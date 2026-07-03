@@ -19,6 +19,8 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
   const proposal = useMemo(() => proposeMoves(result, runnersOn), [result]);
 
   const [direction, setDirection] = useState(initial.direction || null);
+  // 方向未選択時のみ広いフィールド図を開いておく。選択後は折りたたんでスクロールを減らす
+  const [dirOpen, setDirOpen] = useState(!initial.direction);
   const [outType, setOutType] = useState(initial.outType || (result === 'out' ? 'ground' : null));
   const [soType, setSoType] = useState(initial.soType || 'swinging');
   const [dests, setDests] = useState(() => {
@@ -119,7 +121,17 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
       {needsDir && (
         <>
           <div className="section-title" style={{ marginTop: 0 }}>打球方向</div>
-          <FieldPad value={direction} onChange={setDirection} />
+          {dirOpen ? (
+            <FieldPad
+              value={direction}
+              onChange={(key) => { setDirection(key); setDirOpen(false); }}
+            />
+          ) : (
+            <button type="button" className="dir-summary" onClick={() => setDirOpen(true)}>
+              <span className="dir-label">{DIRECTIONS[direction]}</span>
+              <span className="change">変更</span>
+            </button>
+          )}
         </>
       )}
 

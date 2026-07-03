@@ -303,6 +303,15 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
   color: #fff;
   box-shadow: 0 0 0 4px rgba(31, 111, 235, 0.45), 0 3px 10px rgba(0, 0, 0, 0.4);
 }
+/* 方向選択済み時の折りたたみ表示: フィールド図を畳んでシート全体の高さを抑える */
+.dir-summary {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; padding: 12px 16px;
+  background: var(--bg-3); border: 1px solid var(--accent-2); border-radius: var(--radius);
+}
+.dir-summary .dir-label { font-size: 16px; font-weight: 800; color: var(--text); }
+.dir-summary .dir-label::before { content: '⚾ '; }
+.dir-summary .change { font-size: 13px; font-weight: 700; color: var(--accent); }
 
 /* ---- モーダル / シート ---- */
 .sheet-overlay {
