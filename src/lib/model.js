@@ -81,6 +81,7 @@ export function newGame({ opponent = '', isHome = false, date = null } = {}) {
     atBats: [], // AtBat[]
     playLogs: [], // PlayLog[]
     pitchingRecords: [], // PitchingRecord[]
+    linescore: {}, // { [inning]: { my, opp } } 回ごとの得点(試合結果の線分表示用)
     updatedAt: Date.now(),
   };
 }

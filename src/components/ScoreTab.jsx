@@ -10,6 +10,7 @@ import Sheet from './Sheet.jsx';
 import VoiceControl from './VoiceControl.jsx';
 import { SubstituteSheet } from './OrderTab.jsx';
 import HighlightSheet from './HighlightSheet.jsx';
+import GameProgressView from './GameProgressView.jsx';
 import { POSITIONS, OPP_LETTERS } from '../lib/model.js';
 import { playLabel } from '../lib/voiceParser.js';
 
@@ -266,9 +267,10 @@ export default function ScoreTab() {
   const game = useCurrentGame();
   const nameOf = usePlayerName();
   const [sheet, setSheet] = useState(null); // {kind:'play',result} | {kind:'runner',base} | {kind:'batter'}
+  const [showProgress, setShowProgress] = useState(false);
 
-  // 試合終了直後もハイライトシートだけは表示し続ける(閉じたらGameSetupに戻る)
-  if (!game || (game.status === 'finished' && sheet?.kind !== 'highlight')) return <GameSetup />;
+  // 試合終了直後もハイライト/試合経過だけは表示し続ける(閉じたらGameSetupに戻る)
+  if (!game || (game.status === 'finished' && sheet?.kind !== 'highlight' && !showProgress)) return <GameSetup />;
 
   const myBatting = isMyTeamBatting(game);
   const batter = currentBatter(game);
@@ -404,9 +406,12 @@ export default function ScoreTab() {
         </div>
       </div>
 
-      <div className="card">
-        <h2>プレイログ</h2>
-        {[...game.playLogs].slice(-12).reverse().map((l) => (
+      <div className="card" onClick={() => setShowProgress(true)} role="button">
+        <div className="flex">
+          <h2 className="grow" style={{ marginBottom: 0 }}>試合経過</h2>
+          <span className="pill blue">すべて見る ▾</span>
+        </div>
+        {[...game.playLogs].filter((l) => l.kind !== 'run').slice(-3).reverse().map((l) => (
           <div className="log-line" key={l.id}>
             <b>{l.inning}回{l.isTop ? '表' : '裏'}</b> {l.text}
           </div>
@@ -416,6 +421,7 @@ export default function ScoreTab() {
 
       <UndoBar game={game} />
       <VoiceControl game={game} />
+      {showProgress && <GameProgressView game={game} onClose={() => setShowProgress(false)} />}
 
       {sheet?.kind === 'play' && (
         <PlaySheet

@@ -93,6 +93,24 @@ export function currentOppBatter(game) {
   return game.oppLineup[game.oppBatterIndex % game.oppLineup.length];
 }
 
+// reducer内(フック不可)で選手名を引くための素の参照
+function playerNameOf(state, id) {
+  return state.players.find((p) => p.id === id)?.name || '不明';
+}
+
+// 走者移動をUI表示用の1行テキストにする(打者本人以外の走者を対象)
+// 呼び出し側は applyRunnerMoves で game.runners が書き換わる前に呼ぶこと
+function describeRunnerMoves(state, game, moves) {
+  const baseName = ['', '一', '二', '三'];
+  return (moves || []).map((mv) => {
+    const r = game.runners[mv.from];
+    const who = r?.playerId ? playerNameOf(state, r.playerId) : r?.letter || '走者';
+    if (mv.to === 'out') return `${baseName[mv.from]}塁走者 ${who}、アウト`;
+    if (mv.to === 4) return `${baseName[mv.from]}塁走者 ${who}、生還`;
+    return `${baseName[mv.from]}塁走者 ${who}、${baseName[mv.to]}塁へ進塁`;
+  });
+}
+
 // 打席開始スナップショットを作る
 function makeSnapshot(game) {
   return {
@@ -435,6 +453,12 @@ export function reducer(state, action) {
         if (!myBatting && g.currentPitcherId) ensurePitchingRecord(g, g.currentPitcherId).pitches += 1;
       }
       pitches = ensureMinimumPitches(pitches, p.result);
+      const balls = pitches.filter((pt) => pt.type === 'ball').length;
+      const strikes = pitches.filter((pt) => pt.type === 'strike').length;
+      const fouls = pitches.filter((pt) => pt.type === 'foul').length;
+
+      // 打者以外の走者の動き(試合経過画面用の説明文): runnersが書き換わる前に確定
+      const moveLines = describeRunnerMoves(state, g, p.moves);
 
       // --- 走者を動かして得点を数える ---
       const runsInfo = applyRunnerMoves(g, p.moves || [], {
@@ -497,7 +521,13 @@ export function reducer(state, action) {
           text: `${action.batterName || ''} ${DIRECTIONS[p.direction] || ''}${resultLabel}` +
             (totalRuns ? ` (${totalRuns}点)` : '') +
             (p.result === 'so' && p.batterTo === 1 ? ' 振り逃げ' : ''),
-          payload: { atBatId: ab.id, playerId: batter.playerId, result: p.result, direction: p.direction, rbi, runs: totalRuns },
+          payload: {
+            atBatId: ab.id, playerId: batter.playerId, order: batter.order, result: p.result,
+            outType: p.outType || null, soType: p.result === 'so' ? p.soType || null : null,
+            direction: p.direction, rbi, runs: totalRuns,
+            beforeRunners: pending.snapshot.runners, outsBefore, balls, strikes, fouls, pitchCount: pitches.length,
+            moveLines, scoreAfter: { my: g.myScore, opp: g.oppScore },
+          },
         }));
         // 生還した打者の得点ログ
         if (batterScored) {
@@ -530,6 +560,8 @@ export function reducer(state, action) {
             result: p.result, direction: p.direction, outType: p.outType || null,
             soType: p.result === 'so' ? p.soType || null : null, runs: totalRuns,
             letter: oppBatter.letter, order: oppBatter.order,
+            beforeRunners: pending.snapshot.runners, outsBefore, balls, strikes, fouls, pitchCount: pitches.length,
+            moveLines, scoreAfter: { my: g.myScore, opp: g.oppScore },
           },
         }));
         g.oppBatterIndex = (g.oppBatterIndex + 1) % Math.max(1, g.oppLineup.length);
@@ -631,13 +663,17 @@ function applyRunnerMoves(game, moves, { eventKind, erChoices = {}, unearnedRuns
   return { runs, advanced, outsFromMoves };
 }
 
-// 得点処理: スコア加算 + (守備時)投手の失点/自責点
+// 得点処理: スコア加算 + 回ごとの得点(線分表示用) + (守備時)投手の失点/自責点
 function addRun(game, { playerId, erChoice, viaError }) {
   const myBatting = isMyTeamBatting(game);
+  const inn = String(game.inning);
+  if (!game.linescore[inn]) game.linescore[inn] = { my: 0, opp: 0 };
   if (myBatting) {
     game.myScore += 1;
+    game.linescore[inn].my += 1;
   } else {
     game.oppScore += 1;
+    game.linescore[inn].opp += 1;
     // 失点・自責点の帰属先: erChoice(責任投手) > 現投手
     const pid = erChoice || game.currentPitcherId;
     if (pid) {

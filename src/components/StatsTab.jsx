@@ -1,11 +1,14 @@
 import React, { useState, useMemo } from 'react';
-import { useStore, usePlayerName } from '../state/store.jsx';
-import { aggregateBatting, aggregatePitching, DETAIL_METRICS, detailRanking, battingMetrics, fmtAvg } from '../lib/stats.js';
+import { useStore, useCurrentGame, usePlayerName } from '../state/store.jsx';
+import { aggregateBatting, aggregatePitching, pitchingMetrics, DETAIL_METRICS, detailRanking, battingMetrics, fmtAvg } from '../lib/stats.js';
+import { formatIP } from '../lib/model.js';
+import { PitchingGameManagement } from './PitchingTab.jsx';
 import GameScopeToggle, { scopedGames } from './GameScopeToggle.jsx';
 
-// 成績・詳細ランキング(10大メトリクス)
+// 成績・詳細ランキング(10大メトリクス) + 投手成績(旧「投手」タブを統合)
 export default function StatsTab() {
   const { state } = useStore();
+  const game = useCurrentGame();
   const nameOf = usePlayerName();
   const [scope, setScope] = useState({ scope: 'season', gameId: null });
   const [metricKey, setMetricKey] = useState('ba');
@@ -22,6 +25,8 @@ export default function StatsTab() {
 
   return (
     <div>
+      {game && game.status !== 'finished' && <PitchingGameManagement game={game} />}
+
       <GameScopeToggle value={scope} onChange={setScope} />
 
       <div className="section-title">打者メトリクス</div>
@@ -71,6 +76,7 @@ export default function StatsTab() {
       </div>
 
       <BattingSummaryTable batting={batting} nameOf={nameOf} />
+      <PitchingSummaryTable pitching={pitching} nameOf={nameOf} />
     </div>
   );
 }
@@ -107,6 +113,48 @@ function BattingSummaryTable({ batting, nameOf }) {
                   <td className="num">{s.bb + s.hbp}</td>
                   <td className="num">{s.so}</td>
                   <td className="num">{s.sb}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// 全員の投手基本成績一覧(参考テーブル。旧「投手」タブのサマリーを移設)
+function PitchingSummaryTable({ pitching, nameOf }) {
+  const rows = Object.values(pitching).filter((s) => s.outsRecorded > 0 || s.games > 0);
+  if (rows.length === 0) return null;
+  return (
+    <div className="card">
+      <h2>投手成績一覧</h2>
+      <div style={{ overflowX: 'auto' }}>
+        <table className="rank-table" style={{ minWidth: 520 }}>
+          <thead>
+            <tr>
+              <th>投手</th><th>回</th><th>防御率</th><th>被打率</th><th>WHIP</th><th>奪三振</th>
+              <th>与四死</th><th>被安</th><th>自責</th><th>勝</th><th>S</th><th>H</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((s) => {
+              const m = pitchingMetrics(s);
+              return (
+                <tr key={s.playerId}>
+                  <td>{nameOf(s.playerId)}</td>
+                  <td className="num">{formatIP(s.outsRecorded)}</td>
+                  <td className="num">{m.era7 === null ? '-' : m.era7.toFixed(2)}</td>
+                  <td className="num">{m.oba === null ? '-' : m.oba.toFixed(3).replace(/^0\./, '.')}</td>
+                  <td className="num">{m.whip === null ? '-' : m.whip.toFixed(2)}</td>
+                  <td className="num">{s.strikeouts}</td>
+                  <td className="num">{s.walks + s.hitByPitch}</td>
+                  <td className="num">{s.hitsAllowed}</td>
+                  <td className="num">{s.earnedRuns}</td>
+                  <td className="num">{s.wins}</td>
+                  <td className="num">{s.saves}</td>
+                  <td className="num">{s.holds}</td>
                 </tr>
               );
             })}

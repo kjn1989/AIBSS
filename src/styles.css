@@ -452,6 +452,10 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 .pill.red { color: var(--red); border-color: var(--red); }
 .pill.amber { color: var(--amber); border-color: var(--amber); }
 .pill.blue { color: var(--accent); border-color: var(--accent); }
+.pill.hit { color: var(--accent); border-color: var(--accent); }
+.pill.onbase { color: var(--green); border-color: var(--green); }
+.pill.outres { color: var(--red); border-color: var(--red); }
+.pill.sac { color: var(--purple); border-color: var(--purple); }
 .mt8 { margin-top: 8px; } .mt12 { margin-top: 12px; } .mt16 { margin-top: 16px; } .mb8 { margin-bottom: 8px; }
 .flex { display: flex; gap: 8px; align-items: center; }
 .flex .grow { flex: 1; }
@@ -465,6 +469,59 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+
+/* ---- 全画面ビュー(試合経過など) ---- */
+.fullscreen-view {
+  position: fixed; inset: 0; z-index: 400;
+  background: var(--bg);
+  display: flex; flex-direction: column;
+}
+.fullscreen-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; padding-top: max(10px, env(safe-area-inset-top));
+  background: var(--bg-2); border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.fullscreen-header h2 { font-size: 16px; font-weight: 800; }
+.fullscreen-body {
+  flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  padding: 14px 14px calc(20px + var(--safe-bottom));
+}
+
+/* ---- 線分スコア表(試合経過・試合結果 共通) ---- */
+.linescore-table { border-collapse: collapse; font-size: 13px; width: 100%; min-width: 380px; }
+.linescore-table th, .linescore-table td {
+  text-align: center; padding: 6px 8px; border-bottom: 1px solid var(--border);
+  min-width: 26px; font-variant-numeric: tabular-nums;
+}
+.linescore-table th { color: var(--text-dim); font-weight: 600; }
+.linescore-table td.team { text-align: left; font-weight: 700; min-width: 70px; }
+.linescore-table td.num { font-weight: 800; }
+
+/* ---- 回ごとのグループ + プレイカード ---- */
+.inning-group { margin: 16px 0 4px; }
+.inning-header {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 6px 2px; margin-bottom: 6px; border-bottom: 2px solid var(--border);
+  font-size: 14px;
+}
+.play-card {
+  background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px;
+  padding: 10px 12px; margin-bottom: 8px;
+}
+.pc-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.pc-name { font-weight: 700; font-size: 14px; }
+.pc-pill { margin-left: auto; }
+.pc-score { margin-left: 4px; }
+.pc-body { display: flex; gap: 10px; align-items: flex-start; margin-top: 8px; }
+.pc-body .mini-diamond { flex-shrink: 0; margin-top: 2px; }
+.mini-count { flex-shrink: 0; font-size: 10px; color: var(--text-dim); line-height: 1.6; }
+.mini-count div { display: flex; align-items: center; gap: 2px; }
+.mini-count b { width: 10px; font-weight: 700; }
+.mc-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--bg-3); border: 1px solid var(--border); display: inline-block; }
+.mc-dot.ball.on { background: var(--green); border-color: var(--green); }
+.mc-dot.strike.on { background: var(--amber); border-color: var(--amber); }
+.mc-dot.out.on { background: var(--red); border-color: var(--red); }
+.pc-text { flex: 1; font-size: 13px; line-height: 1.6; }
 
 /* ---- ステッパー ---- */
 .stepper { display: flex; align-items: center; gap: 12px; }

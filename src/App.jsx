@@ -4,7 +4,7 @@ import HomeTab from './components/HomeTab.jsx';
 import ScoreTab from './components/ScoreTab.jsx';
 import OrderTab from './components/OrderTab.jsx';
 import StatsTab from './components/StatsTab.jsx';
-import PitchingTab from './components/PitchingTab.jsx';
+import ResultTab from './components/ResultTab.jsx';
 import SettingsTab from './components/SettingsTab.jsx';
 import CloudSync from './components/CloudSync.jsx';
 
@@ -13,7 +13,7 @@ const TABS = [
   { id: 'score', label: 'スコア入力', icon: '⚾' },
   { id: 'order', label: 'オーダー', icon: '📋' },
   { id: 'stats', label: '成績', icon: '📊' },
-  { id: 'pitching', label: '投手', icon: '🎯' },
+  { id: 'result', label: '試合結果', icon: '🏟️' },
 ];
 
 export default function App() {
@@ -43,7 +43,7 @@ export default function App() {
         {tab === 'score' && <ScoreTab />}
         {tab === 'order' && <OrderTab />}
         {tab === 'stats' && <StatsTab />}
-        {tab === 'pitching' && <PitchingTab />}
+        {tab === 'result' && <ResultTab />}
         {tab === 'settings' && <SettingsTab />}
       </main>
 
