@@ -96,18 +96,18 @@ export default function ResultTab() {
         </select>
       </div>
 
+      <div className="section-title">試合レポート</div>
+      <HighlightCard game={game} />
+
+      <div className="section-title">試合経過</div>
+      <GameProgressContent game={game} />
+
       {game.status === 'ongoing' && game.id === state.currentGameId && (
         <>
           <div className="section-title">登板・継投</div>
           <PitchingGameManagement game={game} />
         </>
       )}
-
-      <div className="section-title">試合レポート</div>
-      <HighlightCard game={game} />
-
-      <div className="section-title">試合経過</div>
-      <GameProgressContent game={game} />
     </div>
   );
 }

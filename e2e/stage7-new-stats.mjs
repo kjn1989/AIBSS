@@ -58,7 +58,7 @@ for (const [btn, dir] of [['単打', '左翼'], ['三振', null], ['四球', nul
   await page.waitForTimeout(200);
 }
 await page.click('.tabbar button:has-text("試合結果")');
-const card = (await page.textContent('.card:has(.rank-badge)')).replace(/\s+/g, ' ');
+const card = (await page.textContent('.card:has(.rank-badge):has(.stepper)')).replace(/\s+/g, ' ');
 console.log('投手カード:', card.slice(0, 100));
 // Hトグル
 await page.click('.card button:has-text("H")');
