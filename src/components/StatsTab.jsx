@@ -1,14 +1,12 @@
 import React, { useState, useMemo } from 'react';
-import { useStore, useCurrentGame, usePlayerName } from '../state/store.jsx';
+import { useStore, usePlayerName } from '../state/store.jsx';
 import { aggregateBatting, aggregatePitching, pitchingMetrics, DETAIL_METRICS, detailRanking, battingMetrics, fmtAvg } from '../lib/stats.js';
 import { formatIP } from '../lib/model.js';
-import { PitchingGameManagement } from './PitchingTab.jsx';
 import GameScopeToggle, { scopedGames } from './GameScopeToggle.jsx';
 
 // 成績・詳細ランキング(10大メトリクス) + 投手成績(旧「投手」タブを統合)
 export default function StatsTab() {
   const { state } = useStore();
-  const game = useCurrentGame();
   const nameOf = usePlayerName();
   const [scope, setScope] = useState({ scope: 'season', gameId: null });
   const [metricKey, setMetricKey] = useState('ba');
@@ -25,8 +23,6 @@ export default function StatsTab() {
 
   return (
     <div>
-      {game && game.status !== 'finished' && <PitchingGameManagement game={game} />}
-
       <GameScopeToggle value={scope} onChange={setScope} />
 
       <div className="section-title">打者メトリクス</div>

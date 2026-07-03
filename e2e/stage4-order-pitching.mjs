@@ -33,9 +33,9 @@ await page.click('button:has-text("この打順で確定")');
 await page.waitForSelector('.card h2:has-text("オーダー")');
 console.log('lineup set');
 
-// ==== 投手タブで先発登板 ====
-await page.click('.tabbar button:has-text("成績")');
-await page.selectOption('.card select', { label: '青木' });
+// ==== 試合結果タブ(登板・継投)で先発登板 ====
+await page.click('.tabbar button:has-text("試合結果")');
+await page.selectOption('.card:has(h2:has-text("登板・継投")) select', { label: '青木' });
 await page.click('button:has-text("先発登板")');
 await page.waitForSelector('.pill.green');
 console.log('starter: 青木 登板中');
@@ -50,8 +50,8 @@ await page.click('.sheet-actions button:has-text("確定")');
 await page.waitForTimeout(200);
 
 // 継投: 木村へ
-await page.click('.tabbar button:has-text("成績")');
-await page.selectOption('.card .flex select', { label: '木村' });
+await page.click('.tabbar button:has-text("試合結果")');
+await page.selectOption('.card:has(h2:has-text("登板・継投")) select', { label: '木村' });
 await page.click('button:has-text("継投")');
 await page.waitForTimeout(200);
 console.log('relief: 木村');
@@ -74,10 +74,10 @@ console.log('choices:', prevBtn.trim(), '/', (await page.textContent('.grid2 but
 await page.click('.sheet-actions button:has-text("確定")');
 await page.waitForTimeout(200);
 
-// 投手タブで自責点の反映を確認
-await page.click('.tabbar button:has-text("成績")');
+// 試合結果タブで自責点の反映を確認
+await page.click('.tabbar button:has-text("試合結果")');
 const cards = await page.$$eval('.card', (els) =>
-  els.filter((e) => e.querySelector('.rank-badge')).map((e) => e.textContent.replace(/\s+/g, ' ').slice(0, 90))
+  els.filter((e) => e.querySelector('.rank-badge') && e.querySelector('.stepper')).map((e) => e.textContent.replace(/\s+/g, ' ').slice(0, 90))
 );
 console.log('pitching records:');
 for (const c of cards) console.log(' ', c);

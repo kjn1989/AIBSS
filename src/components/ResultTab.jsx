@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useStore, usePlayerName } from '../state/store.jsx';
 import { computeHighlights, highlightShareText } from '../lib/highlights.js';
 import { GameProgressContent } from './GameProgressView.jsx';
+import { PitchingGameManagement } from './PitchingTab.jsx';
 
 // 試合レポート(ハイライト)カード。HighlightSheetと同じ内容をタブ内に埋め込む形で表示
 function HighlightCard({ game }) {
@@ -94,6 +95,13 @@ export default function ResultTab() {
           ))}
         </select>
       </div>
+
+      {game.status === 'ongoing' && game.id === state.currentGameId && (
+        <>
+          <div className="section-title">登板・継投</div>
+          <PitchingGameManagement game={game} />
+        </>
+      )}
 
       <div className="section-title">試合レポート</div>
       <HighlightCard game={game} />
