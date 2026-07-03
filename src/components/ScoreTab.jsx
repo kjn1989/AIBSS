@@ -10,6 +10,21 @@ import Sheet from './Sheet.jsx';
 import VoiceControl from './VoiceControl.jsx';
 import { SubstituteSheet } from './OrderTab.jsx';
 import { POSITIONS } from '../lib/model.js';
+import { playLabel } from '../lib/voiceParser.js';
+
+// ---- 直近の打席結果を「1. 左翼単打 2. 見逃し三振」のように並べる小さな履歴表示 ----
+function AtBatHistory({ items }) {
+  if (!items || items.length === 0) return null;
+  return (
+    <div className="atbat-history">
+      {items.map((it, i) => (
+        <span className="hist-chip" key={it.id}>
+          {i + 1}. {playLabel(it.result, it.direction, it.outType, it.soType)}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 // ---- 試合セットアップ(試合がない/選択されていないとき) ----
 function GameSetup() {
@@ -159,6 +174,7 @@ export default function ScoreTab() {
   const myBatting = isMyTeamBatting(game);
   const batter = currentBatter(game);
   const noLineup = game.lineup.length === 0;
+  const oppOrder = ((game.oppBatterIndex || 0) % 9) + 1; // 相手打者の打順(名前は管理せず9人サイクル)
 
   const quickLineup = () => {
     const nine = state.players.filter((p) => !p.id.startsWith('demo-')).slice(0, 9);
@@ -190,10 +206,11 @@ export default function ScoreTab() {
               <span className="rank-badge">{batter.order}</span>
               <div className="grow">
                 <b style={{ fontSize: 18 }}>{nameOf(batter.playerId)}</b>
-                <span className="dim small"> {batter.position}</span>
+                <span className="dim small"> 打順{batter.order}番 {batter.position}</span>
               </div>
               <span className="pill blue">打者変更 ▾</span>
             </div>
+            <AtBatHistory items={game.atBats.filter((ab) => ab.playerId === batter.playerId)} />
           </div>
         )
       ) : (
@@ -211,6 +228,15 @@ export default function ScoreTab() {
               ))}
             </select>
           </div>
+          <div className="flex mt8">
+            <span className="rank-badge">{oppOrder}</span>
+            <span className="small dim grow">相手 打順{oppOrder}番(名前は管理しません)</span>
+          </div>
+          <AtBatHistory
+            items={game.playLogs
+              .filter((l) => l.kind === 'defense' && l.payload.oppOrder === oppOrder)
+              .map((l) => ({ id: l.id, ...l.payload }))}
+          />
           <p className="small dim mt8">守備中: 相手打者の結果を下のパッドで記録すると投手成績に反映されます。</p>
         </div>
       )}

@@ -454,11 +454,21 @@ export function reducer(state, action) {
         if (p.result === 'hbp') pr.hitByPitch += 1;
         if (p.result === 'so') pr.strikeouts += 1;
         // アウトカウントは下の共通処理後に別途集計する
+      }
+      // --- 守備時: 相手打者は名前を管理しないため、打順(9人サイクル)だけをログに残す ---
+      // (投手未選択でも打順表示・履歴は追えるよう、投手成績とは別に常に記録する)
+      if (!myBatting) {
+        const oppOrder = ((g.oppBatterIndex || 0) % 9) + 1;
+        const oppResultLabel = (p.result === 'so' && SO_TYPES[p.soType]) || resultDef?.label || p.result;
         g.playLogs.push(newPlayLog({
           gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'defense',
-          text: `相手打者: ${DIRECTIONS[p.direction] || ''}${resultDef?.label || p.result}` + (totalRuns ? ` (${totalRuns}失点)` : ''),
-          payload: { result: p.result, direction: p.direction, runs: totalRuns },
+          text: `相手打者(${oppOrder}番): ${DIRECTIONS[p.direction] || ''}${oppResultLabel}` + (totalRuns ? ` (${totalRuns}失点)` : ''),
+          payload: {
+            result: p.result, direction: p.direction, outType: p.outType || null,
+            soType: p.result === 'so' ? p.soType || null : null, runs: totalRuns, oppOrder,
+          },
         }));
+        g.oppBatterIndex = ((g.oppBatterIndex || 0) + 1) % 9;
       }
 
       // --- 守備時: このプレイで増えたアウト数を現投手に加算 ---

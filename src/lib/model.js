@@ -68,6 +68,7 @@ export function newGame({ opponent = '', isHome = false, date = null } = {}) {
     usedPlayerIds: [], // 出場済み
     retiredPlayerIds: [], // 一度退いた(再出場警告用)
     batterIndex: 0, // 次打者のlineup index
+    oppBatterIndex: 0, // 相手打者の打順(0-8で9人サイクル、名前は管理しない)
     currentPitcherId: null,
     atBats: [], // AtBat[]
     playLogs: [], // PlayLog[]

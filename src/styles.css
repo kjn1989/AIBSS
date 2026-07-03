@@ -159,6 +159,14 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
   font-size: 12px; font-weight: 700; margin-right: 6px;
 }
 
+/* ---- 直近の打席結果チップ(打者/相手打者カード内) ---- */
+.atbat-history { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.hist-chip {
+  font-size: 12px; font-weight: 600; color: var(--text-dim);
+  background: var(--bg-3); border: 1px solid var(--border); border-radius: 999px;
+  padding: 4px 10px; white-space: nowrap;
+}
+
 /* ---- スコアボード ---- */
 .scoreboard {
   display: flex; align-items: center; justify-content: space-between;
@@ -174,11 +182,27 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .out-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--bg-3); border: 1px solid var(--border); }
 .out-dot.on { background: var(--red); border-color: var(--red); }
 
-/* ---- 走者ダイヤモンド(TV中継風フィールド) ---- */
-.field-diamond {
+/* ---- 走者ダイヤモンド(TV中継風フィールド) ----
+   外野の空白を減らすため、本来の縦長フィールド(10/7.2)を下寄せで
+   浅いラッパー(10/5)に収め、上部の余った外野だけを overflow:hidden で切る。
+   内部の幾何(土・ライン・塁の%指定)は元の 10/7.2 のまま維持するので再計算不要。 */
+.field-diamond-crop {
   max-width: 420px;
   margin: 0 auto 12px;
+  aspect-ratio: 10 / 5;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  position: relative;
+}
+.field-diamond.bf {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  margin: 0;
+  max-width: none;
   aspect-ratio: 10 / 7.2;
+  border: none;
+  border-radius: 0;
 }
 /* 土のひし形: 一辺 = 本塁→一塁の距離 (アスペクト0.72時 ≈ 29.6%W) */
 .field-diamond .bf-dirtfan { width: 92%; }
