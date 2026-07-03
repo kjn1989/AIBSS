@@ -216,13 +216,15 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 
 /* ---- モーダル / シート ---- */
 .sheet-overlay {
-  position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); z-index: 200;
+  position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); z-index: 300;
   display: flex; align-items: flex-end; justify-content: center;
 }
 .sheet {
   background: var(--bg-2); border: 1px solid var(--border); border-bottom: none;
   border-radius: 18px 18px 0 0;
-  width: 100%; max-width: 560px; max-height: 88dvh; overflow-y: auto;
+  width: 100%; max-width: 560px; max-height: 85dvh; overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain; /* シート端までスクロールしても背景に伝播させない */
   padding: 18px 16px calc(18px + var(--safe-bottom));
   animation: slideUp 0.2s ease-out;
 }
@@ -230,6 +232,16 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .sheet h3 { font-size: 16px; margin-bottom: 12px; }
 .sheet .sheet-actions { display: flex; gap: 10px; margin-top: 16px; }
 .sheet .sheet-actions button { flex: 1; min-height: 50px; font-size: 16px; }
+/* 確定/キャンセルはシート内で常に見える位置に固定(長い内容でも押せる) */
+.sheet .sheet-actions {
+  position: sticky;
+  bottom: 0;
+  background: var(--bg-2);
+  padding: 10px 0;
+  box-shadow: 0 -8px 16px rgba(13, 17, 23, 0.7);
+}
+/* シート表示中は背景のスクロールをロック(iOS Safariの背景スクロール抜け対策) */
+body.sheet-open .main { overflow: hidden; touch-action: none; }
 
 /* ---- 確認カード(音声・プレイ確定) ---- */
 .confirm-card {
