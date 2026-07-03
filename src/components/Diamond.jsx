@@ -9,7 +9,9 @@ export default function Diamond({ game, onBaseTap }) {
   const label = (base) => {
     const r = game.runners[base];
     if (!r) return base === 1 ? '一塁' : base === 2 ? '二塁' : '三塁';
-    return r.playerId ? nameOf(r.playerId) : '走者';
+    if (r.playerId) return nameOf(r.playerId);
+    if (r.letter) return r.letter;
+    return '走者';
   };
 
   return (

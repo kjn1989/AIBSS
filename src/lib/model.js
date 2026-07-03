@@ -41,6 +41,9 @@ export const DIRECTIONS = {
 // ---- 守備位置 ----
 export const POSITIONS = ['投', '捕', '一', '二', '三', '遊', '左', '中', '右', 'DH', '控'];
 
+// ---- 相手チームの選手記号(実名は入力せず A〜T の20人で管理) ----
+export const OPP_LETTERS = Array.from({ length: 20 }, (_, i) => String.fromCharCode(65 + i));
+
 // ============================================================
 // ファクトリ関数(スキーマ定義を兼ねる)
 // ============================================================
@@ -68,8 +71,13 @@ export function newGame({ opponent = '', isHome = false, date = null } = {}) {
     usedPlayerIds: [], // 出場済み
     retiredPlayerIds: [], // 一度退いた(再出場警告用)
     batterIndex: 0, // 次打者のlineup index
-    oppBatterIndex: 0, // 相手打者の打順(0-8で9人サイクル、名前は管理しない)
     currentPitcherId: null,
+    // 相手チーム: 実名の代わりに A〜T の記号で管理する打順(9枠)。代打・代走・守備交代で入れ替え可能
+    oppLineup: OPP_LETTERS.slice(0, 9).map((letter, i) => ({ order: i + 1, letter, position: '' })),
+    oppUsedLetters: OPP_LETTERS.slice(0, 9), // 出場済み記号
+    oppRetiredLetters: [], // 一度退いた記号(再出場警告用)
+    oppBatterIndex: 0, // 次の相手打者のoppLineup index
+    oppPitcherLetter: null, // 相手投手(成績は追わずラベルのみ)
     atBats: [], // AtBat[]
     playLogs: [], // PlayLog[]
     pitchingRecords: [], // PitchingRecord[]

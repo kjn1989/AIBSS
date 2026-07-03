@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useStore, useCurrentGame, usePlayerName, isMyTeamBatting, currentBatter } from '../state/store.jsx';
+import { useStore, useCurrentGame, usePlayerName, isMyTeamBatting, currentBatter, currentOppBatter } from '../state/store.jsx';
 import Scoreboard from './Scoreboard.jsx';
 import Diamond from './Diamond.jsx';
 import PitchCounter from './PitchCounter.jsx';
@@ -9,7 +9,7 @@ import RunnerEventSheet from './RunnerEventSheet.jsx';
 import Sheet from './Sheet.jsx';
 import VoiceControl from './VoiceControl.jsx';
 import { SubstituteSheet } from './OrderTab.jsx';
-import { POSITIONS } from '../lib/model.js';
+import { POSITIONS, OPP_LETTERS } from '../lib/model.js';
 import { playLabel } from '../lib/voiceParser.js';
 
 // ---- 直近の打席結果を「1. 左翼単打 2. 見逃し三振」のように並べる小さな履歴表示 ----
@@ -94,6 +94,101 @@ function BatterSheet({ game, onClose, onPinchHitter }) {
   );
 }
 
+// ---- 相手打者変更シート(記号A〜Tで管理) ----
+function OppBatterSheet({ game, onClose, onPinchHitter }) {
+  const { dispatch } = useStore();
+  const current = currentOppBatter(game);
+  return (
+    <Sheet title="次の相手打者を選択" onClose={onClose}>
+      <button className="primary" style={{ width: '100%', marginBottom: 10 }} onClick={onPinchHitter}>
+        🔄 相手に代打を送る({current?.letter}に代えて)
+      </button>
+      {game.oppLineup.map((slot, i) => (
+        <div className="row" key={slot.order}>
+          <span className="rank-badge">{slot.order}</span>
+          <span className="grow">{slot.letter}</span>
+          <button
+            className={`small ${i === game.oppBatterIndex ? 'primary' : ''}`}
+            onClick={() => {
+              dispatch({ type: 'OPP_SET_BATTER_INDEX', gameId: game.id, index: i });
+              onClose();
+            }}
+          >
+            {i === game.oppBatterIndex ? '打席中' : 'この打者'}
+          </button>
+        </div>
+      ))}
+    </Sheet>
+  );
+}
+
+// ---- 相手選手交代シート(代打・代走・守備交代。実名の代わりにA〜Tの記号を使う) ----
+function OppSubstituteSheet({ game, slot, onClose, initialKind = 'ph' }) {
+  const { dispatch } = useStore();
+  const [kind, setKind] = useState(initialKind); // ph=代打 pr=代走 def=守備交代
+  const [letter, setLetter] = useState('');
+
+  const inLineup = new Set(game.oppLineup.map((l) => l.letter));
+  const candidates = OPP_LETTERS.filter((l) => !inLineup.has(l));
+  const isRetired = letter && game.oppRetiredLetters.includes(letter);
+  const kindLabel = { ph: '代打', pr: '代走', def: '守備交代' }[kind];
+
+  const runnerBase = [1, 2, 3].find((b) => game.runners[b]?.letter === slot.letter);
+
+  return (
+    <Sheet title={`${slot.order}番 ${slot.letter} の交代`} onClose={onClose}>
+      <div className="grid3">
+        {[['ph', '代打'], ['pr', '代走'], ['def', '守備交代']].map(([k, label]) => (
+          <button key={k} className={kind === k ? 'primary' : ''} onClick={() => setKind(k)}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {kind === 'pr' && !runnerBase && (
+        <div className="warn-box mt8">この選手は現在塁上にいません。代走は塁上の走者に対して行います。</div>
+      )}
+
+      <div className="section-title">出場する選手</div>
+      <select value={letter} onChange={(e) => setLetter(e.target.value)}>
+        <option value="">記号を選択...</option>
+        {candidates.map((l) => (
+          <option key={l} value={l}>
+            {l}{game.oppRetiredLetters.includes(l) ? ' (⚠️出場済み)' : ''}
+          </option>
+        ))}
+      </select>
+
+      {isRetired && (
+        <div className="warn-box">
+          ⚠️ {letter} は一度退いた選手です。公式ルールでは再出場できません(記録は継続可能)。
+        </div>
+      )}
+
+      <div className="sheet-actions">
+        <button className="ghost" onClick={onClose}>キャンセル</button>
+        <button
+          className="primary"
+          disabled={!letter}
+          onClick={() => {
+            dispatch({
+              type: 'OPP_SUBSTITUTE',
+              gameId: game.id,
+              order: slot.order,
+              letter,
+              asRunner: kind === 'pr',
+              label: `相手${kindLabel}: ${letter} (${slot.order}番 ${slot.letter}に代わり)`,
+            });
+            onClose();
+          }}
+        >
+          {kindLabel}で出場
+        </button>
+      </div>
+    </Sheet>
+  );
+}
+
 // ---- 三振確認カード(2ストライク後のストライクで自動表示) ----
 function StrikeoutSheet({ game, batterName, onClose, onFurinige }) {
   const { dispatch } = useStore();
@@ -147,6 +242,8 @@ const UNDO_LABELS = {
   SET_PITCHER: '投手交代',
   FORCE_CHANGE_HALF: 'チェンジ',
   SET_RUNNER: '走者修正',
+  OPP_SUBSTITUTE: '相手選手交代',
+  OPP_SET_PITCHER: '相手投手交代',
 };
 
 function UndoBar({ game }) {
@@ -173,8 +270,8 @@ export default function ScoreTab() {
 
   const myBatting = isMyTeamBatting(game);
   const batter = currentBatter(game);
+  const oppBatter = currentOppBatter(game);
   const noLineup = game.lineup.length === 0;
-  const oppOrder = ((game.oppBatterIndex || 0) % 9) + 1; // 相手打者の打順(名前は管理せず9人サイクル)
 
   const quickLineup = () => {
     const nine = state.players.filter((p) => !p.id.startsWith('demo-')).slice(0, 9);
@@ -201,25 +298,46 @@ export default function ScoreTab() {
             {state.players.length === 0 && <p className="small dim mt8">⚙️ 設定タブで選手を登録してください。</p>}
           </div>
         ) : (
-          <div className="card" onClick={() => setSheet({ kind: 'batter' })} role="button">
-            <div className="flex">
-              <span className="rank-badge">{batter.order}</span>
-              <div className="grow">
-                <b style={{ fontSize: 18 }}>{nameOf(batter.playerId)}</b>
-                <span className="dim small"> 打順{batter.order}番 {batter.position}</span>
+          <>
+            <div className="card" onClick={() => setSheet({ kind: 'batter' })} role="button">
+              <div className="flex">
+                <span className="rank-badge">{batter.order}</span>
+                <div className="grow">
+                  <b style={{ fontSize: 18 }}>{nameOf(batter.playerId)}</b>
+                  <span className="dim small"> 打順{batter.order}番 {batter.position}</span>
+                </div>
+                <span className="pill blue">打者変更 ▾</span>
               </div>
-              <span className="pill blue">打者変更 ▾</span>
+              <AtBatHistory items={game.atBats.filter((ab) => ab.playerId === batter.playerId)} />
             </div>
-            <AtBatHistory items={game.atBats.filter((ab) => ab.playerId === batter.playerId)} />
-          </div>
+            <div className="card">
+              <div className="flex">
+                <span className="small dim">相手投手</span>
+                <select
+                  className="grow"
+                  value={game.oppPitcherLetter || ''}
+                  onChange={(e) => e.target.value && dispatch({
+                    type: 'OPP_SET_PITCHER', gameId: game.id, letter: e.target.value,
+                    label: `相手投手交代: ${e.target.value}`,
+                  })}
+                >
+                  <option value="">投手を選択...</option>
+                  {OPP_LETTERS.map((l) => (
+                    <option key={l} value={l}>{l}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </>
         )
       ) : (
-        <div className="card">
+        <div className="card" onClick={() => setSheet({ kind: 'oppBatter' })} role="button">
           <div className="flex">
             <span className="small dim">投手</span>
             <select
               className="grow"
               value={game.currentPitcherId || ''}
+              onClick={(e) => e.stopPropagation()}
               onChange={(e) => e.target.value && dispatch({ type: 'SET_PITCHER', gameId: game.id, playerId: e.target.value })}
             >
               <option value="">投手を選択...</option>
@@ -228,16 +346,23 @@ export default function ScoreTab() {
               ))}
             </select>
           </div>
-          <div className="flex mt8">
-            <span className="rank-badge">{oppOrder}</span>
-            <span className="small dim grow">相手 打順{oppOrder}番(名前は管理しません)</span>
-          </div>
-          <AtBatHistory
-            items={game.playLogs
-              .filter((l) => l.kind === 'defense' && l.payload.oppOrder === oppOrder)
-              .map((l) => ({ id: l.id, ...l.payload }))}
-          />
-          <p className="small dim mt8">守備中: 相手打者の結果を下のパッドで記録すると投手成績に反映されます。</p>
+          {oppBatter && (
+            <>
+              <div className="flex mt12">
+                <span className="rank-badge">{oppBatter.order}</span>
+                <div className="grow">
+                  <b style={{ fontSize: 18 }}>{oppBatter.letter}</b>
+                  <span className="dim small"> 打順{oppBatter.order}番</span>
+                </div>
+                <span className="pill blue">相手 交代 ▾</span>
+              </div>
+              <AtBatHistory
+                items={game.playLogs
+                  .filter((l) => l.kind === 'defense' && l.payload.letter === oppBatter.letter)
+                  .map((l) => ({ id: l.id, ...l.payload }))}
+              />
+            </>
+          )}
         </div>
       )}
 
@@ -305,6 +430,7 @@ export default function ScoreTab() {
           base={sheet.base}
           onClose={() => setSheet(null)}
           onPinchRunner={(slot) => setSheet({ kind: 'sub', slot, subKind: 'pr' })}
+          onPinchRunnerOpp={(slot) => setSheet({ kind: 'oppSub', slot, subKind: 'pr' })}
         />
       )}
       {sheet?.kind === 'batter' && (
@@ -319,6 +445,19 @@ export default function ScoreTab() {
       )}
       {sheet?.kind === 'sub' && (
         <SubstituteSheet game={game} slot={sheet.slot} initialKind={sheet.subKind} onClose={() => setSheet(null)} />
+      )}
+      {sheet?.kind === 'oppBatter' && (
+        <OppBatterSheet
+          game={game}
+          onClose={() => setSheet(null)}
+          onPinchHitter={() => {
+            const slot = currentOppBatter(game);
+            if (slot) setSheet({ kind: 'oppSub', slot, subKind: 'ph' });
+          }}
+        />
+      )}
+      {sheet?.kind === 'oppSub' && (
+        <OppSubstituteSheet game={game} slot={sheet.slot} initialKind={sheet.subKind} onClose={() => setSheet(null)} />
       )}
     </div>
   );

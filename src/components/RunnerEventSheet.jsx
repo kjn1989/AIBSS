@@ -4,8 +4,9 @@ import { useStore, usePlayerName, isMyTeamBatting } from '../state/store.jsx';
 
 // 塁タップで開く走者イベントシート
 // 盗塁・盗塁死・暴投・捕逸・牽制死などの簡易パターンをワンタップ反映
-// onPinchRunner(slot): 代走シートを開く(自チーム攻撃時のみ)
-export default function RunnerEventSheet({ game, base, onClose, onPinchRunner }) {
+// onPinchRunner(slot): 代走シートを開く(自チーム攻撃時)
+// onPinchRunnerOpp(slot): 相手走者への代走シートを開く(相手チーム攻撃時)
+export default function RunnerEventSheet({ game, base, onClose, onPinchRunner, onPinchRunnerOpp }) {
   const { dispatch } = useStore();
   const nameOf = usePlayerName();
   const runner = game.runners[base];
@@ -59,9 +60,10 @@ export default function RunnerEventSheet({ game, base, onClose, onPinchRunner })
     );
   }
 
-  const name = runner.playerId ? nameOf(runner.playerId) : '走者';
-  // 代走: この走者の打順スロット(自チーム攻撃時のみ存在)
+  const name = runner.playerId ? nameOf(runner.playerId) : runner.letter || '走者';
+  // 代走: この走者の打順スロット(自チーム攻撃時) / 相手打順スロット(相手チーム攻撃時)
   const runnerSlot = runner.playerId ? game.lineup.find((l) => l.playerId === runner.playerId) : null;
+  const oppRunnerSlot = runner.letter ? game.oppLineup?.find((l) => l.letter === runner.letter) : null;
 
   return (
     <Sheet title={`${baseName}: ${name}`} onClose={onClose}>
@@ -72,6 +74,15 @@ export default function RunnerEventSheet({ game, base, onClose, onPinchRunner })
           onClick={() => onPinchRunner(runnerSlot)}
         >
           🔄 代走を送る({name}に代えて)
+        </button>
+      )}
+      {oppRunnerSlot && onPinchRunnerOpp && (
+        <button
+          className="primary"
+          style={{ width: '100%', marginBottom: 10 }}
+          onClick={() => onPinchRunnerOpp(oppRunnerSlot)}
+        >
+          🔄 相手の代走を送る({name}に代えて)
         </button>
       )}
       <div className="grid2">

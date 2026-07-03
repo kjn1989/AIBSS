@@ -7,6 +7,7 @@
 import React, { createContext, useContext, useReducer, useEffect, useRef } from 'react';
 import {
   newPlayer, newGame, newAtBat, newPitch, newPlayLog, newPitchingRecord, RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES,
+  OPP_LETTERS,
 } from '../lib/model.js';
 import { generateDemoData } from '../lib/demo.js';
 
@@ -46,6 +47,19 @@ function loadPersisted() {
   }
 }
 
+// 旧バージョンのセーブデータ(相手チームの記号管理フィールド未保存)に既定値を補う
+function ensureOppFields(g) {
+  if (g.oppLineup) return g;
+  return {
+    ...g,
+    oppLineup: OPP_LETTERS.slice(0, 9).map((letter, i) => ({ order: i + 1, letter, position: '' })),
+    oppUsedLetters: OPP_LETTERS.slice(0, 9),
+    oppRetiredLetters: [],
+    oppBatterIndex: g.oppBatterIndex || 0,
+    oppPitcherLetter: null,
+  };
+}
+
 export function persist(state) {
   try {
     const out = {};
@@ -71,6 +85,12 @@ export function isMyTeamBatting(game) {
 export function currentBatter(game) {
   if (!game.lineup.length) return null;
   return game.lineup[game.batterIndex % game.lineup.length];
+}
+
+// 現在の相手打者(oppLineupエントリ。実名は管理せず記号A〜Tで識別)
+export function currentOppBatter(game) {
+  if (!game.oppLineup || !game.oppLineup.length) return null;
+  return game.oppLineup[game.oppBatterIndex % game.oppLineup.length];
 }
 
 // 打席開始スナップショットを作る
@@ -160,7 +180,7 @@ export function reducer(state, action) {
       const games = { ...state.games };
       for (const g of action.games || []) {
         const local = games[g.id];
-        if (!local || (g.updatedAt || 0) >= (local.updatedAt || 0)) games[g.id] = g;
+        if (!local || (g.updatedAt || 0) >= (local.updatedAt || 0)) games[g.id] = ensureOppFields(g);
       }
       const pmap = new Map(state.players.map((p) => [p.id, p]));
       for (const p of action.players || []) pmap.set(p.id, p);
@@ -265,6 +285,48 @@ export function reducer(state, action) {
       return { ...state, games: { ...state.games, [g.id]: g } };
     }
 
+    // ===== 相手チーム(記号A〜Tで管理・代打/代走/守備交代) =====
+    case 'OPP_SUBSTITUTE': {
+      const g = deep(state.games[action.gameId]);
+      const slot = g.oppLineup.find((l) => l.order === action.order);
+      if (!slot) return state;
+      const outgoing = slot.letter;
+      slot.letter = action.letter;
+      if (action.position) slot.position = action.position;
+      if (outgoing && !g.oppRetiredLetters.includes(outgoing)) g.oppRetiredLetters.push(outgoing);
+      if (!g.oppUsedLetters.includes(action.letter)) g.oppUsedLetters.push(action.letter);
+      // 代走: 塁上の走者も差し替える
+      if (action.asRunner) {
+        for (const b of [1, 2, 3]) {
+          if (g.runners[b]?.letter === outgoing) g.runners[b] = { ...g.runners[b], letter: action.letter };
+        }
+      }
+      g.playLogs.push(newPlayLog({
+        gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'oppsub',
+        text: action.label || '相手選手交代', payload: { order: action.order, in: action.letter, out: outgoing },
+      }));
+      g.updatedAt = Date.now();
+      return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
+    }
+    case 'OPP_SET_BATTER_INDEX': {
+      const g = deep(state.games[action.gameId]);
+      g.oppBatterIndex = action.index;
+      g.updatedAt = Date.now();
+      return { ...state, games: { ...state.games, [g.id]: g } };
+    }
+    case 'OPP_SET_PITCHER': {
+      const g = deep(state.games[action.gameId]);
+      const prev = g.oppPitcherLetter;
+      g.oppPitcherLetter = action.letter;
+      if (!g.oppUsedLetters.includes(action.letter)) g.oppUsedLetters.push(action.letter);
+      g.playLogs.push(newPlayLog({
+        gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'opppitcher',
+        text: action.label || '相手投手交代', payload: { in: action.letter, out: prev },
+      }));
+      g.updatedAt = Date.now();
+      return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
+    }
+
     // ===== 投手 =====
     case 'SET_PITCHER': {
       const g = deep(state.games[action.gameId]);
@@ -358,6 +420,7 @@ export function reducer(state, action) {
       //      erChoices, unearnedRuns, extraOuts }
       const pending = ensurePending(g);
       const batter = currentBatter(g);
+      const oppBatter = currentOppBatter(g);
       if (!batter && isMyTeamBatting(g)) return state;
 
       const myBatting = isMyTeamBatting(g);
@@ -392,6 +455,7 @@ export function reducer(state, action) {
       if (typeof p.batterTo === 'number' && p.batterTo >= 1 && p.batterTo <= 3) {
         g.runners[p.batterTo] = {
           playerId: myBatting ? batter?.playerId : null,
+          letter: myBatting ? null : oppBatter?.letter || null,
           pitcherId: myBatting ? null : g.currentPitcherId,
           viaError: p.result === 'error',
         };
@@ -455,20 +519,20 @@ export function reducer(state, action) {
         if (p.result === 'so') pr.strikeouts += 1;
         // アウトカウントは下の共通処理後に別途集計する
       }
-      // --- 守備時: 相手打者は名前を管理しないため、打順(9人サイクル)だけをログに残す ---
+      // --- 守備時: 相手打者は記号(A〜T)で識別してログに残す ---
       // (投手未選択でも打順表示・履歴は追えるよう、投手成績とは別に常に記録する)
-      if (!myBatting) {
-        const oppOrder = ((g.oppBatterIndex || 0) % 9) + 1;
+      if (!myBatting && oppBatter) {
         const oppResultLabel = (p.result === 'so' && SO_TYPES[p.soType]) || resultDef?.label || p.result;
         g.playLogs.push(newPlayLog({
           gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'defense',
-          text: `相手打者(${oppOrder}番): ${DIRECTIONS[p.direction] || ''}${oppResultLabel}` + (totalRuns ? ` (${totalRuns}失点)` : ''),
+          text: `相手打者${oppBatter.letter}(${oppBatter.order}番): ${DIRECTIONS[p.direction] || ''}${oppResultLabel}` + (totalRuns ? ` (${totalRuns}失点)` : ''),
           payload: {
             result: p.result, direction: p.direction, outType: p.outType || null,
-            soType: p.result === 'so' ? p.soType || null : null, runs: totalRuns, oppOrder,
+            soType: p.result === 'so' ? p.soType || null : null, runs: totalRuns,
+            letter: oppBatter.letter, order: oppBatter.order,
           },
         }));
-        g.oppBatterIndex = ((g.oppBatterIndex || 0) + 1) % 9;
+        g.oppBatterIndex = (g.oppBatterIndex + 1) % Math.max(1, g.oppLineup.length);
       }
 
       // --- 守備時: このプレイで増えたアウト数を現投手に加算 ---
@@ -598,7 +662,11 @@ const StoreContext = createContext(null);
 export function StoreProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, initialState, (init) => {
     const saved = loadPersisted();
-    return saved ? { ...init, ...saved } : init;
+    if (!saved) return init;
+    const games = Object.fromEntries(
+      Object.entries(saved.games || {}).map(([id, g]) => [id, ensureOppFields(g)])
+    );
+    return { ...init, ...saved, games };
   });
 
   // 永続化(変更のたび、軽くデバウンス)
