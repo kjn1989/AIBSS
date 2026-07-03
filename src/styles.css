@@ -443,6 +443,47 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
   font-size: 13px; min-height: 46px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
 }
 
+/* ---- 常時リスニングモード ---- */
+.cont-mode-toggle {
+  position: fixed; right: 16px; bottom: calc(var(--tab-h) + var(--safe-bottom) + 86px);
+  z-index: 90; background: var(--bg-2); border: 1px solid var(--accent-2); color: var(--accent);
+  border-radius: 999px; font-size: 12px; font-weight: 700; padding: 8px 14px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+.cont-status-pill {
+  position: fixed; right: 16px; bottom: calc(var(--tab-h) + var(--safe-bottom) + 16px);
+  z-index: 90; border-radius: 999px; font-size: 14px; font-weight: 800; padding: 14px 18px;
+  border: none; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45); color: #fff;
+}
+.cont-status-pill.live { background: var(--green); animation: pulse-green 1.6s infinite; }
+.cont-status-pill.muted { background: var(--bg-3); color: var(--text-dim); border: 1px solid var(--border); }
+.cont-status-pill.connecting { background: var(--amber); }
+@keyframes pulse-green { 0% { box-shadow: 0 0 0 0 rgba(63, 185, 80, 0.5); } 70% { box-shadow: 0 0 0 16px rgba(63, 185, 80, 0); } 100% { box-shadow: 0 0 0 0 rgba(63, 185, 80, 0); } }
+.cont-exit-btn {
+  position: fixed; right: 16px; bottom: calc(var(--tab-h) + var(--safe-bottom) + 78px);
+  z-index: 90; background: var(--bg-2); border: 1px solid var(--border); color: var(--text-dim);
+  border-radius: 999px; font-size: 11px; padding: 6px 12px;
+}
+.cont-undo-btn {
+  position: fixed; left: 12px; bottom: calc(var(--tab-h) + var(--safe-bottom) + 16px);
+  z-index: 90; min-height: 58px; padding: 0 18px;
+  background: var(--red); border: none; color: #fff; font-size: 15px; font-weight: 800;
+  border-radius: 16px; box-shadow: 0 4px 20px rgba(248, 81, 73, 0.4);
+}
+.pending-toast {
+  position: fixed; left: 12px; right: 12px; bottom: calc(var(--tab-h) + var(--safe-bottom) + 84px);
+  z-index: 91; background: var(--bg-2); border: 2px solid var(--gold); border-radius: 14px;
+  padding: 12px 14px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+}
+.pending-toast .pending-label { font-size: 17px; font-weight: 800; margin-bottom: 8px; }
+.pending-bar-track { height: 4px; background: var(--bg-3); border-radius: 2px; overflow: hidden; margin-bottom: 10px; }
+.pending-bar {
+  height: 100%; width: 100%; background: var(--gold); transform-origin: left;
+  animation: pending-shrink linear forwards;
+  animation-duration: var(--pending-ms, 2500ms);
+}
+@keyframes pending-shrink { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+
 /* ---- バッジ・ユーティリティ ---- */
 .pill {
   display: inline-block; padding: 2px 10px; border-radius: 999px;

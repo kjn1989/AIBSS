@@ -2,14 +2,18 @@ import React, { useState, useRef, useEffect } from 'react';
 import Sheet from './Sheet.jsx';
 import PlaySheet from './PlaySheet.jsx';
 import { useStore, usePlayerName, isMyTeamBatting, currentBatter } from '../state/store.jsx';
-import { parseUtterance, playLabel, normalize } from '../lib/voiceParser.js';
+import { parseUtterance, playLabel, normalize, stripWakeWord, parseCommand, needsComplexConfirm } from '../lib/voiceParser.js';
 import { interpretWithLLM } from '../lib/llm.js';
 import { speechAvailable, createRecognizer } from '../lib/speech.js';
+import { createContinuousRecognizer } from '../lib/continuousSpeech.js';
+import { speak, beep, beepForPitch } from '../lib/tts.js';
 import { proposeMoves } from '../lib/plays.js';
 
 const LLM_THRESHOLD = 0.5; // これ未満の信頼度ならLLMに問い合わせ(設定時のみ)
+const PENDING_MS = 2500; // 常時リスニングモード: オプトアウト自動確定までの待機時間
 
 // 音声実況入力: FAB → 認識 → 解釈 → 大きな確認カード(1タップ確定/修正)
+// + 常時リスニングモード(ウェイクワード「ログ」+ 3階層の確定方式)
 export default function VoiceControl({ game }) {
   const { state, dispatch } = useStore();
   const nameOf = usePlayerName();
@@ -178,7 +182,15 @@ export default function VoiceControl({ game }) {
     const soPending = top.kind === 'play' && top.result === 'so' && !top.soExplicit;
     if (soPending && (t.includes('からぶ') || t.includes('空振'))) return apply({ ...top, soType: 'swinging' });
     if (soPending && (t.includes('みのが') || t.includes('見逃'))) return apply({ ...top, soType: 'looking' });
-    if (/いいえ|ちがう|違う|やりなお|きゃんせる|だめ/.test(t)) return startListening();
+    if (/いいえ|ちがう|違う|やりなお|きゃんせる|だめ/.test(t)) {
+      // 常時リスニングモードでは専用の継続認識が既に走っているため、
+      // 単発セッションは起動せず確認状態を解いて待機に戻すだけでよい
+      if (contMode) {
+        setMode('idle');
+        return;
+      }
+      return startListening();
+    }
     if (/^(はい|うん|おっけ|ok|かくてい|確定|よし|それ)/.test(t)) {
       if (soPending) return; // 三振は種別(空振り/見逃し)の発話が必要
       return apply(top);
@@ -211,13 +223,179 @@ export default function VoiceControl({ game }) {
     }
   };
 
-  // 三振の種別選択が必要なときは自動で音声回答の受付を開始
+  // ============================================================
+  // 常時リスニングモード
+  // ウェイクワード「ログ、〜」を必須にし、投球コールは即時自動確定、
+  // 単純なプレイはオプトアウト自動確定、複雑なプレイのみ画面確認必須。
+  // ============================================================
+  const [contMode, setContMode] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const [contStatus, setContStatus] = useState('idle'); // idle|listening|error|stopped|unsupported
+  const [pendingCommit, setPendingCommit] = useState(null); // { cand, commitNow, startedAt }
+  const contRecRef = useRef(null);
+  const pendingTimerRef = useRef(null);
+  const handlerRef = useRef(() => {});
+
+  const cancelPendingCommit = () => {
+    clearTimeout(pendingTimerRef.current);
+    setPendingCommit(null);
+  };
+
+  const startPendingCommit = (cand) => {
+    clearTimeout(pendingTimerRef.current);
+    const commitNow = () => {
+      clearTimeout(pendingTimerRef.current);
+      setPendingCommit(null);
+      apply(cand);
+    };
+    pendingTimerRef.current = setTimeout(commitNow, PENDING_MS);
+    setPendingCommit({ cand, commitNow, startedAt: Date.now() });
+  };
+
+  // interpret()の常時リスニング版: 結果に応じて呼び出し側で階層分岐する
+  const continuousInterpret = async (text) => {
+    let cands = parseUtterance(text);
+    let usedLLM = false;
+    const top = cands[0];
+    if ((!top || top.confidence < LLM_THRESHOLD) && state.settings.useLLM && state.settings.anthropicApiKey) {
+      const llm = await interpretWithLLM(text, state.settings.anthropicApiKey);
+      if (llm && llm.kind !== 'unknown') {
+        const cand = {
+          kind: llm.kind,
+          result: llm.result || null,
+          direction: llm.direction || null,
+          outType: llm.outType || null,
+          pitchType: llm.pitchType || null,
+          confidence: llm.confidence ?? 0.8,
+          label:
+            llm.kind === 'play'
+              ? playLabel(llm.result, llm.direction, llm.outType)
+              : llm.kind === 'pitch'
+                ? { ball: 'ボール', strike: 'ストライク', foul: 'ファウル' }[llm.pitchType]
+                : llm.kind === 'sb'
+                  ? '盗塁成功'
+                  : '盗塁死',
+          fromLLM: true,
+        };
+        cands = [cand, ...cands.filter((c) => c.label !== cand.label)].slice(0, 3);
+        usedLLM = true;
+      }
+    }
+    setLlmUsed(usedLLM);
+    return cands;
+  };
+
+  const handleContinuousFinal = async (rawText) => {
+    const rest = stripWakeWord(rawText);
+    if (rest === null) return; // ウェイクワードなしの発話は誤反応防止のため無視
+
+    const cmd = parseCommand(rest);
+
+    if (cmd === 'unmute') {
+      if (muted) {
+        setMuted(false);
+        speak('マイク再開');
+      }
+      return;
+    }
+    if (muted) return; // ミュート中は解除コマンド以外を無視
+
+    if (cmd === 'mute') {
+      setMuted(true);
+      cancelPendingCommit();
+      speak('ミュートしました');
+      return;
+    }
+    if (cmd === 'undo') {
+      cancelPendingCommit();
+      const last = state.history[state.history.length - 1];
+      if (last && last.gameId === game.id) {
+        dispatch({ type: 'UNDO' });
+        speak('取り消しました');
+      }
+      return;
+    }
+    if (mode === 'editing') return; // プレイシート編集中は音声を無視(手動操作に専念)
+
+    if (pendingCommit) {
+      if (cmd === 'cancel') {
+        cancelPendingCommit();
+        speak('キャンセルしました');
+        return;
+      }
+      if (cmd === 'confirm') {
+        pendingCommit.commitNow();
+        return;
+      }
+      // 次の発話が来た場合は保留中のプレイをまず確定してから続けて処理する
+      pendingCommit.commitNow();
+    }
+
+    if (mode === 'confirming') {
+      if (cmd === 'cancel') {
+        setMode('idle');
+        return;
+      }
+      handleAnswer(rest);
+      return;
+    }
+
+    const cands = await continuousInterpret(rest);
+    const top = cands[0];
+    if (!top) {
+      beep(320, 70); // 解釈できず: 低い短音のみ(画面遷移なし)
+      return;
+    }
+    if (top.kind === 'pitch') {
+      apply(top);
+      beepForPitch(top.pitchType);
+      return;
+    }
+    if (needsComplexConfirm(top)) {
+      setTranscript(rest);
+      setCandidates(cands);
+      setMode('confirming');
+      speak(`${top.label}でよろしいですか`);
+      return;
+    }
+    // sb/cs、または単純なプレイ: オプトアウト自動確定
+    setTranscript(rest);
+    startPendingCommit(top);
+    speak(top.label);
+  };
+
+  handlerRef.current = handleContinuousFinal;
+
+  useEffect(() => {
+    if (!contMode) {
+      contRecRef.current?.stop?.();
+      contRecRef.current = null;
+      setContStatus('idle');
+      cancelPendingCommit();
+      return;
+    }
+    const rec = createContinuousRecognizer({
+      onFinal: (text) => handlerRef.current(text),
+      onStatus: (status) => setContStatus(status),
+    });
+    contRecRef.current = rec;
+    rec.start();
+    return () => {
+      rec.stop();
+      contRecRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contMode]);
+
+  // 三振の種別選択が必要なときは自動で音声回答の受付を開始(一発リスニングモードのみ。
+  // 常時リスニングモードでは既存の継続認識がそのまま回答も拾う)
   const soPendingTop =
     mode === 'confirming' && candidates[0]?.kind === 'play' && candidates[0]?.result === 'so' && !candidates[0]?.soExplicit;
   useEffect(() => {
-    if (soPendingTop && speechAvailable()) startAnswerListening();
+    if (soPendingTop && speechAvailable() && !contMode) startAnswerListening();
     return () => answerRecRef.current?.abort?.();
-  }, [soPendingTop]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [soPendingTop, contMode]);
 
   useEffect(() => {
     if (mode !== 'confirming') answerRecRef.current?.abort?.();
@@ -227,15 +405,67 @@ export default function VoiceControl({ game }) {
     // 音声非対応ブラウザでもテキスト実況入力は使えるようにFABは出す
   }
 
+  const canUndo = state.history.length > 0 && state.history[state.history.length - 1].gameId === game.id;
+
   return (
     <>
-      <button
-        className={`voice-fab${mode === 'listening' ? ' listening' : ''}`}
-        onClick={() => (mode === 'listening' ? stopListening() : startListening())}
-        aria-label="音声実況"
-      >
-        {mode === 'listening' ? '⏹' : '🎙'}
-      </button>
+      {!contMode && (
+        <button
+          className="cont-mode-toggle"
+          onClick={() => speechAvailable() && setContMode(true)}
+          disabled={!speechAvailable()}
+          title={speechAvailable() ? '常時リスニングモードを開始' : '音声認識が利用できません'}
+        >
+          🎙️常時
+        </button>
+      )}
+
+      {!contMode && (
+        <button
+          className={`voice-fab${mode === 'listening' ? ' listening' : ''}`}
+          onClick={() => (mode === 'listening' ? stopListening() : startListening())}
+          aria-label="音声実況"
+        >
+          {mode === 'listening' ? '⏹' : '🎙'}
+        </button>
+      )}
+
+      {contMode && (
+        <>
+          <button
+            className={`cont-status-pill ${muted ? 'muted' : contStatus === 'listening' ? 'live' : 'connecting'}`}
+            onClick={() => setMuted((m) => !m)}
+            aria-label="ミュート切り替え"
+          >
+            {muted ? '🔇 ミュート' : contStatus === 'listening' ? '🎙️ LIVE' : '🤔 接続中'}
+          </button>
+          <button className="cont-exit-btn" onClick={() => setContMode(false)}>常時モード終了</button>
+          {canUndo && (
+            <button
+              className="cont-undo-btn"
+              onClick={() => {
+                cancelPendingCommit();
+                dispatch({ type: 'UNDO' });
+              }}
+            >
+              ↩ 1つ前に戻す
+            </button>
+          )}
+          {pendingCommit && (
+            <div className="pending-toast">
+              <div className="pending-label">{pendingCommit.cand.label}</div>
+              <div className="pending-bar-track">
+                <div
+                  key={pendingCommit.startedAt}
+                  className="pending-bar"
+                  style={{ '--pending-ms': `${PENDING_MS}ms` }}
+                />
+              </div>
+              <button className="ghost small" onClick={cancelPendingCommit}>キャンセル</button>
+            </div>
+          )}
+        </>
+      )}
 
       {mode === 'listening' && (
         <Sheet title="🎙 実況をどうぞ…" onClose={stopListening}>
@@ -284,7 +514,7 @@ export default function VoiceControl({ game }) {
               <>
                 <div className="q mt8">解釈できませんでした 🙏</div>
                 <div className="sheet-actions">
-                  <button onClick={startListening}>🎙 やり直す</button>
+                  {!contMode && <button onClick={startListening}>🎙 やり直す</button>}
                   <button className="ghost" onClick={() => setMode('idle')}>閉じる</button>
                 </div>
               </>
@@ -323,18 +553,26 @@ export default function VoiceControl({ game }) {
                     </button>
                   ))}
                 </div>
-                <button
-                  className={`mt8 ${answerListening ? 'danger' : ''}`}
-                  style={{ width: '100%' }}
-                  onClick={startAnswerListening}
-                >
-                  {answerListening ? '🎙 音声回答を聞いています…' : '🎙 音声で回答する'}
-                </button>
-                <p className="small dim mt8" style={{ textAlign: 'center' }}>
-                  「はい」「空振り」「見逃し」「やり直し」などと話せます
-                </p>
+                {contMode ? (
+                  <p className="small dim mt8" style={{ textAlign: 'center' }}>
+                    🎙️ 常時リスニング中: 「ログ、はい」「ログ、空振り」「ログ、キャンセル」等と話せます
+                  </p>
+                ) : (
+                  <>
+                    <button
+                      className={`mt8 ${answerListening ? 'danger' : ''}`}
+                      style={{ width: '100%' }}
+                      onClick={startAnswerListening}
+                    >
+                      {answerListening ? '🎙 音声回答を聞いています…' : '🎙 音声で回答する'}
+                    </button>
+                    <p className="small dim mt8" style={{ textAlign: 'center' }}>
+                      「はい」「空振り」「見逃し」「やり直し」などと話せます
+                    </p>
+                  </>
+                )}
                 <div className="sheet-actions">
-                  <button onClick={startListening}>🎙 やり直す</button>
+                  {!contMode && <button onClick={startListening}>🎙 やり直す</button>}
                   <button className="ghost" onClick={() => setMode('idle')}>キャンセル</button>
                 </div>
               </>

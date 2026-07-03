@@ -249,3 +249,59 @@ export function playLabel(result, direction, outType, soType) {
   if (result === 'so') return SO_TYPES[soType || 'swinging'];
   return `${dir ? dir + ' ' : ''}${RESULTS[result].label}`;
 }
+
+// ============================================================
+// 常時リスニングモード用: ウェイクワード切り出し + 操作コマンド解釈
+// ============================================================
+
+// 「ログ、〜」の枕詞を必須にすることで、周囲の歓声・実況・審判の声等への
+// 誤反応を防ぐ(全ての発話に例外なく必須)。
+const WAKE_WORD_VARIANTS = ['ろぐ', 'ろーぐ', 'log'];
+
+// 発話にウェイクワードが含まれていなければ null、含まれていれば
+// それ以降の本文(未正規化のまま次の解析に渡せる正規化済みテキスト)を返す。
+export function stripWakeWord(rawText) {
+  const n = normalize(rawText);
+  for (const w of WAKE_WORD_VARIANTS) {
+    if (n.startsWith(w)) return n.slice(w.length);
+  }
+  return null;
+}
+
+// ---- 操作コマンド辞書(ミュート・取り消し等) ----
+const COMMAND_DICT = {
+  mute: ['ミュート', 'みゅーと', 'マイクオフ'],
+  unmute: ['ミュート解除', 'みゅーとかいじょ', 'かいじょ', 'マイクオン'],
+  cancel: ['キャンセル', 'きゃんせる', '違う', 'ちがう', 'やめて'],
+  undo: ['取り消し', 'とりけし', '戻して', 'もどして', 'アンドゥ'],
+  confirm: ['はい', 'うん', 'おっけー', 'おっけ', '確定', 'かくてい'],
+};
+
+// テキスト(ウェイクワード除去済み)が操作コマンドに一致すればそのキーを返す
+export function parseCommand(text) {
+  const t = normalize(text);
+  if (!t) return null;
+  let best = null;
+  let bestScore = 0;
+  for (const [cmd, words] of Object.entries(COMMAND_DICT)) {
+    for (const w of words) {
+      const s = matchScore(t, w);
+      if (s > bestScore) {
+        bestScore = s;
+        best = cmd;
+      }
+    }
+  }
+  return best;
+}
+
+// 3階層の確定方式: このプレイは画面確認が必須な「複雑なプレイ」か
+// (併殺・エラー・方向不明の長打・犠打犠飛など、走者処理の解釈が割れうるもの)
+export function needsComplexConfirm(cand) {
+  if (cand.kind !== 'play') return false;
+  if (['double', 'triple', 'hr'].includes(cand.result) && !cand.direction) return true;
+  if (['sacBunt', 'sacFly'].includes(cand.result)) return true;
+  if (cand.result === 'error') return true;
+  if (cand.result === 'out' && cand.outType === 'dp') return true;
+  return false;
+}
