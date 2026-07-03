@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import Sheet from './Sheet.jsx';
 import PlaySheet from './PlaySheet.jsx';
 import { useStore, usePlayerName, isMyTeamBatting, currentBatter } from '../state/store.jsx';
-import { parseUtterance, playLabel } from '../lib/voiceParser.js';
+import { parseUtterance, playLabel, normalize } from '../lib/voiceParser.js';
 import { interpretWithLLM } from '../lib/llm.js';
 import { speechAvailable, createRecognizer } from '../lib/speech.js';
 import { proposeMoves } from '../lib/plays.js';
@@ -61,22 +61,38 @@ export default function VoiceControl({ game }) {
   };
 
   const [micError, setMicError] = useState(false);
+  const interimRef = useRef('');
+  const interpretedRef = useRef(false);
 
   const startListening = () => {
     setInterim('');
     setTranscript('');
     setManualText('');
     setMicError(false);
+    interimRef.current = '';
+    interpretedRef.current = false;
     setMode('listening'); // 認識不可でもテキスト実況入力ができるようシートは開く
     const rec = createRecognizer({
-      onInterim: setInterim,
+      onInterim: (text) => {
+        interimRef.current = text;
+        setInterim(text);
+      },
       onResult: (text) => {
+        interpretedRef.current = true;
         setTranscript(text);
         interpret(text);
       },
       // エラー/終了してもシートは開いたまま(テキスト入力にフォールバック)
       onError: () => setMicError(true),
-      onEnd: () => {},
+      // iOS Safariでは確定結果が来ないまま認識が終わることがある
+      // → 暫定(interim)テキストが残っていればそれで解釈する
+      onEnd: () => {
+        if (!interpretedRef.current && interimRef.current.trim()) {
+          interpretedRef.current = true;
+          setTranscript(interimRef.current.trim());
+          interpret(interimRef.current.trim());
+        }
+      },
     });
     if (!rec) {
       setMicError(true);
@@ -114,6 +130,19 @@ export default function VoiceControl({ game }) {
       setMode('idle');
       return;
     }
+    // 長打(二塁打/三塁打/本塁打)で方向が聞き取れていない場合は、
+    // 方向確認のためプレイシート(修正フロー)を開く
+    if (cand.kind === 'play' && ['double', 'triple', 'hr'].includes(cand.result) && !cand.direction) {
+      setEditCand(cand);
+      setMode('editing');
+      return;
+    }
+    // 犠打・犠飛はタップ入力と同様に走者の動きを必ず確認してから確定
+    if (cand.kind === 'play' && ['sacBunt', 'sacFly'].includes(cand.result)) {
+      setEditCand(cand);
+      setMode('editing');
+      return;
+    }
     // play: デフォルトの進塁提案で即確定
     const runnersOn = { 1: !!game.runners[1], 2: !!game.runners[2], 3: !!game.runners[3] };
     const proposal = proposeMoves(cand.result, runnersOn);
@@ -134,6 +163,65 @@ export default function VoiceControl({ game }) {
   };
 
   const [editCand, setEditCand] = useState(null);
+
+  // ---- 確認カードへの音声回答 ----
+  // 「空振り」「見逃し」「はい」「やり直し」等を音声で受け付ける。
+  // それ以外の発話は新しい実況として再解釈する。
+  const [answerListening, setAnswerListening] = useState(false);
+  const answerRecRef = useRef(null);
+
+  const handleAnswer = (raw) => {
+    setAnswerListening(false);
+    const t = normalize(raw);
+    const top = candidates[0];
+    if (!top) return;
+    const soPending = top.kind === 'play' && top.result === 'so' && !top.soExplicit;
+    if (soPending && (t.includes('からぶ') || t.includes('空振'))) return apply({ ...top, soType: 'swinging' });
+    if (soPending && (t.includes('みのが') || t.includes('見逃'))) return apply({ ...top, soType: 'looking' });
+    if (/いいえ|ちがう|違う|やりなお|きゃんせる|だめ/.test(t)) return startListening();
+    if (/^(はい|うん|おっけ|ok|かくてい|確定|よし|それ)/.test(t)) {
+      if (soPending) return; // 三振は種別(空振り/見逃し)の発話が必要
+      return apply(top);
+    }
+    // 他候補のラベルとの一致を確認
+    for (const c of candidates) {
+      const cl = normalize(c.label);
+      if (cl && (t.includes(cl) || cl.includes(t))) return apply(c);
+    }
+    // 新しい実況として解釈し直す
+    setTranscript(raw);
+    interpret(raw);
+  };
+
+  const startAnswerListening = () => {
+    answerRecRef.current?.abort?.();
+    const rec = createRecognizer({
+      onInterim: () => {},
+      onResult: handleAnswer,
+      onError: () => setAnswerListening(false),
+      onEnd: () => setAnswerListening(false),
+    });
+    if (!rec) return;
+    answerRecRef.current = rec;
+    setAnswerListening(true);
+    try {
+      rec.start();
+    } catch {
+      setAnswerListening(false);
+    }
+  };
+
+  // 三振の種別選択が必要なときは自動で音声回答の受付を開始
+  const soPendingTop =
+    mode === 'confirming' && candidates[0]?.kind === 'play' && candidates[0]?.result === 'so' && !candidates[0]?.soExplicit;
+  useEffect(() => {
+    if (soPendingTop && speechAvailable()) startAnswerListening();
+    return () => answerRecRef.current?.abort?.();
+  }, [soPendingTop]);
+
+  useEffect(() => {
+    if (mode !== 'confirming') answerRecRef.current?.abort?.();
+  }, [mode]);
 
   if (!speechAvailable() && mode === 'idle') {
     // 音声非対応ブラウザでもテキスト実況入力は使えるようにFABは出す
@@ -202,12 +290,28 @@ export default function VoiceControl({ game }) {
               </>
             ) : (
               <>
-                <div className="q mt8">{candidates[0].label} でよろしいですか？</div>
+                <div className="q mt8">
+                  {candidates[0].label} でよろしいですか？
+                  {candidates[0].result === 'so' && !candidates[0].soExplicit && (
+                    <span className="dim small" style={{ display: 'block', fontSize: 13 }}>空振り/見逃しを選んで確定</span>
+                  )}
+                </div>
                 <div className="cand">
-                  <button className="top" onClick={() => apply(candidates[0])}>
-                    ✔ はい、{candidates[0].label}
-                    <span className="dim small"> (信頼度{Math.round(candidates[0].confidence * 100)}%)</span>
-                  </button>
+                  {candidates[0].kind === 'play' && candidates[0].result === 'so' && !candidates[0].soExplicit ? (
+                    <div className="grid2">
+                      <button className="top" style={{ minHeight: 54 }} onClick={() => apply({ ...candidates[0], soType: 'swinging' })}>
+                        ✔ 空振り三振
+                      </button>
+                      <button className="top" style={{ minHeight: 54 }} onClick={() => apply({ ...candidates[0], soType: 'looking' })}>
+                        ✔ 見逃し三振
+                      </button>
+                    </div>
+                  ) : (
+                    <button className="top" onClick={() => apply(candidates[0])}>
+                      ✔ はい、{candidates[0].label}
+                      <span className="dim small"> (信頼度{Math.round(candidates[0].confidence * 100)}%)</span>
+                    </button>
+                  )}
                   {candidates[0].kind === 'play' && (
                     <button onClick={() => { setEditCand(candidates[0]); setMode('editing'); }}>
                       ✎ 走者・方向を修正して確定
@@ -219,6 +323,16 @@ export default function VoiceControl({ game }) {
                     </button>
                   ))}
                 </div>
+                <button
+                  className={`mt8 ${answerListening ? 'danger' : ''}`}
+                  style={{ width: '100%' }}
+                  onClick={startAnswerListening}
+                >
+                  {answerListening ? '🎙 音声回答を聞いています…' : '🎙 音声で回答する'}
+                </button>
+                <p className="small dim mt8" style={{ textAlign: 'center' }}>
+                  「はい」「空振り」「見逃し」「やり直し」などと話せます
+                </p>
                 <div className="sheet-actions">
                   <button onClick={startListening}>🎙 やり直す</button>
                   <button className="ghost" onClick={() => setMode('idle')}>キャンセル</button>

@@ -4,7 +4,8 @@ import { useStore, usePlayerName, isMyTeamBatting } from '../state/store.jsx';
 
 // 塁タップで開く走者イベントシート
 // 盗塁・盗塁死・暴投・捕逸・牽制死などの簡易パターンをワンタップ反映
-export default function RunnerEventSheet({ game, base, onClose }) {
+// onPinchRunner(slot): 代走シートを開く(自チーム攻撃時のみ)
+export default function RunnerEventSheet({ game, base, onClose, onPinchRunner }) {
   const { dispatch } = useStore();
   const nameOf = usePlayerName();
   const runner = game.runners[base];
@@ -59,9 +60,20 @@ export default function RunnerEventSheet({ game, base, onClose }) {
   }
 
   const name = runner.playerId ? nameOf(runner.playerId) : '走者';
+  // 代走: この走者の打順スロット(自チーム攻撃時のみ存在)
+  const runnerSlot = runner.playerId ? game.lineup.find((l) => l.playerId === runner.playerId) : null;
 
   return (
     <Sheet title={`${baseName}: ${name}`} onClose={onClose}>
+      {runnerSlot && onPinchRunner && (
+        <button
+          className="primary"
+          style={{ width: '100%', marginBottom: 10 }}
+          onClick={() => onPinchRunner(runnerSlot)}
+        >
+          🔄 代走を送る({name}に代えて)
+        </button>
+      )}
       <div className="grid2">
         <button className="primary" onClick={() => fire('sb', sbMoves)}>
           盗塁成功{isDouble ? '(重盗)' : ''} → {next === 4 ? '本塁' : ['', '一', '二', '三'][next] + '塁'}

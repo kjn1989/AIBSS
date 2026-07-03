@@ -3,6 +3,7 @@ import Sheet from './Sheet.jsx';
 import { useStore, usePlayerName, isMyTeamBatting } from '../state/store.jsx';
 import { RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES } from '../lib/model.js';
 import { proposeMoves, batterDestOptions, runnerDestOptions, DEST_LABEL, judgeAdvance } from '../lib/plays.js';
+import FieldPad from './FieldPad.jsx';
 
 const NEEDS_DIRECTION = ['single', 'double', 'triple', 'hr', 'out', 'error', 'sacBunt', 'sacFly'];
 
@@ -118,13 +119,7 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
       {needsDir && (
         <>
           <div className="section-title" style={{ marginTop: 0 }}>打球方向</div>
-          <div className="dir-pad">
-            {Object.entries(DIRECTIONS).map(([k, v]) => (
-              <button key={k} className={direction === k ? 'primary' : ''} onClick={() => setDirection(k)}>
-                {v}
-              </button>
-            ))}
-          </div>
+          <FieldPad value={direction} onChange={setDirection} />
         </>
       )}
 

@@ -60,10 +60,11 @@ function LineupEditor({ game }) {
 }
 
 // ---- 交代シート(代打・代走・守備交代) ----
-function SubstituteSheet({ game, slot, onClose }) {
+// スコア入力タブ(打者カード/走者タップ)からも再利用するため export する
+export function SubstituteSheet({ game, slot, onClose, initialKind = 'ph' }) {
   const { state, dispatch } = useStore();
   const nameOf = usePlayerName();
-  const [kind, setKind] = useState('ph'); // ph=代打 pr=代走 def=守備交代
+  const [kind, setKind] = useState(initialKind); // ph=代打 pr=代走 def=守備交代
   const [playerId, setPlayerId] = useState('');
   const [position, setPosition] = useState(slot.position);
 

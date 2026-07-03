@@ -8,6 +8,7 @@ import PlaySheet from './PlaySheet.jsx';
 import RunnerEventSheet from './RunnerEventSheet.jsx';
 import Sheet from './Sheet.jsx';
 import VoiceControl from './VoiceControl.jsx';
+import { SubstituteSheet } from './OrderTab.jsx';
 import { POSITIONS } from '../lib/model.js';
 
 // ---- 試合セットアップ(試合がない/選択されていないとき) ----
@@ -51,11 +52,14 @@ function GameSetup() {
 }
 
 // ---- 打者変更シート ----
-function BatterSheet({ game, onClose }) {
+function BatterSheet({ game, onClose, onPinchHitter }) {
   const { dispatch } = useStore();
   const nameOf = usePlayerName();
   return (
     <Sheet title="次の打者を選択" onClose={onClose}>
+      <button className="primary" style={{ width: '100%', marginBottom: 10 }} onClick={onPinchHitter}>
+        🔄 代打を送る({nameOf(currentBatter(game)?.playerId)}に代えて)
+      </button>
       {game.lineup.map((slot, i) => (
         <div className="row" key={slot.order}>
           <span className="rank-badge">{slot.order}</span>
@@ -269,8 +273,27 @@ export default function ScoreTab() {
           onFurinige={(soType) => setSheet({ kind: 'play', result: 'so', soType, batterTo: 1 })}
         />
       )}
-      {sheet?.kind === 'runner' && <RunnerEventSheet game={game} base={sheet.base} onClose={() => setSheet(null)} />}
-      {sheet?.kind === 'batter' && <BatterSheet game={game} onClose={() => setSheet(null)} />}
+      {sheet?.kind === 'runner' && (
+        <RunnerEventSheet
+          game={game}
+          base={sheet.base}
+          onClose={() => setSheet(null)}
+          onPinchRunner={(slot) => setSheet({ kind: 'sub', slot, subKind: 'pr' })}
+        />
+      )}
+      {sheet?.kind === 'batter' && (
+        <BatterSheet
+          game={game}
+          onClose={() => setSheet(null)}
+          onPinchHitter={() => {
+            const slot = currentBatter(game);
+            if (slot) setSheet({ kind: 'sub', slot, subKind: 'ph' });
+          }}
+        />
+      )}
+      {sheet?.kind === 'sub' && (
+        <SubstituteSheet game={game} slot={sheet.slot} initialKind={sheet.subKind} onClose={() => setSheet(null)} />
+      )}
     </div>
   );
 }

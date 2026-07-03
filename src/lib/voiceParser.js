@@ -7,6 +7,24 @@
 // ============================================================
 import { RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES } from './model.js';
 
+// ---- 音声認識(ASR)の定番誤変換を補正 ----
+// iOS/Androidの音声認識が野球用語を一般語に誤変換するパターンを吸収する。
+// (ひらがな化した後に適用)
+const ASR_FIXES = [
+  [/まいひっと/g, 'まえひっと'], // 「前ヒット」→「マイヒット」
+  [/五郎|5郎|ごろう/g, 'ごろ'], // 「ゴロ」→「五郎/ゴロー」
+  [/頃/g, 'ごろ'], // 「ゴロ」→「頃」
+  [/降ろ|凝ろ/g, 'ごろ'],
+  [/送信|三線|散々|散心|賛親/g, 'さんしん'], // 「三振」→「送信/三線」
+  [/そうしん/g, 'さんしん'],
+  [/tbs/g, 'すりーべーす'], // 「スリーベース」→「TBS」
+  [/svb|3b/g, 'すりーべーす'],
+  [/2b/g, 'つーべーす'],
+  [/ホームrun|homerun|hr/g, 'ほーむらん'],
+  [/しんげき/g, 'ゆうげき'], // 「遊撃」誤変換
+  [/ほーむいん/g, 'せいかん'],
+];
+
 // ---- 正規化: 表記ゆれ吸収 ----
 // カタカナ→ひらがな、全角英数→半角、長音・促音・記号のゆれを吸収
 export function normalize(text) {
@@ -17,6 +35,7 @@ export function normalize(text) {
     .toLowerCase()
     .replace(/[、。！!？?・\s]/g, '')
     .replace(/ー+/g, 'ー');
+  for (const [re, to] of ASR_FIXES) t = t.replace(re, to);
   return t;
 }
 
@@ -64,7 +83,7 @@ const DIRECTION_DICT = {
 };
 
 const RESULT_DICT = {
-  single: ['ヒット', '単打', 'シングル', 'シングルヒット', '内野安打', 'ポテンヒット', 'テキサス', 'クリーンヒット', '抜けた', '前ヒット', 'ぬけた'],
+  single: ['ヒット', '単打', 'シングル', 'シングルヒット', '内野安打', 'ポテンヒット', 'テキサス', 'クリーンヒット', '抜けた', '前ヒット', 'ぬけた', 'セーフティバント', 'セーフティーバント', 'セーフティ'],
   double: ['ツーベース', '二塁打', 'ツーベースヒット', 'ダブル', 'フェンス直撃', '2ベース'],
   triple: ['スリーベース', '三塁打', 'トリプル', '3ベース'],
   hr: ['ホームラン', '本塁打', 'ホーマー', '柵越え', 'スタンドイン', '場外', 'アーチ'],
@@ -149,9 +168,14 @@ export function parseUtterance(rawText) {
     if (result === 'sacFly' && (text.includes('たっちあっぷ') || text.includes('犠'))) s += 1.5;
     // 「バント」+「失敗」なら凡打側へ
     if (result === 'sacBunt' && (text.includes('失敗') || text.includes('しっぱい'))) s *= 0.3;
+    // セーフティバントは犠打ではなく単打(内野安打)
+    if (result === 'sacBunt' && text.includes('せーふてぃ')) s *= 0.1;
+    if (result === 'single' && text.includes('せーふてぃ')) s += 2;
 
     if (s <= 0) continue;
     const outType = result === 'out' ? topKey(outTypeScores) || 'ground' : null;
+    // 三振: 発話に「見逃し/空振り」が含まれていれば確定、なければ確認カードで選ばせる
+    const soExplicit = result === 'so' && (text.includes('見逃') || text.includes('空振') || text.includes('からぶ'));
     const soType = result === 'so' ? (text.includes('見逃') ? 'looking' : 'swinging') : null;
     candidates.push({
       kind: 'play',
@@ -159,7 +183,8 @@ export function parseUtterance(rawText) {
       direction: needsDirection(result) ? bestDir || null : null,
       outType,
       soType,
-      label: playLabel(result, bestDir, outType, soType),
+      soExplicit,
+      label: result === 'so' && !soExplicit ? '三振' : playLabel(result, bestDir, outType, soType),
       confidence: norm(s) * (uncertain ? 0.75 : 1),
     });
   }
@@ -177,12 +202,24 @@ export function parseUtterance(rawText) {
     });
   }
 
+  // --- 方向だけ聞き取れた場合のフォールバック ---
+  // 例:「ライトゴロ」の「ゴロ」が認識落ちして「ライト」だけになったケース。
+  // その方向の代表的な結果(単打/ゴロ/フライ)を候補として提示する。
+  const hasPlay = candidates.some((c) => c.kind === 'play');
+  if (bestDir && !hasPlay) {
+    candidates.push(
+      { kind: 'play', result: 'single', direction: bestDir, outType: null, soType: null, label: playLabel('single', bestDir), confidence: 0.5 },
+      { kind: 'play', result: 'out', direction: bestDir, outType: 'ground', soType: null, label: playLabel('out', bestDir, 'ground'), confidence: 0.45 },
+      { kind: 'play', result: 'out', direction: bestDir, outType: 'fly', soType: null, label: playLabel('out', bestDir, 'fly'), confidence: 0.4 }
+    );
+  }
+
   candidates.sort((a, b) => b.confidence - a.confidence);
   // 重複除去して上位3件
   const seen = new Set();
   const out = [];
   for (const c of candidates) {
-    const key = `${c.kind}:${c.result || c.pitchType || ''}:${c.direction || ''}`;
+    const key = `${c.kind}:${c.result || c.pitchType || ''}:${c.direction || ''}:${c.outType || ''}`;
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(c);
