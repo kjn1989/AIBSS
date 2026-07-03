@@ -75,6 +75,50 @@ function BatterSheet({ game, onClose }) {
   );
 }
 
+// ---- 三振確認カード(2ストライク後のストライクで自動表示) ----
+function StrikeoutSheet({ game, batterName, onClose, onFurinige }) {
+  const { dispatch } = useStore();
+  const [soType, setSoType] = useState('swinging');
+
+  const confirmOut = () => {
+    dispatch({
+      type: 'CONFIRM_PLAY',
+      gameId: game.id,
+      batterName: batterName || '',
+      payload: { result: 'so', soType, moves: [], batterTo: 'out' },
+    });
+    onClose();
+  };
+
+  const undoPitch = () => {
+    dispatch({ type: 'REMOVE_LAST_PITCH', gameId: game.id });
+    onClose();
+  };
+
+  return (
+    <Sheet title="⚡ 三振！" onClose={onClose}>
+      <div className="confirm-card" style={{ marginBottom: 0, border: 'none', padding: 6 }}>
+        <div className="q">{batterName ? `${batterName}、` : '相手打者、'}三振でよろしいですか？</div>
+        <div className="grid2">
+          <button className={soType === 'swinging' ? 'primary' : ''} onClick={() => setSoType('swinging')}>
+            空振り三振
+          </button>
+          <button className={soType === 'looking' ? 'primary' : ''} onClick={() => setSoType('looking')}>
+            見逃し三振
+          </button>
+        </div>
+        <button className="mt12" style={{ width: '100%' }} onClick={() => onFurinige(soType)}>
+          振り逃げ(出塁・走者の動きを入力)
+        </button>
+      </div>
+      <div className="sheet-actions">
+        <button className="ghost" onClick={undoPitch}>↩ 誤タップ(1球取消)</button>
+        <button className="primary" onClick={confirmOut}>三振アウトで確定</button>
+      </div>
+    </Sheet>
+  );
+}
+
 // ---- Undoバー(履歴スタック方式: 直前のプレイ入力を1タップ取り消し) ----
 const UNDO_LABELS = {
   CONFIRM_PLAY: '打席確定',
@@ -167,7 +211,12 @@ export default function ScoreTab() {
         </div>
       )}
 
-      <PitchCounter game={game} />
+      <PitchCounter
+        game={game}
+        onAutoEvent={(kind) =>
+          setSheet(kind === 'so' ? { kind: 'strikeout' } : { kind: 'play', result: 'bb' })
+        }
+      />
 
       {(!myBatting || !noLineup) && (
         <div className="card">
@@ -207,9 +256,17 @@ export default function ScoreTab() {
       {sheet?.kind === 'play' && (
         <PlaySheet
           game={game}
-          initial={{ result: sheet.result }}
+          initial={{ result: sheet.result, soType: sheet.soType, batterTo: sheet.batterTo }}
           batterName={myBatting && batter ? nameOf(batter.playerId) : null}
           onClose={() => setSheet(null)}
+        />
+      )}
+      {sheet?.kind === 'strikeout' && (
+        <StrikeoutSheet
+          game={game}
+          batterName={myBatting && batter ? nameOf(batter.playerId) : null}
+          onClose={() => setSheet(null)}
+          onFurinige={(soType) => setSheet({ kind: 'play', result: 'so', soType, batterTo: 1 })}
         />
       )}
       {sheet?.kind === 'runner' && <RunnerEventSheet game={game} base={sheet.base} onClose={() => setSheet(null)} />}

@@ -6,7 +6,7 @@
 // ============================================================
 import React, { createContext, useContext, useReducer, useEffect, useRef } from 'react';
 import {
-  newPlayer, newGame, newAtBat, newPitch, newPlayLog, newPitchingRecord, RESULTS, DIRECTIONS, OUT_TYPES,
+  newPlayer, newGame, newAtBat, newPitch, newPlayLog, newPitchingRecord, RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES,
 } from '../lib/model.js';
 import { generateDemoData } from '../lib/demo.js';
 
@@ -131,11 +131,14 @@ function changeHalf(game) {
 function ensureMinimumPitches(pitches, result) {
   const balls = pitches.filter((p) => p.type === 'ball').length;
   const strikes = pitches.filter((p) => p.type === 'strike').length;
+  const fouls = pitches.filter((p) => p.type === 'foul').length;
   const out = [...pitches];
   if (result === 'bb') {
     for (let i = balls; i < 4; i++) out.push(newPitch('ball'));
   } else if (result === 'so') {
-    for (let i = strikes; i < 3; i++) out.push(newPitch('strike'));
+    // ファウルは2ストライク分まで有効(ファウル2球+空振り1球でも正規の三振)
+    const strikeEquiv = strikes + Math.min(fouls, 2);
+    for (let i = strikeEquiv; i < 3; i++) out.push(newPitch('strike'));
   }
   return out;
 }
@@ -404,6 +407,7 @@ export function reducer(state, action) {
         const ab = newAtBat({ gameId: g.id, playerId: batter.playerId, order: batter.order, snapshot: pending.snapshot });
         ab.result = p.result;
         ab.outType = p.outType || null;
+        ab.soType = p.result === 'so' ? p.soType || null : null;
         ab.direction = p.direction || null;
         ab.pitches = pitches;
         ab.pitchCount = pitches.length;
@@ -423,10 +427,12 @@ export function reducer(state, action) {
         }
         ab.clutch = judgeClutch(pending.snapshot.scoreDiff, rbi, scoreBefore.my, scoreBefore.opp);
         g.atBats.push(ab);
+        const resultLabel = (p.result === 'so' && SO_TYPES[p.soType]) || resultDef?.label || p.result;
         g.playLogs.push(newPlayLog({
           gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'atbat',
-          text: `${action.batterName || ''} ${DIRECTIONS[p.direction] || ''}${resultDef?.label || p.result}` +
-            (totalRuns ? ` (${totalRuns}点)` : ''),
+          text: `${action.batterName || ''} ${DIRECTIONS[p.direction] || ''}${resultLabel}` +
+            (totalRuns ? ` (${totalRuns}点)` : '') +
+            (p.result === 'so' && p.batterTo === 1 ? ' 振り逃げ' : ''),
           payload: { atBatId: ab.id, playerId: batter.playerId, result: p.result, direction: p.direction, rbi, runs: totalRuns },
         }));
         // 生還した打者の得点ログ

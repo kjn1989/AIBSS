@@ -21,6 +21,9 @@ export const RESULTS = {
   interference: { label: '打撃妨害', short: 'IF', hit: false, bases: 0, ab: false, onBase: true },
 };
 
+// ---- 三振の内訳 ----
+export const SO_TYPES = { swinging: '空振り三振', looking: '見逃し三振' };
+
 // ---- 凡打の内訳 ----
 export const OUT_TYPES = {
   ground: 'ゴロ',
@@ -83,6 +86,7 @@ export function newAtBat({ gameId, playerId, order, snapshot }) {
     // 結果(確定時に埋める)
     result: null, // RESULTS のキー
     outType: null, // OUT_TYPES のキー(凡打時)
+    soType: null, // 三振の種類: 'swinging'(空振り) | 'looking'(見逃し)
     direction: null, // DIRECTIONS のキー
     rbi: 0,
     runsOnPlay: 0,

@@ -4,7 +4,7 @@
 // - UTF-8 BOM付き(Excel/スマホでの文字化け防止)
 // - ダウンロード / 端末の共有機能(LINE等, Web Share API)
 // ============================================================
-import { RESULTS, DIRECTIONS, OUT_TYPES, formatIP } from './model.js';
+import { RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES, formatIP } from './model.js';
 import { aggregateBatting, aggregatePitching, battingMetrics, pitchingMetrics, fmtAvg, fmt2, fmtPct } from './stats.js';
 
 function esc(v) {
@@ -85,7 +85,7 @@ export function atBatCSV(games, nameOf) {
       const snap = ab.snapshot || {};
       rows.push([
         g.date, g.opponent, snap.inning ?? '', ab.order, nameOf(ab.playerId),
-        RESULTS[ab.result]?.label || ab.result,
+        (ab.result === 'so' && SO_TYPES[ab.soType]) || RESULTS[ab.result]?.label || ab.result,
         ab.outType ? OUT_TYPES[ab.outType] : '',
         ab.direction ? DIRECTIONS[ab.direction] : '',
         ab.rbi, ab.runsOnPlay, ab.pitchCount,

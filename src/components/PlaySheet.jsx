@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import Sheet from './Sheet.jsx';
 import { useStore, usePlayerName, isMyTeamBatting } from '../state/store.jsx';
-import { RESULTS, DIRECTIONS, OUT_TYPES } from '../lib/model.js';
+import { RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES } from '../lib/model.js';
 import { proposeMoves, batterDestOptions, runnerDestOptions, DEST_LABEL, judgeAdvance } from '../lib/plays.js';
 
 const NEEDS_DIRECTION = ['single', 'double', 'triple', 'hr', 'out', 'error', 'sacBunt', 'sacFly'];
@@ -19,6 +19,7 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
 
   const [direction, setDirection] = useState(initial.direction || null);
   const [outType, setOutType] = useState(initial.outType || (result === 'out' ? 'ground' : null));
+  const [soType, setSoType] = useState(initial.soType || 'swinging');
   const [dests, setDests] = useState(() => {
     const d = {};
     for (const b of [1, 2, 3]) {
@@ -73,7 +74,8 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
   const summary = () => {
     const dir = direction ? DIRECTIONS[direction] : '';
     const ot = result === 'out' && outType ? OUT_TYPES[outType] : '';
-    return `${dir}${ot}${result === 'out' ? '' : def.label}${runs ? `・${runs}点` : ''}`;
+    const label = result === 'so' ? SO_TYPES[soType] + (batterTo === 1 ? '(振り逃げ)' : '') : result === 'out' ? '' : def.label;
+    return `${dir}${ot}${label}${runs ? `・${runs}点` : ''}`;
   };
 
   // 守備時: 生還する走者のうち継投を跨いだ走者(前投手の責任走者)
@@ -93,6 +95,7 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
       payload: {
         result,
         outType: result === 'out' ? outType : null,
+        soType: result === 'so' ? soType : undefined,
         direction: needsDir ? direction : null,
         moves,
         batterTo,
@@ -118,6 +121,19 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
           <div className="dir-pad">
             {Object.entries(DIRECTIONS).map(([k, v]) => (
               <button key={k} className={direction === k ? 'primary' : ''} onClick={() => setDirection(k)}>
+                {v}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
+      {result === 'so' && (
+        <>
+          <div className="section-title">三振の種類</div>
+          <div className="grid2">
+            {Object.entries(SO_TYPES).map(([k, v]) => (
+              <button key={k} className={soType === k ? 'primary' : ''} onClick={() => setSoType(k)}>
                 {v}
               </button>
             ))}
@@ -177,7 +193,9 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
                 className={batterTo === to ? `sel${to === 'out' ? ' out' : ''}` : ''}
                 onClick={() => setBatterTo(to)}
               >
-                {to === 'out' ? 'アウト' : to === 4 ? '生還' : `${['', '一', '二', '三'][to]}塁へ`}
+                {to === 'out' ? 'アウト' : to === 4 ? '生還'
+                  : result === 'so' && to === 1 ? '振り逃げで一塁'
+                    : `${['', '一', '二', '三'][to]}塁へ`}
               </button>
             ))}
           </div>

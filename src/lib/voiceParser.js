@@ -5,7 +5,7 @@
 // のような曖昧・ラフな発話を、同義語辞書 + 部分一致スコアリングで解釈する。
 // 戻り値: 信頼度順の候補配列(上位2〜3件を確認カードに表示)
 // ============================================================
-import { RESULTS, DIRECTIONS, OUT_TYPES } from './model.js';
+import { RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES } from './model.js';
 
 // ---- 正規化: 表記ゆれ吸収 ----
 // カタカナ→ひらがな、全角英数→半角、長音・促音・記号のゆれを吸収
@@ -152,12 +152,14 @@ export function parseUtterance(rawText) {
 
     if (s <= 0) continue;
     const outType = result === 'out' ? topKey(outTypeScores) || 'ground' : null;
+    const soType = result === 'so' ? (text.includes('見逃') ? 'looking' : 'swinging') : null;
     candidates.push({
       kind: 'play',
       result,
       direction: needsDirection(result) ? bestDir || null : null,
       outType,
-      label: playLabel(result, bestDir, outType),
+      soType,
+      label: playLabel(result, bestDir, outType, soType),
       confidence: norm(s) * (uncertain ? 0.75 : 1),
     });
   }
@@ -204,8 +206,9 @@ function needsDirection(result) {
   return ['single', 'double', 'triple', 'hr', 'out', 'error', 'sacBunt', 'sacFly'].includes(result);
 }
 
-export function playLabel(result, direction, outType) {
+export function playLabel(result, direction, outType, soType) {
   const dir = direction ? DIRECTIONS[direction] : '';
   if (result === 'out') return `${dir}${OUT_TYPES[outType || 'ground']}・アウト`;
+  if (result === 'so') return SO_TYPES[soType || 'swinging'];
   return `${dir ? dir + ' ' : ''}${RESULTS[result].label}`;
 }
