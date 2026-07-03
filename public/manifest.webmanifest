@@ -1,0 +1,16 @@
+{
+  "name": "野球 音声実況＆タップスコアラー",
+  "short_name": "スコアラー",
+  "description": "野球チーム向け 音声実況＆直感タップUIスコアラー",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0d1117",
+  "theme_color": "#0d1117",
+  "lang": "ja",
+  "icons": [
+    { "src": "./icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
