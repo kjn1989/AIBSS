@@ -9,6 +9,7 @@ import RunnerEventSheet from './RunnerEventSheet.jsx';
 import Sheet from './Sheet.jsx';
 import VoiceControl from './VoiceControl.jsx';
 import { SubstituteSheet } from './OrderTab.jsx';
+import HighlightSheet from './HighlightSheet.jsx';
 import { POSITIONS, OPP_LETTERS } from '../lib/model.js';
 import { playLabel } from '../lib/voiceParser.js';
 
@@ -266,7 +267,8 @@ export default function ScoreTab() {
   const nameOf = usePlayerName();
   const [sheet, setSheet] = useState(null); // {kind:'play',result} | {kind:'runner',base} | {kind:'batter'}
 
-  if (!game || game.status === 'finished') return <GameSetup />;
+  // 試合終了直後もハイライトシートだけは表示し続ける(閉じたらGameSetupに戻る)
+  if (!game || (game.status === 'finished' && sheet?.kind !== 'highlight')) return <GameSetup />;
 
   const myBatting = isMyTeamBatting(game);
   const batter = currentBatter(game);
@@ -382,13 +384,20 @@ export default function ScoreTab() {
 
       <div className="card">
         <h2>試合操作</h2>
+        <button className="mb8" style={{ width: '100%' }} onClick={() => setSheet({ kind: 'highlight' })}>
+          🏆 ハイライトを見る・共有
+        </button>
         <div className="grid2">
           <button onClick={() => window.confirm('攻守交代(チェンジ)しますか？') && dispatch({ type: 'FORCE_CHANGE_HALF', gameId: game.id })}>
             手動チェンジ
           </button>
           <button
             className="danger"
-            onClick={() => window.confirm('試合を終了しますか？') && dispatch({ type: 'FINISH_GAME', id: game.id })}
+            onClick={() => {
+              if (!window.confirm('試合を終了しますか？')) return;
+              dispatch({ type: 'FINISH_GAME', id: game.id });
+              setSheet({ kind: 'highlight' });
+            }}
           >
             試合終了
           </button>
@@ -458,6 +467,9 @@ export default function ScoreTab() {
       )}
       {sheet?.kind === 'oppSub' && (
         <OppSubstituteSheet game={game} slot={sheet.slot} initialKind={sheet.subKind} onClose={() => setSheet(null)} />
+      )}
+      {sheet?.kind === 'highlight' && (
+        <HighlightSheet game={game} onClose={() => setSheet(null)} />
       )}
     </div>
   );

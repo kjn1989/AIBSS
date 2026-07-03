@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useStore, usePlayerName } from '../state/store.jsx';
 import { parseFirebaseConfig } from '../lib/cloud.js';
+import { encodeWatchLink } from './WatchView.jsx';
 import { battingCSV, pitchingCSV, playLogCSV, atBatCSV, downloadCSV, shareCSV } from '../lib/csv.js';
 
 export default function SettingsTab() {
@@ -113,6 +114,16 @@ function CloudCard() {
     error: '⚠️ エラー(config/ルール/ネットワークを確認)',
   }[state.cloudStatus];
 
+  const copyWatchLink = async () => {
+    const link = encodeWatchLink({ configText: s.firebaseConfigText, teamCode: s.teamCode });
+    try {
+      await navigator.clipboard.writeText(link);
+      window.alert('観戦リンクをコピーしました。保護者やOBに送ると、書き込みなしで試合速報をリアルタイム閲覧できます。');
+    } catch {
+      window.prompt('コピーして共有してください:', link);
+    }
+  };
+
   return (
     <div className="card">
       <h2>クラウド共有 (Firebase Firestore)</h2>
@@ -145,6 +156,16 @@ function CloudCard() {
           {s.cloudEnabled ? '共有を停止' : '共有を開始'}
         </button>
       </div>
+      {s.cloudEnabled && cfgValid && s.teamCode && (
+        <>
+          <button className="mt12" style={{ width: '100%' }} onClick={copyWatchLink}>
+            📺 観戦リンクをコピー(保護者・OB向け閲覧専用)
+          </button>
+          <p className="small dim mt8">
+            リンクを開いた人は書き込みできず、試合速報(スコア・走者・プレイログ)をリアルタイムで見るだけになります。
+          </p>
+        </>
+      )}
     </div>
   );
 }
