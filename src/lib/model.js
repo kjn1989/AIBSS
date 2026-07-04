@@ -39,7 +39,8 @@ export const DIRECTIONS = {
 };
 
 // ---- 守備位置 ----
-export const POSITIONS = ['投', '捕', '一', '二', '三', '遊', '左', '中', '右', 'DH', '控'];
+// '打' = 全員打ちの打撃のみ(守備につかない打者)、'控' = ベンチ
+export const POSITIONS = ['投', '捕', '一', '二', '三', '遊', '左', '中', '右', 'DH', '打', '控'];
 
 // ---- 相手チームの選手記号(実名は入力せず A〜T の20人で管理) ----
 export const OPP_LETTERS = Array.from({ length: 20 }, (_, i) => String.fromCharCode(65 + i));

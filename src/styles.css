@@ -556,8 +556,8 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 /* 選手選択の行(タップで選択) */
 .select-row {
   display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
-  padding: 12px 10px; margin-bottom: 6px; min-height: 52px;
-  background: var(--bg-3); border: 1px solid var(--border); border-radius: 12px; font-size: 15px;
+  padding: 8px 10px; margin-bottom: 5px; min-height: 44px;
+  background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; font-size: 15px;
 }
 .select-row.on { border-color: var(--accent-2); background: rgba(31, 111, 235, 0.14); }
 .sel-badge {
@@ -572,11 +572,12 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 .wizard-nav .grow { flex: 1; }
 .wizard-nav button { min-height: 44px; padding: 0 18px; }
 
-/* 並べ替えの行(ドラッグ/▲▼) */
+/* 並べ替えの行(ドラッグ/▲▼) — コンパクト表示でスタメン全員が1画面に収まる */
 .lineup-droparea { position: relative; }
 .lineup-row {
-  display: flex; align-items: center; gap: 8px; padding: 10px 8px; margin-bottom: 8px;
-  background: var(--bg-3); border: 1px solid var(--border); border-radius: 12px; min-height: 52px;
+  display: flex; align-items: center; gap: 8px; padding: 3px 8px; margin-bottom: 5px;
+  background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; min-height: 42px;
+  font-size: 14px;
   touch-action: none;
   /* ドラッグ中に他行がスライドする際の滑らかな動き */
   transition: transform 0.18s cubic-bezier(0.2, 0, 0, 1);
@@ -587,9 +588,9 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5); opacity: 0.97;
 }
 .reorder-arrows { display: flex; flex-direction: column; gap: 2px; }
-.reorder-arrows .mini { min-height: 22px; min-width: 34px; padding: 0; font-size: 11px; }
+.reorder-arrows .mini { min-height: 17px; min-width: 32px; padding: 0; font-size: 10px; line-height: 1; }
 .drag-handle {
-  min-height: 44px; min-width: 44px; font-size: 22px; color: var(--text-dim);
+  min-height: 40px; min-width: 42px; font-size: 20px; color: var(--text-dim);
   background: transparent; border: none; cursor: grab; touch-action: none;
 }
 

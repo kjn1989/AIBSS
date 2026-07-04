@@ -23,6 +23,7 @@ const FIELD_SPOTS = [
   { value: '投', left: '50%', top: '66%' },
   { value: '捕', left: '50%', top: '89%' },
   { value: 'DH', left: '89%', top: '90%', label: '指' },
+  { value: '打', left: '11%', top: '90%', label: '打', shared: true }, // 全員打ち(打撃のみ)。複数人可
 ];
 
 // ============================================================
@@ -46,11 +47,11 @@ export default function LineupWizard({ game }) {
 
   const toggle = (pid) => {
     if (selectedIds.has(pid)) setSelected(selected.filter((s) => s.playerId !== pid));
-    else setSelected([...selected, { playerId: pid, position: '' }]);
+    else if (selected.length < 20) setSelected([...selected, { playerId: pid, position: '' }]); // 全員打ちは最大20人
   };
 
-  const autoSelectAll = () => {
-    setSelected(players.slice(0, 9).map((p) => ({ playerId: p.id, position: '' })));
+  const autoSelectN = (n) => {
+    setSelected(players.slice(0, n).map((p) => ({ playerId: p.id, position: '' })));
   };
 
   const loadFromPast = (gameId) => {
@@ -70,17 +71,19 @@ export default function LineupWizard({ game }) {
   const assignPosition = (idx, value) => {
     setSelected((prev) => prev.map((s, i) => {
       if (i === idx) return { ...s, position: value };
-      // 同じ守備位置を他の選手が持っていたら空ける(1守備位置1人)
-      if (s.position === value && value !== '控') return { ...s, position: '' };
+      // 同じ守備位置を他の選手が持っていたら空ける(1守備位置1人)。
+      // '控'(ベンチ)と'打'(全員打ちの打撃のみ)は複数人OK。
+      if (s.position === value && value !== '控' && value !== '打') return { ...s, position: '' };
       return s;
     }));
   };
 
   const confirm = () => {
+    // 未割り当ての守備位置: 1〜9番はポジション順の既定、10番以降は「打」(全員打ち)
     const lineup = selected.map((s, i) => ({
       order: i + 1,
       playerId: s.playerId,
-      position: s.position || POSITIONS[i] || '控',
+      position: s.position || (i < 9 ? POSITIONS[i] : '打'),
     }));
     dispatch({ type: 'SET_LINEUP', gameId: game.id, lineup });
   };
@@ -98,7 +101,7 @@ export default function LineupWizard({ game }) {
           numberOf={(id) => players.find((p) => p.id === id)?.number || ''}
           pastGames={pastGames}
           onToggle={toggle}
-          onAutoSelect={autoSelectAll}
+          onAutoSelect={autoSelectN}
           onLoadPast={loadFromPast}
           onNext={() => setStep(2)}
         />
@@ -152,6 +155,7 @@ function SelectStep({ players, selected, selectedIds, nameOf, numberOf, pastGame
         <button className="primary" disabled={selected.length === 0} onClick={onNext}>次へ(打順の並べ替え)</button>
       </div>
       <h2>選手を打順順にタップ ({selected.length}人選択中)</h2>
+      <p className="small dim" style={{ marginBottom: 6 }}>タップした順が打順になります。全員打ち(守備につかない打者)は最大20人までOK。</p>
       {players.length === 0 && <div className="warn-box">⚙️ 設定タブで選手を登録してください。</div>}
 
       {pastGames.length > 0 && (
@@ -169,7 +173,10 @@ function SelectStep({ players, selected, selectedIds, nameOf, numberOf, pastGame
           </select>
         </div>
       )}
-      <button className="small mt8" onClick={onAutoSelect} disabled={players.length === 0}>登録順に9人選択</button>
+      <div className="grid2 mt8">
+        <button className="small" onClick={() => onAutoSelect(9)} disabled={players.length === 0}>登録順に9人選択</button>
+        <button className="small" onClick={() => onAutoSelect(Math.min(20, players.length))} disabled={players.length === 0}>全員選択(全員打ち)</button>
+      </div>
 
       <div className="mt12">
         {players.map((p) => {
@@ -317,8 +324,22 @@ function PositionStep({ selected, nameOf, numberOf, onAssign, onBack, onConfirm 
         <div className="bf-line right" />
         <div className="bf-basepath" />
         {FIELD_SPOTS.map((spot) => {
-          const holder = holderOf(spot.value);
           const isCur = curPlayer.position === spot.value;
+          // '打'(全員打ち)は複数人可。担当者名は出さず、人数を添える。
+          if (spot.shared) {
+            const count = selected.filter((s) => s.position === spot.value).length;
+            return (
+              <button
+                key={spot.value}
+                className={`pos-spot shared${isCur ? ' cur' : ''}`}
+                style={{ left: spot.left, top: spot.top }}
+                onClick={() => pick(spot.value)}
+              >
+                {spot.label}{count > 0 ? ` ${count}` : ''}
+              </button>
+            );
+          }
+          const holder = holderOf(spot.value);
           const taken = holder >= 0;
           return (
             <button
