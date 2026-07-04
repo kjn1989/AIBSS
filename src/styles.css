@@ -641,6 +641,12 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
   position: fixed; inset: 0; z-index: 400;
   background: var(--bg);
   display: flex; flex-direction: column;
+  /* iOS Safariで新規マウント時にfixedレイヤーが即座に再描画されず、
+     直前の背後のコンテンツ(ヘッダー/タブバー)が一瞬透けて見える不具合対策。
+     独立した合成レイヤーに昇格させ、確実に最前面へ描画させる。 */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  backface-visibility: hidden;
 }
 .fullscreen-header {
   display: flex; align-items: center; justify-content: space-between;
