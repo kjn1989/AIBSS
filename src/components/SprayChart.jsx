@@ -2,7 +2,7 @@ import React from 'react';
 import { RESULTS } from '../lib/model.js';
 
 // 打球方向スプレーチャート: 記録済みの打球方向(atBat.direction)を
-// フィールド図に打点として描画する。安打=青 / 凡打=赤 / その他(失策・犠打等)=琥珀。
+// フィールド図に打点として描画する。単打=青 / 二塁打=緑 / 三塁打=紫 / 本塁打=金 / 凡打=赤 / その他(失策・犠打等)=琥珀。
 const POS = {
   LF: [20, 26], CF: [50, 14], RF: [80, 26],
   '3B': [24, 52], SS: [38, 40], '2B': [62, 40], '1B': [76, 52],
@@ -18,11 +18,12 @@ function jitter(id, range = 7) {
   return [dx, dy];
 }
 
+const HIT_COLORS = { single: 'var(--accent)', double: 'var(--green)', triple: 'var(--purple)', hr: 'var(--gold)' };
+
 function dotColor(ab) {
-  const def = RESULTS[ab.result];
-  if (def?.hit) return 'var(--accent)';
+  if (HIT_COLORS[ab.result]) return HIT_COLORS[ab.result];
   if (ab.result === 'out' || ab.result === 'so') return 'var(--red)';
-  return 'var(--amber)';
+  return 'var(--text-dim)';
 }
 
 export default function SprayChart({ atBats, title }) {
@@ -64,9 +65,12 @@ export default function SprayChart({ atBats, title }) {
             })}
           </svg>
           <div className="spray-legend">
-            <span><i style={{ background: 'var(--accent)' }} />安打</span>
+            <span><i style={{ background: 'var(--accent)' }} />単打</span>
+            <span><i style={{ background: 'var(--green)' }} />二塁打</span>
+            <span><i style={{ background: 'var(--purple)' }} />三塁打</span>
+            <span><i style={{ background: 'var(--gold)' }} />本塁打</span>
             <span><i style={{ background: 'var(--red)' }} />アウト</span>
-            <span><i style={{ background: 'var(--amber)' }} />失策・犠打等</span>
+            <span><i style={{ background: 'var(--text-dim)' }} />失策・犠打等</span>
           </div>
         </>
       )}

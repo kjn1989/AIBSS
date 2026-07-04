@@ -686,7 +686,7 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 
 /* ---- スプレーチャート / 成績推移 / 選手個人ページ ---- */
 .spray-chart { width: 100%; max-width: 420px; display: block; margin: 0 auto; border-radius: 12px; }
-.spray-legend { display: flex; gap: 16px; justify-content: center; margin-top: 8px; font-size: 12px; color: var(--text-dim); }
+.spray-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; justify-content: center; margin-top: 8px; font-size: 12px; color: var(--text-dim); }
 .spray-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; }
 .trend-chart { width: 100%; display: block; }
 .player-stat-grid {
