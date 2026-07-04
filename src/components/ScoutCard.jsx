@@ -104,7 +104,7 @@ function fileToAvatarDataURL(file, size = 256) {
 
 // ---- AI選手名鑑&スカウト寸評 ----
 // Gemini APIキーが設定タブで入力されていれば実際にAI生成し、未設定/失敗時はダミー文言にフォールバックする。
-export default function ScoutCard({ player, batting, pitching, battingM, pitchingM, onClose }) {
+export default function ScoutCard({ player, batting, pitching, battingM, pitchingM, saveType = 'UPDATE_PLAYER', onClose }) {
   const { state, dispatch } = useStore();
   const apiKey = state.settings.geminiApiKey;
   const statsSummary = buildStatsSummary(batting, pitching, battingM, pitchingM);
@@ -183,7 +183,7 @@ export default function ScoutCard({ player, batting, pitching, battingM, pitchin
 
   const handleConfirm = () => {
     dispatch({
-      type: 'UPDATE_PLAYER',
+      type: saveType,
       id: player.id,
       patch: { scoutTags: tags, scoutCatchphrase: catchphrase, scoutReport: report, scoutPhoto: photo },
     });

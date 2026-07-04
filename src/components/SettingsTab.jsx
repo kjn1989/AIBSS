@@ -185,6 +185,7 @@ function BackupCard() {
       version: 1,
       exportedAt: new Date().toISOString(),
       players: state.players,
+      members: state.members || [],
       games: state.games,
       currentGameId: state.currentGameId,
       settings: state.settings,

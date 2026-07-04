@@ -6,7 +6,7 @@
 // ============================================================
 import React, { createContext, useContext, useReducer, useEffect, useRef } from 'react';
 import {
-  newPlayer, newGame, newAtBat, newPitch, newPlayLog, newPitchingRecord, RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES,
+  newPlayer, newMember, newGame, newAtBat, newPitch, newPlayLog, newPitchingRecord, RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES,
   OPP_LETTERS,
 } from '../lib/model.js';
 import { generateDemoData } from '../lib/demo.js';
@@ -20,6 +20,7 @@ const UNDO_LIMIT = 50;
 // ------------------------------------------------------------
 export const initialState = {
   players: [], // Player[]
+  members: [], // Member[] 参加メンバー(マネージャー/応援等。試合には出ないが参加回数を記録)
   games: {}, // { [gameId]: Game }
   currentGameId: null,
   settings: {
@@ -38,7 +39,7 @@ export const initialState = {
   cloudStatus: 'off', // 'off' | 'connecting' | 'on' | 'error'
 };
 
-const PERSIST_KEYS = ['players', 'games', 'currentGameId', 'settings', 'demoLoaded'];
+const PERSIST_KEYS = ['players', 'members', 'games', 'currentGameId', 'settings', 'demoLoaded'];
 
 function loadPersisted() {
   try {
@@ -206,6 +207,7 @@ export function reducer(state, action) {
       return {
         ...state,
         players: Array.isArray(b.players) ? b.players : [],
+        members: Array.isArray(b.members) ? b.members : [],
         games,
         currentGameId: b.currentGameId && games[b.currentGameId] ? b.currentGameId : null,
         settings: { ...state.settings, ...(b.settings || {}) },
@@ -258,6 +260,16 @@ export function reducer(state, action) {
     case 'DELETE_PLAYER':
       return { ...state, players: state.players.filter((p) => p.id !== action.id) };
 
+    // ===== 参加メンバー(マネージャー/応援等) =====
+    case 'ADD_MEMBER':
+      return { ...state, members: [...(state.members || []), newMember(action.name, action.role)] };
+    case 'UPDATE_MEMBER': {
+      const members = (state.members || []).map((m) => (m.id === action.id ? { ...m, ...action.patch } : m));
+      return { ...state, members };
+    }
+    case 'DELETE_MEMBER':
+      return { ...state, members: (state.members || []).filter((m) => m.id !== action.id) };
+
     // ===== 試合 =====
     case 'CREATE_GAME': {
       const g = newGame(action.payload || {});
@@ -278,10 +290,11 @@ export function reducer(state, action) {
       return { ...state, games: {}, players, currentGameId: null, demoLoaded: false, history: [] };
     }
     case 'RESET_ALL': {
-      // 完全初期化: 選手・試合をすべて消す。チーム名など設定は保持する
+      // 完全初期化: 選手・メンバー・試合をすべて消す。チーム名など設定は保持する
       return {
         ...state,
         players: [],
+        members: [],
         games: {},
         currentGameId: null,
         demoLoaded: false,

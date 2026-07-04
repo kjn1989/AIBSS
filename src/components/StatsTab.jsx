@@ -4,6 +4,7 @@ import { aggregateBatting, aggregatePitching, pitchingMetrics, DETAIL_METRICS, d
 import { formatIP } from '../lib/model.js';
 import GameScopeToggle, { scopedGames } from './GameScopeToggle.jsx';
 import PlayerView from './PlayerView.jsx';
+import MemberSection from './MemberSection.jsx';
 
 // 成績・詳細ランキング(10大メトリクス) + 投手成績(旧「投手」タブを統合)
 export default function StatsTab() {
@@ -78,6 +79,8 @@ export default function StatsTab() {
       <p className="small dim" style={{ textAlign: 'center', marginBottom: 12 }}>
         選手名をタップすると個人ページ(スプレーチャート・成績推移・打席履歴)が開きます。
       </p>
+
+      <MemberSection />
 
       {playerId && <PlayerView playerId={playerId} games={games} onClose={() => setPlayerId(null)} />}
     </div>

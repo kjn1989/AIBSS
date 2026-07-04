@@ -60,6 +60,20 @@ export function newPlayer(name, number = '') {
   };
 }
 
+// ---- 参加メンバー(マネージャー/応援/スタッフ等。試合には出ないが参加回数を記録する) ----
+export const MEMBER_ROLES = ['マネージャー', 'コーチ', '応援', 'スタッフ', 'その他'];
+
+export function newMember(name, role = 'マネージャー') {
+  return {
+    id: uid(), name, role, participation: 0, createdAt: Date.now(),
+    // 選手と同じく名鑑(スカウト寸評)を持てる
+    scoutTags: [],
+    scoutCatchphrase: '',
+    scoutReport: '',
+    scoutPhoto: '',
+  };
+}
+
 export function newGame({ opponent = '', isHome = false, date = null, season = '' } = {}) {
   return {
     id: uid(),
