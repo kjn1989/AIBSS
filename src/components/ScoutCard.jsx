@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useStore } from '../state/store.jsx';
 import { generateScoutReport } from '../lib/gemini.js';
+import { fmtAvg } from '../lib/stats.js';
 import FullscreenView from './FullscreenView.jsx';
 
 // ---- プリセット特殊能力タグ(パワプロ風) ----
@@ -44,21 +45,34 @@ const CATCHPHRASES = [
   '頼れる4番打者候補', '一振りに賭ける男', 'チームの心臓', '無冠の職人', '最後の切り札',
 ];
 
-function buildDummyReport(name, tags) {
+function buildDummyReport(name, tags, statsSummary) {
   const plus = tags.filter((t) => t.type === 'plus').map((t) => t.label);
   const minus = tags.filter((t) => t.type === 'minus').map((t) => t.label);
   const joke = tags.filter((t) => t.type === 'joke').map((t) => t.label);
 
-  if (tags.length === 0) {
-    return `${name || '無名の選手'}……まだタグが登録されていない。素材としては未知数だが、伸びしろは無限大かもしれない。まずはタグを付けてやってくれ。`;
+  if (tags.length === 0 && !statsSummary) {
+    return `${name || '無名の選手'}……まだタグも成績データも登録されていない。素材としては未知数だが、伸びしろは無限大かもしれない。`;
   }
   let s = `${name || '無名の選手'}、`;
+  if (statsSummary) s += `今季${statsSummary}という数字を残す。`;
   if (plus.length) s += `「${plus[0]}」の看板に嘘はない。`;
   if (plus.length > 1) s += `加えて${plus.slice(1).join('・')}も持ち味で、使い勝手は抜群だ。`;
   if (minus.length) s += `ただし${minus.join('・')}が課題で、そこを克服できれば化ける。`;
   if (joke.length) s += `グラウンド外では${joke.join('・')}としても欠かせない存在……なのは間違いない。`;
   s += ' 愛すべきキャラクターであることは、球団としても認めざるを得ない。';
   return s;
+}
+
+// 選手の集計成績(打撃/投手)を短い日本語サマリーに変換し、スカウト寸評に反映させる
+function buildStatsSummary(batting, pitching, m, pm) {
+  const parts = [];
+  if (batting && batting.pa > 0 && m) {
+    parts.push(`打率${fmtAvg(m.ba)} 本塁打${batting.hr} 打点${batting.rbi} OPS${m.ops === null ? '-' : m.ops.toFixed(3)}`);
+  }
+  if (pitching && (pitching.outsRecorded > 0 || pitching.games > 0) && pm) {
+    parts.push(`防御率${pm.era7 === null ? '-' : pm.era7.toFixed(2)} 奪三振${pitching.strikeouts} WHIP${pm.whip === null ? '-' : pm.whip.toFixed(2)}`);
+  }
+  return parts.join(' / ');
 }
 
 function TagPill({ label, type, onClick }) {
@@ -71,9 +85,10 @@ function TagPill({ label, type, onClick }) {
 
 // ---- AI選手名鑑&スカウト寸評 ----
 // Gemini APIキーが設定タブで入力されていれば実際にAI生成し、未設定/失敗時はダミー文言にフォールバックする。
-export default function ScoutCard({ player, onClose }) {
+export default function ScoutCard({ player, batting, pitching, battingM, pitchingM, onClose }) {
   const { state } = useStore();
   const apiKey = state.settings.geminiApiKey;
+  const statsSummary = buildStatsSummary(batting, pitching, battingM, pitchingM);
   const [catchphrase, setCatchphrase] = useState(CATCHPHRASES[0]);
   const [tags, setTags] = useState([]); // { label, type }
   const [freeText, setFreeText] = useState('');
@@ -105,12 +120,12 @@ export default function ScoutCard({ player, onClose }) {
   const generate = async () => {
     if (!apiKey) {
       setCatchphrase(CATCHPHRASES[Math.floor(Math.random() * CATCHPHRASES.length)]);
-      setReport(buildDummyReport(name, tags));
+      setReport(buildDummyReport(name, tags, statsSummary));
       setSource('dummy-no-key');
       return;
     }
     setLoading(true);
-    const result = await generateScoutReport({ apiKey, name, number: player?.number, tags });
+    const result = await generateScoutReport({ apiKey, name, number: player?.number, tags, statsSummary });
     setLoading(false);
     if (result && !result.error) {
       if (result.catchphrase) setCatchphrase(result.catchphrase);
@@ -118,7 +133,7 @@ export default function ScoutCard({ player, onClose }) {
       setSource('ai');
     } else {
       setCatchphrase(CATCHPHRASES[Math.floor(Math.random() * CATCHPHRASES.length)]);
-      setReport(buildDummyReport(name, tags));
+      setReport(buildDummyReport(name, tags, statsSummary));
       setErrorDetail(result?.error || '');
       setSource('dummy-error');
     }
@@ -140,6 +155,7 @@ export default function ScoutCard({ player, onClose }) {
           </div>
 
           <div className="scout-mid">
+            {statsSummary && <p className="small dim mb8">📊 今季成績: {statsSummary}</p>}
             <div className="selected-tags-panel">
               <div className="section-title" style={{ margin: 0 }}>
                 特殊能力タグ {tags.length > 0 && <span className="tag-count-badge">{tags.length}</span>}
@@ -201,7 +217,7 @@ export default function ScoutCard({ player, onClose }) {
               </button>
             </div>
             <div className="scout-report">
-              {report || buildDummyReport(name, tags)}
+              {report || buildDummyReport(name, tags, statsSummary)}
             </div>
             {source === 'ai' && <p className="small mt8" style={{ color: 'var(--green)' }}>✨ Gemini AIによる生成です。</p>}
             {source === 'dummy-error' && (

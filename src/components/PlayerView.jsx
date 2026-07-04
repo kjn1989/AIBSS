@@ -98,7 +98,16 @@ export default function PlayerView({ playerId, games, onClose }) {
           </div>
         )}
       </div>
-      {showScout && <ScoutCard player={player} onClose={() => setShowScout(false)} />}
+      {showScout && (
+        <ScoutCard
+          player={player}
+          batting={batting}
+          pitching={pitching}
+          battingM={m}
+          pitchingM={pm}
+          onClose={() => setShowScout(false)}
+        />
+      )}
     </FullscreenView>
   );
 }
