@@ -36,6 +36,7 @@ export default function PlayerView({ playerId, games, onClose }) {
         <button className="ghost small" onClick={() => setShowScout(true)}>📇 名鑑</button>
       </header>
       <div className="fullscreen-body">
+        <h1 className="player-page-name">{player?.name || '選手'}{player?.number ? ` #${player.number}` : ''}</h1>
         {batting ? (
           <div className="card">
             <h2>打撃成績 <span className="dim small">({atBatsByGame.length}試合)</span></h2>

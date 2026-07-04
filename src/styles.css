@@ -648,6 +648,7 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
   background: var(--bg-2); border-bottom: 1px solid var(--border); flex-shrink: 0;
 }
 .fullscreen-header h2 { font-size: 16px; font-weight: 800; }
+.player-page-name { font-size: 22px; font-weight: 900; margin-bottom: 12px; }
 .fullscreen-body {
   flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
   padding: 14px 14px calc(20px + var(--safe-bottom));
