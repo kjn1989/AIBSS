@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useStore, usePlayerName } from '../state/store.jsx';
+import Sheet from './Sheet.jsx';
 
 // 配列の要素を from→to へ移動した新配列を返す(純関数・テスト容易)
 export function moveItem(arr, from, to) {
@@ -69,14 +70,26 @@ export default function LineupWizard({ game }) {
 
   const reorder = (from, to) => setSelected((prev) => moveItem(prev, from, to));
 
-  const assignPosition = (idx, value) => {
-    setSelected((prev) => prev.map((s, i) => {
-      if (i === idx) return { ...s, position: value };
-      // 同じ守備位置を他の選手が持っていたら空ける(1守備位置1人)。
-      // '控'(ベンチ)と'打'(全員打ちの打撃のみ)は複数人OK。
-      if (s.position === value && value !== '控' && value !== '打') return { ...s, position: '' };
-      return s;
-    }));
+  // ポジション P に打順index xi の選手を割り当てる。
+  // Xが別ポジションを守っていて、Pに既に別の選手がいれば2人をスワップ(入れ替え)。
+  // '打'(全員打ち)・'控'は複数人可なので単純設定。
+  const assignPlayerToPosition = (position, xi) => {
+    setSelected((prev) => {
+      const arr = prev.map((s) => ({ ...s }));
+      if (position === '打' || position === '控') {
+        arr[xi].position = position;
+        return arr;
+      }
+      const oldX = arr[xi].position;
+      const H = arr.findIndex((s, i) => i !== xi && s.position === position);
+      if (H >= 0) arr[H].position = oldX; // スワップ相手はXの元の位置へ
+      arr[xi].position = position;
+      return arr;
+    });
+  };
+  // そのポジションを守っている選手を守備なし(空き)に戻す
+  const clearPositionHolder = (position) => {
+    setSelected((prev) => prev.map((s) => (s.position === position ? { ...s, position: '' } : s)));
   };
 
   const confirm = () => {
@@ -138,7 +151,8 @@ export default function LineupWizard({ game }) {
           selected={selected}
           nameOf={nameOf}
           numberOf={(id) => players.find((p) => p.id === id)?.number || ''}
-          onAssign={assignPosition}
+          onAssignPlayer={assignPlayerToPosition}
+          onClearPosition={clearPositionHolder}
           onBack={() => setStep(2)}
           onConfirm={confirm}
           useDH={useDH}
@@ -320,22 +334,14 @@ function ReorderStep({ selected, nameOf, numberOf, onReorder, onBack, onNext }) 
   );
 }
 
-// ---- ステップ3: フィールドから守備位置を選択 ----
-function PositionStep({ selected, nameOf, numberOf, onAssign, onBack, onConfirm, useDH, pitcherId }) {
-  const [cur, setCur] = useState(0); // 現在割り当て中の打順index
-  const curPlayer = selected[cur];
-  // position値 → その位置を守っている選手のindex
+// ---- ステップ3: フィールドの各ポジションをタップ → メンバーリストで割り当て/入れ替え ----
+function PositionStep({ selected, nameOf, numberOf, onAssignPlayer, onClearPosition, onBack, onConfirm, useDH, pitcherId }) {
+  const [pickerPos, setPickerPos] = useState(null); // 割り当て中のポジション値
   const holderOf = (value) => selected.findIndex((s) => s.position === value);
   // DH制なら「投」は打順外の投手が守るので打者からは選べない。DHなしなら「指(DH)」は使わない。
   const spots = FIELD_SPOTS.filter((s) => (useDH ? s.value !== '投' : s.value !== 'DH'));
-
-  const pick = (value) => {
-    onAssign(cur, value);
-    // 未割り当ての次の選手へ自動で進む
-    const nextUnassigned = selected.findIndex((s, i) => i > cur && !s.position);
-    if (nextUnassigned >= 0) setCur(nextUnassigned);
-    else if (cur < selected.length - 1) setCur(cur + 1);
-  };
+  const posLabel = (v) => (!v ? '－' : v === 'DH' ? '指' : v); // 選手の現在守備位置の表示
+  const spotLabel = (v) => FIELD_SPOTS.find((s) => s.value === v)?.label || v;
 
   return (
     <div className="card">
@@ -345,17 +351,9 @@ function PositionStep({ selected, nameOf, numberOf, onAssign, onBack, onConfirm,
         <button className="primary" onClick={onConfirm}>このオーダーで確定</button>
       </div>
       <h2>守備位置を選択</h2>
-      {/* 現在の選手ナビ */}
-      <div className="pos-navbar">
-        <button className="mini" disabled={cur === 0} onClick={() => setCur(cur - 1)} aria-label="前の選手">‹</button>
-        <div className="pos-cur">
-          <span className="rank-badge">{cur + 1}</span>
-          <b>{nameOf(curPlayer.playerId)}</b>
-          {numberOf(curPlayer.playerId) && <span className="dim small"> #{numberOf(curPlayer.playerId)}</span>}
-          {curPlayer.position && <span className="pill blue" style={{ marginLeft: 6 }}>{curPlayer.position === 'DH' ? '指' : curPlayer.position}</span>}
-        </div>
-        <button className="mini" disabled={cur === selected.length - 1} onClick={() => setCur(cur + 1)} aria-label="次の選手">›</button>
-      </div>
+      <p className="small dim" style={{ marginBottom: 8 }}>
+        ポジションをタップして守る選手を選びます。埋まっている位置をタップすると入れ替え・変更ができます。
+      </p>
 
       {/* フィールド */}
       <div className="pos-field bf">
@@ -365,16 +363,15 @@ function PositionStep({ selected, nameOf, numberOf, onAssign, onBack, onConfirm,
         <div className="bf-line right" />
         <div className="bf-basepath" />
         {spots.map((spot) => {
-          const isCur = curPlayer.position === spot.value;
-          // '打'(全員打ち)は複数人可。担当者名は出さず、人数を添える。
+          // '打'(全員打ち)は複数人可。担当者名は出さず人数を添える。
           if (spot.shared) {
             const count = selected.filter((s) => s.position === spot.value).length;
             return (
               <button
                 key={spot.value}
-                className={`pos-spot shared${isCur ? ' cur' : ''}`}
+                className="pos-spot shared"
                 style={{ left: spot.left, top: spot.top }}
-                onClick={() => pick(spot.value)}
+                onClick={() => setPickerPos(spot.value)}
               >
                 {spot.label}{count > 0 ? ` ${count}` : ''}
               </button>
@@ -385,9 +382,9 @@ function PositionStep({ selected, nameOf, numberOf, onAssign, onBack, onConfirm,
           return (
             <button
               key={spot.value}
-              className={`pos-spot${isCur ? ' cur' : taken ? ' taken' : ''}`}
+              className={`pos-spot${taken ? ' taken' : ''}`}
               style={{ left: spot.left, top: spot.top }}
-              onClick={() => pick(spot.value)}
+              onClick={() => setPickerPos(spot.value)}
             >
               {taken ? nameOf(selected[holder].playerId) : (spot.label || spot.value)}
             </button>
@@ -404,7 +401,38 @@ function PositionStep({ selected, nameOf, numberOf, onAssign, onBack, onConfirm,
         <p className="small dim mt8">DH制: 投手は打順に入りません{pitcherId ? `(先発: ${nameOf(pitcherId)})` : '(先発は後で選択可)'}。</p>
       )}
 
-      <button className="ghost small mt8" onClick={() => onAssign(cur, '')}>この選手の守備位置をクリア</button>
+      {/* ポジションタップ時のメンバー選択ポップアップ */}
+      {pickerPos && (
+        <Sheet title={`「${spotLabel(pickerPos)}」を守る選手を選択`} onClose={() => setPickerPos(null)}>
+          <div className="picker-list">
+            {selected.map((s, i) => {
+              const here = s.position === pickerPos;
+              return (
+                <button
+                  key={s.playerId}
+                  className={`picker-row${here ? ' current' : ''}`}
+                  onClick={() => { onAssignPlayer(pickerPos, i); setPickerPos(null); }}
+                >
+                  <span className="rank-badge">{i + 1}</span>
+                  <span className="grow" style={{ textAlign: 'left' }}>
+                    {nameOf(s.playerId)}{numberOf(s.playerId) && <span className="dim small"> #{numberOf(s.playerId)}</span>}
+                  </span>
+                  <span className={`pos-chip${here ? ' on' : ''}`}>{here ? '守備中' : posLabel(s.position)}</span>
+                </button>
+              );
+            })}
+          </div>
+          {pickerPos !== '打' && holderOf(pickerPos) >= 0 && (
+            <button
+              className="ghost danger mt8"
+              style={{ width: '100%' }}
+              onClick={() => { onClearPosition(pickerPos); setPickerPos(null); }}
+            >
+              この守備位置を空ける({nameOf(selected[holderOf(pickerPos)].playerId)} を守備なしに)
+            </button>
+          )}
+        </Sheet>
+      )}
     </div>
   );
 }
