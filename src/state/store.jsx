@@ -10,8 +10,9 @@ import {
   OPP_LETTERS,
 } from '../lib/model.js';
 import { generateDemoData } from '../lib/demo.js';
+import { idbSave } from '../lib/durableStore.js';
 
-const STORAGE_KEY = 'bbscorer.v1';
+export const STORAGE_KEY = 'bbscorer.v1';
 const UNDO_LIMIT = 50;
 
 // ------------------------------------------------------------
@@ -29,6 +30,7 @@ export const initialState = {
     anthropicApiKey: '', // 音声解釈のLLM拡張(任意)
     useLLM: false,
     geminiApiKey: '', // AI選手名鑑のスカウト寸評生成(任意)
+    lastBackupAt: null, // 最後にJSONバックアップを保存した時刻(データ消失対策のリマインド用)
   },
   demoLoaded: false,
   // ---- 以下は永続化しないセッション状態 ----
@@ -66,7 +68,9 @@ export function persist(state) {
   try {
     const out = {};
     for (const k of PERSIST_KEYS) out[k] = state[k];
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(out));
+    const json = JSON.stringify(out);
+    localStorage.setItem(STORAGE_KEY, json);
+    idbSave(json); // IndexedDBミラー(非同期・失敗は無視。データ消失対策の二重化)
   } catch {
     /* 容量超過等は無視(次回保存で回復) */
   }

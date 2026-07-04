@@ -169,6 +169,16 @@ function BackupCard() {
   const { state, dispatch } = useStore();
   const stamp = new Date().toISOString().slice(0, 10);
 
+  // データ消失対策のリマインド: 最終バックアップからの経過を表示し、古ければ警告する
+  const last = state.settings.lastBackupAt;
+  const nGames = Object.keys(state.games || {}).length;
+  const daysSince = last ? Math.floor((Date.now() - last) / 86400000) : null;
+  const lastLabel = last ? (daysSince === 0 ? '今日' : `${daysSince}日前`) : 'まだ保存していません';
+  const stale = nGames > 0 && (!last || Date.now() - last > 7 * 86400000);
+  // ホーム画面未追加のPWAはiOSでストレージ自動削除の対象になりやすい
+  const isStandalone =
+    window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true;
+
   const exportBackup = () => {
     const payload = {
       app: 'aibss-baseball-scorer',
@@ -188,6 +198,7 @@ function BackupCard() {
     a.download = `aibss-backup_${stamp}.json`;
     a.click();
     URL.revokeObjectURL(url);
+    dispatch({ type: 'UPDATE_SETTINGS', patch: { lastBackupAt: Date.now() } });
   };
 
   const importBackup = (file) => {
@@ -220,6 +231,12 @@ function BackupCard() {
         全データ(選手・全試合・設定)を1つのファイルに書き出します。
         機種変更やブラウザのキャッシュ削除に備えて、シーズン中は定期的な保存をおすすめします。
       </p>
+      <div className="small" style={{ marginBottom: 10 }}>最終バックアップ: <b>{lastLabel}</b></div>
+      {stale && (
+        <div className="warn-box" style={{ marginBottom: 10 }}>
+          ⚠️ しばらくバックアップしていません。端末の故障やブラウザのデータ削除に備えて、今保存しておくことをおすすめします。
+        </div>
+      )}
       <div className="grid2">
         <button className="primary" onClick={exportBackup}>⬇ バックアップを保存</button>
         <label className="file-btn">
@@ -236,6 +253,11 @@ function BackupCard() {
           />
         </label>
       </div>
+      {!isStandalone && (
+        <p className="small dim" style={{ marginTop: 10 }}>
+          💡 ホーム画面に追加すると、iPhoneのデータ自動削除の対象外になり、記録が消えにくくなります(共有ボタン →「ホーム画面に追加」)。
+        </p>
+      )}
     </div>
   );
 }
