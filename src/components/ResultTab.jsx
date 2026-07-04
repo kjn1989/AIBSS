@@ -5,6 +5,7 @@ import { shareHighlightImage } from '../lib/shareImage.js';
 import { GameProgressContent } from './GameProgressView.jsx';
 import { PitchingGameManagement } from './PitchingTab.jsx';
 import ScoreSheetView from './ScoreSheetView.jsx';
+import NewspaperView from './NewspaperView.jsx';
 
 // 試合レポート(ハイライト)カード。HighlightSheetと同じ内容をタブ内に埋め込む形で表示
 function HighlightCard({ game }) {
@@ -81,6 +82,7 @@ function HighlightCard({ game }) {
 export default function ResultTab() {
   const { state, dispatch } = useStore();
   const [showSheet, setShowSheet] = useState(false);
+  const [showNewspaper, setShowNewspaper] = useState(false);
   const [editMeta, setEditMeta] = useState(false);
   const games = Object.values(state.games)
     .filter((g) => !g.id.startsWith('demo-'))
@@ -157,6 +159,9 @@ export default function ResultTab() {
 
       <div className="section-title">試合レポート</div>
       <HighlightCard game={game} />
+      <button className="mt12" style={{ width: '100%' }} onClick={() => setShowNewspaper(true)}>
+        📰 AIスポーツ新聞を作る
+      </button>
 
       <div className="section-title">試合経過</div>
       <GameProgressContent game={game} editable />
@@ -169,6 +174,7 @@ export default function ResultTab() {
       )}
 
       {showSheet && <ScoreSheetView game={game} onClose={() => setShowSheet(false)} />}
+      {showNewspaper && <NewspaperView game={game} onClose={() => setShowNewspaper(false)} />}
     </div>
   );
 }

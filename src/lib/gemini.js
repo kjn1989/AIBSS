@@ -1,13 +1,57 @@
 // ============================================================
-// 任意拡張: Gemini APIによるAI選手名鑑スカウト寸評の生成
-// APIキーは設定画面で任意入力。未設定時は呼び出さない(呼び出し元でダミー文言にフォールバック)。
+// 任意拡張: Gemini API 連携
+//   - AI選手名鑑(スカウト寸評)
+//   - AIヘッドコーチ(スタメン提案)
+//   - AIスポーツ新聞(試合記事)
+// APIキーは設定画面で任意入力。未設定/オフライン時は呼ばない(呼び出し元でフォールバック)。
 // ============================================================
 
 // 個別バージョンを固定すると廃止時に壊れるため、Googleが常に生きたモデルを
 // 指し続けるエイリアス(-latest)を使う。
 const MODEL = 'gemini-flash-latest';
 
-function buildPrompt({ name, number, tags, statsSummary }) {
+// 低レベル共通呼び出し。プロンプトを投げてJSONを1つ取り出す。
+// 戻り値: 成功 { data: <parsed> } / 失敗 { error: <表示用文字列> } / 未設定・オフライン null
+async function callGeminiJSON(apiKey, prompt, { maxOutputTokens = 1024, temperature = 0.9 } = {}) {
+  if (!apiKey || !navigator.onLine) return null;
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          // thinkingBudget: 0 で内部思考トークンを無効化(有効だと出力が思考に消費され本文が空になる)。
+          generationConfig: { temperature, maxOutputTokens, thinkingConfig: { thinkingBudget: 0 } },
+        }),
+      }
+    );
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      let reason = body;
+      try {
+        reason = JSON.parse(body)?.error?.message || body;
+      } catch {
+        /* JSONでなければそのまま */
+      }
+      return { error: `HTTP ${res.status}: ${reason}`.slice(0, 200) };
+    }
+    const data = await res.json();
+    const raw = data.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      const finishReason = data.candidates?.[0]?.finishReason;
+      return { error: `AIの応答からJSONを取り出せませんでした${finishReason ? ` (finishReason: ${finishReason})` : ''}` };
+    }
+    return { data: JSON.parse(jsonMatch[0]) };
+  } catch (e) {
+    return { error: e?.message || 'ネットワークエラー' };
+  }
+}
+
+// ---------------- AI選手名鑑(スカウト寸評) ----------------
+function scoutPrompt({ name, number, tags, statsSummary }) {
   const plus = tags.filter((t) => t.type === 'plus').map((t) => t.label);
   const minus = tags.filter((t) => t.type === 'minus').map((t) => t.label);
   const joke = tags.filter((t) => t.type === 'joke').map((t) => t.label);
@@ -26,45 +70,70 @@ function buildPrompt({ name, number, tags, statsSummary }) {
 {"catchphrase":"...","report":"..."}`;
 }
 
-// 戻り値: 成功時 { catchphrase, report }。
-// 失敗時 { error: '画面表示用の理由文字列' }。未設定/オフライン時のみ null。
+// 戻り値: 成功 { catchphrase, report } / 失敗 { error } / 未設定・オフライン null
 export async function generateScoutReport({ apiKey, name, number, tags, statsSummary }) {
-  if (!apiKey || !navigator.onLine) return null;
-  try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`,
-      {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: buildPrompt({ name, number, tags, statsSummary }) }] }],
-          // thinkingBudget: 0 で内部思考トークンを無効化(有効なままだと出力トークンが
-          // 思考に消費され、maxOutputTokensに達しても本文が空になることがある)。
-          generationConfig: { temperature: 0.9, maxOutputTokens: 1024, thinkingConfig: { thinkingBudget: 0 } },
-        }),
-      }
-    );
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      let reason = body;
-      try {
-        reason = JSON.parse(body)?.error?.message || body;
-      } catch {
-        /* bodyがJSONでなければそのまま使う */
-      }
-      return { error: `HTTP ${res.status}: ${reason}`.slice(0, 200) };
-    }
-    const data = await res.json();
-    const raw = data.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';
-    const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      const finishReason = data.candidates?.[0]?.finishReason;
-      return { error: `AIの応答からJSONを取り出せませんでした${finishReason ? ` (finishReason: ${finishReason})` : ''}` };
-    }
-    const parsed = JSON.parse(jsonMatch[0]);
-    if (!parsed.report) return { error: 'AIの応答にreportが含まれていません' };
-    return { catchphrase: parsed.catchphrase || '', report: parsed.report };
-  } catch (e) {
-    return { error: e?.message || 'ネットワークエラー' };
+  const r = await callGeminiJSON(apiKey, scoutPrompt({ name, number, tags, statsSummary }));
+  if (!r || r.error) return r;
+  if (!r.data.report) return { error: 'AIの応答にreportが含まれていません' };
+  return { catchphrase: r.data.catchphrase || '', report: r.data.report };
+}
+
+// ---------------- AIヘッドコーチ(スタメン提案) ----------------
+// players: [{ name, statsLine }] 打順に含めたい選手。statsLineは「打率.320 出塁率.400 OPS.850 打点5」等。
+function lineupPrompt(players, dh) {
+  const list = players.map((p) => `- ${p.name}（${p.statsLine || '成績データ少'}）`).join('\n');
+  const posTokens = dh ? '投 捕 一 二 三 遊 左 中 右 DH' : '投 捕 一 二 三 遊 左 中 右';
+  return `あなたは草野球チームの名将ヘッドコーチです。以下の選手の今季成績をもとに、最も得点が期待できる打順と守備位置を提案してください。
+
+選手一覧（今季成績）:
+${list}
+
+守備位置は次の記号のみ使用: ${posTokens}
+条件:
+- lineupは打順1番から順に、上の選手を全員1回ずつ含める
+- nameは上の選手名を一字一句そのまま使う（余計な装飾なし）
+- 各選手に position（上記記号のいずれか）と reason（30字程度の起用理由）を付ける
+- 一般的なセオリー（出塁率の高い打者を上位、長打力を3〜5番等）を踏まえる
+- strategy に全体の狙いを80字程度で
+- 出力は次のJSON形式のみ。前置き・説明は一切禁止:
+{"lineup":[{"name":"...","position":"...","reason":"..."}],"strategy":"..."}`;
+}
+
+// 戻り値: 成功 { lineup:[{name,position,reason}], strategy } / 失敗 { error } / 未設定・オフライン null
+export async function generateLineup({ apiKey, players, dh = false }) {
+  const r = await callGeminiJSON(apiKey, lineupPrompt(players, dh), { maxOutputTokens: 2048, temperature: 0.7 });
+  if (!r || r.error) return r;
+  if (!Array.isArray(r.data.lineup) || r.data.lineup.length === 0) {
+    return { error: 'AIの応答にlineupが含まれていません' };
   }
+  return { lineup: r.data.lineup, strategy: r.data.strategy || '' };
+}
+
+// ---------------- AIスポーツ新聞(試合記事) ----------------
+// summary: 試合結果を人間可読テキストにまとめたもの(スコア・MVP・好投・見どころ等)
+function newspaperPrompt(summary) {
+  return `あなたはスポーツ新聞のベテラン記者です。以下の試合結果から、臨場感あふれるスポーツ新聞の記事を書いてください。草野球の試合ですが、プロ野球の一面記事のように熱く、少しユーモアも交えて。
+
+${summary}
+
+条件:
+- headline: 力強い大見出し（20字以内、新聞一面風）
+- subhead: 小見出し（30字程度）
+- body: 本文（150〜250字、試合展開・主役の活躍・投手に触れる新聞記事調）
+- comment: 一言講評（40字程度、愛のあるユーモアを添えて）
+- 出力は次のJSON形式のみ。前置き・説明は一切禁止:
+{"headline":"...","subhead":"...","body":"...","comment":"..."}`;
+}
+
+// 戻り値: 成功 { headline, subhead, body, comment } / 失敗 { error } / 未設定・オフライン null
+export async function generateNewspaper({ apiKey, summary }) {
+  const r = await callGeminiJSON(apiKey, newspaperPrompt(summary), { maxOutputTokens: 2048, temperature: 0.95 });
+  if (!r || r.error) return r;
+  if (!r.data.headline || !r.data.body) return { error: 'AIの応答に記事本文が含まれていません' };
+  return {
+    headline: r.data.headline,
+    subhead: r.data.subhead || '',
+    body: r.data.body,
+    comment: r.data.comment || '',
+  };
 }

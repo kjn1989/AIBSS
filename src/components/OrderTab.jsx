@@ -3,6 +3,7 @@ import { useStore, useCurrentGame, usePlayerName } from '../state/store.jsx';
 import { POSITIONS } from '../lib/model.js';
 import Sheet from './Sheet.jsx';
 import LineupWizard from './LineupWizard.jsx';
+import HeadCoachView from './HeadCoachView.jsx';
 
 // ---- 交代シート(代打・代走・守備交代) ----
 // スコア入力タブ(打者カード/走者タップ)からも再利用するため export する
@@ -88,16 +89,35 @@ export default function OrderTab() {
   const game = useCurrentGame();
   const nameOf = usePlayerName();
   const [subSlot, setSubSlot] = useState(null);
+  const [coachOpen, setCoachOpen] = useState(false);
 
   if (!game || game.status === 'finished') {
     return <div className="big-note">📋 スコア入力タブで試合を開始すると、オーダーを設定できます。</div>;
   }
 
-  if (game.lineup.length === 0) return <LineupWizard game={game} />;
-
   // 試合が始まっているか(打席が記録されている or プレイログがある)
   const gameStarted = game.atBats.length > 0 ||
     game.playLogs.some((l) => ['atbat', 'defense', 'run', 'sb'].includes(l.kind));
+
+  const coachBtn = <button className="small" onClick={() => setCoachOpen(true)}>🤖 AI提案</button>;
+  const coachView = coachOpen && (
+    <HeadCoachView game={game} canApply={!gameStarted} onClose={() => setCoachOpen(false)} />
+  );
+
+  if (game.lineup.length === 0) {
+    return (
+      <div>
+        <div className="card">
+          <div className="flex">
+            <span className="grow small dim">打順に迷ったら、AIヘッドコーチが提案します。</span>
+            {coachBtn}
+          </div>
+        </div>
+        <LineupWizard game={game} />
+        {coachView}
+      </div>
+    );
+  }
 
   const rebuildLineup = () => {
     if (!window.confirm('オーダーを最初から組み直しますか？(現在の打順・守備位置はリセットされます)')) return;
@@ -109,6 +129,7 @@ export default function OrderTab() {
       <div className="card">
         <div className="flex" style={{ marginBottom: 8 }}>
           <h2 className="grow" style={{ marginBottom: 0 }}>オーダー ({game.inning}回{game.isTop ? '表' : '裏'})</h2>
+          {coachBtn}
           {!gameStarted && <button className="small" onClick={rebuildLineup}>↻ 組み直す</button>}
         </div>
         {game.lineup.map((slot, i) => (
@@ -147,6 +168,7 @@ export default function OrderTab() {
       )}
 
       {subSlot && <SubstituteSheet game={game} slot={subSlot} onClose={() => setSubSlot(null)} />}
+      {coachView}
     </div>
   );
 }
