@@ -6,6 +6,7 @@ import { playLabel } from '../lib/voiceParser.js';
 import SprayChart from './SprayChart.jsx';
 import TrendChart from './TrendChart.jsx';
 import ScoutCard from './ScoutCard.jsx';
+import FullscreenView from './FullscreenView.jsx';
 
 // 選手個人ページ: 通算成績・スプレーチャート・成績推移・打席履歴を1画面に集約
 export default function PlayerView({ playerId, games, onClose }) {
@@ -29,7 +30,7 @@ export default function PlayerView({ playerId, games, onClose }) {
   const pm = pitching ? pitchingMetrics(pitching) : null;
 
   return (
-    <div className="fullscreen-view">
+    <FullscreenView>
       <header className="fullscreen-header">
         <button className="ghost small" onClick={onClose}>← 戻る</button>
         <h2>{player?.name || '選手'}{player?.number ? ` #${player.number}` : ''}</h2>
@@ -98,6 +99,6 @@ export default function PlayerView({ playerId, games, onClose }) {
         )}
       </div>
       {showScout && <ScoutCard player={player} onClose={() => setShowScout(false)} />}
-    </div>
+    </FullscreenView>
   );
 }

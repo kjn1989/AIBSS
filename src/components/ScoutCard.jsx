@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useStore } from '../state/store.jsx';
 import { generateScoutReport } from '../lib/gemini.js';
+import FullscreenView from './FullscreenView.jsx';
 
 // ---- プリセット特殊能力タグ(パワプロ風) ----
 // type: 'plus'(青=長所) / 'minus'(赤=短所) / 'joke'(緑=個性・チーム貢献)
@@ -124,7 +125,7 @@ export default function ScoutCard({ player, onClose }) {
   };
 
   return (
-    <div className="fullscreen-view">
+    <FullscreenView>
       <header className="fullscreen-header">
         <button className="ghost small" onClick={onClose}>← 戻る</button>
         <h2>AI選手名鑑</h2>
@@ -216,6 +217,6 @@ export default function ScoutCard({ player, onClose }) {
           </div>
         </div>
       </div>
-    </div>
+    </FullscreenView>
   );
 }

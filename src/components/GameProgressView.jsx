@@ -4,6 +4,7 @@ import { RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES } from '../lib/model.js';
 import { playLabel } from '../lib/voiceParser.js';
 import { computeBoxScore } from '../lib/boxscore.js';
 import Sheet from './Sheet.jsx';
+import FullscreenView from './FullscreenView.jsx';
 
 // 打席結果のカテゴリ(色分け用)
 function resultCategory(result) {
@@ -271,7 +272,7 @@ export function GameProgressContent({ game, editable = false }) {
 // 独立した全画面ビュー(「試合経過」への遷移用)
 export default function GameProgressView({ game, onClose }) {
   return (
-    <div className="fullscreen-view">
+    <FullscreenView>
       <header className="fullscreen-header">
         <button className="ghost small" onClick={onClose}>← 戻る</button>
         <h2>試合経過</h2>
@@ -280,6 +281,6 @@ export default function GameProgressView({ game, onClose }) {
       <div className="fullscreen-body">
         <GameProgressContent game={game} editable />
       </div>
-    </div>
+    </FullscreenView>
   );
 }

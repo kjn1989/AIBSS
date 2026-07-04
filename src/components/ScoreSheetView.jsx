@@ -2,6 +2,7 @@ import React from 'react';
 import { useStore, usePlayerName } from '../state/store.jsx';
 import { RESULTS, DIRECTIONS, formatIP } from '../lib/model.js';
 import { computeBoxScore } from '../lib/boxscore.js';
+import FullscreenView from './FullscreenView.jsx';
 
 // 打席結果の超短縮表記(スコアシートのセル用): 例「中安」「遊ゴ」「左本」「四球」
 function shortLabel(ab) {
@@ -58,7 +59,7 @@ export default function ScoreSheetView({ game, onClose }) {
   const records = [...game.pitchingRecords].sort((a, b) => a.appearanceOrder - b.appearanceOrder);
 
   return (
-    <div className="fullscreen-view">
+    <FullscreenView>
       <header className="fullscreen-header no-print">
         <button className="ghost small" onClick={onClose}>← 戻る</button>
         <h2>スコアシート</h2>
@@ -149,6 +150,6 @@ export default function ScoreSheetView({ game, onClose }) {
           <div className="ss-footer">AIBSS — 音声実況スコアラー</div>
         </div>
       </div>
-    </div>
+    </FullscreenView>
   );
 }
