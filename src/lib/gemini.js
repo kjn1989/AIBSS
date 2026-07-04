@@ -37,7 +37,9 @@ export async function generateScoutReport({ apiKey, name, number, tags }) {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: buildPrompt({ name, number, tags }) }] }],
-          generationConfig: { temperature: 0.9, maxOutputTokens: 300 },
+          // thinkingBudget: 0 で内部思考トークンを無効化(有効なままだと出力トークンが
+          // 思考に消費され、maxOutputTokensに達しても本文が空になることがある)。
+          generationConfig: { temperature: 0.9, maxOutputTokens: 1024, thinkingConfig: { thinkingBudget: 0 } },
         }),
       }
     );
@@ -52,9 +54,12 @@ export async function generateScoutReport({ apiKey, name, number, tags }) {
       return { error: `HTTP ${res.status}: ${reason}`.slice(0, 200) };
     }
     const data = await res.json();
-    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const raw = data.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return { error: 'AIの応答からJSONを取り出せませんでした' };
+    if (!jsonMatch) {
+      const finishReason = data.candidates?.[0]?.finishReason;
+      return { error: `AIの応答からJSONを取り出せませんでした${finishReason ? ` (finishReason: ${finishReason})` : ''}` };
+    }
     const parsed = JSON.parse(jsonMatch[0]);
     if (!parsed.report) return { error: 'AIの応答にreportが含まれていません' };
     return { catchphrase: parsed.catchphrase || '', report: parsed.report };
