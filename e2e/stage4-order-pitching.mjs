@@ -31,7 +31,7 @@ await page.click('.tabbar button:has-text("オーダー")');
 await page.click('button:has-text("登録順に9人選択")');
 await page.click('button:has-text("次へ(打順の並べ替え)")');
 await page.click('button:has-text("次へ(守備位置)")');
-await page.click('button:has-text("この打順で確定")');
+await page.click('button:has-text("このオーダーで確定")');
 await page.waitForSelector('.card h2:has-text("オーダー")');
 console.log('lineup set');
 

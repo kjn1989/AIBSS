@@ -95,10 +95,22 @@ export default function OrderTab() {
 
   if (game.lineup.length === 0) return <LineupWizard game={game} />;
 
+  // 試合が始まっているか(打席が記録されている or プレイログがある)
+  const gameStarted = game.atBats.length > 0 ||
+    game.playLogs.some((l) => ['atbat', 'defense', 'run', 'sb'].includes(l.kind));
+
+  const rebuildLineup = () => {
+    if (!window.confirm('オーダーを最初から組み直しますか？(現在の打順・守備位置はリセットされます)')) return;
+    dispatch({ type: 'SET_LINEUP', gameId: game.id, lineup: [] });
+  };
+
   return (
     <div>
       <div className="card">
-        <h2>オーダー ({game.inning}回{game.isTop ? '表' : '裏'})</h2>
+        <div className="flex" style={{ marginBottom: 8 }}>
+          <h2 className="grow" style={{ marginBottom: 0 }}>オーダー ({game.inning}回{game.isTop ? '表' : '裏'})</h2>
+          {!gameStarted && <button className="small" onClick={rebuildLineup}>↻ 組み直す</button>}
+        </div>
         {game.lineup.map((slot, i) => (
           <div className="row" key={slot.order}>
             <span className="rank-badge">{slot.order}</span>

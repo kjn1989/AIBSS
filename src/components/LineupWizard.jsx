@@ -147,6 +147,10 @@ function SelectStep({ players, selected, selectedIds, nameOf, numberOf, pastGame
   const orderOf = (pid) => selected.findIndex((s) => s.playerId === pid) + 1;
   return (
     <div className="card">
+      <div className="wizard-nav">
+        <span className="grow" />
+        <button className="primary" disabled={selected.length === 0} onClick={onNext}>次へ(打順の並べ替え)</button>
+      </div>
       <h2>選手を打順順にタップ ({selected.length}人選択中)</h2>
       {players.length === 0 && <div className="warn-box">⚙️ 設定タブで選手を登録してください。</div>}
 
@@ -179,47 +183,73 @@ function SelectStep({ players, selected, selectedIds, nameOf, numberOf, pastGame
           );
         })}
       </div>
-
-      <button className="primary mt12" style={{ width: '100%' }} disabled={selected.length === 0} onClick={onNext}>
-        次へ(打順の並べ替え)
-      </button>
     </div>
   );
 }
 
 // ---- ステップ2: ドラッグ/▲▼で打順を並べ替え ----
 function ReorderStep({ selected, nameOf, numberOf, onReorder, onBack, onNext }) {
-  const [dragIdx, setDragIdx] = useState(null);
-  const [overIdx, setOverIdx] = useState(null);
+  // ドラッグ中は配列を並べ替えず、各行を transform でスライドさせて
+  // 「掴んだ行が指に追従し、他の行が隙間を空ける」動きをリアルタイムに見せる。
+  // 確定(pointerup)時にだけ実際の並べ替えを反映する。
+  const [drag, setDrag] = useState(null); // { idx, startY, curY, rowH }
   const rowRefs = useRef([]);
 
-  const onPointerDown = (e, idx) => {
-    setDragIdx(idx); setOverIdx(idx);
+  const targetIndex = () => {
+    if (!drag) return null;
+    const delta = Math.round((drag.curY - drag.startY) / drag.rowH);
+    return Math.max(0, Math.min(selected.length - 1, drag.idx + delta));
+  };
+
+  const onDown = (e, idx) => {
+    const el = rowRefs.current[idx];
+    const rowH = el ? el.getBoundingClientRect().height + 8 : 60; // 高さ + 行間
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* noop */ }
+    setDrag({ idx, startY: e.clientY, curY: e.clientY, rowH });
   };
-  const onPointerMove = (e) => {
-    if (dragIdx === null) return;
-    const y = e.clientY;
-    for (let i = 0; i < rowRefs.current.length; i++) {
-      const r = rowRefs.current[i]?.getBoundingClientRect();
-      if (r && y >= r.top && y <= r.bottom) { setOverIdx(i); break; }
+  const onMove = (e) => {
+    if (!drag) return;
+    e.preventDefault();
+    setDrag((d) => (d ? { ...d, curY: e.clientY } : d));
+  };
+  const onUp = () => {
+    if (drag) {
+      const to = targetIndex();
+      if (to !== null && to !== drag.idx) onReorder(drag.idx, to);
     }
+    setDrag(null);
   };
-  const onPointerUp = () => {
-    if (dragIdx !== null && overIdx !== null && dragIdx !== overIdx) onReorder(dragIdx, overIdx);
-    setDragIdx(null); setOverIdx(null);
+
+  const tIdx = targetIndex();
+  const rowStyle = (i) => {
+    if (!drag) return undefined;
+    if (i === drag.idx) {
+      // 掴んだ行: 指に1:1追従、浮かせる(transitionなし)
+      return { transform: `translateY(${drag.curY - drag.startY}px)`, zIndex: 5, transition: 'none' };
+    }
+    // 他の行: ドラッグ元と挿入先の間にある行を1行分ずらして隙間を作る
+    let shift = 0;
+    if (drag.idx < tIdx && i > drag.idx && i <= tIdx) shift = -drag.rowH;
+    else if (drag.idx > tIdx && i >= tIdx && i < drag.idx) shift = drag.rowH;
+    return { transform: `translateY(${shift}px)` };
   };
 
   return (
     <div className="card">
+      {/* ナビは上部に配置 */}
+      <div className="wizard-nav">
+        <button className="ghost" onClick={onBack}>戻る</button>
+        <button className="primary" onClick={onNext}>次へ(守備位置)</button>
+      </div>
       <h2>打順を並べ替え</h2>
       <p className="small dim" style={{ marginBottom: 8 }}>右端の ≡ を上下にドラッグ、または ▲▼ で入れ替えできます。</p>
-      <div onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
+      <div className="lineup-droparea">
         {selected.map((s, i) => (
           <div
             key={s.playerId}
             ref={(el) => (rowRefs.current[i] = el)}
-            className={`lineup-row${dragIdx === i ? ' dragging' : ''}${overIdx === i && dragIdx !== null && dragIdx !== i ? ' over' : ''}`}
+            className={`lineup-row${drag?.idx === i ? ' dragging' : ''}`}
+            style={rowStyle(i)}
           >
             <span className="rank-badge">{i + 1}</span>
             <span className="grow">{nameOf(s.playerId)} {numberOf(s.playerId) && <span className="dim small">#{numberOf(s.playerId)}</span>}</span>
@@ -230,16 +260,15 @@ function ReorderStep({ selected, nameOf, numberOf, onReorder, onBack, onNext }) 
             <button
               className="drag-handle"
               aria-label="ドラッグして並べ替え"
-              onPointerDown={(e) => onPointerDown(e, i)}
+              onPointerDown={(e) => onDown(e, i)}
+              onPointerMove={onMove}
+              onPointerUp={onUp}
+              onPointerCancel={onUp}
             >
               ≡
             </button>
           </div>
         ))}
-      </div>
-      <div className="sheet-actions">
-        <button className="ghost" onClick={onBack}>戻る</button>
-        <button className="primary" onClick={onNext}>次へ(守備位置)</button>
       </div>
     </div>
   );
@@ -262,6 +291,11 @@ function PositionStep({ selected, nameOf, numberOf, onAssign, onBack, onConfirm 
 
   return (
     <div className="card">
+      {/* ナビは上部に配置 */}
+      <div className="wizard-nav">
+        <button className="ghost" onClick={onBack}>戻る</button>
+        <button className="primary" onClick={onConfirm}>このオーダーで確定</button>
+      </div>
       <h2>守備位置を選択</h2>
       {/* 現在の選手ナビ */}
       <div className="pos-navbar">
@@ -300,11 +334,6 @@ function PositionStep({ selected, nameOf, numberOf, onAssign, onBack, onConfirm 
       </div>
 
       <button className="ghost small mt8" onClick={() => onAssign(cur, '')}>この選手の守備位置をクリア</button>
-
-      <div className="sheet-actions">
-        <button className="ghost" onClick={onBack}>戻る</button>
-        <button className="primary" onClick={onConfirm}>この打順で確定</button>
-      </div>
     </div>
   );
 }

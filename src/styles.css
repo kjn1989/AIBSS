@@ -567,14 +567,25 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 }
 .sel-badge.on { background: var(--accent-2); border-color: var(--accent-2); color: #fff; }
 
+/* ウィザードの上部ナビ(戻る/次へ・確定) */
+.wizard-nav { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+.wizard-nav .grow { flex: 1; }
+.wizard-nav button { min-height: 44px; padding: 0 18px; }
+
 /* 並べ替えの行(ドラッグ/▲▼) */
+.lineup-droparea { position: relative; }
 .lineup-row {
-  display: flex; align-items: center; gap: 8px; padding: 10px 8px; margin-bottom: 6px;
+  display: flex; align-items: center; gap: 8px; padding: 10px 8px; margin-bottom: 8px;
   background: var(--bg-3); border: 1px solid var(--border); border-radius: 12px; min-height: 52px;
   touch-action: none;
+  /* ドラッグ中に他行がスライドする際の滑らかな動き */
+  transition: transform 0.18s cubic-bezier(0.2, 0, 0, 1);
+  will-change: transform;
 }
-.lineup-row.dragging { opacity: 0.5; }
-.lineup-row.over { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(88,166,255,0.4); }
+.lineup-row.dragging {
+  border-color: var(--accent); background: var(--bg-2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5); opacity: 0.97;
+}
 .reorder-arrows { display: flex; flex-direction: column; gap: 2px; }
 .reorder-arrows .mini { min-height: 22px; min-width: 34px; padding: 0; font-size: 11px; }
 .drag-handle {
