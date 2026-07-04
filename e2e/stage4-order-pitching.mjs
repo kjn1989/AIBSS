@@ -35,12 +35,10 @@ await page.click('button:has-text("このオーダーで確定")');
 await page.waitForSelector('.card h2:has-text("オーダー")');
 console.log('lineup set');
 
-// ==== 試合結果タブ(登板・継投)で先発登板 ====
+// ==== 先発投手はオーダー確定時に自動設定される(打順1番=青木が投を守る) ====
 await page.click('.tabbar button:has-text("試合結果")');
-await page.selectOption('.card:has(h2:has-text("登板・継投")) select', { label: '青木' });
-await page.click('button:has-text("先発登板")');
-await page.waitForSelector('.pill.green');
-console.log('starter: 青木 登板中');
+await page.waitForSelector('.pill.green'); // 青木が登板中
+console.log('starter: 青木 登板中(オーダー確定で自動設定)');
 
 // ==== 守備で被安打→継投→継承走者生還 ====
 await page.click('.tabbar button:has-text("スコア入力")');

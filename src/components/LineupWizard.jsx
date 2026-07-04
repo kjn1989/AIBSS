@@ -1,6 +1,5 @@
 import React, { useState, useRef } from 'react';
 import { useStore, usePlayerName } from '../state/store.jsx';
-import { POSITIONS } from '../lib/model.js';
 
 // 配列の要素を from→to へ移動した新配列を返す(純関数・テスト容易)
 export function moveItem(arr, from, to) {
@@ -37,6 +36,8 @@ export default function LineupWizard({ game }) {
   const [step, setStep] = useState(1);
   // selected: [{ playerId, position }] を打順順に保持
   const [selected, setSelected] = useState([]);
+  const [useDH, setUseDH] = useState(false); // DH制(投手は打たず、DHが代わりに打つ)
+  const [pitcherId, setPitcherId] = useState(''); // DH制時の打順外の投手
 
   const players = state.players.filter((p) => !p.id.startsWith('demo-'));
   const pastGames = Object.values(state.games)
@@ -79,13 +80,23 @@ export default function LineupWizard({ game }) {
   };
 
   const confirm = () => {
-    // 未割り当ての守備位置: 1〜9番はポジション順の既定、10番以降は「打」(全員打ち)
+    // 未割り当ての守備位置の既定値:
+    // DHなし → 投捕一二三遊左中右(投手も打つ)、DHあり → 捕一二三遊左中右+指(投手は打順外)、
+    // 10番目以降(全員打ち)は「打」
+    const DEF_NO_DH = ['投', '捕', '一', '二', '三', '遊', '左', '中', '右'];
+    const DEF_DH = ['捕', '一', '二', '三', '遊', '左', '中', '右', 'DH'];
+    const defaults = useDH ? DEF_DH : DEF_NO_DH;
     const lineup = selected.map((s, i) => ({
       order: i + 1,
       playerId: s.playerId,
-      position: s.position || (i < 9 ? POSITIONS[i] : '打'),
+      position: s.position || (i < 9 ? defaults[i] : '打'),
     }));
     dispatch({ type: 'SET_LINEUP', gameId: game.id, lineup });
+    // 先発投手を確定: DH制なら打順外の投手、DHなしなら打順内で「投」を守る選手
+    const pid = useDH ? pitcherId : (lineup.find((l) => l.position === '投')?.playerId || '');
+    if (pid) {
+      dispatch({ type: 'SET_PITCHER', gameId: game.id, playerId: pid, label: `先発: ${nameOf(pid)}` });
+    }
   };
 
   return (
@@ -104,6 +115,10 @@ export default function LineupWizard({ game }) {
           onAutoSelect={autoSelectN}
           onLoadPast={loadFromPast}
           onNext={() => setStep(2)}
+          useDH={useDH}
+          onToggleDH={setUseDH}
+          pitcherId={pitcherId}
+          onPitcher={setPitcherId}
         />
       )}
 
@@ -126,6 +141,8 @@ export default function LineupWizard({ game }) {
           onAssign={assignPosition}
           onBack={() => setStep(2)}
           onConfirm={confirm}
+          useDH={useDH}
+          pitcherId={pitcherId}
         />
       )}
     </div>
@@ -146,8 +163,9 @@ function StepHeader({ step }) {
 }
 
 // ---- ステップ1: 選手をタップで打順順に選択 ----
-function SelectStep({ players, selected, selectedIds, nameOf, numberOf, pastGames, onToggle, onAutoSelect, onLoadPast, onNext }) {
+function SelectStep({ players, selected, selectedIds, nameOf, numberOf, pastGames, onToggle, onAutoSelect, onLoadPast, onNext, useDH, onToggleDH, pitcherId, onPitcher }) {
   const orderOf = (pid) => selected.findIndex((s) => s.playerId === pid) + 1;
+  const benchForPitcher = players.filter((p) => !selectedIds.has(p.id)); // 打順に入っていない選手=投手候補
   return (
     <div className="card">
       <div className="wizard-nav">
@@ -156,6 +174,27 @@ function SelectStep({ players, selected, selectedIds, nameOf, numberOf, pastGame
       </div>
       <h2>選手を打順順にタップ ({selected.length}人選択中)</h2>
       <p className="small dim" style={{ marginBottom: 6 }}>タップした順が打順になります。全員打ち(守備につかない打者)は最大20人までOK。</p>
+
+      {/* DH制の有無 */}
+      <div className="dh-toggle">
+        <span className="grow small">DH制(投手は打たず、DHが代わりに打つ)</span>
+        <div className="toggle-row" style={{ width: 140, marginBottom: 0 }}>
+          <button className={!useDH ? 'active' : ''} onClick={() => onToggleDH(false)}>なし</button>
+          <button className={useDH ? 'active' : ''} onClick={() => onToggleDH(true)}>あり</button>
+        </div>
+      </div>
+      {useDH && (
+        <div className="flex mt8">
+          <span className="small dim">投手(打順外)</span>
+          <select className="grow" aria-label="投手選択" value={pitcherId} onChange={(e) => onPitcher(e.target.value)}>
+            <option value="">後で選ぶ</option>
+            {benchForPitcher.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}{p.number ? ` #${p.number}` : ''}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {players.length === 0 && <div className="warn-box">⚙️ 設定タブで選手を登録してください。</div>}
 
       {pastGames.length > 0 && (
@@ -282,11 +321,13 @@ function ReorderStep({ selected, nameOf, numberOf, onReorder, onBack, onNext }) 
 }
 
 // ---- ステップ3: フィールドから守備位置を選択 ----
-function PositionStep({ selected, nameOf, numberOf, onAssign, onBack, onConfirm }) {
+function PositionStep({ selected, nameOf, numberOf, onAssign, onBack, onConfirm, useDH, pitcherId }) {
   const [cur, setCur] = useState(0); // 現在割り当て中の打順index
   const curPlayer = selected[cur];
   // position値 → その位置を守っている選手のindex
   const holderOf = (value) => selected.findIndex((s) => s.position === value);
+  // DH制なら「投」は打順外の投手が守るので打者からは選べない。DHなしなら「指(DH)」は使わない。
+  const spots = FIELD_SPOTS.filter((s) => (useDH ? s.value !== '投' : s.value !== 'DH'));
 
   const pick = (value) => {
     onAssign(cur, value);
@@ -323,7 +364,7 @@ function PositionStep({ selected, nameOf, numberOf, onAssign, onBack, onConfirm 
         <div className="bf-line left" />
         <div className="bf-line right" />
         <div className="bf-basepath" />
-        {FIELD_SPOTS.map((spot) => {
+        {spots.map((spot) => {
           const isCur = curPlayer.position === spot.value;
           // '打'(全員打ち)は複数人可。担当者名は出さず、人数を添える。
           if (spot.shared) {
@@ -352,7 +393,16 @@ function PositionStep({ selected, nameOf, numberOf, onAssign, onBack, onConfirm 
             </button>
           );
         })}
+        {/* DH制: 投手は打順外。フィールド上に読み取り専用で表示 */}
+        {useDH && (
+          <div className="pos-spot pitcher-fixed" style={{ left: '50%', top: '66%' }}>
+            {pitcherId ? nameOf(pitcherId) : '投(未定)'}
+          </div>
+        )}
       </div>
+      {useDH && (
+        <p className="small dim mt8">DH制: 投手は打順に入りません{pitcherId ? `(先発: ${nameOf(pitcherId)})` : '(先発は後で選択可)'}。</p>
+      )}
 
       <button className="ghost small mt8" onClick={() => onAssign(cur, '')}>この選手の守備位置をクリア</button>
     </div>

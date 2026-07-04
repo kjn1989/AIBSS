@@ -610,6 +610,12 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
   max-width: 84px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .pos-spot.taken { background: rgba(255, 255, 255, 0.5); color: #29323a; }
+.pos-spot.pitcher-fixed {
+  background: rgba(188, 140, 255, 0.9); color: #1a1030; font-weight: 800;
+  pointer-events: none;
+}
+.dh-toggle { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.dh-toggle .grow { flex: 1; }
 .pos-spot.cur {
   background: var(--accent-2); color: #fff;
   box-shadow: 0 0 0 4px rgba(31, 111, 235, 0.5), 0 3px 10px rgba(0, 0, 0, 0.4);
