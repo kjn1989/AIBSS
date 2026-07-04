@@ -11,8 +11,9 @@ export default function HeadCoachView({ game, canApply, onClose }) {
   const nameOf = usePlayerName();
   const apiKey = state.settings.geminiApiKey;
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState(null); // { lineup, strategy }
+  const [result, setResult] = useState(null); // { lineup, pitcher, strategy }
   const [error, setError] = useState('');
+  const [dh, setDh] = useState(false); // DH制の有無(有=10人/無=9人)
 
   const games = useMemo(() => Object.values(state.games), [state.games]);
   const batting = useMemo(() => aggregateBatting(games), [games]);
@@ -30,7 +31,7 @@ export default function HeadCoachView({ game, canApply, onClose }) {
   const run = async () => {
     setError('');
     setLoading(true);
-    const r = await generateLineup({ apiKey, players });
+    const r = await generateLineup({ apiKey, players, dh });
     setLoading(false);
     if (!r) {
       setError('Gemini APIキーが未設定か、オフラインです。設定タブでキーを追加してください。');
@@ -58,7 +59,10 @@ export default function HeadCoachView({ game, canApply, onClose }) {
       return;
     }
     dispatch({ type: 'SET_LINEUP', gameId: game.id, lineup });
-    const pid = lineup.find((l) => l.position === '投')?.playerId;
+    // 先発投手: DHなしは打順内の「投」、DHありは打順外のpitcher
+    const pid = dh
+      ? nameToId[result.pitcher?.name]
+      : lineup.find((l) => l.position === '投')?.playerId;
     if (pid) dispatch({ type: 'SET_PITCHER', gameId: game.id, playerId: pid, label: `先発: ${nameOf(pid)}` });
     onClose();
   };
@@ -76,8 +80,15 @@ export default function HeadCoachView({ game, canApply, onClose }) {
             今季の打撃成績をもとに、AIが打順と守備位置を提案します。あくまで参考の「おまけ」機能です
             (最終判断は監督であるあなたの目で)。
           </p>
+          <div className="flex" style={{ marginBottom: 10 }}>
+            <span className="grow small">DH制（指名打者）</span>
+            <div className="toggle-row" style={{ margin: 0, width: 150 }}>
+              <button className={dh ? '' : 'active'} onClick={() => { setDh(false); setResult(null); }}>なし(9人)</button>
+              <button className={dh ? 'active' : ''} onClick={() => { setDh(true); setResult(null); }}>あり(10人)</button>
+            </div>
+          </div>
           <button className="primary" onClick={run} disabled={loading} style={{ width: '100%' }}>
-            {loading ? '🤔 考え中...' : result ? '🔄 もう一度提案してもらう' : '🤖 スタメンを提案してもらう'}
+            {loading ? '🤔 考え中...' : result ? '🔄 もう一度提案してもらう' : `🤖 スタメン(${dh ? '10' : '9'}人)を提案してもらう`}
           </button>
           {error && <div className="warn-box mt8">⚠️ {error}</div>}
           {!apiKey && <p className="small dim mt8">※ Gemini APIキー未設定です。設定タブから追加すると生成できます。</p>}
@@ -103,6 +114,16 @@ export default function HeadCoachView({ game, canApply, onClose }) {
                   </div>
                 </div>
               ))}
+              {dh && result.pitcher && (
+                <div className="row">
+                  <span className="rank-badge">投</span>
+                  <div className="grow">
+                    <b>{result.pitcher.name}</b>
+                    <span className="pill" style={{ marginLeft: 6 }}>投手・打順外</span>
+                    {result.pitcher.reason && <div className="small dim">{result.pitcher.reason}</div>}
+                  </div>
+                </div>
+              )}
               {canApply ? (
                 <>
                   <button className="primary mt8" onClick={apply} style={{ width: '100%' }}>このオーダーを採用</button>

@@ -79,34 +79,52 @@ export async function generateScoutReport({ apiKey, name, number, tags, statsSum
 }
 
 // ---------------- AIヘッドコーチ(スタメン提案) ----------------
-// players: [{ name, statsLine }] 打順に含めたい選手。statsLineは「打率.320 出塁率.400 OPS.850 打点5」等。
+// players: [{ name, statsLine }] 候補選手。statsLineは「打率.320 出塁率.400 OPS.850 打点5」等。
+// dh=true: DH制(打順9人=守備8+DH1、別に打順外の投手1人、合計10人)
+// dh=false: DHなし(打順9人=投手含む全員守備)
 function lineupPrompt(players, dh) {
   const list = players.map((p) => `- ${p.name}（${p.statsLine || '成績データ少'}）`).join('\n');
-  const posTokens = dh ? '投 捕 一 二 三 遊 左 中 右 DH' : '投 捕 一 二 三 遊 左 中 右';
-  return `あなたは草野球チームの名将ヘッドコーチです。以下の選手の今季成績をもとに、最も得点が期待できる打順と守備位置を提案してください。
+  if (dh) {
+    return `あなたは草野球チームの名将ヘッドコーチです。以下の候補選手の今季成績をもとに、最も得点が期待できるスタメンを提案してください。DH制です。
 
-選手一覧（今季成績）:
+候補選手（今季成績）:
 ${list}
 
-守備位置は次の記号のみ使用: ${posTokens}
 条件:
-- lineupは打順1番から順に、上の選手を全員1回ずつ含める
-- nameは上の選手名を一字一句そのまま使う（余計な装飾なし）
-- 各選手に position（上記記号のいずれか）と reason（30字程度の起用理由）を付ける
-- 一般的なセオリー（出塁率の高い打者を上位、長打力を3〜5番等）を踏まえる
-- strategy に全体の狙いを80字程度で
+- 打順(lineup)はちょうど9人。守備位置は「捕 一 二 三 遊 左 中 右」を各1つずつ割り当て、残り1人をDHにする（8守備+DH=9人。各ポジション重複禁止・欠け禁止）。投手は打順に入れない。
+- 別途、打順に入らない投手(pitcher)を1人選ぶ（打席に立たない）。合計10人。
+- 候補が11人以上いる場合は、成績を見て使う10人を選抜する（全員を入れない）。
+- nameは候補選手名を一字一句そのまま使う（余計な装飾なし）。
+- 各打者に position（捕一二三遊左中右DHのいずれか）と reason（30字程度の起用理由）を付ける。
+- 出塁率の高い打者を上位、長打力を3〜5番等のセオリーを踏まえる。
+- strategy に全体の狙いを80字程度で。
+- 出力は次のJSON形式のみ。前置き・説明は一切禁止:
+{"lineup":[{"name":"...","position":"...","reason":"..."}],"pitcher":{"name":"...","reason":"..."},"strategy":"..."}`;
+  }
+  return `あなたは草野球チームの名将ヘッドコーチです。以下の候補選手の今季成績をもとに、最も得点が期待できるスタメン9人を選び、打順と守備位置を提案してください。DHなしです。
+
+候補選手（今季成績）:
+${list}
+
+条件:
+- 打順(lineup)はちょうど9人。守備位置「投 捕 一 二 三 遊 左 中 右」を9人に各1つずつ割り当てる（重複禁止・欠け禁止。投手も打席に立つ）。
+- 候補が10人以上いる場合は、成績を見て9人を選抜する（全員を入れない）。
+- nameは候補選手名を一字一句そのまま使う（余計な装飾なし）。
+- 各選手に position（投捕一二三遊左中右のいずれか）と reason（30字程度の起用理由）を付ける。
+- 出塁率の高い打者を上位、長打力を3〜5番等のセオリーを踏まえる。
+- strategy に全体の狙いを80字程度で。
 - 出力は次のJSON形式のみ。前置き・説明は一切禁止:
 {"lineup":[{"name":"...","position":"...","reason":"..."}],"strategy":"..."}`;
 }
 
-// 戻り値: 成功 { lineup:[{name,position,reason}], strategy } / 失敗 { error } / 未設定・オフライン null
+// 戻り値: 成功 { lineup:[{name,position,reason}], pitcher(DH時のみ){name,reason}, strategy } / 失敗 { error } / 未設定・オフライン null
 export async function generateLineup({ apiKey, players, dh = false }) {
   const r = await callGeminiJSON(apiKey, lineupPrompt(players, dh), { maxOutputTokens: 2048, temperature: 0.7 });
   if (!r || r.error) return r;
   if (!Array.isArray(r.data.lineup) || r.data.lineup.length === 0) {
     return { error: 'AIの応答にlineupが含まれていません' };
   }
-  return { lineup: r.data.lineup, strategy: r.data.strategy || '' };
+  return { lineup: r.data.lineup, pitcher: dh ? r.data.pitcher || null : null, strategy: r.data.strategy || '' };
 }
 
 // ---------------- AIスポーツ新聞(試合記事) ----------------
