@@ -1,7 +1,10 @@
 /* オフライン対応 Service Worker
  * 方針:
- *  - アプリシェル(HTML/JS/CSS/アイコン)は stale-while-revalidate。
- *  - まずキャッシュから即応答し、裏でネットワーク更新 → 次回反映。
+ *  - HTML(ナビゲーション)は network-first。オンラインなら常に最新版のHTMLを
+ *    取得し、それが指す新しいハッシュ付きJS/CSSも自然に最新化される。
+ *    オフライン時のみキャッシュにフォールバック。
+ *  - ハッシュ付きJS/CSS等その他アセットは stale-while-revalidate
+ *    (ファイル名が内容ごとに変わるためキャッシュ優先で問題ない)。
  *  - Firestore 等の外部APIリクエストはキャッシュ対象外(SDK側が
  *    オフラインキューを持つため素通しする)。
  */
@@ -25,6 +28,22 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   // 同一オリジンの GET のみキャッシュ(Firestore/LLM API 等は素通し)
   if (e.request.method !== 'GET' || url.origin !== self.location.origin) return;
+
+  const isHTML = e.request.mode === 'navigate' || url.pathname.endsWith('/') || url.pathname.endsWith('.html');
+  if (isHTML) {
+    e.respondWith(
+      fetch(e.request)
+        .then((res) => {
+          if (res && res.status === 200) {
+            const clone = res.clone();
+            caches.open(CACHE).then((c) => c.put(e.request, clone));
+          }
+          return res;
+        })
+        .catch(() => caches.match(e.request))
+    );
+    return;
+  }
 
   e.respondWith(
     caches.match(e.request).then((cached) => {
