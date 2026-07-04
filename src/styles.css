@@ -768,6 +768,15 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 }
 .scout-name { font-size: 22px; font-weight: 900; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.4); }
 .scout-mid { padding: 14px 14px 4px; }
+.selected-tags-panel {
+  background: var(--bg-3); border: 1.5px solid var(--accent-2); border-radius: 12px;
+  padding: 12px; margin-bottom: 16px;
+}
+.tag-count-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; padding: 0 5px; margin-left: 4px;
+  background: var(--accent-2); color: #fff; font-size: 11px; font-weight: 800; border-radius: 999px;
+}
 .tag-pill-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
 .tag-pill {
   display: inline-flex; align-items: center; gap: 4px; border: none; min-height: auto;

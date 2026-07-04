@@ -114,19 +114,23 @@ export default function ScoutCard({ player, onClose }) {
           </div>
 
           <div className="scout-mid">
-            <div className="section-title">特殊能力タグ</div>
-            {tags.length === 0 ? (
-              <p className="small dim">下のタグ候補から選ぶか、自由入力で追加してください。</p>
-            ) : (
-              <>
-                <div className="tag-pill-row">
-                  {tags.map((t) => (
-                    <TagPill key={t.label} label={t.label} type={t.type} onClick={() => removeTag(t.label)} />
-                  ))}
-                </div>
-                <p className="small dim mt8">タップで解除できます。</p>
-              </>
-            )}
+            <div className="selected-tags-panel">
+              <div className="section-title" style={{ margin: 0 }}>
+                特殊能力タグ {tags.length > 0 && <span className="tag-count-badge">{tags.length}</span>}
+              </div>
+              {tags.length === 0 ? (
+                <p className="small dim mt8">下のタグ候補から選ぶか、自由入力で追加してください。</p>
+              ) : (
+                <>
+                  <div className="tag-pill-row mt8">
+                    {tags.map((t) => (
+                      <TagPill key={t.label} label={t.label} type={t.type} onClick={() => removeTag(t.label)} />
+                    ))}
+                  </div>
+                  <p className="small dim mt8">タップで解除できます。</p>
+                </>
+              )}
+            </div>
 
             {TAG_GROUPS.map((g) => (
               <div key={g.category}>
