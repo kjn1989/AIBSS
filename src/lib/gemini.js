@@ -3,7 +3,9 @@
 // APIキーは設定画面で任意入力。未設定時は呼び出さない(呼び出し元でダミー文言にフォールバック)。
 // ============================================================
 
-const MODEL = 'gemini-1.5-flash';
+// 個別バージョンを固定すると廃止時に壊れるため、Googleが常に生きたモデルを
+// 指し続けるエイリアス(-latest)を使う。
+const MODEL = 'gemini-flash-latest';
 
 function buildPrompt({ name, number, tags }) {
   const plus = tags.filter((t) => t.type === 'plus').map((t) => t.label);
@@ -23,6 +25,8 @@ function buildPrompt({ name, number, tags }) {
 {"catchphrase":"...","report":"..."}`;
 }
 
+// 戻り値: 成功時 { catchphrase, report }。
+// 失敗時 { error: '画面表示用の理由文字列' }。未設定/オフライン時のみ null。
 export async function generateScoutReport({ apiKey, name, number, tags }) {
   if (!apiKey || !navigator.onLine) return null;
   try {
@@ -37,15 +41,24 @@ export async function generateScoutReport({ apiKey, name, number, tags }) {
         }),
       }
     );
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      let reason = body;
+      try {
+        reason = JSON.parse(body)?.error?.message || body;
+      } catch {
+        /* bodyがJSONでなければそのまま使う */
+      }
+      return { error: `HTTP ${res.status}: ${reason}`.slice(0, 200) };
+    }
     const data = await res.json();
     const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return null;
+    if (!jsonMatch) return { error: 'AIの応答からJSONを取り出せませんでした' };
     const parsed = JSON.parse(jsonMatch[0]);
-    if (!parsed.report) return null;
+    if (!parsed.report) return { error: 'AIの応答にreportが含まれていません' };
     return { catchphrase: parsed.catchphrase || '', report: parsed.report };
-  } catch {
-    return null; // ネットワーク/解析エラー時はダミー生成にフォールバック
+  } catch (e) {
+    return { error: e?.message || 'ネットワークエラー' };
   }
 }

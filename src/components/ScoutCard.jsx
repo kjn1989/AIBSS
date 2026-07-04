@@ -80,6 +80,7 @@ export default function ScoutCard({ player, onClose }) {
   const [report, setReport] = useState('');
   const [loading, setLoading] = useState(false);
   const [source, setSource] = useState(null); // 'ai' | 'dummy-no-key' | 'dummy-error' | null(未生成)
+  const [errorDetail, setErrorDetail] = useState('');
 
   const name = player?.name || '選手';
 
@@ -110,13 +111,14 @@ export default function ScoutCard({ player, onClose }) {
     setLoading(true);
     const result = await generateScoutReport({ apiKey, name, number: player?.number, tags });
     setLoading(false);
-    if (result) {
+    if (result && !result.error) {
       if (result.catchphrase) setCatchphrase(result.catchphrase);
       setReport(result.report);
       setSource('ai');
     } else {
       setCatchphrase(CATCHPHRASES[Math.floor(Math.random() * CATCHPHRASES.length)]);
       setReport(buildDummyReport(name, tags));
+      setErrorDetail(result?.error || '');
       setSource('dummy-error');
     }
   };
@@ -201,7 +203,11 @@ export default function ScoutCard({ player, onClose }) {
               {report || buildDummyReport(name, tags)}
             </div>
             {source === 'ai' && <p className="small mt8" style={{ color: 'var(--green)' }}>✨ Gemini AIによる生成です。</p>}
-            {source === 'dummy-error' && <p className="small mt8" style={{ color: 'var(--amber)' }}>⚠️ AI生成に失敗したため、ダミー文言を表示しています。</p>}
+            {source === 'dummy-error' && (
+              <p className="small mt8" style={{ color: 'var(--amber)' }}>
+                ⚠️ AI生成に失敗したため、ダミー文言を表示しています。{errorDetail && `(${errorDetail})`}
+              </p>
+            )}
             {source !== 'ai' && source !== 'dummy-error' && (
               <p className="small dim mt8">
                 {apiKey ? '※ まだ生成していません。' : '※ Gemini APIキー未設定のため、ダミー文言です。設定タブから追加できます。'}
