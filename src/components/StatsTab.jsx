@@ -3,6 +3,7 @@ import { useStore, usePlayerName } from '../state/store.jsx';
 import { aggregateBatting, aggregatePitching, pitchingMetrics, DETAIL_METRICS, detailRanking, battingMetrics, fmtAvg } from '../lib/stats.js';
 import { formatIP } from '../lib/model.js';
 import GameScopeToggle, { scopedGames } from './GameScopeToggle.jsx';
+import PlayerView from './PlayerView.jsx';
 
 // 成績・詳細ランキング(10大メトリクス) + 投手成績(旧「投手」タブを統合)
 export default function StatsTab() {
@@ -10,6 +11,7 @@ export default function StatsTab() {
   const nameOf = usePlayerName();
   const [scope, setScope] = useState({ scope: 'season', gameId: null });
   const [metricKey, setMetricKey] = useState('ba');
+  const [playerId, setPlayerId] = useState(null); // 選手個人ページ
 
   const games = scopedGames(state, scope);
   const batting = useMemo(() => aggregateBatting(games), [games]);
@@ -57,7 +59,7 @@ export default function StatsTab() {
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.playerId}>
+                <tr key={r.playerId} onClick={() => setPlayerId(r.playerId)} role="button">
                   <td><span className="rank-badge">{r.rank}</span></td>
                   <td>
                     {nameOf(r.playerId)}
@@ -71,14 +73,19 @@ export default function StatsTab() {
         )}
       </div>
 
-      <BattingSummaryTable batting={batting} nameOf={nameOf} />
-      <PitchingSummaryTable pitching={pitching} nameOf={nameOf} />
+      <BattingSummaryTable batting={batting} nameOf={nameOf} onOpenPlayer={setPlayerId} />
+      <PitchingSummaryTable pitching={pitching} nameOf={nameOf} onOpenPlayer={setPlayerId} />
+      <p className="small dim" style={{ textAlign: 'center', marginBottom: 12 }}>
+        選手名をタップすると個人ページ(スプレーチャート・成績推移・打席履歴)が開きます。
+      </p>
+
+      {playerId && <PlayerView playerId={playerId} games={games} onClose={() => setPlayerId(null)} />}
     </div>
   );
 }
 
 // 全員の打撃基本成績一覧(参考テーブル)
-function BattingSummaryTable({ batting, nameOf }) {
+function BattingSummaryTable({ batting, nameOf, onOpenPlayer }) {
   const rows = Object.values(batting)
     .filter((s) => s.pa > 0)
     .sort((a, b) => b.h - a.h);
@@ -98,8 +105,8 @@ function BattingSummaryTable({ batting, nameOf }) {
             {rows.map((s) => {
               const m = battingMetrics(s);
               return (
-                <tr key={s.playerId}>
-                  <td>{nameOf(s.playerId)}</td>
+                <tr key={s.playerId} onClick={() => onOpenPlayer?.(s.playerId)} role="button">
+                  <td style={{ color: 'var(--accent)', fontWeight: 700 }}>{nameOf(s.playerId)}</td>
                   <td className="num">{s.pa}</td>
                   <td className="num">{s.ab}</td>
                   <td className="num">{s.h}</td>
@@ -120,7 +127,7 @@ function BattingSummaryTable({ batting, nameOf }) {
 }
 
 // 全員の投手基本成績一覧(参考テーブル。旧「投手」タブのサマリーを移設)
-function PitchingSummaryTable({ pitching, nameOf }) {
+function PitchingSummaryTable({ pitching, nameOf, onOpenPlayer }) {
   const rows = Object.values(pitching).filter((s) => s.outsRecorded > 0 || s.games > 0);
   if (rows.length === 0) return null;
   return (
@@ -138,8 +145,8 @@ function PitchingSummaryTable({ pitching, nameOf }) {
             {rows.map((s) => {
               const m = pitchingMetrics(s);
               return (
-                <tr key={s.playerId}>
-                  <td>{nameOf(s.playerId)}</td>
+                <tr key={s.playerId} onClick={() => onOpenPlayer?.(s.playerId)} role="button">
+                  <td style={{ color: 'var(--accent)', fontWeight: 700 }}>{nameOf(s.playerId)}</td>
                   <td className="num">{formatIP(s.outsRecorded)}</td>
                   <td className="num">{m.era7 === null ? '-' : m.era7.toFixed(2)}</td>
                   <td className="num">{m.oba === null ? '-' : m.oba.toFixed(3).replace(/^0\./, '.')}</td>

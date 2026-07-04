@@ -47,10 +47,9 @@ function loadPersisted() {
   }
 }
 
-// 旧バージョンのセーブデータ(相手チームの記号管理フィールド未保存)に既定値を補う
+// 旧バージョンのセーブデータに後から追加されたフィールドの既定値を補う
 function ensureOppFields(g) {
-  if (g.oppLineup) return g;
-  return {
+  const out = g.oppLineup ? { ...g } : {
     ...g,
     oppLineup: OPP_LETTERS.slice(0, 9).map((letter, i) => ({ order: i + 1, letter, position: '' })),
     oppUsedLetters: OPP_LETTERS.slice(0, 9),
@@ -58,6 +57,8 @@ function ensureOppFields(g) {
     oppBatterIndex: g.oppBatterIndex || 0,
     oppPitcherLetter: null,
   };
+  if (!out.linescore) out.linescore = {}; // 回別得点(線分スコア)未保存の試合
+  return out;
 }
 
 export function persist(state) {
@@ -191,6 +192,22 @@ export function reducer(state, action) {
       // Firestore等からの全置換(スキーマは同一)
       return { ...state, ...action.payload };
     }
+    case 'IMPORT_BACKUP': {
+      // バックアップJSONからの全置換。旧スキーマの試合には既定値を補う
+      const b = action.payload || {};
+      const games = Object.fromEntries(
+        Object.entries(b.games || {}).map(([id, g]) => [id, ensureOppFields(g)])
+      );
+      return {
+        ...state,
+        players: Array.isArray(b.players) ? b.players : [],
+        games,
+        currentGameId: b.currentGameId && games[b.currentGameId] ? b.currentGameId : null,
+        settings: { ...state.settings, ...(b.settings || {}) },
+        demoLoaded: !!b.demoLoaded,
+        history: [], // 別データ由来のUndo履歴は破棄
+      };
+    }
     case 'SET_CLOUD_STATUS':
       return { ...state, cloudStatus: action.status };
     case 'MERGE_REMOTE': {
@@ -252,6 +269,14 @@ export function reducer(state, action) {
     case 'FINISH_GAME': {
       const g = deep(state.games[action.id]);
       g.status = 'finished';
+      g.updatedAt = Date.now();
+      return { ...state, games: { ...state.games, [g.id]: g } };
+    }
+    case 'UPDATE_GAME_META': {
+      // 試合の対戦相手・日付・シーズンを後から編集
+      const g = deep(state.games[action.id]);
+      if (!g) return state;
+      Object.assign(g, action.patch); // { opponent, date, season }
       g.updatedAt = Date.now();
       return { ...state, games: { ...state.games, [g.id]: g } };
     }
@@ -598,6 +623,69 @@ export function reducer(state, action) {
       return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
     }
 
+    // ===== 過去プレイの事後編集(結果種別・方向・打点を修正し成績を再計算) =====
+    case 'EDIT_PLAY_LOG': {
+      const g = deep(state.games[action.gameId]);
+      const log = g.playLogs.find((l) => l.id === action.logId);
+      if (!log) return state;
+      const p = action.patch; // { result, direction, outType, soType, rbi }
+      const label = (p.result === 'so' && SO_TYPES[p.soType]) || RESULTS[p.result]?.label || p.result;
+      const dir = DIRECTIONS[p.direction] || '';
+      if (log.kind === 'atbat') {
+        const ab = g.atBats.find((a) => a.id === log.payload.atBatId);
+        if (ab) {
+          ab.result = p.result;
+          ab.direction = p.direction || null;
+          ab.outType = p.result === 'out' ? p.outType || 'ground' : null;
+          ab.soType = p.result === 'so' ? p.soType || 'swinging' : null;
+          if (p.rbi !== undefined) ab.rbi = p.rbi;
+        }
+        const name = playerNameOf(state, log.payload.playerId);
+        log.text = `${name} ${dir}${label}` + (log.payload.runs ? ` (${log.payload.runs}点)` : '');
+      } else if (log.kind === 'defense') {
+        log.text = `相手打者${log.payload.letter}(${log.payload.order}番): ${dir}${label}` +
+          (log.payload.runs ? ` (${log.payload.runs}失点)` : '');
+      }
+      log.payload = {
+        ...log.payload,
+        result: p.result,
+        direction: p.direction || null,
+        outType: p.result === 'out' ? p.outType || 'ground' : null,
+        soType: p.result === 'so' ? p.soType || 'swinging' : null,
+        ...(p.rbi !== undefined ? { rbi: p.rbi } : {}),
+      };
+      g.updatedAt = Date.now();
+      return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
+    }
+    case 'DELETE_PLAY_LOG': {
+      const g = deep(state.games[action.gameId]);
+      const log = g.playLogs.find((l) => l.id === action.logId);
+      if (!log) return state;
+      if (log.kind === 'atbat' && log.payload.atBatId) {
+        g.atBats = g.atBats.filter((a) => a.id !== log.payload.atBatId);
+      }
+      g.playLogs = g.playLogs.filter((l) => l.id !== action.logId);
+      g.updatedAt = Date.now();
+      return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
+    }
+
+    // ===== スコアの手動修正(回を指定して±) =====
+    case 'ADJUST_SCORE': {
+      const g = deep(state.games[action.gameId]);
+      const key = action.team === 'my' ? 'my' : 'opp';
+      const inn = String(action.inning);
+      if (!g.linescore) g.linescore = {};
+      if (!g.linescore[inn]) g.linescore[inn] = { my: 0, opp: 0 };
+      const nextInn = g.linescore[inn][key] + action.delta;
+      const nextTotal = (key === 'my' ? g.myScore : g.oppScore) + action.delta;
+      if (nextInn < 0 || nextTotal < 0) return state;
+      g.linescore[inn][key] = nextInn;
+      if (key === 'my') g.myScore = nextTotal;
+      else g.oppScore = nextTotal;
+      g.updatedAt = Date.now();
+      return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
+    }
+
     // ===== Undo =====
     case 'UNDO': {
       const hist = [...state.history];
@@ -667,6 +755,7 @@ function applyRunnerMoves(game, moves, { eventKind, erChoices = {}, unearnedRuns
 function addRun(game, { playerId, erChoice, viaError }) {
   const myBatting = isMyTeamBatting(game);
   const inn = String(game.inning);
+  if (!game.linescore) game.linescore = {}; // 旧データ保険
   if (!game.linescore[inn]) game.linescore[inn] = { my: 0, opp: 0 };
   if (myBatting) {
     game.myScore += 1;

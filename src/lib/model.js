@@ -52,11 +52,12 @@ export function newPlayer(name, number = '') {
   return { id: uid(), name, number, createdAt: Date.now() };
 }
 
-export function newGame({ opponent = '', isHome = false, date = null } = {}) {
+export function newGame({ opponent = '', isHome = false, date = null, season = '' } = {}) {
   return {
     id: uid(),
     date: date || new Date().toISOString().slice(0, 10),
     opponent,
+    season, // シーズン/大会名(任意。集計フィルタに使用)
     isHome, // true=自チーム後攻
     status: 'ongoing', // 'ongoing' | 'finished'
     inning: 1,

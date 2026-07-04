@@ -364,8 +364,9 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .dir-summary .change { font-size: 13px; font-weight: 700; color: var(--accent); }
 
 /* ---- モーダル / シート ---- */
+/* z-index 550: 全画面ビュー(試合経過など, 400)より上に出す */
 .sheet-overlay {
-  position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); z-index: 300;
+  position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); z-index: 550;
   display: flex; align-items: flex-end; justify-content: center;
 }
 .sheet {
@@ -510,6 +511,29 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+/* ファイル選択をボタン風に見せる(label + 非表示input) */
+.file-btn {
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg-3); border: 1px solid var(--border); border-radius: 12px;
+  font-size: 15px; font-weight: 600; color: var(--text); min-height: 46px;
+  cursor: pointer; text-align: center; padding: 8px;
+}
+
+/* ---- QRコード / 招待 ---- */
+.qr-box {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 14px; margin-top: 10px; background: var(--bg-3); border-radius: 12px;
+}
+.qr-img { border-radius: 8px; background: #fff; padding: 8px; }
+.invite-overlay {
+  position: fixed; inset: 0; z-index: 600; background: rgba(0, 0, 0, 0.7);
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.invite-card {
+  background: var(--bg-2); border: 1px solid var(--accent-2); border-radius: 18px;
+  padding: 20px; max-width: 420px; width: 100%;
+}
+.invite-card h2 { font-size: 18px; margin-bottom: 10px; }
 
 /* ---- 全画面ビュー(試合経過など) ---- */
 .fullscreen-view {
@@ -553,6 +577,49 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 .pc-name { font-weight: 700; font-size: 14px; }
 .pc-pill { margin-left: auto; }
 .pc-score { margin-left: 4px; }
+.pc-edit-btn {
+  min-height: 32px; min-width: 36px; padding: 2px 8px; font-size: 14px;
+  background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; color: var(--text-dim);
+}
+
+/* ---- スプレーチャート / 成績推移 / 選手個人ページ ---- */
+.spray-chart { width: 100%; max-width: 420px; display: block; margin: 0 auto; border-radius: 12px; }
+.spray-legend { display: flex; gap: 16px; justify-content: center; margin-top: 8px; font-size: 12px; color: var(--text-dim); }
+.spray-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; }
+.trend-chart { width: 100%; display: block; }
+.player-stat-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px 8px; text-align: center;
+}
+.player-stat-grid b { font-size: 18px; font-variant-numeric: tabular-nums; }
+
+/* ---- 印刷用スコアシート ---- */
+.scoresheet-root { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
+.ss-title { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; gap: 8px; flex-wrap: wrap; }
+.ss-title b { font-size: 16px; }
+.ss-title span { font-size: 12px; color: var(--text-dim); }
+.ss-table {
+  border-collapse: collapse; width: 100%; margin-bottom: 16px;
+  font-size: 11px; font-variant-numeric: tabular-nums;
+}
+.ss-table th, .ss-table td {
+  border: 1px solid var(--border); padding: 4px 3px; text-align: center; min-width: 22px;
+}
+.ss-table th { color: var(--text-dim); font-weight: 600; }
+.ss-table .ss-team, .ss-table .ss-name { text-align: left; white-space: nowrap; padding: 4px 6px; }
+.ss-matrix { display: block; overflow-x: auto; }
+.ss-footer { text-align: center; font-size: 10px; color: var(--text-dim); }
+
+@media print {
+  body * { visibility: hidden; }
+  .scoresheet-root, .scoresheet-root * { visibility: visible; }
+  .scoresheet-root {
+    position: absolute; left: 0; top: 0; width: 100%;
+    background: #fff !important; color: #000 !important; border: none; border-radius: 0;
+  }
+  .scoresheet-root .ss-table th, .scoresheet-root .ss-table td { border-color: #000; color: #000; }
+  .scoresheet-root .ss-title span, .scoresheet-root .ss-footer, .scoresheet-root .ss-table th { color: #333; }
+  .ss-matrix { display: table; overflow: visible; }
+}
 .pc-body { display: flex; gap: 10px; align-items: flex-start; margin-top: 8px; }
 .pc-body .mini-diamond { flex-shrink: 0; margin-top: 2px; }
 .mini-count { flex-shrink: 0; font-size: 10px; color: var(--text-dim); line-height: 1.6; }

@@ -1,8 +1,9 @@
-import React from 'react';
-import { useStore, usePlayerName, isMyTeamBatting } from '../state/store.jsx';
-import { RESULTS } from '../lib/model.js';
+import React, { useState } from 'react';
+import { useStore, usePlayerName } from '../state/store.jsx';
+import { RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES } from '../lib/model.js';
 import { playLabel } from '../lib/voiceParser.js';
 import { computeBoxScore } from '../lib/boxscore.js';
+import Sheet from './Sheet.jsx';
 
 // 打席結果のカテゴリ(色分け用)
 function resultCategory(result) {
@@ -40,7 +41,7 @@ function CountDots({ balls, strikes, outsBefore }) {
 }
 
 // 打席系プレイ(kind: atbat/defense)の1件カード
-function PlayCard({ log, nameOf, numberOf }) {
+function PlayCard({ log, nameOf, numberOf, onEdit }) {
   const p = log.payload || {};
   const isDefense = log.kind === 'defense';
   const name = isDefense ? p.letter : nameOf(p.playerId);
@@ -59,6 +60,9 @@ function PlayCard({ log, nameOf, numberOf }) {
             {p.scoreAfter ? `${p.scoreAfter.my}-${p.scoreAfter.opp}` : `${p.runs}点`}
           </span>
         )}
+        {onEdit && (
+          <button className="pc-edit-btn" onClick={() => onEdit(log)} aria-label="このプレイを修正">✎</button>
+        )}
       </div>
       <div className="pc-body">
         <MiniDiamond runners={p.beforeRunners} />
@@ -69,6 +73,101 @@ function PlayCard({ log, nameOf, numberOf }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// ---- 過去プレイの事後編集シート ----
+// 結果種別・方向・打点を後から修正/削除できる(成績は自動で再計算)。
+// スコア・走者・投手成績はここでは変えず、必要なら手動修正機能を案内する。
+function EditPlaySheet({ game, log, onClose }) {
+  const { dispatch } = useStore();
+  const p = log.payload || {};
+  const [result, setResult] = useState(p.result);
+  const [direction, setDirection] = useState(p.direction || null);
+  const [outType, setOutType] = useState(p.outType || 'ground');
+  const [soType, setSoType] = useState(p.soType || 'swinging');
+  const [rbi, setRbi] = useState(p.rbi ?? null);
+  const isAtBat = log.kind === 'atbat';
+
+  const save = () => {
+    dispatch({
+      type: 'EDIT_PLAY_LOG',
+      gameId: game.id,
+      logId: log.id,
+      patch: { result, direction, outType, soType, ...(isAtBat && rbi !== null ? { rbi } : {}) },
+    });
+    onClose();
+  };
+
+  const remove = () => {
+    if (!window.confirm('このプレイを記録から削除しますか？(成績から除外されます)')) return;
+    dispatch({ type: 'DELETE_PLAY_LOG', gameId: game.id, logId: log.id });
+    onClose();
+  };
+
+  return (
+    <Sheet title={`プレイの修正 (${log.inning}回${log.isTop ? '表' : '裏'})`} onClose={onClose}>
+      <div className="section-title" style={{ marginTop: 0 }}>結果</div>
+      <div className="grid3">
+        {Object.entries(RESULTS).map(([k, def]) => (
+          <button key={k} className={`small ${result === k ? 'primary' : ''}`} onClick={() => setResult(k)}>
+            {def.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="section-title">方向</div>
+      <div className="grid3">
+        {Object.entries(DIRECTIONS).map(([k, v]) => (
+          <button key={k} className={`small ${direction === k ? 'primary' : ''}`} onClick={() => setDirection(direction === k ? null : k)}>
+            {v}
+          </button>
+        ))}
+      </div>
+
+      {result === 'out' && (
+        <>
+          <div className="section-title">凡打の種類</div>
+          <div className="grid2">
+            {Object.entries(OUT_TYPES).map(([k, v]) => (
+              <button key={k} className={`small ${outType === k ? 'primary' : ''}`} onClick={() => setOutType(k)}>{v}</button>
+            ))}
+          </div>
+        </>
+      )}
+      {result === 'so' && (
+        <>
+          <div className="section-title">三振の種類</div>
+          <div className="grid2">
+            {Object.entries(SO_TYPES).map(([k, v]) => (
+              <button key={k} className={`small ${soType === k ? 'primary' : ''}`} onClick={() => setSoType(k)}>{v}</button>
+            ))}
+          </div>
+        </>
+      )}
+
+      {isAtBat && (
+        <div className="flex mt12">
+          <span className="small dim grow">打点</span>
+          <div className="stepper">
+            <button onClick={() => setRbi(Math.max(0, (rbi ?? p.rbi ?? 0) - 1))}>−</button>
+            <span className="val">{rbi ?? p.rbi ?? 0}</span>
+            <button onClick={() => setRbi(Math.min(4, (rbi ?? p.rbi ?? 0) + 1))}>＋</button>
+          </div>
+        </div>
+      )}
+
+      <div className="warn-box mt12">
+        修正しても当時のスコア・走者・投手成績は自動では変わりません。
+        必要なら「スコア修正」(スコア入力タブ)や投手の詳細調整(試合結果タブ)で合わせてください。
+      </div>
+
+      <button className="ghost danger mt8" style={{ width: '100%' }} onClick={remove}>🗑 このプレイを削除</button>
+      <div className="sheet-actions">
+        <button className="ghost" onClick={onClose}>キャンセル</button>
+        <button className="primary" onClick={save}>保存</button>
+      </div>
+    </Sheet>
   );
 }
 
@@ -92,10 +191,11 @@ function groupByHalfInning(playLogs) {
 }
 
 // 試合結果タブにも埋め込めるよう、線分スコア+回別プレイを描画する中身部分
-export function GameProgressContent({ game }) {
+export function GameProgressContent({ game, editable = false }) {
   const { state } = useStore();
   const nameOf = usePlayerName();
   const numberOf = (id) => state.players.find((p) => p.id === id)?.number || '';
+  const [editLog, setEditLog] = useState(null);
   const box = computeBoxScore(game);
   // 'run'ログは各プレイカード内のmoveLinesに既に含まれるため二重表示を避ける
   const groups = groupByHalfInning(game.playLogs.filter((l) => l.kind !== 'run'));
@@ -148,12 +248,22 @@ export function GameProgressContent({ game }) {
             </div>
             {[...grp.logs].reverse().map((log) =>
               log.kind === 'atbat' || log.kind === 'defense'
-                ? <PlayCard key={log.id} log={log} nameOf={nameOf} numberOf={numberOf} />
+                ? (
+                  <PlayCard
+                    key={log.id}
+                    log={log}
+                    nameOf={nameOf}
+                    numberOf={numberOf}
+                    onEdit={editable ? setEditLog : null}
+                  />
+                )
                 : <SimpleLogLine key={log.id} log={log} />
             )}
           </div>
         );
       })}
+
+      {editLog && <EditPlaySheet game={game} log={editLog} onClose={() => setEditLog(null)} />}
     </div>
   );
 }
@@ -168,7 +278,7 @@ export default function GameProgressView({ game, onClose }) {
         <span style={{ width: 60 }} />
       </header>
       <div className="fullscreen-body">
-        <GameProgressContent game={game} />
+        <GameProgressContent game={game} editable />
       </div>
     </div>
   );

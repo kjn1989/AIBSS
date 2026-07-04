@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useStore, usePlayerName } from '../state/store.jsx';
 import { parseFirebaseConfig } from '../lib/cloud.js';
-import { encodeWatchLink } from './WatchView.jsx';
+import { encodeWatchLink, encodeInviteLink } from './WatchView.jsx';
+import QRCode from './QRCode.jsx';
 import { battingCSV, pitchingCSV, playLogCSV, atBatCSV, downloadCSV, shareCSV } from '../lib/csv.js';
 
 export default function SettingsTab() {
@@ -90,6 +91,7 @@ export default function SettingsTab() {
 
       <CloudCard />
       <ExportCard />
+      <BackupCard />
 
       <div className="card">
         <h2>データ管理</h2>
@@ -97,6 +99,82 @@ export default function SettingsTab() {
           データはこの端末のブラウザ内(localStorage)に自動保存され、オフラインでも完全動作します。
           クラウド共有を有効にすると、同じチームコードを設定した全員の端末とリアルタイム同期します。
         </p>
+      </div>
+    </div>
+  );
+}
+
+// ---- バックアップ/復元(全データのJSONエクスポート・インポート) ----
+function BackupCard() {
+  const { state, dispatch } = useStore();
+  const stamp = new Date().toISOString().slice(0, 10);
+
+  const exportBackup = () => {
+    const payload = {
+      app: 'aibss-baseball-scorer',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      players: state.players,
+      games: state.games,
+      currentGameId: state.currentGameId,
+      settings: state.settings,
+      demoLoaded: state.demoLoaded,
+    };
+    const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    // 一部ブラウザは非ASCIIのdownload属性を無視するためASCIIファイル名にする
+    a.download = `aibss-backup_${stamp}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importBackup = (file) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result);
+        if (data.app !== 'aibss-baseball-scorer' || typeof data.games !== 'object') {
+          window.alert('このファイルはAIBSSのバックアップではないようです。');
+          return;
+        }
+        const nGames = Object.keys(data.games || {}).length;
+        const nPlayers = (data.players || []).length;
+        if (!window.confirm(
+          `バックアップを復元しますか？\n(選手${nPlayers}人・試合${nGames}件 / ${data.exportedAt?.slice(0, 10) || '日付不明'})\n\n⚠️ この端末の現在のデータはすべて上書きされます。`
+        )) return;
+        dispatch({ type: 'IMPORT_BACKUP', payload: data });
+        window.alert('復元しました。');
+      } catch {
+        window.alert('ファイルを読み込めませんでした(JSONの解析エラー)。');
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  return (
+    <div className="card">
+      <h2>バックアップ / 復元</h2>
+      <p className="small dim" style={{ marginBottom: 10 }}>
+        全データ(選手・全試合・設定)を1つのファイルに書き出します。
+        機種変更やブラウザのキャッシュ削除に備えて、シーズン中は定期的な保存をおすすめします。
+      </p>
+      <div className="grid2">
+        <button className="primary" onClick={exportBackup}>⬇ バックアップを保存</button>
+        <label className="file-btn">
+          ⬆ 復元(ファイル選択)
+          <input
+            type="file"
+            accept="application/json,.json"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) importBackup(f);
+              e.target.value = '';
+            }}
+          />
+        </label>
       </div>
     </div>
   );
@@ -114,15 +192,18 @@ function CloudCard() {
     error: '⚠️ エラー(config/ルール/ネットワークを確認)',
   }[state.cloudStatus];
 
-  const copyWatchLink = async () => {
-    const link = encodeWatchLink({ configText: s.firebaseConfigText, teamCode: s.teamCode });
+  const [qr, setQr] = useState(null); // 'watch' | 'invite' | null
+
+  const copyLink = async (link, msg) => {
     try {
       await navigator.clipboard.writeText(link);
-      window.alert('観戦リンクをコピーしました。保護者やOBに送ると、書き込みなしで試合速報をリアルタイム閲覧できます。');
+      window.alert(msg);
     } catch {
       window.prompt('コピーして共有してください:', link);
     }
   };
+  const watchLink = () => encodeWatchLink({ configText: s.firebaseConfigText, teamCode: s.teamCode });
+  const inviteLink = () => encodeInviteLink({ configText: s.firebaseConfigText, teamCode: s.teamCode });
 
   return (
     <div className="card">
@@ -158,12 +239,37 @@ function CloudCard() {
       </div>
       {s.cloudEnabled && cfgValid && s.teamCode && (
         <>
-          <button className="mt12" style={{ width: '100%' }} onClick={copyWatchLink}>
-            📺 観戦リンクをコピー(保護者・OB向け閲覧専用)
-          </button>
-          <p className="small dim mt8">
-            リンクを開いた人は書き込みできず、試合速報(スコア・走者・プレイログ)をリアルタイムで見るだけになります。
+          <div className="section-title">チームメンバーを招待</div>
+          <p className="small dim" style={{ marginBottom: 8 }}>
+            リンク/QRを開くだけで同期設定が完了し、記録に参加できます(書き込み可)。
           </p>
+          <div className="grid2">
+            <button onClick={() => copyLink(inviteLink(), '招待リンクをコピーしました。チームメンバーに送ってください。')}>
+              🔗 招待リンク
+            </button>
+            <button onClick={() => setQr(qr === 'invite' ? null : 'invite')}>
+              {qr === 'invite' ? 'QRを閉じる' : '📱 招待QR'}
+            </button>
+          </div>
+          {qr === 'invite' && (
+            <div className="qr-box"><QRCode text={inviteLink()} /><span className="small dim">スマホのカメラで読み取ってもらってください</span></div>
+          )}
+
+          <div className="section-title">観戦(閲覧専用)</div>
+          <p className="small dim" style={{ marginBottom: 8 }}>
+            保護者・OB向け。書き込みできず、試合速報をリアルタイムで見るだけになります。
+          </p>
+          <div className="grid2">
+            <button onClick={() => copyLink(watchLink(), '観戦リンクをコピーしました。')}>
+              🔗 観戦リンク
+            </button>
+            <button onClick={() => setQr(qr === 'watch' ? null : 'watch')}>
+              {qr === 'watch' ? 'QRを閉じる' : '📱 観戦QR'}
+            </button>
+          </div>
+          {qr === 'watch' && (
+            <div className="qr-box"><QRCode text={watchLink()} /><span className="small dim">スマホのカメラで読み取ってもらってください</span></div>
+          )}
         </>
       )}
     </div>

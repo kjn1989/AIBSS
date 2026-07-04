@@ -305,3 +305,63 @@ export function needsComplexConfirm(cand) {
   if (cand.result === 'out' && cand.outType === 'dp') return true;
   return false;
 }
+
+// ---- 操作(選手交代・チェンジ)コマンド辞書 ----
+// 例:「代打、田中」「投手交代、鈴木」「チェンジ」
+const OPERATION_DICT = {
+  ph: ['代打', 'だいだ'],
+  pr: ['代走', 'だいそう'],
+  pitcher: ['投手交代', 'とうしゅこうたい', '継投', 'けいとう', 'ピッチャー交代'],
+  change: ['チェンジ', 'ちぇんじ', '攻守交代', 'こうしゅこうたい'],
+};
+
+// ウェイクワード除去済みテキストから、操作コマンドと選手名部分を切り出す。
+// 戻り値: { op: 'ph'|'pr'|'pitcher'|'change', name: 残りテキスト } | null
+// name は VoiceControl 側で登録選手名とファジー照合する。
+export function parseOperation(text) {
+  const t = normalize(text);
+  if (!t) return null;
+  let best = null;
+  let bestScore = 0;
+  let bestKw = '';
+  for (const [op, words] of Object.entries(OPERATION_DICT)) {
+    for (const w of words) {
+      const nw = normalize(w);
+      // 先頭一致を優先しつつ、含まれていれば拾う
+      const idx = t.indexOf(nw);
+      if (idx >= 0) {
+        const score = nw.length + (idx === 0 ? 2 : 0);
+        if (score > bestScore) {
+          bestScore = score;
+          best = op;
+          bestKw = nw;
+        }
+      }
+    }
+  }
+  if (!best) return null;
+  // 操作語より後ろの部分を選手名候補として返す(「代打田中」「代打、田中」両対応)
+  const after = t.slice(t.indexOf(bestKw) + bestKw.length);
+  return { op: best, name: after };
+}
+
+// 発話の選手名候補を登録選手リストにファジー照合し、最も近い選手を返す
+// players: [{ id, name }]
+export function matchPlayer(nameText, players) {
+  const t = normalize(nameText);
+  if (!t || !players?.length) return null;
+  let best = null;
+  let bestSim = 0;
+  for (const p of players) {
+    const pn = normalize(p.name);
+    if (!pn) continue;
+    let sim = 0;
+    if (t.includes(pn) || pn.includes(t)) sim = 1;
+    else sim = diceSimilarity(t, pn);
+    if (sim > bestSim) {
+      bestSim = sim;
+      best = p;
+    }
+  }
+  return bestSim >= 0.5 ? best : null;
+}

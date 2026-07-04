@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import Sheet from './Sheet.jsx';
 import PlaySheet from './PlaySheet.jsx';
 import { useStore, usePlayerName, isMyTeamBatting, currentBatter } from '../state/store.jsx';
-import { parseUtterance, playLabel, normalize, stripWakeWord, parseCommand, needsComplexConfirm } from '../lib/voiceParser.js';
+import { parseUtterance, playLabel, normalize, stripWakeWord, parseCommand, needsComplexConfirm, parseOperation, matchPlayer } from '../lib/voiceParser.js';
 import { interpretWithLLM } from '../lib/llm.js';
 import { speechAvailable, createRecognizer } from '../lib/speech.js';
 import { createContinuousRecognizer } from '../lib/continuousSpeech.js';
@@ -285,6 +285,69 @@ export default function VoiceControl({ game }) {
     return cands;
   };
 
+  // 操作コマンド(代打・代走・投手交代・チェンジ)を実行。処理したら true を返す。
+  const handleOperation = (operation) => {
+    const { op, name } = operation;
+
+    if (op === 'change') {
+      dispatch({ type: 'FORCE_CHANGE_HALF', gameId: game.id });
+      speak('チェンジ');
+      return true;
+    }
+
+    // 交代系: 登録選手(未出場)から発話名にファジー照合
+    const inLineup = new Set(game.lineup.map((l) => l.playerId));
+    const bench = state.players.filter((p) => !inLineup.has(p.id));
+    const matched = matchPlayer(name, bench) || matchPlayer(name, state.players);
+    if (!matched) {
+      speak('選手が聞き取れませんでした');
+      beep(320, 90);
+      return true;
+    }
+
+    if (op === 'pitcher') {
+      dispatch({
+        type: 'SET_PITCHER', gameId: game.id, playerId: matched.id,
+        label: game.currentPitcherId
+          ? `継投: ${matched.name} (← ${nameOf(game.currentPitcherId)})`
+          : `先発: ${matched.name}`,
+      });
+      speak(`投手 ${matched.name}`);
+      return true;
+    }
+
+    if (op === 'ph') {
+      const slot = currentBatter(game);
+      if (!slot) { speak('打者がいません'); return true; }
+      dispatch({
+        type: 'SUBSTITUTE', gameId: game.id, order: slot.order, playerId: matched.id,
+        position: slot.position, label: `代打: ${matched.name} (${slot.order}番 ${nameOf(slot.playerId)}に代わり)`,
+      });
+      speak(`代打 ${matched.name}`);
+      return true;
+    }
+
+    if (op === 'pr') {
+      // 塁上でlineupに属する走者のうち、最も先の塁の走者を代走対象にする
+      const base = [3, 2, 1].find((b) => {
+        const r = game.runners[b];
+        return r?.playerId && game.lineup.some((l) => l.playerId === r.playerId);
+      });
+      if (!base) { speak('塁上に走者がいません'); return true; }
+      const runnerPid = game.runners[base].playerId;
+      const slot = game.lineup.find((l) => l.playerId === runnerPid);
+      dispatch({
+        type: 'SUBSTITUTE', gameId: game.id, order: slot.order, playerId: matched.id,
+        position: slot.position, asRunner: true,
+        label: `代走: ${matched.name} (${slot.order}番 ${nameOf(runnerPid)}に代わり)`,
+      });
+      speak(`代走 ${matched.name}`);
+      return true;
+    }
+
+    return false;
+  };
+
   const handleContinuousFinal = async (rawText) => {
     const rest = stripWakeWord(rawText);
     if (rest === null) return; // ウェイクワードなしの発話は誤反応防止のため無視
@@ -339,6 +402,10 @@ export default function VoiceControl({ game }) {
       handleAnswer(rest);
       return;
     }
+
+    // ---- 操作コマンド(代打・代走・投手交代・チェンジ) ----
+    const operation = parseOperation(rest);
+    if (operation && handleOperation(operation)) return;
 
     const cands = await continuousInterpret(rest);
     const top = cands[0];

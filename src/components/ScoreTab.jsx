@@ -33,7 +33,10 @@ function GameSetup() {
   const { state, dispatch } = useStore();
   const [opponent, setOpponent] = useState('');
   const [isHome, setIsHome] = useState(false);
+  const [season, setSeason] = useState('');
   const ongoing = Object.values(state.games).filter((g) => g.status === 'ongoing' && !g.id.startsWith('demo-'));
+  // 既存試合で使われたシーズン名(サジェスト用)
+  const knownSeasons = [...new Set(Object.values(state.games).map((g) => g.season).filter(Boolean))];
 
   return (
     <div>
@@ -41,11 +44,23 @@ function GameSetup() {
         <h2>新しい試合を開始</h2>
         <label className="small dim">対戦相手</label>
         <input value={opponent} onChange={(e) => setOpponent(e.target.value)} placeholder="対戦相手名" />
+        <label className="small dim mt8" style={{ display: 'block' }}>シーズン/大会名(任意)</label>
+        <input
+          value={season}
+          onChange={(e) => setSeason(e.target.value)}
+          placeholder="例: 2026春季大会"
+          list="season-suggest"
+        />
+        {knownSeasons.length > 0 && (
+          <datalist id="season-suggest">
+            {knownSeasons.map((s) => <option key={s} value={s} />)}
+          </datalist>
+        )}
         <div className="toggle-row mt12">
           <button className={!isHome ? 'active' : ''} onClick={() => setIsHome(false)}>先攻</button>
           <button className={isHome ? 'active' : ''} onClick={() => setIsHome(true)}>後攻</button>
         </div>
-        <button className="primary" style={{ width: '100%' }} onClick={() => dispatch({ type: 'CREATE_GAME', payload: { opponent, isHome } })}>
+        <button className="primary" style={{ width: '100%' }} onClick={() => dispatch({ type: 'CREATE_GAME', payload: { opponent, isHome, season: season.trim() } })}>
           試合開始
         </button>
       </div>
@@ -186,6 +201,44 @@ function OppSubstituteSheet({ game, slot, onClose, initialKind = 'ph' }) {
         >
           {kindLabel}で出場
         </button>
+      </div>
+    </Sheet>
+  );
+}
+
+// ---- スコア手動修正シート(回を指定して±。事後編集で点差が狂ったときの帳尻合わせ用) ----
+function ScoreAdjustSheet({ game, onClose }) {
+  const { state, dispatch } = useStore();
+  const [inning, setInning] = useState(game.inning);
+  const myName = state.settings.teamName || 'マイチーム';
+  const oppName = game.opponent || '対戦相手';
+  const ls = game.linescore?.[String(inning)] || { my: 0, opp: 0 };
+
+  const adjust = (team, delta) => dispatch({ type: 'ADJUST_SCORE', gameId: game.id, team, inning, delta });
+
+  return (
+    <Sheet title="スコア修正" onClose={onClose}>
+      <p className="small dim">回を選んで得点を直接増減できます(合計スコアも連動)。</p>
+      <div className="section-title">対象の回</div>
+      <div className="grid3">
+        {Array.from({ length: Math.max(9, game.inning) }, (_, i) => i + 1).map((i) => (
+          <button key={i} className={`small ${inning === i ? 'primary' : ''}`} onClick={() => setInning(i)}>
+            {i}回
+          </button>
+        ))}
+      </div>
+      {[['my', myName, ls.my, game.myScore], ['opp', oppName, ls.opp, game.oppScore]].map(([team, name, innScore, total]) => (
+        <div className="flex mt12" key={team}>
+          <span className="grow">{name} <span className="dim small">({inning}回: {innScore}点 / 計{total}点)</span></span>
+          <div className="stepper">
+            <button onClick={() => adjust(team, -1)}>−</button>
+            <span className="val">{innScore}</span>
+            <button onClick={() => adjust(team, +1)}>＋</button>
+          </div>
+        </div>
+      ))}
+      <div className="sheet-actions">
+        <button className="primary" onClick={onClose} style={{ width: '100%' }}>閉じる</button>
       </div>
     </Sheet>
   );
@@ -393,8 +446,10 @@ export default function ScoreTab() {
           <button onClick={() => window.confirm('攻守交代(チェンジ)しますか？') && dispatch({ type: 'FORCE_CHANGE_HALF', gameId: game.id })}>
             手動チェンジ
           </button>
+          <button onClick={() => setSheet({ kind: 'scoreAdjust' })}>スコア修正</button>
           <button
             className="danger"
+            style={{ gridColumn: '1 / -1' }}
             onClick={() => {
               if (!window.confirm('試合を終了しますか？')) return;
               dispatch({ type: 'FINISH_GAME', id: game.id });
@@ -476,6 +531,9 @@ export default function ScoreTab() {
       )}
       {sheet?.kind === 'highlight' && (
         <HighlightSheet game={game} onClose={() => setSheet(null)} />
+      )}
+      {sheet?.kind === 'scoreAdjust' && (
+        <ScoreAdjustSheet game={game} onClose={() => setSheet(null)} />
       )}
     </div>
   );

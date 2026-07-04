@@ -1,13 +1,16 @@
 import React from 'react';
 import Sheet from './Sheet.jsx';
-import { usePlayerName } from '../state/store.jsx';
+import { useStore, usePlayerName } from '../state/store.jsx';
 import { computeHighlights, highlightShareText } from '../lib/highlights.js';
+import { shareHighlightImage } from '../lib/shareImage.js';
 
 // 試合ハイライト: 決勝打・好投・MVP・見どころを自動要約し、SNS共有できるカード
 export default function HighlightSheet({ game, onClose }) {
+  const { state } = useStore();
   const nameOf = usePlayerName();
   const h = computeHighlights(game, nameOf);
   const shareText = highlightShareText(game, h);
+  const teamName = state.settings.teamName || 'マイチーム';
   const empty = !h.clutch && !h.topBatter && !h.topPitcher && h.extraBaseHits.length === 0;
 
   const share = async () => {
@@ -75,6 +78,7 @@ export default function HighlightSheet({ game, onClose }) {
 
       <div className="sheet-actions">
         <button className="ghost" onClick={onClose}>閉じる</button>
+        <button onClick={() => shareHighlightImage(game, h, teamName)}>🖼 画像</button>
         <button className="primary" onClick={share}>📤 共有</button>
       </div>
     </Sheet>

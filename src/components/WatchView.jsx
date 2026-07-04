@@ -7,7 +7,7 @@ import Diamond from './Diamond.jsx';
 // URLの ?watch=1&team=<チームコード>&cfg=<base64のfirebaseConfig> を読み取って
 // 読み取り専用でFirestoreを購読し、試合速報だけを表示する観戦者向けページ。
 // スコア入力タブ等は一切表示せず、書き込みも行わない。
-function decodeConfig(cfgParam) {
+export function decodeConfig(cfgParam) {
   try {
     return decodeURIComponent(escape(atob(cfgParam)));
   } catch {
@@ -20,6 +20,18 @@ export function encodeWatchLink({ configText, teamCode }) {
   const url = new URL(window.location.href);
   url.search = '';
   url.searchParams.set('watch', '1');
+  url.searchParams.set('team', teamCode);
+  url.searchParams.set('cfg', cfg);
+  return url.toString();
+}
+
+// チーム招待リンク: 開くと同期設定(config+チームコード)を自動で取り込み、
+// 書き込み可能なメンバーとして参加できる。観戦(閲覧専用)リンクとは別物。
+export function encodeInviteLink({ configText, teamCode }) {
+  const cfg = btoa(unescape(encodeURIComponent(configText)));
+  const url = new URL(window.location.href);
+  url.search = '';
+  url.searchParams.set('invite', '1');
   url.searchParams.set('team', teamCode);
   url.searchParams.set('cfg', cfg);
   return url.toString();
