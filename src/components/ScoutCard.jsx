@@ -86,17 +86,18 @@ function TagPill({ label, type, onClick }) {
 // ---- AI選手名鑑&スカウト寸評 ----
 // Gemini APIキーが設定タブで入力されていれば実際にAI生成し、未設定/失敗時はダミー文言にフォールバックする。
 export default function ScoutCard({ player, batting, pitching, battingM, pitchingM, onClose }) {
-  const { state } = useStore();
+  const { state, dispatch } = useStore();
   const apiKey = state.settings.geminiApiKey;
   const statsSummary = buildStatsSummary(batting, pitching, battingM, pitchingM);
-  const [catchphrase, setCatchphrase] = useState(CATCHPHRASES[0]);
-  const [tags, setTags] = useState([]); // { label, type }
+  const [catchphrase, setCatchphrase] = useState(player?.scoutCatchphrase || CATCHPHRASES[0]);
+  const [tags, setTags] = useState(player?.scoutTags || []); // { label, type }
   const [freeText, setFreeText] = useState('');
   const [freeType, setFreeType] = useState('plus');
-  const [report, setReport] = useState('');
+  const [report, setReport] = useState(player?.scoutReport || '');
   const [loading, setLoading] = useState(false);
   const [source, setSource] = useState(null); // 'ai' | 'dummy-no-key' | 'dummy-error' | null(未生成)
   const [errorDetail, setErrorDetail] = useState('');
+  const [dirty, setDirty] = useState(false); // 確定(保存)していない変更があるか
 
   const name = player?.name || '選手';
 
@@ -104,6 +105,7 @@ export default function ScoutCard({ player, batting, pitching, battingM, pitchin
 
   const toggleTag = (label, type) => {
     setTags((prev) => (prev.some((t) => t.label === label) ? prev.filter((t) => t.label !== label) : [...prev, { label, type }]));
+    setDirty(true);
   };
 
   const addFreeTag = () => {
@@ -111,13 +113,18 @@ export default function ScoutCard({ player, batting, pitching, battingM, pitchin
     if (!label || hasTag(label)) return;
     setTags((prev) => [...prev, { label, type: freeType }]);
     setFreeText('');
+    setDirty(true);
   };
 
-  const removeTag = (label) => setTags((prev) => prev.filter((t) => t.label !== label));
+  const removeTag = (label) => {
+    setTags((prev) => prev.filter((t) => t.label !== label));
+    setDirty(true);
+  };
 
   const initial = name.slice(0, 1);
 
   const generate = async () => {
+    setDirty(true);
     if (!apiKey) {
       setCatchphrase(CATCHPHRASES[Math.floor(Math.random() * CATCHPHRASES.length)]);
       setReport(buildDummyReport(name, tags, statsSummary));
@@ -139,12 +146,26 @@ export default function ScoutCard({ player, batting, pitching, battingM, pitchin
     }
   };
 
+  const handleClose = () => {
+    if (dirty && !window.confirm('確定せずに戻ると、現在の入力内容は全てキャンセルされます。よろしいですか？')) return;
+    onClose();
+  };
+
+  const handleConfirm = () => {
+    dispatch({ type: 'UPDATE_PLAYER', id: player.id, patch: { scoutTags: tags, scoutCatchphrase: catchphrase, scoutReport: report } });
+    setDirty(false);
+    onClose();
+  };
+
   return (
     <FullscreenView>
       <header className="fullscreen-header">
-        <button className="ghost small" onClick={onClose}>← 戻る</button>
-        <h2>AI選手名鑑</h2>
-        <span style={{ width: 60 }} />
+        <button className="ghost small" onClick={handleClose}>← 戻る</button>
+        <h2>
+          AI選手名鑑
+          {dirty && <span className="small" style={{ color: 'var(--amber)', marginLeft: 6, fontWeight: 700 }}>●未確定</span>}
+        </h2>
+        <button className="primary small" onClick={handleConfirm}>確定</button>
       </header>
       <div className="fullscreen-body">
         <div className="scout-card">

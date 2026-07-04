@@ -50,7 +50,13 @@ export const OPP_LETTERS = Array.from({ length: 20 }, (_, i) => String.fromCharC
 // ============================================================
 
 export function newPlayer(name, number = '') {
-  return { id: uid(), name, number, createdAt: Date.now() };
+  return {
+    id: uid(), name, number, createdAt: Date.now(),
+    // AI選手名鑑(スカウト寸評)の保存内容。未確定の間は編集画面側のローカル状態のみで保持する。
+    scoutTags: [], // { label, type }[]
+    scoutCatchphrase: '',
+    scoutReport: '',
+  };
 }
 
 export function newGame({ opponent = '', isHome = false, date = null, season = '' } = {}) {
