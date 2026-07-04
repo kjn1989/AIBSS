@@ -92,6 +92,7 @@ export default function SettingsTab() {
       <CloudCard />
       <ExportCard />
       <BackupCard />
+      <DangerZoneCard />
 
       <div className="card">
         <h2>データ管理</h2>
@@ -100,6 +101,49 @@ export default function SettingsTab() {
           クラウド共有を有効にすると、同じチームコードを設定した全員の端末とリアルタイム同期します。
         </p>
       </div>
+    </div>
+  );
+}
+
+// ---- データのリセット(試合の全削除 / 完全初期化) ----
+function DangerZoneCard() {
+  const { state, dispatch } = useStore();
+  const gameCount = Object.keys(state.games).length;
+  const playerCount = state.players.length;
+
+  const deleteAllGames = () => {
+    if (gameCount === 0) { window.alert('削除する試合がありません。'); return; }
+    if (!window.confirm(
+      `試合結果を全て削除しますか？(${gameCount}件)\n\nチーム名と選手(${playerCount}人)はそのまま残ります。\nこの操作は取り消せません。`
+    )) return;
+    // 消える前に自動バックアップを促す最終確認
+    if (!window.confirm('本当に削除します。よろしいですか？(念のため事前のバックアップ保存を推奨)')) return;
+    dispatch({ type: 'DELETE_ALL_GAMES' });
+    window.alert('試合結果を全て削除しました。選手とチーム名はそのままです。');
+  };
+
+  const resetAll = () => {
+    if (!window.confirm(
+      `完全初期化しますか？\n\n全ての試合(${gameCount}件)と選手(${playerCount}人)を削除します。\nチーム名・クラウド設定は残ります。\nこの操作は取り消せません。`
+    )) return;
+    if (!window.confirm('本当に初期化します。よろしいですか？(念のため事前のバックアップ保存を推奨)')) return;
+    dispatch({ type: 'RESET_ALL' });
+    window.alert('初期化しました。');
+  };
+
+  return (
+    <div className="card danger-zone">
+      <h2>データのリセット</h2>
+      <p className="small dim" style={{ marginBottom: 10 }}>
+        テスト入力を消して本番用にやり直すときに使います。
+        <b>削除は取り消せません。</b>不安な場合は先に上の「バックアップを保存」で保存しておくと、後から復元できます。
+      </p>
+      <button className="ghost danger" style={{ width: '100%', marginBottom: 8 }} onClick={deleteAllGames}>
+        🗑 試合結果だけ全て削除(選手・チーム名は残す)
+      </button>
+      <button className="danger" style={{ width: '100%' }} onClick={resetAll}>
+        ⚠️ 完全初期化(試合も選手も削除)
+      </button>
     </div>
   );
 }

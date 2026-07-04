@@ -264,7 +264,24 @@ export function reducer(state, action) {
       const games = { ...state.games };
       delete games[action.id];
       const currentGameId = state.currentGameId === action.id ? null : state.currentGameId;
-      return { ...state, games, currentGameId };
+      return { ...state, games, currentGameId, history: state.history.filter((h) => h.gameId !== action.id) };
+    }
+    case 'DELETE_ALL_GAMES': {
+      // 全試合を削除(登録選手・チーム設定は保持)。
+      // デモ由来の試合・選手(id が 'demo-' で始まる)も一緒に片付ける
+      const players = state.players.filter((p) => !p.id.startsWith('demo-'));
+      return { ...state, games: {}, players, currentGameId: null, demoLoaded: false, history: [] };
+    }
+    case 'RESET_ALL': {
+      // 完全初期化: 選手・試合をすべて消す。チーム名など設定は保持する
+      return {
+        ...state,
+        players: [],
+        games: {},
+        currentGameId: null,
+        demoLoaded: false,
+        history: [],
+      };
     }
     case 'FINISH_GAME': {
       const g = deep(state.games[action.id]);

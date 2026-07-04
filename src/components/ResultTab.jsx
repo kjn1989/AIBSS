@@ -135,6 +135,19 @@ export default function ResultTab() {
                 {knownSeasons.map((s) => <option key={s} value={s} />)}
               </datalist>
             )}
+            <button
+              className="ghost danger mt12"
+              style={{ width: '100%' }}
+              onClick={() => {
+                if (!window.confirm(`この試合(${game.date} vs ${game.opponent || '対戦相手'})を削除しますか？\nこの操作は取り消せません。`)) return;
+                dispatch({ type: 'DELETE_GAME', id: game.id });
+                setEditMeta(false);
+                const remaining = Object.values(state.games).filter((g) => g.id !== game.id && !g.id.startsWith('demo-'));
+                setGameId(remaining[0]?.id || '');
+              }}
+            >
+              🗑 この試合を削除
+            </button>
           </div>
         )}
         <button className="mt8" style={{ width: '100%' }} onClick={() => setShowSheet(true)}>

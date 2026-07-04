@@ -535,6 +535,10 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 }
 .invite-card h2 { font-size: 18px; margin-bottom: 10px; }
 
+/* ---- データのリセット(危険操作) ---- */
+.danger-zone { border-color: rgba(248, 81, 73, 0.4); }
+.danger-zone h2 { color: var(--red); }
+
 /* ---- 全画面ビュー(試合経過など) ---- */
 .fullscreen-view {
   position: fixed; inset: 0; z-index: 400;
