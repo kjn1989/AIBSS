@@ -28,6 +28,7 @@ export const initialState = {
     teamCode: '', // Firestore上のチーム識別子
     anthropicApiKey: '', // 音声解釈のLLM拡張(任意)
     useLLM: false,
+    geminiApiKey: '', // AI選手名鑑のスカウト寸評生成(任意)
   },
   demoLoaded: false,
   // ---- 以下は永続化しないセッション状態 ----

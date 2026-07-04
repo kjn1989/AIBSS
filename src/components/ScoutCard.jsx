@@ -1,4 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
+import { useStore } from '../state/store.jsx';
+import { generateScoutReport } from '../lib/gemini.js';
 
 // ---- プリセット特殊能力タグ(パワプロ風) ----
 // type: 'plus'(青=長所) / 'minus'(赤=短所) / 'joke'(緑=個性・チーム貢献)
@@ -66,13 +68,18 @@ function TagPill({ label, type, onClick }) {
   );
 }
 
-// ---- AI選手名鑑&スカウト寸評 (UIモック / ダミーデータのみ、AI連携は未実装) ----
+// ---- AI選手名鑑&スカウト寸評 ----
+// Gemini APIキーが設定タブで入力されていれば実際にAI生成し、未設定/失敗時はダミー文言にフォールバックする。
 export default function ScoutCard({ player, onClose }) {
+  const { state } = useStore();
+  const apiKey = state.settings.geminiApiKey;
   const [catchphrase, setCatchphrase] = useState(CATCHPHRASES[0]);
   const [tags, setTags] = useState([]); // { label, type }
   const [freeText, setFreeText] = useState('');
   const [freeType, setFreeType] = useState('plus');
   const [report, setReport] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [source, setSource] = useState(null); // 'ai' | 'dummy-no-key' | 'dummy-error' | null(未生成)
 
   const name = player?.name || '選手';
 
@@ -93,9 +100,25 @@ export default function ScoutCard({ player, onClose }) {
 
   const initial = name.slice(0, 1);
 
-  const generate = () => {
-    setCatchphrase(CATCHPHRASES[Math.floor(Math.random() * CATCHPHRASES.length)]);
-    setReport(buildDummyReport(name, tags));
+  const generate = async () => {
+    if (!apiKey) {
+      setCatchphrase(CATCHPHRASES[Math.floor(Math.random() * CATCHPHRASES.length)]);
+      setReport(buildDummyReport(name, tags));
+      setSource('dummy-no-key');
+      return;
+    }
+    setLoading(true);
+    const result = await generateScoutReport({ apiKey, name, number: player?.number, tags });
+    setLoading(false);
+    if (result) {
+      if (result.catchphrase) setCatchphrase(result.catchphrase);
+      setReport(result.report);
+      setSource('ai');
+    } else {
+      setCatchphrase(CATCHPHRASES[Math.floor(Math.random() * CATCHPHRASES.length)]);
+      setReport(buildDummyReport(name, tags));
+      setSource('dummy-error');
+    }
   };
 
   return (
@@ -170,12 +193,20 @@ export default function ScoutCard({ player, onClose }) {
           <div className="scout-bottom">
             <div className="flex" style={{ marginBottom: 8 }}>
               <div className="grow section-title" style={{ margin: 0 }}>スカウト寸評</div>
-              <button className="small primary" onClick={generate}>🎲 生成(ダミー)</button>
+              <button className="small primary" onClick={generate} disabled={loading}>
+                {loading ? '生成中...' : apiKey ? '✨ AIで生成' : '🎲 生成(ダミー)'}
+              </button>
             </div>
             <div className="scout-report">
               {report || buildDummyReport(name, tags)}
             </div>
-            <p className="small dim mt8">※ この寸評はダミー生成です。AI(Gemini等)連携は次のステップで対応予定。</p>
+            {source === 'ai' && <p className="small mt8" style={{ color: 'var(--green)' }}>✨ Gemini AIによる生成です。</p>}
+            {source === 'dummy-error' && <p className="small mt8" style={{ color: 'var(--amber)' }}>⚠️ AI生成に失敗したため、ダミー文言を表示しています。</p>}
+            {source !== 'ai' && source !== 'dummy-error' && (
+              <p className="small dim mt8">
+                {apiKey ? '※ まだ生成していません。' : '※ Gemini APIキー未設定のため、ダミー文言です。設定タブから追加できます。'}
+              </p>
+            )}
           </div>
         </div>
       </div>

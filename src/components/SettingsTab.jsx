@@ -89,6 +89,22 @@ export default function SettingsTab() {
         )}
       </div>
 
+      <div className="card">
+        <h2>AI選手名鑑の設定</h2>
+        <p className="small dim" style={{ marginBottom: 10 }}>
+          選手個人ページの「📇 名鑑」でのスカウト寸評生成に使用します(任意)。
+          未設定の場合はダミー文言が表示されます。
+        </p>
+        <label className="small dim">Gemini APIキー</label>
+        <input
+          type="password"
+          value={state.settings.geminiApiKey}
+          onChange={(e) => dispatch({ type: 'UPDATE_SETTINGS', patch: { geminiApiKey: e.target.value } })}
+          placeholder="未入力の場合はダミー文言のみ"
+        />
+        <p className="small dim mt8">⚠️ キーはこの端末のブラウザ内にのみ保存されます。</p>
+      </div>
+
       <CloudCard />
       <ExportCard />
       <BackupCard />
