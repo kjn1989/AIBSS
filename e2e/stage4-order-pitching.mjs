@@ -26,9 +26,11 @@ await page.click('.toggle-row button:has-text("後攻")');
 await page.click('button:has-text("試合開始")');
 await page.waitForSelector('.scoreboard');
 
-// ==== オーダータブで打順を設定 ====
+// ==== オーダータブで打順を設定(ウィザード: 選手選択→並べ替え→守備位置) ====
 await page.click('.tabbar button:has-text("オーダー")');
-await page.click('button:has-text("登録順に自動入力")');
+await page.click('button:has-text("登録順に9人選択")');
+await page.click('button:has-text("次へ(打順の並べ替え)")');
+await page.click('button:has-text("次へ(守備位置)")');
 await page.click('button:has-text("この打順で確定")');
 await page.waitForSelector('.card h2:has-text("オーダー")');
 console.log('lineup set');

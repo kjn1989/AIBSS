@@ -2,62 +2,7 @@ import React, { useState } from 'react';
 import { useStore, useCurrentGame, usePlayerName } from '../state/store.jsx';
 import { POSITIONS } from '../lib/model.js';
 import Sheet from './Sheet.jsx';
-
-// ---- 初期オーダー編集(lineup未設定時) ----
-function LineupEditor({ game }) {
-  const { state, dispatch } = useStore();
-  const [slots, setSlots] = useState(() =>
-    Array.from({ length: 9 }, (_, i) => ({ order: i + 1, playerId: '', position: POSITIONS[i] || '控' }))
-  );
-
-  const autoFill = () => {
-    const nine = state.players.slice(0, 9);
-    setSlots(Array.from({ length: 9 }, (_, i) => ({
-      order: i + 1,
-      playerId: nine[i]?.id || '',
-      position: POSITIONS[i] || '控',
-    })));
-  };
-
-  const set = (i, patch) => setSlots(slots.map((s, j) => (j === i ? { ...s, ...patch } : s)));
-  const filled = slots.filter((s) => s.playerId);
-  const dup = new Set(filled.map((s) => s.playerId)).size !== filled.length;
-
-  return (
-    <div className="card">
-      <h2>スターティングオーダー登録</h2>
-      {state.players.length === 0 && <div className="warn-box">⚙️ 設定タブで選手を登録してください。</div>}
-      <button className="small mt8" onClick={autoFill} disabled={state.players.length === 0}>
-        登録順に自動入力
-      </button>
-      {slots.map((s, i) => (
-        <div className="row" key={s.order}>
-          <span className="rank-badge">{s.order}</span>
-          <select className="grow" value={s.playerId} onChange={(e) => set(i, { playerId: e.target.value })}>
-            <option value="">選手を選択...</option>
-            {state.players.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-          <select style={{ width: 84 }} value={s.position} onChange={(e) => set(i, { position: e.target.value })}>
-            {POSITIONS.map((pos) => (
-              <option key={pos} value={pos}>{pos}</option>
-            ))}
-          </select>
-        </div>
-      ))}
-      {dup && <div className="warn-box">⚠️ 同じ選手が複数の打順に入っています。</div>}
-      <button
-        className="primary mt12"
-        style={{ width: '100%' }}
-        disabled={filled.length === 0 || dup}
-        onClick={() => dispatch({ type: 'SET_LINEUP', gameId: game.id, lineup: slots.filter((s) => s.playerId) })}
-      >
-        この打順で確定
-      </button>
-    </div>
-  );
-}
+import LineupWizard from './LineupWizard.jsx';
 
 // ---- 交代シート(代打・代走・守備交代) ----
 // スコア入力タブ(打者カード/走者タップ)からも再利用するため export する
@@ -148,7 +93,7 @@ export default function OrderTab() {
     return <div className="big-note">📋 スコア入力タブで試合を開始すると、オーダーを設定できます。</div>;
   }
 
-  if (game.lineup.length === 0) return <LineupEditor game={game} />;
+  if (game.lineup.length === 0) return <LineupWizard game={game} />;
 
   return (
     <div>
