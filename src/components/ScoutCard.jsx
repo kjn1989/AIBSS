@@ -83,6 +83,25 @@ function TagPill({ label, type, onClick }) {
   );
 }
 
+// 顔写真をアップロード用に256px正方形へリサイズ・圧縮してdataURL化(localStorage肥大化を防ぐ)
+function fileToAvatarDataURL(file, size = 256) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const r = Math.max(size / img.width, size / img.height); // cover(中央切り抜き)
+      const iw = img.width * r, ih = img.height * r;
+      ctx.drawImage(img, (size - iw) / 2, (size - ih) / 2, iw, ih);
+      resolve(canvas.toDataURL('image/jpeg', 0.82));
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+
 // ---- AI選手名鑑&スカウト寸評 ----
 // Gemini APIキーが設定タブで入力されていれば実際にAI生成し、未設定/失敗時はダミー文言にフォールバックする。
 export default function ScoutCard({ player, batting, pitching, battingM, pitchingM, onClose }) {
@@ -90,6 +109,7 @@ export default function ScoutCard({ player, batting, pitching, battingM, pitchin
   const apiKey = state.settings.geminiApiKey;
   const statsSummary = buildStatsSummary(batting, pitching, battingM, pitchingM);
   const [catchphrase, setCatchphrase] = useState(player?.scoutCatchphrase || CATCHPHRASES[0]);
+  const [photo, setPhoto] = useState(player?.scoutPhoto || ''); // 顔写真のdataURL
   const [tags, setTags] = useState(player?.scoutTags || []); // { label, type }
   const [freeText, setFreeText] = useState('');
   const [freeType, setFreeType] = useState('plus');
@@ -119,6 +139,16 @@ export default function ScoutCard({ player, batting, pitching, battingM, pitchin
   const removeTag = (label) => {
     setTags((prev) => prev.filter((t) => t.label !== label));
     setDirty(true);
+  };
+
+  const onPhoto = async (file) => {
+    try {
+      const url = await fileToAvatarDataURL(file);
+      setPhoto(url);
+      setDirty(true);
+    } catch {
+      /* 読み込み失敗は無視 */
+    }
   };
 
   const initial = name.slice(0, 1);
@@ -152,7 +182,11 @@ export default function ScoutCard({ player, batting, pitching, battingM, pitchin
   };
 
   const handleConfirm = () => {
-    dispatch({ type: 'UPDATE_PLAYER', id: player.id, patch: { scoutTags: tags, scoutCatchphrase: catchphrase, scoutReport: report } });
+    dispatch({
+      type: 'UPDATE_PLAYER',
+      id: player.id,
+      patch: { scoutTags: tags, scoutCatchphrase: catchphrase, scoutReport: report, scoutPhoto: photo },
+    });
     setDirty(false);
     onClose();
   };
@@ -170,7 +204,20 @@ export default function ScoutCard({ player, batting, pitching, battingM, pitchin
       <div className="fullscreen-body">
         <div className="scout-card">
           <div className="scout-top">
-            <div className="scout-photo">{initial}</div>
+            <label className="scout-photo" title="タップで顔写真をアップロード">
+              {photo ? <img src={photo} alt={name} /> : initial}
+              <span className="scout-photo-cam">📷</span>
+              <input
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) onPhoto(f);
+                  e.target.value = '';
+                }}
+              />
+            </label>
             <div className="scout-catch">{catchphrase}</div>
             <div className="scout-name">{name}{player?.number ? ` #${player.number}` : ''}</div>
           </div>

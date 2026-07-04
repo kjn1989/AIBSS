@@ -56,6 +56,7 @@ export function newPlayer(name, number = '') {
     scoutTags: [], // { label, type }[]
     scoutCatchphrase: '',
     scoutReport: '',
+    scoutPhoto: '', // 顔写真(256px JPEGのdataURL)。空なら頭文字を表示。
   };
 }
 
