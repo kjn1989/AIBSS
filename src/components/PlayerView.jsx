@@ -1,15 +1,17 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useStore } from '../state/store.jsx';
 import { aggregateBatting, aggregatePitching, battingMetrics, pitchingMetrics, fmtAvg } from '../lib/stats.js';
 import { formatIP } from '../lib/model.js';
 import { playLabel } from '../lib/voiceParser.js';
 import SprayChart from './SprayChart.jsx';
 import TrendChart from './TrendChart.jsx';
+import ScoutCard from './ScoutCard.jsx';
 
 // 選手個人ページ: 通算成績・スプレーチャート・成績推移・打席履歴を1画面に集約
 export default function PlayerView({ playerId, games, onClose }) {
   const { state } = useStore();
   const player = state.players.find((p) => p.id === playerId);
+  const [showScout, setShowScout] = useState(false);
 
   const batting = useMemo(() => aggregateBatting(games)[playerId], [games, playerId]);
   const pitching = useMemo(() => aggregatePitching(games)[playerId], [games, playerId]);
@@ -31,7 +33,7 @@ export default function PlayerView({ playerId, games, onClose }) {
       <header className="fullscreen-header">
         <button className="ghost small" onClick={onClose}>← 戻る</button>
         <h2>{player?.name || '選手'}{player?.number ? ` #${player.number}` : ''}</h2>
-        <span style={{ width: 60 }} />
+        <button className="ghost small" onClick={() => setShowScout(true)}>📇 名鑑</button>
       </header>
       <div className="fullscreen-body">
         {batting ? (
@@ -94,6 +96,7 @@ export default function PlayerView({ playerId, games, onClose }) {
           </div>
         )}
       </div>
+      {showScout && <ScoutCard player={player} onClose={() => setShowScout(false)} />}
     </div>
   );
 }
