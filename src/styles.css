@@ -768,18 +768,14 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 }
 .scout-name { font-size: 22px; font-weight: 900; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.4); }
 .scout-mid { padding: 14px 14px 4px; }
-.tag-pill-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.tag-pill-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
 .tag-pill {
-  display: inline-flex; align-items: center; gap: 4px;
+  display: inline-flex; align-items: center; gap: 4px; border: none; min-height: auto;
   padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 800; color: #fff;
 }
 .tag-pill.plus { background: var(--accent-2); }
 .tag-pill.minus { background: var(--red); }
 .tag-pill.joke { background: var(--green); }
-.tag-pill-x {
-  background: transparent; border: none; color: #fff; font-size: 13px; font-weight: 900;
-  min-height: auto; padding: 0 0 0 2px; line-height: 1; opacity: 0.85;
-}
 .tag-suggest-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .tag-suggest {
   font-size: 12px; padding: 5px 10px; min-height: auto; border-radius: 999px;

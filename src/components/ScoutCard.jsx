@@ -58,14 +58,11 @@ function buildDummyReport(name, tags) {
   return s;
 }
 
-function TagPill({ label, type, onRemove }) {
+function TagPill({ label, type, onClick }) {
   return (
-    <span className={`tag-pill ${type}`}>
+    <button type="button" className={`tag-pill ${type}`} onClick={onClick}>
       {label}
-      {onRemove && (
-        <button className="tag-pill-x" onClick={onRemove} aria-label="削除">×</button>
-      )}
-    </span>
+    </button>
   );
 }
 
@@ -121,11 +118,14 @@ export default function ScoutCard({ player, onClose }) {
             {tags.length === 0 ? (
               <p className="small dim">下のタグ候補から選ぶか、自由入力で追加してください。</p>
             ) : (
-              <div className="tag-pill-row">
-                {tags.map((t) => (
-                  <TagPill key={t.label} label={t.label} type={t.type} onRemove={() => removeTag(t.label)} />
-                ))}
-              </div>
+              <>
+                <div className="tag-pill-row">
+                  {tags.map((t) => (
+                    <TagPill key={t.label} label={t.label} type={t.type} onClick={() => removeTag(t.label)} />
+                  ))}
+                </div>
+                <p className="small dim mt8">タップで解除できます。</p>
+              </>
             )}
 
             {TAG_GROUPS.map((g) => (
