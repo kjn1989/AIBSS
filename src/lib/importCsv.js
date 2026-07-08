@@ -5,12 +5,19 @@
 // ============================================================
 
 // ---- テンプレートCSVの生成 ----
+const BATTERS_HEADER = ['名前', '背番号', '打席', '打数', '安打', '二塁打', '三塁打', '本塁打', '打点', '四球', '死球', '三振', '犠打', '盗塁', '得点', 'メモ'];
+const PITCHERS_HEADER = ['名前', '投球回', '失点', '自責点', '被安打', '与四球', '与死球', '奪三振', '投球数', '勝', 'セーブ', 'ホールド', 'メモ'];
+const blankRow = (n) => Array(n).fill('').join(',');
+
+// あらかじめ空行を並べておき、行を手動で追加しなくても1試合分(打者12人・投手4人)を埋められるようにする
 export function buildTemplateCsv(myTeam = 'マイチーム') {
   return [
     '# AIBSS 試合取り込みテンプレート (CSV / UTF-8)',
     '# 各セクションの値を埋めて保存し、AIBSSの「CSVで試合を取り込む」からアップロードします。',
-    '# 空欄は「不明」として扱われます(合計では0)。分からない列は空欄のままでOK。',
+    '# 空欄は「不明」として扱われます(合計では0)。分からない列は空欄のままでOK。行は最初から多めに用意してあるので追加不要です。',
     '# 名前は既存の選手名と一致すればその選手に、なければ新規登録されます。',
+    '# メモ欄に自由に書いておくと、AIBSS側で「AIによる不足項目の補完」時にヒントとして使われます',
+    '# (例: "3回に山田が満塁弾" 「今井、危なげなく完投勝利」 等。スコアブック右上の備忘録欄をご活用ください)。',
     '',
     '[GAME]',
     '日付,2026-07-04',
@@ -18,21 +25,22 @@ export function buildTemplateCsv(myTeam = 'マイチーム') {
     '相手チーム,対戦相手',
     '自チームは先攻か後攻,後攻',
     '大会・シーズン,',
+    '試合メモ,',
     '',
     '[LINESCORE]  (回別得点。分かる範囲でOK。空欄可)',
     'チーム,1,2,3,4,5,6,7,8,9,10',
     '自,,,,,,,,,,',
     '相手,,,,,,,,,,',
     '',
-    '[BATTERS]  (打者のボックススコア。1人1行)',
-    '名前,背番号,打席,打数,安打,二塁打,三塁打,本塁打,打点,四球,死球,三振,犠打,盗塁,得点',
-    '例)山田,10,4,4,2,1,0,0,2,0,0,1,0,1,1',
-    ',,,,,,,,,,,,,,',
+    '[BATTERS]  (打者のボックススコア。1人1行。メモは自由記述、AI補完のヒントに使えます)',
+    BATTERS_HEADER.join(','),
+    '例)山田,10,4,4,2,1,0,0,2,0,0,1,0,1,1,',
+    ...Array.from({ length: 12 }, () => blankRow(BATTERS_HEADER.length)),
     '',
     '[PITCHERS]  (投手成績。分かる範囲でOK。投球回は 4.2 = 4回2/3)',
-    '名前,投球回,失点,自責点,被安打,与四球,与死球,奪三振,投球数,勝,セーブ,ホールド',
-    '例)田中,5.0,2,1,,,,6,,1,,',
-    ',,,,,,,,,,,',
+    PITCHERS_HEADER.join(','),
+    '例)田中,5.0,2,1,,,,6,,1,,,',
+    ...Array.from({ length: 4 }, () => blankRow(PITCHERS_HEADER.length)),
     '',
   ].join('\n');
 }
@@ -80,14 +88,14 @@ const BAT_SYN = {
   打席: 'pa', 打席数: 'pa', 打数: 'ab', 安打: 'h', 単打: 'single',
   二塁打: 'double', '2塁打': 'double', 三塁打: 'triple', '3塁打': 'triple',
   本塁打: 'hr', 本: 'hr', 打点: 'rbi', 四球: 'bb', 死球: 'hbp', 三振: 'so',
-  犠打: 'sacBunt', 犠飛: 'sacFly', 盗塁: 'sb', 得点: 'runs',
+  犠打: 'sacBunt', 犠飛: 'sacFly', 盗塁: 'sb', 得点: 'runs', メモ: 'memo', 備考: 'memo',
 };
 const PIT_SYN = {
   名前: 'name', 選手: 'name', 選手名: 'name', 投球回: 'ip', 回: 'ip',
   失点: 'runs', 自責点: 'earnedRuns', 自責: 'earnedRuns', 被安打: 'hitsAllowed',
   与四球: 'walks', 与死球: 'hitByPitch', 奪三振: 'strikeouts', 投球数: 'pitches', 球数: 'pitches',
   被打数: 'abFaced', 対戦打者: 'abFaced', 勝: 'win', 勝利: 'win', セーブ: 'save', S: 'save',
-  ホールド: 'hold', H: 'hold',
+  ホールド: 'hold', H: 'hold', メモ: 'memo', 備考: 'memo',
 };
 
 // ヘッダ行 → 列index→正規キー のマップ
@@ -119,7 +127,7 @@ export function parseGameCsv(text) {
   }
 
   // GAME
-  const meta = { date: '', myTeam: '', opponent: '', season: '', isHome: false, myScore: undefined, oppScore: undefined };
+  const meta = { date: '', myTeam: '', opponent: '', season: '', isHome: false, myScore: undefined, oppScore: undefined, memo: '' };
   for (const row of sections.GAME || []) {
     const k = (row[0] || '').replace(/\s/g, '');
     const v = (row[1] || '').trim();
@@ -130,6 +138,7 @@ export function parseGameCsv(text) {
     else if (/大会|シーズン|season/i.test(k)) meta.season = v;
     else if (/自得点/.test(k)) meta.myScore = intOrU(v);
     else if (/相手得点/.test(k)) meta.oppScore = intOrU(v);
+    else if (/メモ|備考/.test(k)) meta.memo = v;
   }
 
   // LINESCORE
@@ -166,6 +175,7 @@ export function parseGameCsv(text) {
         single: intOrU(rec.single), double: intOrU(rec.double), triple: intOrU(rec.triple), hr: intOrU(rec.hr),
         rbi: intOrU(rec.rbi), bb: intOrU(rec.bb), hbp: intOrU(rec.hbp), so: intOrU(rec.so),
         sacBunt: intOrU(rec.sacBunt), sacFly: intOrU(rec.sacFly), sb: intOrU(rec.sb), runs: intOrU(rec.runs),
+        memo: (rec.memo || '').trim(),
       });
     }
   }
@@ -186,6 +196,7 @@ export function parseGameCsv(text) {
         hitsAllowed: intOrU(rec.hitsAllowed), walks: intOrU(rec.walks), hitByPitch: intOrU(rec.hitByPitch),
         strikeouts: intOrU(rec.strikeouts), pitches: intOrU(rec.pitches), abFaced: intOrU(rec.abFaced),
         win: truthy(rec.win), save: truthy(rec.save), hold: truthy(rec.hold),
+        memo: (rec.memo || '').trim(),
       });
     }
   }
@@ -194,4 +205,36 @@ export function parseGameCsv(text) {
     return { ok: false, error: 'データを読み取れませんでした。テンプレート形式(セクション見出し[GAME]など)をご確認ください。' };
   }
   return { ok: true, meta, linescore, batters, pitchers };
+}
+
+// ---- AI補完結果のマージ(元データの値は絶対に上書きしない。未入力だった項目のみ埋める) ----
+const BAT_NUM_KEYS = ['pa', 'ab', 'h', 'single', 'double', 'triple', 'hr', 'rbi', 'bb', 'hbp', 'so', 'sacBunt', 'sacFly', 'sb', 'runs'];
+const PIT_NUM_KEYS = ['outsRecorded', 'runs', 'earnedRuns', 'hitsAllowed', 'walks', 'hitByPitch', 'strikeouts', 'pitches', 'abFaced'];
+const PIT_BOOL_KEYS = ['win', 'save', 'hold'];
+
+function mergeOne(orig, ai, numKeys, boolKeys) {
+  if (!ai) return { ...orig, aiFilled: false, aiFieldCount: 0 };
+  const out = { ...orig };
+  let fieldCount = 0;
+  for (const key of numKeys) {
+    if (out[key] === undefined && ai[key] != null) {
+      const n = Number(ai[key]);
+      if (Number.isFinite(n)) { out[key] = Math.round(n); fieldCount++; }
+    }
+  }
+  for (const key of boolKeys || []) {
+    if (out[key] === false && ai[key] === true) { out[key] = true; fieldCount++; }
+  }
+  return { ...out, aiFilled: fieldCount > 0, aiFieldCount: fieldCount };
+}
+
+// 戻り値: { batters, pitchers, filledCount(補完されたフィールドの総数) }
+// (batters/pitchersの各要素に aiFilled:boolean が付く)
+export function mergeCompletion({ batters, pitchers }, ai) {
+  const aiBatters = Array.isArray(ai?.batters) ? ai.batters : [];
+  const aiPitchers = Array.isArray(ai?.pitchers) ? ai.pitchers : [];
+  const mergedBatters = batters.map((b) => mergeOne(b, aiBatters.find((a) => a.name === b.name), BAT_NUM_KEYS));
+  const mergedPitchers = pitchers.map((p) => mergeOne(p, aiPitchers.find((a) => a.name === p.name), PIT_NUM_KEYS, PIT_BOOL_KEYS));
+  const filledCount = [...mergedBatters, ...mergedPitchers].reduce((s, r) => s + r.aiFieldCount, 0);
+  return { batters: mergedBatters, pitchers: mergedPitchers, filledCount };
 }

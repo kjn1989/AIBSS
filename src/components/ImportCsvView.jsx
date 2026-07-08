@@ -1,14 +1,18 @@
 import React, { useState } from 'react';
 import { useStore } from '../state/store.jsx';
-import { buildTemplateCsv, parseGameCsv } from '../lib/importCsv.js';
+import { buildTemplateCsv, parseGameCsv, mergeCompletion } from '../lib/importCsv.js';
+import { completeBoxScore } from '../lib/gemini.js';
 import FullscreenView from './FullscreenView.jsx';
 
 // 指定フォーマットCSVからボックススコア＋線スコアを取り込む
 export default function ImportCsvView({ onClose }) {
   const { state, dispatch } = useStore();
   const myTeam = state.settings.teamName || 'マイチーム';
+  const apiKey = state.settings.geminiApiKey;
   const [parsed, setParsed] = useState(null);
   const [error, setError] = useState('');
+  const [completing, setCompleting] = useState(false);
+  const [completeNote, setCompleteNote] = useState(null); // { ok, filledCount } | { ok:false, error }
 
   const downloadTemplate = () => {
     const blob = new Blob([buildTemplateCsv(myTeam)], { type: 'text/csv;charset=utf-8' });
@@ -23,6 +27,7 @@ export default function ImportCsvView({ onClose }) {
   const onFile = (file) => {
     setError('');
     setParsed(null);
+    setCompleteNote(null);
     const reader = new FileReader();
     reader.onload = () => {
       const r = parseGameCsv(reader.result);
@@ -31,6 +36,26 @@ export default function ImportCsvView({ onClose }) {
     };
     reader.onerror = () => setError('ファイルを読み込めませんでした。');
     reader.readAsText(file, 'utf-8');
+  };
+
+  const hasMemo = !!(parsed && (parsed.meta.memo || parsed.batters.some((b) => b.memo) || parsed.pitchers.some((p) => p.memo)));
+
+  const runCompletion = async () => {
+    setCompleteNote(null);
+    setCompleting(true);
+    const r = await completeBoxScore({ apiKey, meta: parsed.meta, linescore: parsed.linescore, batters: parsed.batters, pitchers: parsed.pitchers });
+    setCompleting(false);
+    if (!r) {
+      setCompleteNote({ ok: false, error: 'Gemini APIキーが未設定か、オフラインです。' });
+      return;
+    }
+    if (r.error) {
+      setCompleteNote({ ok: false, error: r.error });
+      return;
+    }
+    const merged = mergeCompletion(parsed, r);
+    setParsed({ ...parsed, batters: merged.batters, pitchers: merged.pitchers });
+    setCompleteNote({ ok: true, filledCount: merged.filledCount });
   };
 
   const lsKeys = parsed ? Object.keys(parsed.linescore) : [];
@@ -42,7 +67,13 @@ export default function ImportCsvView({ onClose }) {
   }
 
   const doImport = () => {
-    dispatch({ type: 'IMPORT_BOX_GAME', payload: parsed });
+    // aiFilled/aiFieldCountはUI表示専用のフラグなので、保存前に取り除く
+    const payload = {
+      ...parsed,
+      batters: parsed.batters.map(({ aiFilled, aiFieldCount, ...b }) => b),
+      pitchers: parsed.pitchers.map(({ aiFilled, aiFieldCount, ...p }) => p),
+    };
+    dispatch({ type: 'IMPORT_BOX_GAME', payload });
     window.alert(`試合を取り込みました。\n${myTeam} ${myScore} - ${oppScore} ${parsed.meta.opponent || '相手'}\n(試合結果・成績タブに反映されます)`);
     onClose();
   };
@@ -86,6 +117,29 @@ export default function ImportCsvView({ onClose }) {
               <div className="hl-final" style={{ fontSize: 30 }}>{myTeam} {myScore} - {oppScore} {parsed.meta.opponent || '相手'}</div>
             </div>
 
+            {parsed.meta.memo && (
+              <div className="warn-box" style={{ marginBottom: 12, borderColor: 'var(--accent-2)', color: 'var(--text)' }}>
+                📝 試合メモ: {parsed.meta.memo}
+              </div>
+            )}
+
+            {hasMemo && (
+              <div className="mt8" style={{ marginBottom: 12 }}>
+                <button onClick={runCompletion} disabled={!apiKey || completing} style={{ width: '100%' }}>
+                  {completing ? '🤔 補完中...' : '🤖 AIで不足項目を補完する'}
+                </button>
+                {!apiKey && <p className="small dim mt8">※ Gemini APIキー未設定です。設定タブから追加すると使えます。</p>}
+                {completeNote?.ok && (
+                  <p className="small mt8" style={{ color: 'var(--green)' }}>
+                    ✨ メモをもとに{completeNote.filledCount}項目を補完しました(🤖マークの選手)。内容を確認してから取り込んでください。
+                  </p>
+                )}
+                {completeNote && !completeNote.ok && (
+                  <p className="small mt8" style={{ color: 'var(--amber)' }}>⚠️ 補完に失敗しました({completeNote.error})</p>
+                )}
+              </div>
+            )}
+
             {lsKeys.length > 0 && (
               <>
                 <div className="section-title small">線スコア</div>
@@ -105,14 +159,20 @@ export default function ImportCsvView({ onClose }) {
             {parsed.batters.length > 0 && (
               <div className="atbat-history" style={{ marginBottom: 8 }}>
                 {parsed.batters.map((b, i) => (
-                  <span className="hist-chip" key={i}>{b.name}（{b.h ?? 0}安打{b.hr ? ` ${b.hr}本` : ''}{b.rbi ? ` ${b.rbi}打点` : ''}）</span>
+                  <span className="hist-chip" key={i}>
+                    {b.aiFilled && '🤖 '}{b.name}（{b.h ?? 0}安打{b.hr ? ` ${b.hr}本` : ''}{b.rbi ? ` ${b.rbi}打点` : ''}）
+                    {b.memo && <span className="dim"> ・{b.memo}</span>}
+                  </span>
                 ))}
               </div>
             )}
             {parsed.pitchers.length > 0 && (
               <div className="atbat-history">
                 {parsed.pitchers.map((p, i) => (
-                  <span className="hist-chip" key={i}>{p.name}（{p.outsRecorded != null ? `${Math.floor(p.outsRecorded / 3)}${p.outsRecorded % 3 ? '.' + (p.outsRecorded % 3) : ''}回` : '回不明'}{p.earnedRuns != null ? ` 自責${p.earnedRuns}` : ''}）</span>
+                  <span className="hist-chip" key={i}>
+                    {p.aiFilled && '🤖 '}{p.name}（{p.outsRecorded != null ? `${Math.floor(p.outsRecorded / 3)}${p.outsRecorded % 3 ? '.' + (p.outsRecorded % 3) : ''}回` : '回不明'}{p.earnedRuns != null ? ` 自責${p.earnedRuns}` : ''}）
+                    {p.memo && <span className="dim"> ・{p.memo}</span>}
+                  </span>
                 ))}
               </div>
             )}

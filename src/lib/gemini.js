@@ -155,3 +155,40 @@ export async function generateNewspaper({ apiKey, summary }) {
     comment: r.data.comment || '',
   };
 }
+
+// ---------------- CSV取り込みのAI補完(メモ・線スコアの整合性から空欄を埋める) ----------------
+// batters/pitchers は lib/importCsv.js の parseGameCsv() が返す構造(memoフィールド含む)をそのまま渡す。
+function completionPrompt({ meta, linescore, batters, pitchers }) {
+  const linescoreText = Object.keys(linescore || {}).length
+    ? Object.entries(linescore).map(([inn, s]) => `${inn}回: 自${s.my}-相手${s.opp}`).join('、')
+    : '不明';
+  return `以下は野球の試合をCSVから読み取った構造化データです。値が入っていない(未入力の)項目があります。各選手の「memo」欄の具体的な記述と、線スコアとの整合性だけを手がかりに、確信を持って埋められる項目だけを補完してください。
+
+試合情報: ${meta.myTeam || '自チーム'} vs ${meta.opponent || '相手'}（${meta.date || '日付不明'}）
+試合メモ: ${meta.memo || 'なし'}
+線スコア: ${linescoreText}
+
+打者データ(JSON配列。値がない項目=未入力):
+${JSON.stringify(batters)}
+
+投手データ(JSON配列。outsRecordedはアウト数=投球回×3+端数。例: 4回2/3=14):
+${JSON.stringify(pitchers)}
+
+厳守事項:
+- 出力するbatters/pitchersは入力と同じ人数・同じ順序・同じnameのみ(選手を増減しない)
+- memoに具体的に書かれている事実(例:「3回に満塁弾」→本塁打1・打点4以上）だけを根拠に埋める。根拠のない平均的な数字での穴埋めや創作は禁止
+- 根拠が無い項目は元の値のまま(未入力ならnull)にする。無理に全項目を埋めない
+- memo欄はそのまま出力に含める(内容を変更・削除しない)
+- 出力は次のJSON形式のみ。前置き・説明は一切禁止:
+{"batters":[{"name":"...","...":"..."}],"pitchers":[{"name":"...","...":"..."}]}`;
+}
+
+// 戻り値: 成功 { batters, pitchers }(元の配列と同じ人数・順序) / 失敗 { error } / 未設定・オフライン null
+export async function completeBoxScore({ apiKey, meta, linescore, batters, pitchers }) {
+  const r = await callGeminiJSON(apiKey, completionPrompt({ meta, linescore, batters, pitchers }), { maxOutputTokens: 4096, temperature: 0.2 });
+  if (!r || r.error) return r;
+  if (!Array.isArray(r.data.batters) && !Array.isArray(r.data.pitchers)) {
+    return { error: 'AIの応答が期待した形式ではありません' };
+  }
+  return { batters: r.data.batters || batters, pitchers: r.data.pitchers || pitchers };
+}
