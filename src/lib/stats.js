@@ -83,6 +83,17 @@ export function aggregateBatting(games) {
       if (log.kind === 'run' && log.payload?.playerId) get(log.payload.playerId).runs += 1;
       if (log.kind === 'sb' && log.payload?.playerId) get(log.payload.playerId).sb += 1;
     }
+    // CSV取り込みのボックススコアを加算(空欄は0扱い)
+    for (const b of g.importedBatting || []) {
+      const s = get(b.playerId);
+      const single = b.single != null ? b.single : Math.max(0, (b.h || 0) - (b.double || 0) - (b.triple || 0) - (b.hr || 0));
+      const tb = b.tb != null ? b.tb : single + 2 * (b.double || 0) + 3 * (b.triple || 0) + 4 * (b.hr || 0);
+      s.pa += b.pa || 0; s.ab += b.ab || 0; s.h += b.h || 0;
+      s.single += single; s.double += b.double || 0; s.triple += b.triple || 0; s.hr += b.hr || 0;
+      s.rbi += b.rbi || 0; s.runs += b.runs || 0; s.sb += b.sb || 0;
+      s.bb += b.bb || 0; s.hbp += b.hbp || 0; s.so += b.so || 0;
+      s.sacBunt += b.sacBunt || 0; s.sacFly += b.sacFly || 0; s.tb += tb;
+    }
   }
   return map;
 }
@@ -117,6 +128,23 @@ export function aggregatePitching(games) {
       if (pr.win) s.wins += 1;
       if (pr.save) s.saves += 1;
       if (pr.hold) s.holds += 1;
+    }
+    // CSV取り込みの投手ボックススコアを加算(空欄は0扱い)
+    for (const p of g.importedPitching || []) {
+      const s = get(p.playerId);
+      s.games += 1;
+      s.outsRecorded += p.outsRecorded || 0;
+      s.runs += p.runs || 0;
+      s.earnedRuns += p.earnedRuns || 0;
+      s.hitsAllowed += p.hitsAllowed || 0;
+      s.walks += p.walks || 0;
+      s.hitByPitch += p.hitByPitch || 0;
+      s.strikeouts += p.strikeouts || 0;
+      s.pitches += p.pitches || 0;
+      s.abFaced += p.abFaced || 0;
+      if (p.win) s.wins += 1;
+      if (p.save) s.saves += 1;
+      if (p.hold) s.holds += 1;
     }
   }
   return map;

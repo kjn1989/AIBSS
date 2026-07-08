@@ -1,0 +1,197 @@
+// ============================================================
+// 指定フォーマットCSVからの試合取り込み(ボックススコア＋線スコア)
+// OCRはAIBSS側では行わず、ユーザーがこのフォーマットに整形して渡す。
+// 空欄は「不明」として0扱い(まばらなデータも許容)。
+// ============================================================
+
+// ---- テンプレートCSVの生成 ----
+export function buildTemplateCsv(myTeam = 'マイチーム') {
+  return [
+    '# AIBSS 試合取り込みテンプレート (CSV / UTF-8)',
+    '# 各セクションの値を埋めて保存し、AIBSSの「CSVで試合を取り込む」からアップロードします。',
+    '# 空欄は「不明」として扱われます(合計では0)。分からない列は空欄のままでOK。',
+    '# 名前は既存の選手名と一致すればその選手に、なければ新規登録されます。',
+    '',
+    '[GAME]',
+    '日付,2026-07-04',
+    `自チーム,${myTeam}`,
+    '相手チーム,対戦相手',
+    '自チームは先攻か後攻,後攻',
+    '大会・シーズン,',
+    '',
+    '[LINESCORE]  (回別得点。分かる範囲でOK。空欄可)',
+    'チーム,1,2,3,4,5,6,7,8,9,10',
+    '自,,,,,,,,,,',
+    '相手,,,,,,,,,,',
+    '',
+    '[BATTERS]  (打者のボックススコア。1人1行)',
+    '名前,背番号,打席,打数,安打,二塁打,三塁打,本塁打,打点,四球,死球,三振,犠打,盗塁,得点',
+    '例)山田,10,4,4,2,1,0,0,2,0,0,1,0,1,1',
+    ',,,,,,,,,,,,,,',
+    '',
+    '[PITCHERS]  (投手成績。分かる範囲でOK。投球回は 4.2 = 4回2/3)',
+    '名前,投球回,失点,自責点,被安打,与四球,与死球,奪三振,投球数,勝,セーブ,ホールド',
+    '例)田中,5.0,2,1,,,,6,,1,,',
+    ',,,,,,,,,,,',
+    '',
+  ].join('\n');
+}
+
+// ---- CSVパース(簡易。引用符は最小対応) ----
+function splitLine(line) {
+  // カンマ区切り。ダブルクオート内のカンマのみ保護
+  const out = [];
+  let cur = '';
+  let q = false;
+  for (const ch of line) {
+    if (ch === '"') q = !q;
+    else if (ch === ',' && !q) { out.push(cur); cur = ''; }
+    else cur += ch;
+  }
+  out.push(cur);
+  return out.map((c) => c.trim());
+}
+
+const numOrU = (v) => {
+  if (v == null || String(v).trim() === '') return undefined;
+  const n = parseFloat(String(v).replace(/[^0-9.\-]/g, ''));
+  return Number.isFinite(n) ? n : undefined;
+};
+const intOrU = (v) => {
+  const n = numOrU(v);
+  return n == null ? undefined : Math.round(n);
+};
+const truthy = (v) => {
+  const s = String(v ?? '').trim();
+  return s === '1' || s === '○' || s === '◯' || s === '〇' || /^(true|yes|y|勝|S|H)$/i.test(s);
+};
+// "4.2" → アウト数 14 (4回2/3)。"4" → 12。空欄 → undefined
+const ipToOuts = (v) => {
+  if (v == null || String(v).trim() === '') return undefined;
+  const s = String(v).trim();
+  const [full, frac] = s.split('.');
+  const f = parseInt(full, 10) || 0;
+  const r = frac ? Math.min(2, parseInt(frac[0], 10) || 0) : 0;
+  return f * 3 + r;
+};
+
+const BAT_SYN = {
+  名前: 'name', 選手: 'name', 選手名: 'name', 背番号: 'number', 番号: 'number',
+  打席: 'pa', 打席数: 'pa', 打数: 'ab', 安打: 'h', 単打: 'single',
+  二塁打: 'double', '2塁打': 'double', 三塁打: 'triple', '3塁打': 'triple',
+  本塁打: 'hr', 本: 'hr', 打点: 'rbi', 四球: 'bb', 死球: 'hbp', 三振: 'so',
+  犠打: 'sacBunt', 犠飛: 'sacFly', 盗塁: 'sb', 得点: 'runs',
+};
+const PIT_SYN = {
+  名前: 'name', 選手: 'name', 選手名: 'name', 投球回: 'ip', 回: 'ip',
+  失点: 'runs', 自責点: 'earnedRuns', 自責: 'earnedRuns', 被安打: 'hitsAllowed',
+  与四球: 'walks', 与死球: 'hitByPitch', 奪三振: 'strikeouts', 投球数: 'pitches', 球数: 'pitches',
+  被打数: 'abFaced', 対戦打者: 'abFaced', 勝: 'win', 勝利: 'win', セーブ: 'save', S: 'save',
+  ホールド: 'hold', H: 'hold',
+};
+
+// ヘッダ行 → 列index→正規キー のマップ
+function headerMap(cells, syn) {
+  const m = {};
+  cells.forEach((c, i) => {
+    const key = syn[c.replace(/\s/g, '')];
+    if (key) m[i] = key;
+  });
+  return m;
+}
+
+// メイン: CSVテキスト → 構造化データ
+export function parseGameCsv(text) {
+  const rawLines = String(text || '').split(/\r?\n/);
+  const sections = {}; // name -> array of split rows
+  let cur = null;
+  for (const raw of rawLines) {
+    const line = raw.replace(/^﻿/, '');
+    const t = line.trim();
+    if (!t || t.startsWith('#')) continue;
+    const sec = /^\[([^\]]+)\]/.exec(t);
+    if (sec) {
+      cur = sec[1].trim().toUpperCase();
+      sections[cur] = [];
+      continue;
+    }
+    if (cur) sections[cur].push(splitLine(line));
+  }
+
+  // GAME
+  const meta = { date: '', myTeam: '', opponent: '', season: '', isHome: false, myScore: undefined, oppScore: undefined };
+  for (const row of sections.GAME || []) {
+    const k = (row[0] || '').replace(/\s/g, '');
+    const v = (row[1] || '').trim();
+    if (/日付|date/i.test(k)) meta.date = v;
+    else if (/自チーム|自軍|マイ/.test(k)) meta.myTeam = v;
+    else if (/相手/.test(k)) meta.opponent = v;
+    else if (/先攻|後攻/.test(k)) meta.isHome = /後攻/.test(v);
+    else if (/大会|シーズン|season/i.test(k)) meta.season = v;
+    else if (/自得点/.test(k)) meta.myScore = intOrU(v);
+    else if (/相手得点/.test(k)) meta.oppScore = intOrU(v);
+  }
+
+  // LINESCORE
+  const linescore = {}; // { inning: { my, opp } }
+  let myLine = null, oppLine = null;
+  for (const row of sections.LINESCORE || []) {
+    const label = (row[0] || '').replace(/\s/g, '');
+    if (/^自/.test(label)) myLine = row.slice(1);
+    else if (/^相手|^敵/.test(label)) oppLine = row.slice(1);
+  }
+  if (myLine || oppLine) {
+    const n = Math.max(myLine?.length || 0, oppLine?.length || 0);
+    for (let i = 0; i < n; i++) {
+      const my = intOrU(myLine?.[i]);
+      const opp = intOrU(oppLine?.[i]);
+      if (my != null || opp != null) linescore[i + 1] = { my: my || 0, opp: opp || 0 };
+    }
+  }
+
+  // BATTERS
+  const batters = [];
+  const brows = sections.BATTERS || [];
+  if (brows.length) {
+    const hmap = headerMap(brows[0], BAT_SYN);
+    for (const row of brows.slice(1)) {
+      const rec = {};
+      row.forEach((cell, i) => { if (hmap[i]) rec[hmap[i]] = cell; });
+      const name = (rec.name || '').replace(/^例\)/, '').trim();
+      if (!name) continue;
+      batters.push({
+        name,
+        number: (rec.number || '').trim(),
+        pa: intOrU(rec.pa), ab: intOrU(rec.ab), h: intOrU(rec.h),
+        single: intOrU(rec.single), double: intOrU(rec.double), triple: intOrU(rec.triple), hr: intOrU(rec.hr),
+        rbi: intOrU(rec.rbi), bb: intOrU(rec.bb), hbp: intOrU(rec.hbp), so: intOrU(rec.so),
+        sacBunt: intOrU(rec.sacBunt), sacFly: intOrU(rec.sacFly), sb: intOrU(rec.sb), runs: intOrU(rec.runs),
+      });
+    }
+  }
+
+  // PITCHERS
+  const pitchers = [];
+  const prows = sections.PITCHERS || [];
+  if (prows.length) {
+    const hmap = headerMap(prows[0], PIT_SYN);
+    for (const row of prows.slice(1)) {
+      const rec = {};
+      row.forEach((cell, i) => { if (hmap[i]) rec[hmap[i]] = cell; });
+      const name = (rec.name || '').replace(/^例\)/, '').trim();
+      if (!name) continue;
+      pitchers.push({
+        name,
+        outsRecorded: ipToOuts(rec.ip), runs: intOrU(rec.runs), earnedRuns: intOrU(rec.earnedRuns),
+        hitsAllowed: intOrU(rec.hitsAllowed), walks: intOrU(rec.walks), hitByPitch: intOrU(rec.hitByPitch),
+        strikeouts: intOrU(rec.strikeouts), pitches: intOrU(rec.pitches), abFaced: intOrU(rec.abFaced),
+        win: truthy(rec.win), save: truthy(rec.save), hold: truthy(rec.hold),
+      });
+    }
+  }
+
+  if (!meta.opponent && batters.length === 0 && pitchers.length === 0 && Object.keys(linescore).length === 0) {
+    return { ok: false, error: 'データを読み取れませんでした。テンプレート形式(セクション見出し[GAME]など)をご確認ください。' };
+  }
+  return { ok: true, meta, linescore, batters, pitchers };
+}

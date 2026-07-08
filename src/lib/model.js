@@ -105,6 +105,10 @@ export function newGame({ opponent = '', isHome = false, date = null, season = '
     playLogs: [], // PlayLog[]
     pitchingRecords: [], // PitchingRecord[]
     linescore: {}, // { [inning]: { my, opp } } 回ごとの得点(試合結果の線分表示用)
+    // CSV取り込み(ボックススコア)の集計値。プレイ単位ではなく選手ごとの合計を保持し、
+    // 成績集計エンジンが加算する。空欄項目は0扱い(まばらなデータも許容)。
+    importedBatting: [], // [{ playerId, pa, ab, h, single, double, triple, hr, rbi, bb, hbp, so, sacBunt, sacFly, sb, runs, tb }]
+    importedPitching: [], // [{ playerId, outsRecorded, runs, earnedRuns, hitsAllowed, walks, hitByPitch, strikeouts, pitches, abFaced, win, save, hold }]
     updatedAt: Date.now(),
   };
 }

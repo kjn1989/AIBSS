@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useStore, usePlayerName } from '../state/store.jsx';
 import { aggregateBatting, aggregatePitching, BATTING_TITLES, PITCHING_TITLES, titleLeaders } from '../lib/stats.js';
 import GameScopeToggle, { scopedGames } from './GameScopeToggle.jsx';
+import ImportCsvView from './ImportCsvView.jsx';
 
 function TitleCard({ crown, label, leaders, display, nameOf, pitcher }) {
   return (
@@ -28,6 +29,7 @@ export default function HomeTab() {
   const { state } = useStore();
   const nameOf = usePlayerName();
   const [scope, setScope] = useState({ scope: 'season', gameId: null });
+  const [showImport, setShowImport] = useState(false);
 
   const games = scopedGames(state, scope);
   const batting = useMemo(() => aggregateBatting(games), [games]);
@@ -38,6 +40,11 @@ export default function HomeTab() {
   return (
     <div>
       <GameScopeToggle value={scope} onChange={setScope} />
+
+      <button className="mb8" style={{ width: '100%' }} onClick={() => setShowImport(true)}>
+        📄 CSVで過去試合を取り込む
+      </button>
+      {showImport && <ImportCsvView onClose={() => setShowImport(false)} />}
 
       {!hasData && (
         <div className="big-note">

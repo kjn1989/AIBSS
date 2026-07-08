@@ -277,6 +277,34 @@ export function reducer(state, action) {
     }
     case 'SELECT_GAME':
       return { ...state, currentGameId: action.id };
+    case 'IMPORT_BOX_GAME': {
+      // 指定フォーマットCSVから作った完成済み試合を挿入。選手は名前照合(なければ新規作成)。
+      const { meta, linescore, batters, pitchers } = action.payload;
+      let players = [...state.players];
+      const findOrCreate = (name, number) => {
+        let p = players.find((x) => x.name === name);
+        if (!p) { p = newPlayer(name, number || ''); players = [...players, p]; }
+        return p.id;
+      };
+      const importedBatting = (batters || []).map(({ name, number, ...stats }) => ({ playerId: findOrCreate(name, number), ...stats }));
+      const importedPitching = (pitchers || []).map(({ name, ...stats }) => ({ playerId: findOrCreate(name), ...stats }));
+      let myScore = 0, oppScore = 0;
+      const lsKeys = Object.keys(linescore || {});
+      if (lsKeys.length) {
+        for (const k of lsKeys) { myScore += linescore[k].my || 0; oppScore += linescore[k].opp || 0; }
+      } else if (meta.myScore != null || meta.oppScore != null) {
+        myScore = meta.myScore || 0; oppScore = meta.oppScore || 0;
+      } else {
+        myScore = (batters || []).reduce((s, b) => s + (b.runs || 0), 0);
+      }
+      const g = {
+        ...newGame({ opponent: meta.opponent, date: meta.date || undefined, isHome: meta.isHome, season: meta.season }),
+        status: 'finished', myScore, oppScore, linescore: linescore || {},
+        importedBatting, importedPitching,
+        inning: Math.max(1, lsKeys.length), isTop: false,
+      };
+      return { ...state, players, games: { ...state.games, [g.id]: g } };
+    }
     case 'DELETE_GAME': {
       const games = { ...state.games };
       delete games[action.id];
