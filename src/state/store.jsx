@@ -7,7 +7,7 @@
 import React, { createContext, useContext, useReducer, useEffect, useRef } from 'react';
 import {
   newPlayer, newMember, newGame, newAtBat, newPitch, newPlayLog, newPitchingRecord, RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES,
-  OPP_LETTERS,
+  OPP_LETTERS, DEFAULT_EDITION,
 } from '../lib/model.js';
 import { generateDemoData } from '../lib/demo.js';
 import { idbSave } from '../lib/durableStore.js';
@@ -25,6 +25,7 @@ export const initialState = {
   currentGameId: null,
   settings: {
     teamName: 'マイチーム',
+    edition: DEFAULT_EDITION, // '草野球' | 'ブカツ(中-大)' | '少年野球'。AIスタメン/AI選手名鑑は草野球限定。
     firebaseConfigText: '', // 設定画面で貼り付けるJSON
     cloudEnabled: false,
     teamCode: '', // Firestore上のチーム識別子

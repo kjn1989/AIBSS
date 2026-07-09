@@ -4,6 +4,7 @@ import { parseFirebaseConfig } from '../lib/cloud.js';
 import { encodeWatchLink, encodeInviteLink } from './WatchView.jsx';
 import QRCode from './QRCode.jsx';
 import { battingCSV, pitchingCSV, playLogCSV, atBatCSV, downloadCSV, shareCSV } from '../lib/csv.js';
+import { EDITIONS } from '../lib/model.js';
 
 export default function SettingsTab() {
   const { state, dispatch } = useStore();
@@ -27,6 +28,22 @@ export default function SettingsTab() {
           onChange={(e) => dispatch({ type: 'UPDATE_SETTINGS', patch: { teamName: e.target.value } })}
           placeholder="マイチーム"
         />
+        <label className="small dim mt8" style={{ display: 'block' }}>エディション</label>
+        <div className="toggle-row">
+          {EDITIONS.map((ed) => (
+            <button
+              key={ed}
+              className={state.settings.edition === ed ? 'active' : ''}
+              onClick={() => dispatch({ type: 'UPDATE_SETTINGS', patch: { edition: ed } })}
+            >
+              {ed}
+            </button>
+          ))}
+        </div>
+        <p className="small dim mt8">
+          「草野球」では📇AI選手名鑑・🤖AIスタメン提案が使えます(パワプロ風の際どい寸評を含むため)。
+          「ブカツ(中-大)」「少年野球」ではこの2機能は表示されません。
+        </p>
       </div>
 
       <div className="card">
@@ -90,10 +107,11 @@ export default function SettingsTab() {
       </div>
 
       <div className="card">
-        <h2>AI選手名鑑の設定</h2>
+        <h2>AI機能(Gemini)の設定</h2>
         <p className="small dim" style={{ marginBottom: 10 }}>
-          選手個人ページの「📇 名鑑」でのスカウト寸評生成に使用します(任意)。
-          未設定の場合はダミー文言が表示されます。
+          {state.settings.edition === '草野球'
+            ? '選手個人ページの「📇 名鑑」でのスカウト寸評生成、🤖AIスタメン提案、CSV取り込み時のAI補完等に使用します(任意)。未設定の場合はダミー文言が表示されます。'
+            : 'CSV取り込み時のAI補完等に使用します(任意)。📇AI選手名鑑・🤖AIスタメン提案は「草野球」エディションのみの機能です。'}
         </p>
         <label className="small dim">Gemini APIキー</label>
         <input

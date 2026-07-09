@@ -10,6 +10,8 @@ export default function MemberSection() {
   const [name, setName] = useState('');
   const [role, setRole] = useState(MEMBER_ROLES[0]);
   const [scoutId, setScoutId] = useState(null);
+  // AI選手名鑑は「草野球」エディション限定の機能
+  const scoutEnabled = state.settings.edition === '草野球';
 
   const add = () => {
     const n = name.trim();
@@ -29,7 +31,8 @@ export default function MemberSection() {
     <div className="card">
       <h2>参加メンバー <span className="dim small">(マネージャー・応援など)</span></h2>
       <p className="small dim" style={{ marginBottom: 10 }}>
-        試合に出場しなくても、マネージャーや応援・宴会などでの参加回数を記録できます。名前をタップすると名鑑ページが開きます。
+        試合に出場しなくても、マネージャーや応援・宴会などでの参加回数を記録できます。
+        {scoutEnabled && '名前をタップすると名鑑ページが開きます。'}
       </p>
 
       <div className="flex" style={{ gap: 6, marginBottom: 12 }}>
@@ -51,7 +54,7 @@ export default function MemberSection() {
       ) : (
         members.map((m) => (
           <div className="row" key={m.id}>
-            <div className="grow" onClick={() => setScoutId(m.id)} role="button">
+            <div className="grow" onClick={() => scoutEnabled && setScoutId(m.id)} role={scoutEnabled ? 'button' : undefined}>
               <b style={{ color: 'var(--accent)' }}>{m.name}</b>
               <span className="pill" style={{ marginLeft: 6 }}>{m.role}</span>
             </div>
@@ -73,7 +76,7 @@ export default function MemberSection() {
         ))
       )}
 
-      {scoutMember && (
+      {scoutEnabled && scoutMember && (
         <ScoutCard player={scoutMember} saveType="UPDATE_MEMBER" onClose={() => setScoutId(null)} />
       )}
     </div>

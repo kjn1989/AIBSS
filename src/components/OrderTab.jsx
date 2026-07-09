@@ -90,6 +90,8 @@ export default function OrderTab() {
   const nameOf = usePlayerName();
   const [subSlot, setSubSlot] = useState(null);
   const [coachOpen, setCoachOpen] = useState(false);
+  // AIスタメン提案は「草野球」エディション限定の機能
+  const aiCoachEnabled = state.settings.edition === '草野球';
 
   if (!game || game.status === 'finished') {
     return <div className="big-note">📋 スコア入力タブで試合を開始すると、オーダーを設定できます。</div>;
@@ -99,20 +101,22 @@ export default function OrderTab() {
   const gameStarted = game.atBats.length > 0 ||
     game.playLogs.some((l) => ['atbat', 'defense', 'run', 'sb'].includes(l.kind));
 
-  const coachBtn = <button className="small" onClick={() => setCoachOpen(true)}>🤖 AI提案</button>;
-  const coachView = coachOpen && (
+  const coachBtn = aiCoachEnabled && <button className="small" onClick={() => setCoachOpen(true)}>🤖 AI提案</button>;
+  const coachView = aiCoachEnabled && coachOpen && (
     <HeadCoachView game={game} canApply={!gameStarted} onClose={() => setCoachOpen(false)} />
   );
 
   if (game.lineup.length === 0) {
     return (
       <div>
-        <div className="card">
-          <div className="flex">
-            <span className="grow small dim">打順に迷ったら、AIヘッドコーチが提案します。</span>
-            {coachBtn}
+        {aiCoachEnabled && (
+          <div className="card">
+            <div className="flex">
+              <span className="grow small dim">打順に迷ったら、AIヘッドコーチが提案します。</span>
+              {coachBtn}
+            </div>
           </div>
-        </div>
+        )}
         <LineupWizard game={game} />
         {coachView}
       </div>

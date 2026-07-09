@@ -13,6 +13,8 @@ export default function PlayerView({ playerId, games, onClose }) {
   const { state } = useStore();
   const player = state.players.find((p) => p.id === playerId);
   const [showScout, setShowScout] = useState(false);
+  // AI選手名鑑は「草野球」エディション限定の機能
+  const scoutEnabled = state.settings.edition === '草野球';
 
   const batting = useMemo(() => aggregateBatting(games)[playerId], [games, playerId]);
   const pitching = useMemo(() => aggregatePitching(games)[playerId], [games, playerId]);
@@ -34,7 +36,11 @@ export default function PlayerView({ playerId, games, onClose }) {
       <header className="fullscreen-header">
         <button className="ghost small" onClick={onClose}>← 戻る</button>
         <h2>{player?.name || '選手'}{player?.number ? ` #${player.number}` : ''}</h2>
-        <button className="ghost small" onClick={() => setShowScout(true)}>📇 名鑑</button>
+        {scoutEnabled ? (
+          <button className="ghost small" onClick={() => setShowScout(true)}>📇 名鑑</button>
+        ) : (
+          <span style={{ width: 60 }} />
+        )}
       </header>
       <div className="fullscreen-body">
         <h1 className="player-page-name">{player?.name || '選手'}{player?.number ? ` #${player.number}` : ''}</h1>
@@ -98,7 +104,7 @@ export default function PlayerView({ playerId, games, onClose }) {
           </div>
         )}
       </div>
-      {showScout && (
+      {scoutEnabled && showScout && (
         <ScoutCard
           player={player}
           batting={batting}
