@@ -1,20 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../state/store.jsx';
 import {
-  officialAvailable, watchAuth, loginWithGoogle, sendLoginLink, logout,
+  officialAvailable, watchAuth, loginWithPassword, logout,
   createCloudTeam, createInvite, inviteUrl, listMyTeams, listMembers, setMemberRole, removeMember,
 } from '../lib/officialCloud.js';
 import QRCode from './QRCode.jsx';
 
 const ROLE_LABEL = { owner: '管理者', scorer: '記録係', viewer: '観戦' };
 
-// AI-BSS公式クラウド: ログイン+チーム登録+招待+メンバー管理。
+// AI-BSS公式クラウド(Supabase): ログイン+チーム登録+招待+メンバー管理。
 // 旧方式(自前Firebase)のCloudCardとは独立(公式が設定されていれば同期はこちらを優先)。
 export default function OfficialCloudCard() {
   const { state, dispatch } = useStore();
   const [user, setUser] = useState(undefined); // undefined=確認中 / null=未ログイン
   const [email, setEmail] = useState('');
-  const [sent, setSent] = useState(false);
+  const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [invite, setInvite] = useState(null); // { url, role }
@@ -83,7 +83,7 @@ export default function OfficialCloudCard() {
         <h2>☁️ AI-BSS公式クラウド</h2>
         <p className="small dim">
           準備中です。ログイン+招待リンクだけでチーム同期ができる公式クラウド機能が、まもなく使えるようになります。
-          (運営者向け: docs/firebase-setup.md の手順で接続設定を注入すると有効になります)
+          (運営者向け: docs/supabase-setup.md の手順で接続設定を注入すると有効になります)
         </p>
       </div>
     );
@@ -98,29 +98,29 @@ export default function OfficialCloudCard() {
       {user === null && (
         <>
           <p className="small dim" style={{ marginBottom: 10 }}>
-            ログインすると、このチームをクラウドに登録して、招待リンクだけでチームメイトと同期できます(Firebase設定の貼り付けは不要)。
+            メールアドレスとパスワードでログイン(初めての場合は自動で新規登録)すると、
+            このチームをクラウドに登録して、招待リンクだけでチームメイトと同期できます。
           </p>
-          <button className="primary" style={{ width: '100%', marginBottom: 8 }} disabled={busy} onClick={run(loginWithGoogle)}>
-            Googleでログイン
+          <input type="email" placeholder="メールアドレス" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <input
+            type="password" placeholder="パスワード(6文字以上)" className="mt8"
+            value={password} onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && email.includes('@') && password.length >= 6 && run(() => loginWithPassword(email.trim(), password))()}
+          />
+          <button
+            className="primary mt8" style={{ width: '100%' }}
+            disabled={busy || !email.includes('@') || password.length < 6}
+            onClick={run(() => loginWithPassword(email.trim(), password))}
+          >
+            {busy ? '処理中…' : 'ログイン / 新規登録'}
           </button>
-          <div className="flex" style={{ gap: 6 }}>
-            <input className="grow" type="email" placeholder="メールアドレス" value={email} onChange={(e) => setEmail(e.target.value)} />
-            <button
-              className="small"
-              disabled={busy || !email.includes('@')}
-              onClick={run(async () => { await sendLoginLink(email.trim()); setSent(true); })}
-            >
-              リンク送信
-            </button>
-          </div>
-          {sent && <p className="small mt8" style={{ color: 'var(--green)' }}>✉️ ログイン用リンクを送信しました。メールを開いてリンクをタップしてください。</p>}
         </>
       )}
 
       {user && !teamId && (
         <>
           <p className="small" style={{ marginBottom: 8 }}>
-            ログイン中: <b>{user.displayName || user.email}</b>
+            ログイン中: <b>{user.email}</b>
             <button className="small ghost" style={{ marginLeft: 8 }} onClick={run(logout)}>ログアウト</button>
           </p>
           <p className="small dim" style={{ marginBottom: 10 }}>
@@ -171,7 +171,7 @@ export default function OfficialCloudCard() {
               {members.map((m) => (
                 <div className="row" key={m.uid}>
                   <div className="grow">
-                    <b>{m.name}</b>
+                    <b>{m.name || m.email}</b>
                     <div className="dim small">{m.email}</div>
                   </div>
                   {myRole === 'owner' && m.uid !== user.uid ? (
@@ -190,7 +190,7 @@ export default function OfficialCloudCard() {
                       <button
                         className="small ghost"
                         style={{ color: 'var(--red)' }}
-                        onClick={() => window.confirm(`${m.name} をチームから外しますか？`) && run(async () => {
+                        onClick={() => window.confirm(`${m.name || m.email} をチームから外しますか？`) && run(async () => {
                           await removeMember(teamId, m.uid);
                           setMembers(await listMembers(teamId));
                         })()}

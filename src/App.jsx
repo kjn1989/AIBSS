@@ -8,7 +8,7 @@ import ResultTab from './components/ResultTab.jsx';
 import SettingsTab from './components/SettingsTab.jsx';
 import CloudSync from './components/CloudSync.jsx';
 import { decodeConfig } from './components/WatchView.jsx';
-import { officialAvailable, completeLoginLink, currentUserAsync, loginWithGoogle, joinByInvite } from './lib/officialCloud.js';
+import { officialAvailable, currentUserAsync, loginWithPassword, joinByInvite } from './lib/officialCloud.js';
 import { addProfile, switchActiveProfile } from './lib/profiles.js';
 import { persist } from './state/store.jsx';
 
@@ -51,10 +51,11 @@ function useOfficialJoin(state) {
   const [token, setToken] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [needLogin, setNeedLogin] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
   useEffect(() => {
-    // メールリンクログインの完了(該当時のみ動く)
-    if (officialAvailable()) completeLoginLink().catch(() => {});
     const params = new URLSearchParams(window.location.search);
     const t = params.get('ct');
     if (!t) return;
@@ -62,13 +63,19 @@ function useOfficialJoin(state) {
     const clean = new URL(window.location.href);
     clean.search = '';
     window.history.replaceState({}, '', clean.toString());
+    if (officialAvailable()) currentUserAsync().then((u) => setNeedLogin(!u));
   }, []);
 
   const join = async () => {
     setBusy(true);
     setError('');
     try {
-      if (!(await currentUserAsync())) await loginWithGoogle();
+      if (!(await currentUserAsync())) {
+        if (!email.includes('@') || password.length < 6) {
+          throw new Error('メールアドレスとパスワード(6文字以上)を入力してください');
+        }
+        await loginWithPassword(email.trim(), password);
+      }
       const meta = await joinByInvite(token);
       // 参加したクラウドチーム専用のローカルプロフィールを作って切り替える
       persist(state); // 現在のチームを保存してから
@@ -80,7 +87,7 @@ function useOfficialJoin(state) {
       setBusy(false);
     }
   };
-  return { token, busy, error, join, dismiss: () => setToken(null) };
+  return { token, busy, error, join, needLogin, email, setEmail, password, setPassword, dismiss: () => setToken(null) };
 }
 
 export default function App() {
@@ -100,14 +107,26 @@ export default function App() {
           <div className="invite-card">
             <h2>チームに参加 (AI-BSS公式クラウド)</h2>
             <p className="small dim">
-              招待リンクからの参加です。ログインするとチームに参加し、このチーム専用の
-              プロフィールが作られて選手・試合データが同期されます。
+              招待リンクからの参加です。参加するとこのチーム専用のプロフィールが作られて、
+              選手・試合データが同期されます。
             </p>
-            {officialJoin.error && <div className="warn-box">⚠️ {officialJoin.error}</div>}
+            {officialJoin.needLogin && (
+              <>
+                <input
+                  type="email" placeholder="メールアドレス"
+                  value={officialJoin.email} onChange={(e) => officialJoin.setEmail(e.target.value)}
+                />
+                <input
+                  type="password" placeholder="パスワード(6文字以上・初回は自動登録)" className="mt8"
+                  value={officialJoin.password} onChange={(e) => officialJoin.setPassword(e.target.value)}
+                />
+              </>
+            )}
+            {officialJoin.error && <div className="warn-box mt8">⚠️ {officialJoin.error}</div>}
             <div className="sheet-actions">
               <button className="ghost" onClick={officialJoin.dismiss} disabled={officialJoin.busy}>今はしない</button>
               <button className="primary" onClick={officialJoin.join} disabled={officialJoin.busy}>
-                {officialJoin.busy ? '参加中…' : 'ログインして参加'}
+                {officialJoin.busy ? '参加中…' : officialJoin.needLogin ? 'ログインして参加' : '参加する'}
               </button>
             </div>
           </div>

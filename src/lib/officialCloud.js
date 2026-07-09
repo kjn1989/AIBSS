@@ -1,145 +1,127 @@
 // ============================================================
-// AI-BSS公式クラウド(運営ホスト型Firebase)
-//  - 認証: Google / メールリンク(パスワードレス)
-//  - チーム管理: teams/{id} + members(権限: owner/scorer/viewer) + invites(招待トークン)
-//  - 同期: teams/{id}/games|players|crew を購読+push(LWW判定は CloudSync 側)
-// アクセス制御はサーバ側の firestore.rules が強制する(リポジトリ同梱)。
-// 旧方式(自前Firebase+チームコード / lib/cloud.js)とは独立して併存する。
+// AI-BSS公式クラウド(Supabase)
+//  - 認証: メール+パスワード(確認メール不要設定を推奨) / マジックリンク(任意)
+//  - チーム管理: teams + team_members(権限: owner/scorer/viewer) + invites(招待トークン)
+//  - 同期: team_games|team_players|team_crew を初回全取得+Realtime購読、push=upsert
+// アクセス制御はサーバ側のRLS(supabase/schema.sql)が強制する。
+// Supabaseを選んだ理由: 無料プランはカード登録不要で、上限到達時は停止するだけ
+// (従量課金が構造的に発生しない)。旧方式(自前Firebase / lib/cloud.js)とは独立して併存。
 // ============================================================
-import { initializeApp } from 'firebase/app';
-import {
-  getAuth, GoogleAuthProvider, signInWithPopup, sendSignInLinkToEmail,
-  isSignInWithEmailLink, signInWithEmailLink, onAuthStateChanged, signOut,
-  connectAuthEmulator, createUserWithEmailAndPassword, signInWithEmailAndPassword,
-} from 'firebase/auth';
-import {
-  initializeFirestore, persistentLocalCache, persistentSingleTabManager,
-  connectFirestoreEmulator, collection, doc, setDoc, getDoc, getDocs, deleteDoc, onSnapshot,
-} from 'firebase/firestore';
+import { createClient } from '@supabase/supabase-js';
 import { getOfficialConfig, officialAvailable } from './officialConfig.js';
 import { uid as newId } from './model.js';
 
 export { officialAvailable };
 
-let app = null;
-let auth = null;
-let db = null;
+let client = null;
 
-function ensureInit() {
-  if (app) return true;
+function ensureClient() {
+  if (client) return client;
   const cfg = getOfficialConfig();
-  if (!cfg || !cfg.apiKey || !cfg.projectId) return false;
-  app = initializeApp(cfg, 'aibss-official');
-  auth = getAuth(app);
-  db = initializeFirestore(app, {
-    localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() }),
-  });
-  if (cfg.emulator) {
-    // ローカル検証(Firebaseエミュレータ)用。本番configにemulatorフラグは入れないこと。
-    const host = cfg.emulatorHost || '127.0.0.1';
-    connectAuthEmulator(auth, `http://${host}:9099`, { disableWarnings: true });
-    connectFirestoreEmulator(db, host, 8080);
-    // e2e用のテストログイン(エミュレータ時のみ露出)
-    window.__aibssTestSignIn = async (email, password = 'aibss-test-pass') => {
-      try {
-        await createUserWithEmailAndPassword(auth, email, password);
-      } catch {
-        await signInWithEmailAndPassword(auth, email, password);
-      }
-    };
-  }
-  return true;
+  if (!cfg?.url || !cfg?.anonKey) return null;
+  client = createClient(cfg.url, cfg.anonKey);
+  return client;
+}
+
+// Supabaseのuserをアプリ内の共通形( uid / email / displayName )へ
+function toUser(u) {
+  if (!u) return null;
+  return { uid: u.id, email: u.email || '', displayName: u.user_metadata?.name || u.email || '名無し' };
+}
+
+function jpAuthError(error) {
+  const m = error?.message || String(error);
+  if (/Invalid login credentials/i.test(m)) return 'メールアドレスまたはパスワードが違います';
+  if (/Password should be at least/i.test(m)) return 'パスワードは6文字以上にしてください';
+  if (/rate limit/i.test(m)) return '試行回数が多すぎます。しばらく待ってから再度お試しください';
+  if (/already registered/i.test(m)) return 'このメールアドレスは登録済みです(パスワードが違う可能性)';
+  return m;
 }
 
 // ---------------- 認証 ----------------
 export function watchAuth(cb) {
-  if (!ensureInit()) return () => {};
-  return onAuthStateChanged(auth, cb);
-}
-
-export async function loginWithGoogle() {
-  if (!ensureInit()) throw new Error('公式クラウドは未設定です');
-  await signInWithPopup(auth, new GoogleAuthProvider());
-}
-
-const PENDING_EMAIL_KEY = 'bbscorer.pendingLoginEmail';
-
-export async function sendLoginLink(email) {
-  if (!ensureInit()) throw new Error('公式クラウドは未設定です');
-  await sendSignInLinkToEmail(auth, email, {
-    url: window.location.origin + window.location.pathname,
-    handleCodeInApp: true,
+  const sb = ensureClient();
+  if (!sb) return () => {};
+  const { data: { subscription } } = sb.auth.onAuthStateChange((_event, session) => {
+    cb(toUser(session?.user || null));
   });
-  localStorage.setItem(PENDING_EMAIL_KEY, email);
+  return () => subscription.unsubscribe();
 }
 
-// メールリンクからの遷移でログインを完了する(App起動時に呼ぶ)。該当しなければ何もしない。
-export async function completeLoginLink() {
-  if (!ensureInit()) return false;
-  if (!isSignInWithEmailLink(auth, window.location.href)) return false;
-  const email = localStorage.getItem(PENDING_EMAIL_KEY) ||
-    window.prompt('確認のため、ログイン用リンクを受け取ったメールアドレスを入力してください');
-  if (!email) return false;
-  await signInWithEmailLink(auth, email, window.location.href);
-  localStorage.removeItem(PENDING_EMAIL_KEY);
-  const clean = new URL(window.location.href);
-  clean.search = '';
-  window.history.replaceState({}, '', clean.toString());
-  return true;
+export function currentUserAsync() {
+  const sb = ensureClient();
+  if (!sb) return Promise.resolve(null);
+  return sb.auth.getSession().then(({ data }) => toUser(data?.session?.user || null));
+}
+
+// ログイン。未登録なら自動で新規登録も試す(確認メール設定がONの場合はメール確認を促す)
+export async function loginWithPassword(email, password) {
+  const sb = ensureClient();
+  if (!sb) throw new Error('公式クラウドは未設定です');
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  if (!error) return;
+  if (/Invalid login credentials/i.test(error.message)) {
+    const { data, error: e2 } = await sb.auth.signUp({ email, password });
+    if (e2) throw new Error(jpAuthError(e2));
+    if (!data.session) {
+      throw new Error('確認メールを送信しました。メール内のリンクを開いてから、もう一度ログインしてください。');
+    }
+    return; // 新規登録+即ログイン成功
+  }
+  throw new Error(jpAuthError(error));
+}
+
+// マジックリンク(パスワード不要)。Supabase既定のメール送信は頻度制限があるため補助扱い
+export async function sendLoginLink(email) {
+  const sb = ensureClient();
+  if (!sb) throw new Error('公式クラウドは未設定です');
+  const { error } = await sb.auth.signInWithOtp({
+    email,
+    options: { emailRedirectTo: window.location.origin + window.location.pathname },
+  });
+  if (error) throw new Error(jpAuthError(error));
 }
 
 export async function logout() {
-  if (ensureInit()) await signOut(auth);
-}
-
-// セッション復元(非同期)を待ってから現在のユーザーを返す。未ログインならnull
-export function currentUserAsync() {
-  if (!ensureInit()) return Promise.resolve(null);
-  return new Promise((resolve) => {
-    const unsub = onAuthStateChanged(auth, (u) => {
-      unsub();
-      resolve(u);
-    });
-  });
+  const sb = ensureClient();
+  if (sb) await sb.auth.signOut();
 }
 
 // ---------------- チーム管理 ----------------
-function memberDoc(u, role, inviteToken) {
-  return {
-    uid: u.uid,
-    role, // 'owner' | 'scorer' | 'viewer'
-    name: u.displayName || u.email || '名無し',
-    email: u.email || '',
-    joinedAt: Date.now(),
-    ...(inviteToken ? { invite: inviteToken } : {}),
-  };
+async function requireUser() {
+  const u = await currentUserAsync();
+  if (!u) throw new Error('ログインしてください');
+  return u;
 }
 
 export async function createCloudTeam({ name, edition }) {
-  if (!ensureInit()) throw new Error('公式クラウドは未設定です');
-  const u = auth.currentUser;
-  if (!u) throw new Error('ログインしてください');
+  const sb = ensureClient();
+  if (!sb) throw new Error('公式クラウドは未設定です');
+  const u = await requireUser();
   const teamId = newId();
-  await setDoc(doc(db, 'teams', teamId), {
-    id: teamId, name, edition, ownerUid: u.uid, createdAt: Date.now(), plan: 'free',
+  const { error: e1 } = await sb.from('teams').insert({
+    id: teamId, name, edition, owner_uid: u.uid, plan: 'free', created_at: Date.now(),
   });
-  await setDoc(doc(db, 'teams', teamId, 'members', u.uid), memberDoc(u, 'owner', null));
-  await setDoc(doc(db, 'users', u.uid, 'memberships', teamId), {
-    teamId, teamName: name, role: 'owner', joinedAt: Date.now(),
+  if (e1) throw new Error(e1.message);
+  const { error: e2 } = await sb.from('team_members').insert({
+    team_id: teamId, uid: u.uid, role: 'owner', name: u.displayName, email: u.email, joined_at: Date.now(),
   });
+  if (e2) throw new Error(e2.message);
   return teamId;
 }
 
 // 招待トークンを発行(URLに埋め込む。トークンを知っていること自体が参加権)
 export async function createInvite(teamId, role = 'scorer') {
-  if (!ensureInit()) throw new Error('公式クラウドは未設定です');
+  const sb = ensureClient();
+  if (!sb) throw new Error('公式クラウドは未設定です');
+  const u = await requireUser();
   const token = newId() + newId();
-  await setDoc(doc(db, 'invites', token), {
-    teamId, role,
-    createdBy: auth.currentUser.uid,
-    createdAt: Date.now(),
-    expiresAt: Date.now() + 14 * 86400000, // 14日で失効
+  const { error } = await sb.from('invites').insert({
+    token, team_id: teamId, role,
+    created_by: u.uid, created_at: Date.now(),
+    expires_at: Date.now() + 14 * 86400000, // 14日で失効
   });
+  if (error) throw new Error(error.message);
   return token;
 }
 
@@ -150,75 +132,106 @@ export function inviteUrl(token) {
 }
 
 export async function joinByInvite(token) {
-  if (!ensureInit()) throw new Error('公式クラウドは未設定です');
-  const u = auth.currentUser;
-  if (!u) throw new Error('ログインしてください');
-  const inv = await getDoc(doc(db, 'invites', token));
-  if (!inv.exists()) throw new Error('招待が見つかりません(削除済み・URL誤りの可能性)');
-  const { teamId, role, expiresAt } = inv.data();
-  if (expiresAt < Date.now()) throw new Error('招待の有効期限が切れています');
-  await setDoc(doc(db, 'teams', teamId, 'members', u.uid), memberDoc(u, role, token));
-  const team = await getDoc(doc(db, 'teams', teamId));
-  const meta = { name: team.data()?.name || 'チーム', edition: team.data()?.edition || '草野球' };
-  await setDoc(doc(db, 'users', u.uid, 'memberships', teamId), {
-    teamId, teamName: meta.name, role, joinedAt: Date.now(),
+  const sb = ensureClient();
+  if (!sb) throw new Error('公式クラウドは未設定です');
+  const u = await requireUser();
+  const { data, error } = await sb.rpc('get_invite', { tok: token });
+  if (error) throw new Error(error.message);
+  const inv = data?.[0];
+  if (!inv) throw new Error('招待が見つかりません(削除済み・URL誤りの可能性)');
+  if (inv.expires_at < Date.now()) throw new Error('招待の有効期限が切れています');
+  const { error: e2 } = await sb.from('team_members').insert({
+    team_id: inv.team_id, uid: u.uid, role: inv.role,
+    name: u.displayName, email: u.email, invite: token, joined_at: Date.now(),
   });
-  return { teamId, role, ...meta };
+  // 既に参加済み(重複キー)はエラーにしない
+  if (e2 && !/duplicate key/i.test(e2.message)) throw new Error(e2.message);
+  return { teamId: inv.team_id, role: inv.role, name: inv.team_name, edition: inv.team_edition };
 }
 
 export async function listMyTeams() {
-  if (!ensureInit()) return [];
-  const u = auth.currentUser;
+  const sb = ensureClient();
+  if (!sb) return [];
+  const u = await currentUserAsync();
   if (!u) return [];
-  const snap = await getDocs(collection(db, 'users', u.uid, 'memberships'));
-  return snap.docs.map((d) => d.data());
+  const { data, error } = await sb
+    .from('team_members')
+    .select('team_id, role, teams(name, edition)')
+    .eq('uid', u.uid);
+  if (error) return [];
+  return (data || []).map((r) => ({ teamId: r.team_id, role: r.role, teamName: r.teams?.name || 'チーム' }));
 }
 
 export async function listMembers(teamId) {
-  if (!ensureInit()) return [];
-  const snap = await getDocs(collection(db, 'teams', teamId, 'members'));
-  return snap.docs.map((d) => d.data());
+  const sb = ensureClient();
+  if (!sb) return [];
+  const { data, error } = await sb.from('team_members').select('*').eq('team_id', teamId).order('joined_at');
+  if (error) return [];
+  return data || [];
 }
 
 export async function setMemberRole(teamId, uid, role) {
-  await setDoc(doc(db, 'teams', teamId, 'members', uid), { role }, { merge: true });
+  const sb = ensureClient();
+  const { error } = await sb.from('team_members').update({ role }).eq('team_id', teamId).eq('uid', uid);
+  if (error) throw new Error(error.message);
 }
 
 export async function removeMember(teamId, uid) {
-  await deleteDoc(doc(db, 'teams', teamId, 'members', uid));
+  const sb = ensureClient();
+  const { error } = await sb.from('team_members').delete().eq('team_id', teamId).eq('uid', uid);
+  if (error) throw new Error(error.message);
 }
 
 // ---------------- 同期接続(lib/cloud.jsのconnectCloudと同じ呼び出し形) ----------------
-// Firestoreはundefinedを許容しないため除去(JSON往復でスキーマ同一性も担保)
+// undefinedはjsonbに入らないため除去(JSON往復でスキーマ同一性も担保)
 function sanitize(obj) {
   return JSON.parse(JSON.stringify(obj));
 }
 
 export function connectOfficial({ teamId, onGames, onPlayers, onCrew, onStatus }) {
-  if (!ensureInit() || !teamId) {
+  const sb = ensureClient();
+  if (!sb || !teamId) {
     onStatus?.('error');
     return null;
   }
   onStatus?.('connecting');
-  const unsubs = [];
-  const sub = (col, cb) => {
-    unsubs.push(onSnapshot(
-      collection(db, 'teams', teamId, col),
-      (snap) => {
-        onStatus?.('on');
-        cb?.(snap.docs.map((d) => d.data()));
-      },
-      () => onStatus?.('error')
-    ));
+
+  const load = async (table, cb) => {
+    const { data, error } = await sb.from(table).select('data').eq('team_id', teamId);
+    if (error) throw error;
+    cb?.((data || []).map((r) => r.data));
   };
-  sub('games', onGames);
-  sub('players', onPlayers);
-  sub('crew', onCrew);
+  Promise.all([load('team_games', onGames), load('team_players', onPlayers), load('team_crew', onCrew)])
+    .then(() => onStatus?.('on'))
+    .catch(() => onStatus?.('error'));
+
+  const onRow = (cb) => (payload) => {
+    const row = payload.new;
+    if (row?.data) cb?.([row.data]);
+  };
+  const channel = sb
+    .channel(`team-${teamId}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'team_games', filter: `team_id=eq.${teamId}` }, onRow(onGames))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'team_players', filter: `team_id=eq.${teamId}` }, onRow(onPlayers))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'team_crew', filter: `team_id=eq.${teamId}` }, onRow(onCrew))
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') onStatus?.('on');
+      else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') onStatus?.('error');
+    });
+
+  const push = (table) => async (obj) => {
+    const { error } = await sb.from(table).upsert({
+      team_id: teamId, id: obj.id, data: sanitize(obj), updated_at: obj.updatedAt || 0,
+    });
+    if (error) throw error;
+  };
   return {
     teamId,
-    async pushGame(game) { await setDoc(doc(db, 'teams', teamId, 'games', game.id), sanitize(game)); },
-    async pushPlayer(player) { await setDoc(doc(db, 'teams', teamId, 'players', player.id), sanitize(player)); },
-    async pushCrew(member) { await setDoc(doc(db, 'teams', teamId, 'crew', member.id), sanitize(member)); },
-    teardown() { unsubs.forEach((u) => u()); },
+    pushGame: push('team_games'),
+    pushPlayer: push('team_players'),
+    pushCrew: push('team_crew'),
+    teardown() {
+      sb.removeChannel(channel);
+    },
   };
 }
