@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useStore } from '../state/store.jsx';
 import { buildTemplateCsv, parseGameCsv, mergeCompletion } from '../lib/importCsv.js';
 import { completeBoxScore } from '../lib/gemini.js';
+import { downloadCSV } from '../lib/csv.js';
 import FullscreenView from './FullscreenView.jsx';
 
 // 指定フォーマットCSVからボックススコア＋線スコアを取り込む
@@ -14,15 +15,8 @@ export default function ImportCsvView({ onClose }) {
   const [completing, setCompleting] = useState(false);
   const [completeNote, setCompleteNote] = useState(null); // { ok, filledCount } | { ok:false, error }
 
-  const downloadTemplate = () => {
-    const blob = new Blob([buildTemplateCsv(myTeam)], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'aibss-import-template.csv';
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  // downloadCSV()はUTF-8 BOM付きでダウンロードする(BOM無しだとExcelがShift-JIS等と誤認して文字化けするため)
+  const downloadTemplate = () => downloadCSV('aibss-import-template.csv', buildTemplateCsv(myTeam));
 
   const onFile = (file) => {
     setError('');
