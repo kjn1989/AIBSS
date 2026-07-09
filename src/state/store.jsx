@@ -11,9 +11,15 @@ import {
 } from '../lib/model.js';
 import { generateDemoData } from '../lib/demo.js';
 import { idbSave } from '../lib/durableStore.js';
+import { getActiveProfileId, profileStorageKey, listProfiles, updateProfileMeta } from '../lib/profiles.js';
 
-export const STORAGE_KEY = 'bbscorer.v1';
 const UNDO_LIMIT = 50;
+// アクティブなチーム(プロフィール)のデータ保存キー。main.jsxのensureRegistry()が
+// 描画前に必ずアクティブIDを確定させるため、通常はフォールバックに落ちない。
+function currentStorageKey() {
+  const id = getActiveProfileId();
+  return id ? profileStorageKey(id) : 'bbscorer.v1';
+}
 
 // ------------------------------------------------------------
 // 初期状態
@@ -44,7 +50,7 @@ const PERSIST_KEYS = ['players', 'members', 'games', 'currentGameId', 'settings'
 
 function loadPersisted() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(currentStorageKey());
     if (!raw) return null;
     return JSON.parse(raw);
   } catch {
@@ -71,8 +77,9 @@ export function persist(state) {
     const out = {};
     for (const k of PERSIST_KEYS) out[k] = state[k];
     const json = JSON.stringify(out);
-    localStorage.setItem(STORAGE_KEY, json);
-    idbSave(json); // IndexedDBミラー(非同期・失敗は無視。データ消失対策の二重化)
+    const key = currentStorageKey();
+    localStorage.setItem(key, json);
+    idbSave(key, json); // IndexedDBミラー(非同期・失敗は無視。データ消失対策の二重化)
   } catch {
     /* 容量超過等は無視(次回保存で回復) */
   }
@@ -851,11 +858,16 @@ const StoreContext = createContext(null);
 export function StoreProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, initialState, (init) => {
     const saved = loadPersisted();
-    if (!saved) return init;
-    const games = Object.fromEntries(
-      Object.entries(saved.games || {}).map(([id, g]) => [id, ensureOppFields(g)])
-    );
-    return { ...init, ...saved, games };
+    if (saved) {
+      const games = Object.fromEntries(
+        Object.entries(saved.games || {}).map(([id, g]) => [id, ensureOppFields(g)])
+      );
+      return { ...init, ...saved, games };
+    }
+    // 新規チーム(まだデータ未保存): チーム切り替え画面で入力したチーム名/エディションを反映
+    const meta = listProfiles().find((p) => p.id === getActiveProfileId());
+    if (meta) return { ...init, settings: { ...init.settings, teamName: meta.name, edition: meta.edition } };
+    return init;
   });
 
   // 永続化(変更のたび、軽くデバウンス)
@@ -865,6 +877,12 @@ export function StoreProvider({ children }) {
     timer.current = setTimeout(() => persist(state), 150);
     return () => clearTimeout(timer.current);
   }, [state]);
+
+  // チーム切り替えリストの表示名/エディションを、設定変更のたびレジストリ側にも同期する
+  useEffect(() => {
+    const id = getActiveProfileId();
+    if (id) updateProfileMeta(id, { name: state.settings.teamName, edition: state.settings.edition });
+  }, [state.settings.teamName, state.settings.edition]);
 
   return <StoreContext.Provider value={{ state, dispatch }}>{children}</StoreContext.Provider>;
 }

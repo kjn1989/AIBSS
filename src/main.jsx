@@ -2,8 +2,9 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.jsx';
 import WatchView from './components/WatchView.jsx';
-import { StoreProvider, STORAGE_KEY } from './state/store.jsx';
+import { StoreProvider } from './state/store.jsx';
 import { recoverIfNeeded, requestPersistentStorage } from './lib/durableStore.js';
+import { ensureRegistry, getActiveProfileId, profileStorageKey, LEGACY_DATA_KEY } from './lib/profiles.js';
 import './styles.css';
 
 // ?watch=1 が付いたリンクは観戦専用ページ(読み取り専用)を表示する
@@ -19,9 +20,18 @@ function mount() {
   );
 }
 
-// データ消失対策: 描画前にIndexedDBミラーからの復旧を試み(localStorageが消えていた場合)、
-// その後で恒久ストレージの利用を要求する。IndexedDB不可でも必ずmountする。
-recoverIfNeeded(STORAGE_KEY)
+// データ消失対策 + 複数チーム対応: 描画前に
+//  1. 旧(単一チーム時代)データをIndexedDBミラーから復旧
+//  2. チームレジストリが無ければ、旧データを最初のチームとして移行
+//  3. 現在アクティブなチームのデータをIndexedDBミラーから復旧
+// の順で行い、その後で恒久ストレージの利用を要求する。IndexedDB不可でも必ずmountする。
+recoverIfNeeded(LEGACY_DATA_KEY)
+  .catch(() => {})
+  .then(() => {
+    ensureRegistry();
+    const activeId = getActiveProfileId();
+    return activeId ? recoverIfNeeded(profileStorageKey(activeId)) : null;
+  })
   .catch(() => {})
   .finally(() => {
     mount();

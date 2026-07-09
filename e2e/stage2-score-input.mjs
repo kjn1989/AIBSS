@@ -16,7 +16,7 @@ await page.reload({ waitUntil: 'networkidle' });
 await page.click('button[aria-label="設定"]');
 for (const name of ['青木', '木村', '斎藤', '松本', '井上']) {
   await page.fill('input[placeholder="選手名"]', name);
-  await page.click('button:has-text("追加")');
+  await page.click('.card:has(h2:has-text("選手登録")) button:has-text("追加")');
 }
 console.log('players added');
 

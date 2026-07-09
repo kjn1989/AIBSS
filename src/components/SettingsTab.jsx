@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { useStore, usePlayerName } from '../state/store.jsx';
+import { useStore, usePlayerName, persist } from '../state/store.jsx';
 import { parseFirebaseConfig } from '../lib/cloud.js';
 import { encodeWatchLink, encodeInviteLink } from './WatchView.jsx';
 import QRCode from './QRCode.jsx';
 import { battingCSV, pitchingCSV, playLogCSV, atBatCSV, downloadCSV, shareCSV } from '../lib/csv.js';
 import { EDITIONS } from '../lib/model.js';
+import { listProfiles, getActiveProfileId, addProfile, switchActiveProfile, deleteProfile } from '../lib/profiles.js';
 
 export default function SettingsTab() {
   const { state, dispatch } = useStore();
@@ -20,6 +21,8 @@ export default function SettingsTab() {
 
   return (
     <div>
+      <TeamSwitcherCard />
+
       <div className="card">
         <h2>チーム設定</h2>
         <label className="small dim">チーム名</label>
@@ -135,6 +138,81 @@ export default function SettingsTab() {
           クラウド共有を有効にすると、同じチームコードを設定した全員の端末とリアルタイム同期します。
         </p>
       </div>
+    </div>
+  );
+}
+
+// ---- 所属チームの追加・切り替え(草野球チームと部活チーム等、複数チームに所属する場合) ----
+function TeamSwitcherCard() {
+  const { state } = useStore();
+  const [profiles, setProfiles] = useState(() => listProfiles());
+  const activeId = getActiveProfileId();
+  const [adding, setAdding] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newEdition, setNewEdition] = useState(EDITIONS[0]);
+
+  const switchTo = (id) => {
+    if (id === activeId) return;
+    if (!window.confirm('チームを切り替えます。画面がリロードされます。')) return;
+    persist(state); // 切り替え前に現在のチームの最新データを確実に保存
+    switchActiveProfile(id);
+    window.location.reload();
+  };
+
+  const createTeam = () => {
+    const name = newName.trim();
+    if (!name) return;
+    persist(state);
+    const p = addProfile(name, newEdition);
+    switchActiveProfile(p.id);
+    window.location.reload();
+  };
+
+  const remove = (id, name) => {
+    if (profiles.length <= 1) { window.alert('最後の1チームは削除できません。'); return; }
+    if (!window.confirm(`「${name}」を削除しますか？\nこのチームの選手・試合データも全て削除されます。この操作は取り消せません。`)) return;
+    deleteProfile(id);
+    setProfiles(listProfiles());
+  };
+
+  return (
+    <div className="card">
+      <h2>所属チーム</h2>
+      <p className="small dim" style={{ marginBottom: 10 }}>
+        複数のチームに所属している場合、ここでチームを追加・切り替えできます(例: 草野球チームと部活チーム)。
+        チームごとに選手・試合・設定・クラウド共有が独立します。
+      </p>
+      {profiles.map((p) => (
+        <div className="row" key={p.id}>
+          <div className="grow" onClick={() => switchTo(p.id)} role="button">
+            <b style={{ color: p.id === activeId ? 'var(--accent)' : 'var(--text)' }}>
+              {p.id === activeId ? '✅ ' : ''}{p.name}
+            </b>
+            <span className="pill" style={{ marginLeft: 6 }}>{p.edition}</span>
+          </div>
+          {p.id !== activeId && (
+            <button className="small ghost" style={{ color: 'var(--red)' }} onClick={() => remove(p.id, p.name)}>削除</button>
+          )}
+        </div>
+      ))}
+      {adding ? (
+        <div className="mt12">
+          <label className="small dim">チーム名</label>
+          <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="例: ○○中学校野球部" />
+          <label className="small dim mt8" style={{ display: 'block' }}>エディション</label>
+          <div className="toggle-row">
+            {EDITIONS.map((ed) => (
+              <button key={ed} className={newEdition === ed ? 'active' : ''} onClick={() => setNewEdition(ed)}>{ed}</button>
+            ))}
+          </div>
+          <div className="grid2 mt8">
+            <button className="ghost" onClick={() => setAdding(false)}>キャンセル</button>
+            <button className="primary" disabled={!newName.trim()} onClick={createTeam}>追加して切り替え</button>
+          </div>
+        </div>
+      ) : (
+        <button className="mt12" style={{ width: '100%' }} onClick={() => setAdding(true)}>＋ チームを追加</button>
+      )}
     </div>
   );
 }

@@ -11,7 +11,10 @@
 
 const DB_NAME = 'aibss';
 const STORE = 'kv';
-const KEY = 'snapshot';
+// 複数チーム対応前(〜v1系)は固定キー'snapshot'に1件だけ保存していた。
+// 後方互換のため、旧データのIDB復旧時のみこのキーもフォールバック参照する。
+const LEGACY_SNAPSHOT_KEY = 'snapshot';
+const LEGACY_STORAGE_KEY = 'bbscorer.v1';
 
 function openDB() {
   return new Promise((resolve, reject) => {
@@ -27,12 +30,13 @@ function openDB() {
 }
 
 // スナップショット文字列(persist()が作るJSON)をIndexedDBへ保存。失敗は無視。
-export async function idbSave(snapshotString) {
+// key: localStorageキーと同じ文字列(チームごとに独立させるため)
+export async function idbSave(key, snapshotString) {
   try {
     const db = await openDB();
     await new Promise((resolve, reject) => {
       const tx = db.transaction(STORE, 'readwrite');
-      tx.objectStore(STORE).put(snapshotString, KEY);
+      tx.objectStore(STORE).put(snapshotString, key);
       tx.oncomplete = resolve;
       tx.onerror = () => reject(tx.error);
     });
@@ -42,12 +46,12 @@ export async function idbSave(snapshotString) {
   }
 }
 
-export async function idbLoad() {
+export async function idbLoad(key) {
   try {
     const db = await openDB();
     const val = await new Promise((resolve, reject) => {
       const tx = db.transaction(STORE, 'readonly');
-      const r = tx.objectStore(STORE).get(KEY);
+      const r = tx.objectStore(STORE).get(key);
       r.onsuccess = () => resolve(r.result || null);
       r.onerror = () => reject(r.error);
     });
@@ -64,13 +68,14 @@ export async function recoverIfNeeded(storageKey) {
   try {
     const ls = localStorage.getItem(storageKey);
     const hasLS = !!ls && ls !== 'null';
-    const idb = await idbLoad();
+    let idb = await idbLoad(storageKey);
+    if (!idb && storageKey === LEGACY_STORAGE_KEY) idb = await idbLoad(LEGACY_SNAPSHOT_KEY); // 旧固定キーからの後方互換復旧
     if (!hasLS && idb) {
       localStorage.setItem(storageKey, idb); // localStorageが消えていた → IDBから復旧
       return 'recovered';
     }
     if (hasLS && !idb) {
-      await idbSave(ls); // 既存ユーザーの初回: IDBにも複製しておく
+      await idbSave(storageKey, ls); // 既存ユーザーの初回: IDBにも複製しておく
       return 'seeded';
     }
     return 'ok';
