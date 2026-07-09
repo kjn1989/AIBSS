@@ -8,6 +8,9 @@ import ResultTab from './components/ResultTab.jsx';
 import SettingsTab from './components/SettingsTab.jsx';
 import CloudSync from './components/CloudSync.jsx';
 import { decodeConfig } from './components/WatchView.jsx';
+import { officialAvailable, completeLoginLink, currentUserAsync, loginWithGoogle, joinByInvite } from './lib/officialCloud.js';
+import { addProfile, switchActiveProfile } from './lib/profiles.js';
+import { persist } from './state/store.jsx';
 
 const TABS = [
   { id: 'home', label: 'ホーム', icon: '🏆' },
@@ -42,10 +45,49 @@ function useInvite(dispatch) {
   return { invite, accept, dismiss: () => setInvite(null) };
 }
 
+// 公式クラウドの招待リンク(?ct=トークン)で開かれたら、ログイン→チーム参加→専用の
+// チームプロフィール作成、まで面倒を見る
+function useOfficialJoin(state) {
+  const [token, setToken] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    // メールリンクログインの完了(該当時のみ動く)
+    if (officialAvailable()) completeLoginLink().catch(() => {});
+    const params = new URLSearchParams(window.location.search);
+    const t = params.get('ct');
+    if (!t) return;
+    setToken(t);
+    const clean = new URL(window.location.href);
+    clean.search = '';
+    window.history.replaceState({}, '', clean.toString());
+  }, []);
+
+  const join = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      if (!(await currentUserAsync())) await loginWithGoogle();
+      const meta = await joinByInvite(token);
+      // 参加したクラウドチーム専用のローカルプロフィールを作って切り替える
+      persist(state); // 現在のチームを保存してから
+      const p = addProfile(meta.name, meta.edition, { officialTeamId: meta.teamId });
+      switchActiveProfile(p.id);
+      window.location.reload();
+    } catch (e) {
+      setError(e?.message || String(e));
+      setBusy(false);
+    }
+  };
+  return { token, busy, error, join, dismiss: () => setToken(null) };
+}
+
 export default function App() {
   const [tab, setTab] = useState('home');
   const { state, dispatch } = useStore();
   const { invite, accept, dismiss } = useInvite(dispatch);
+  const officialJoin = useOfficialJoin(state);
 
   const cloudBadge =
     state.cloudStatus === 'on' ? '☁️' : state.cloudStatus === 'connecting' ? '⏳' : state.cloudStatus === 'error' ? '⚠️' : '';
@@ -53,6 +95,24 @@ export default function App() {
   return (
     <div className="app" data-edition={state.settings.edition || '草野球'}>
       <CloudSync />
+      {officialJoin.token && (
+        <div className="invite-overlay">
+          <div className="invite-card">
+            <h2>チームに参加 (AI-BSS公式クラウド)</h2>
+            <p className="small dim">
+              招待リンクからの参加です。ログインするとチームに参加し、このチーム専用の
+              プロフィールが作られて選手・試合データが同期されます。
+            </p>
+            {officialJoin.error && <div className="warn-box">⚠️ {officialJoin.error}</div>}
+            <div className="sheet-actions">
+              <button className="ghost" onClick={officialJoin.dismiss} disabled={officialJoin.busy}>今はしない</button>
+              <button className="primary" onClick={officialJoin.join} disabled={officialJoin.busy}>
+                {officialJoin.busy ? '参加中…' : 'ログインして参加'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {invite && (
         <div className="invite-overlay">
           <div className="invite-card">

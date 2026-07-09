@@ -1,0 +1,90 @@
+rules_version = '2';
+// ============================================================
+// AI-BSS公式クラウドのセキュリティルール
+// 権限モデル: teams/{teamId}/members/{uid} の role で制御
+//   owner  … 全部+メンバー管理・チーム設定
+//   scorer … スコア入力・選手/参加メンバー編集
+//   viewer … 閲覧のみ
+// 参加は invites/{token} (推測不能トークン+有効期限) 経由のみ。
+// デプロイ: Firebaseコンソール > Firestore > ルール に貼り付け(docs/firebase-setup.md参照)
+// ============================================================
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function memberPath(teamId) {
+      return /databases/$(database)/documents/teams/$(teamId)/members/$(request.auth.uid);
+    }
+    function isMember(teamId) {
+      return isSignedIn() && exists(memberPath(teamId));
+    }
+    function hasRole(teamId, roles) {
+      return isMember(teamId) && get(memberPath(teamId)).data.role in roles;
+    }
+    function isOwner(teamId) {
+      return hasRole(teamId, ['owner']);
+    }
+    function invite(token) {
+      return get(/databases/$(database)/documents/invites/$(token)).data;
+    }
+
+    // 自分の所属チーム一覧(本人のみ読み書き)
+    match /users/{uid}/memberships/{teamId} {
+      allow read, write: if isSignedIn() && request.auth.uid == uid;
+    }
+
+    match /teams/{teamId} {
+      // 作成: 自分をownerUidにする場合のみ
+      allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
+      allow read: if isMember(teamId);
+      allow update: if isOwner(teamId);
+      allow delete: if false; // 誤削除防止。削除は将来の管理機能で対応
+
+      match /members/{uid} {
+        allow read: if isMember(teamId);
+        // 参加(自分のメンバードキュメント作成):
+        //  a) チーム作成者本人がownerとして登録する場合
+        //  b) 有効な招待トークン(teamId/role一致・期限内)を添えた場合
+        allow create: if isSignedIn() && request.auth.uid == uid && request.resource.data.uid == uid && (
+          (
+            get(/databases/$(database)/documents/teams/$(teamId)).data.ownerUid == request.auth.uid
+            && request.resource.data.role == 'owner'
+          ) || (
+            request.resource.data.invite is string
+            && invite(request.resource.data.invite).teamId == teamId
+            && invite(request.resource.data.invite).role == request.resource.data.role
+            && invite(request.resource.data.invite).expiresAt > request.time.toMillis()
+          )
+        );
+        // ロール変更はownerのみ。退出(削除)は本人 or owner
+        allow update: if isOwner(teamId);
+        allow delete: if isOwner(teamId) || (isSignedIn() && request.auth.uid == uid);
+      }
+
+      match /players/{id} {
+        allow read: if isMember(teamId);
+        allow write: if hasRole(teamId, ['owner', 'scorer']);
+      }
+      match /games/{id} {
+        allow read: if isMember(teamId);
+        allow write: if hasRole(teamId, ['owner', 'scorer']);
+      }
+      // 参加メンバー(マネージャー/応援等。認証メンバーとは別物)
+      match /crew/{id} {
+        allow read: if isMember(teamId);
+        allow write: if hasRole(teamId, ['owner', 'scorer']);
+      }
+    }
+
+    match /invites/{token} {
+      // トークン(ドキュメントID)を知っていること自体が参加権(URL能力)。一覧取得は不可
+      allow get: if isSignedIn();
+      allow list: if false;
+      allow create: if isSignedIn() && hasRole(request.resource.data.teamId, ['owner']);
+      allow delete: if isSignedIn() && isOwner(resource.data.teamId);
+      allow update: if false;
+    }
+  }
+}

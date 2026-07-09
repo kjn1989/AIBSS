@@ -6,6 +6,7 @@ import QRCode from './QRCode.jsx';
 import { battingCSV, pitchingCSV, playLogCSV, atBatCSV, downloadCSV, shareCSV } from '../lib/csv.js';
 import { EDITIONS } from '../lib/model.js';
 import { listProfiles, getActiveProfileId, addProfile, switchActiveProfile, deleteProfile } from '../lib/profiles.js';
+import OfficialCloudCard from './OfficialCloudCard.jsx';
 
 export default function SettingsTab() {
   const { state, dispatch } = useStore();
@@ -126,6 +127,7 @@ export default function SettingsTab() {
         <p className="small dim mt8">⚠️ キーはこの端末のブラウザ内にのみ保存されます。</p>
       </div>
 
+      <OfficialCloudCard />
       <CloudCard />
       <ExportCard />
       <BackupCard />
@@ -387,11 +389,12 @@ function CloudCard() {
 
   return (
     <div className="card">
-      <h2>クラウド共有 (Firebase Firestore)</h2>
+      <h2>クラウド共有 (上級者向け・自前Firebase)</h2>
       <p className="small dim" style={{ marginBottom: 10 }}>
+        自分のFirebaseプロジェクトで同期したい上級者向けの旧方式です。
+        通常は上の「AI-BSS公式クラウド」をお使いください(公式クラウド接続中はこちらは使われません)。
         Firebaseコンソールで作ったプロジェクトの構成(firebaseConfig)を貼り付け、
-        チームで共通の「チームコード」を決めて全員が同じ値を入力すると、
-        試合データがリアルタイムで共有されます。未設定でもローカルだけで完全動作します。
+        チームで共通の「チームコード」を決めて全員が同じ値を入力すると、試合データがリアルタイムで共有されます。
       </p>
       <label className="small dim">firebaseConfig (JSONまたはコンソールのコピペ)</label>
       <textarea

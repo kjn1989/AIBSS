@@ -39,6 +39,7 @@ export const initialState = {
     useLLM: false,
     geminiApiKey: '', // AI選手名鑑のスカウト寸評生成(任意)
     lastBackupAt: null, // 最後にJSONバックアップを保存した時刻(データ消失対策のリマインド用)
+    officialTeamId: null, // 公式クラウド(lib/officialCloud.js)のチームID。null=未接続
   },
   demoLoaded: false,
   // ---- 以下は永続化しないセッション状態 ----
@@ -237,7 +238,14 @@ export function reducer(state, action) {
       const pmap = new Map(state.players.map((p) => [p.id, p]));
       for (const p of action.players || []) pmap.set(p.id, p);
       const players = [...pmap.values()].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
-      return { ...state, games, players };
+      // 参加メンバー(公式クラウドではcrewコレクション)も同様にidマージ
+      let members = state.members || [];
+      if (action.crew) {
+        const mmap = new Map(members.map((m) => [m.id, m]));
+        for (const m of action.crew) mmap.set(m.id, m);
+        members = [...mmap.values()].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+      }
+      return { ...state, games, players, members };
     }
     case 'UPDATE_SETTINGS':
       return { ...state, settings: { ...state.settings, ...action.patch } };
@@ -869,9 +877,19 @@ export function StoreProvider({ children }) {
       settings.edition = normalizeEdition(settings.edition) || init.settings.edition;
       return { ...init, ...saved, settings, games };
     }
-    // 新規チーム(まだデータ未保存): チーム切り替え画面で入力したチーム名/エディションを反映
+    // 新規チーム(まだデータ未保存): チーム切り替え/招待参加で決まったメタ情報を反映
     const meta = listProfiles().find((p) => p.id === getActiveProfileId());
-    if (meta) return { ...init, settings: { ...init.settings, teamName: meta.name, edition: meta.edition } };
+    if (meta) {
+      return {
+        ...init,
+        settings: {
+          ...init.settings,
+          teamName: meta.name,
+          edition: meta.edition,
+          officialTeamId: meta.officialTeamId || null,
+        },
+      };
+    }
     return init;
   });
 
@@ -883,11 +901,17 @@ export function StoreProvider({ children }) {
     return () => clearTimeout(timer.current);
   }, [state]);
 
-  // チーム切り替えリストの表示名/エディションを、設定変更のたびレジストリ側にも同期する
+  // チーム切り替えリストの表示名/エディション/クラウド接続を、設定変更のたびレジストリ側にも同期する
   useEffect(() => {
     const id = getActiveProfileId();
-    if (id) updateProfileMeta(id, { name: state.settings.teamName, edition: state.settings.edition });
-  }, [state.settings.teamName, state.settings.edition]);
+    if (id) {
+      updateProfileMeta(id, {
+        name: state.settings.teamName,
+        edition: state.settings.edition,
+        officialTeamId: state.settings.officialTeamId || null,
+      });
+    }
+  }, [state.settings.teamName, state.settings.edition, state.settings.officialTeamId]);
 
   return <StoreContext.Provider value={{ state, dispatch }}>{children}</StoreContext.Provider>;
 }

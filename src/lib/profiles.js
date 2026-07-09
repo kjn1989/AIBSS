@@ -71,9 +71,15 @@ export function getActiveProfileId() {
   return loadRegistry()?.activeId || null;
 }
 
-export function addProfile(name, edition) {
+export function addProfile(name, edition, extra = {}) {
   const reg = loadRegistry() || { profiles: [], activeId: null };
-  const p = { id: uid(), name: (name || '').trim() || '新しいチーム', edition: edition || '草野球', createdAt: Date.now() };
+  const p = {
+    id: uid(),
+    name: (name || '').trim() || '新しいチーム',
+    edition: edition || '草野球',
+    createdAt: Date.now(),
+    ...extra, // 例: { officialTeamId } 招待参加で作るプロフィールにクラウドチームを紐付ける
+  };
   reg.profiles.push(p);
   saveRegistry(reg);
   return p;
