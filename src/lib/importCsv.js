@@ -75,7 +75,7 @@ const truthy = (v) => {
   return s === '1' || s === '○' || s === '◯' || s === '〇' || /^(true|yes|y|勝|S|H)$/i.test(s);
 };
 // "4.2" → アウト数 14 (4回2/3)。"4" → 12。空欄 → undefined
-const ipToOuts = (v) => {
+export const ipToOuts = (v) => {
   if (v == null || String(v).trim() === '') return undefined;
   const s = String(v).trim();
   const [full, frac] = s.split('.');
@@ -165,19 +165,30 @@ export function parseGameCsv(text) {
   }
 
   // LINESCORE
+  // ヘッダ行(例: チーム,1,2,...,10,合計)の数字ラベルから列→回のマップを作る。
+  // 「合計」等の非数値列は無視することで、合計列を余分な1回分として誤集計するのを防ぐ。
   const linescore = {}; // { inning: { my, opp } }
-  let myLine = null, oppLine = null;
-  for (const row of sections.LINESCORE || []) {
-    const label = (row[0] || '').replace(/\s/g, '');
-    if (/^自/.test(label)) myLine = row.slice(1);
-    else if (/^相手|^敵/.test(label)) oppLine = row.slice(1);
-  }
-  if (myLine || oppLine) {
-    const n = Math.max(myLine?.length || 0, oppLine?.length || 0);
-    for (let i = 0; i < n; i++) {
-      const my = intOrU(myLine?.[i]);
-      const opp = intOrU(oppLine?.[i]);
-      if (my != null || opp != null) linescore[i + 1] = { my: my || 0, opp: opp || 0 };
+  const lrows = sections.LINESCORE || [];
+  if (lrows.length) {
+    const header = lrows[0] || [];
+    const inningCols = [];
+    header.forEach((cell, i) => {
+      if (i === 0) return;
+      const s = String(cell).trim();
+      if (/^\d+$/.test(s)) inningCols.push({ idx: i, inning: parseInt(s, 10) });
+    });
+    let myRow = null, oppRow = null;
+    for (const row of lrows.slice(1)) {
+      const label = (row[0] || '').replace(/\s/g, '');
+      if (/^自/.test(label)) myRow = row;
+      else if (/^相手|^敵/.test(label)) oppRow = row;
+    }
+    if (myRow || oppRow) {
+      for (const { idx, inning } of inningCols) {
+        const my = intOrU(myRow?.[idx]);
+        const opp = intOrU(oppRow?.[idx]);
+        if (my != null || opp != null) linescore[inning] = { my: my || 0, opp: opp || 0 };
+      }
     }
   }
 
