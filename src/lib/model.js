@@ -63,8 +63,14 @@ export function newPlayer(name, number = '') {
 // ---- エディション(利用シーン別のモード切り替え) ----
 // AIスタメン提案・AI選手名鑑など一部AI機能は「草野球」限定(パワプロ風の際どい寸評等が
 // 未成年やブカツ(部活)の文脈にそぐわないため)。エディションはチーム設定で切り替える。
-export const EDITIONS = ['草野球', 'ブカツ(中-大)', '少年野球'];
+export const EDITIONS = ['草野球', 'ブカツ(中高大)', '少年野球'];
 export const DEFAULT_EDITION = '草野球';
+
+// 旧表記(初期リリースの「ブカツ(中-大)」)を現行表記へ正規化する。
+// 保存済みデータ(settings.edition / チームレジストリ)の読み込み時に通すこと。
+export function normalizeEdition(edition) {
+  return edition === 'ブカツ(中-大)' ? 'ブカツ(中高大)' : edition;
+}
 
 // ---- 参加メンバー(マネージャー/応援/スタッフ等。試合には出ないが参加回数を記録する) ----
 export const MEMBER_ROLES = ['マネージャー', 'コーチ', '応援', 'スタッフ', 'その他'];

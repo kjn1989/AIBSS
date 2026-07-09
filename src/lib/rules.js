@@ -37,14 +37,14 @@ export const RULE_PRESETS = [
     rules: { innings: 6, mercy: [{ after: 4, diff: 10 }, { after: 5, diff: 7 }], pitchLimit: { perGame: 70, warnAt: 60 }, timeLimitMin: null },
   },
   {
-    id: 'chu7', label: '中学 7回制・100球', edition: 'ブカツ(中-大)',
+    id: 'chu7', label: '中学 7回制・100球', edition: 'ブカツ(中高大)',
     rules: { innings: 7, mercy: [{ after: 5, diff: 7 }], pitchLimit: { perGame: 100, warnAt: 85 }, timeLimitMin: null },
   },
   {
-    id: 'koko9', label: '高校 9回制(地方大会コールド)', edition: 'ブカツ(中-大)',
+    id: 'koko9', label: '高校 9回制(地方大会コールド)', edition: 'ブカツ(中高大)',
     rules: { innings: 9, mercy: [{ after: 5, diff: 10 }, { after: 7, diff: 7 }], pitchLimit: null, timeLimitMin: null },
   },
-  { id: 'daigaku9', label: '大学 9回制', edition: 'ブカツ(中-大)', rules: { innings: 9, mercy: [], pitchLimit: null, timeLimitMin: null } },
+  { id: 'daigaku9', label: '大学 9回制', edition: 'ブカツ(中高大)', rules: { innings: 9, mercy: [], pitchLimit: null, timeLimitMin: null } },
 ];
 
 export function presetById(id) {
@@ -52,7 +52,7 @@ export function presetById(id) {
 }
 
 export function defaultPresetIdForEdition(edition) {
-  return { 草野球: 'kusa7', 少年野球: 'gakudo6', 'ブカツ(中-大)': 'chu7' }[edition] || 'kusa7';
+  return { 草野球: 'kusa7', 少年野球: 'gakudo6', 'ブカツ(中高大)': 'chu7' }[edition] || 'kusa7';
 }
 
 // ルール内容の1行説明(選択UI・確認表示用)

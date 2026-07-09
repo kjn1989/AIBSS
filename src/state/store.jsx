@@ -7,7 +7,7 @@
 import React, { createContext, useContext, useReducer, useEffect, useRef } from 'react';
 import {
   newPlayer, newMember, newGame, newAtBat, newPitch, newPlayLog, newPitchingRecord, RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES,
-  OPP_LETTERS, DEFAULT_EDITION,
+  OPP_LETTERS, DEFAULT_EDITION, normalizeEdition,
 } from '../lib/model.js';
 import { generateDemoData } from '../lib/demo.js';
 import { idbSave } from '../lib/durableStore.js';
@@ -31,7 +31,7 @@ export const initialState = {
   currentGameId: null,
   settings: {
     teamName: 'マイチーム',
-    edition: DEFAULT_EDITION, // '草野球' | 'ブカツ(中-大)' | '少年野球'。AIスタメン/AI選手名鑑は草野球限定。
+    edition: DEFAULT_EDITION, // '草野球' | 'ブカツ(中高大)' | '少年野球'。AIスタメン/AI選手名鑑は草野球限定。
     firebaseConfigText: '', // 設定画面で貼り付けるJSON
     cloudEnabled: false,
     teamCode: '', // Firestore上のチーム識別子
@@ -212,13 +212,15 @@ export function reducer(state, action) {
       const games = Object.fromEntries(
         Object.entries(b.games || {}).map(([id, g]) => [id, ensureOppFields(g)])
       );
+      const settings = { ...state.settings, ...(b.settings || {}) };
+      settings.edition = normalizeEdition(settings.edition) || DEFAULT_EDITION;
       return {
         ...state,
         players: Array.isArray(b.players) ? b.players : [],
         members: Array.isArray(b.members) ? b.members : [],
         games,
         currentGameId: b.currentGameId && games[b.currentGameId] ? b.currentGameId : null,
-        settings: { ...state.settings, ...(b.settings || {}) },
+        settings,
         demoLoaded: !!b.demoLoaded,
         history: [], // 別データ由来のUndo履歴は破棄
       };
@@ -862,7 +864,10 @@ export function StoreProvider({ children }) {
       const games = Object.fromEntries(
         Object.entries(saved.games || {}).map(([id, g]) => [id, ensureOppFields(g)])
       );
-      return { ...init, ...saved, games };
+      // 設定は既定値とマージする(保存後に追加された設定キーの欠落を補う)。旧エディション表記も正規化
+      const settings = { ...init.settings, ...(saved.settings || {}) };
+      settings.edition = normalizeEdition(settings.edition) || init.settings.edition;
+      return { ...init, ...saved, settings, games };
     }
     // 新規チーム(まだデータ未保存): チーム切り替え画面で入力したチーム名/エディションを反映
     const meta = listProfiles().find((p) => p.id === getActiveProfileId());

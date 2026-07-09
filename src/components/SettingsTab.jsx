@@ -45,7 +45,7 @@ export default function SettingsTab() {
         </div>
         <p className="small dim mt8">
           「草野球」では📇AI選手名鑑・🤖AIスタメン提案が使えます(パワプロ風の際どい寸評を含むため)。
-          「ブカツ(中-大)」「少年野球」ではこの2機能は表示されません。
+          「ブカツ(中高大)」「少年野球」ではこの2機能は表示されません。
         </p>
       </div>
 

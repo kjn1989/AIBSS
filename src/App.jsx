@@ -51,7 +51,7 @@ export default function App() {
     state.cloudStatus === 'on' ? '☁️' : state.cloudStatus === 'connecting' ? '⏳' : state.cloudStatus === 'error' ? '⚠️' : '';
 
   return (
-    <div className="app">
+    <div className="app" data-edition={state.settings.edition || '草野球'}>
       <CloudSync />
       {invite && (
         <div className="invite-overlay">
@@ -70,9 +70,10 @@ export default function App() {
       )}
       <header className="app-header">
         <div>
+          {/* ブランドを主役に: ロゴ+AI-BASEワードマークを1行目、チーム名を2行目に */}
           <h1>
             {/* AI-BASEモノグラム(favicon.svgと同デザインの縮小版・背景なし) */}
-            <svg className="brand-mark" viewBox="0 0 100 100" width="20" height="20" aria-hidden="true">
+            <svg className="brand-mark" viewBox="0 0 100 100" width="30" height="30" aria-hidden="true">
               <path d="M27 27 H73 V56 L50 79 L27 56 Z" fill="none" stroke="#e3b341" strokeWidth="7" strokeLinejoin="round" />
               <path d="M35 57 L50 68 L65 57" fill="none" stroke="#388bfd" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
               <circle cx="35" cy="57" r="4.5" fill="#58a6ff" />
@@ -80,12 +81,12 @@ export default function App() {
               <circle cx="50" cy="68" r="4.5" fill="#58a6ff" />
               <text x="50" y="50" textAnchor="middle" fontFamily="'Helvetica Neue',Arial,sans-serif" fontWeight="800" fontSize="24" fill="#58a6ff">AI</text>
             </svg>
-            {' '}{state.settings.teamName || 'マイチーム'}
+            <span>
+              <span className="brand-ai">AI</span><span className="brand-dash">-</span><span className="brand-base">BASE</span>
+              <span className="brand-for"> for {state.settings.edition || '草野球'}</span>
+            </span>
           </h1>
-          <div className="sub">
-            <span className="brand-ai">AI</span><span className="brand-dash">-</span><span className="brand-base">BASE</span>
-            <span className="brand-for"> for {state.settings.edition || '草野球'}</span> {cloudBadge}
-          </div>
+          <div className="sub">{state.settings.teamName || 'マイチーム'} {cloudBadge}</div>
         </div>
         <div className="header-btns">
           <button className="ghost small" onClick={() => setTab('settings')} aria-label="設定">

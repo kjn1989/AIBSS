@@ -5,7 +5,7 @@
 // チームごとのデータは専用のlocalStorageキー(profileStorageKey)に保存され、
 // クラウド共有設定(teamCode等)もチームごとに独立するため、別々のクラウドチームへ接続できる。
 // ============================================================
-import { uid } from './model.js';
+import { uid, normalizeEdition } from './model.js';
 
 export const REGISTRY_KEY = 'bbscorer.profiles.v1';
 export const LEGACY_DATA_KEY = 'bbscorer.v1'; // 複数チーム対応前(単一チーム時代)のデータキー
@@ -17,7 +17,10 @@ export function profileStorageKey(id) {
 function loadRegistry() {
   try {
     const raw = localStorage.getItem(REGISTRY_KEY);
-    return raw ? JSON.parse(raw) : null;
+    const reg = raw ? JSON.parse(raw) : null;
+    // 旧エディション表記(ブカツ(中-大)等)を現行表記へ正規化
+    if (reg?.profiles) for (const p of reg.profiles) p.edition = normalizeEdition(p.edition) || p.edition;
+    return reg;
   } catch {
     return null;
   }
@@ -45,7 +48,7 @@ export function ensureRegistry() {
     try {
       const parsed = JSON.parse(legacyRaw);
       name = parsed?.settings?.teamName || name;
-      edition = parsed?.settings?.edition || edition;
+      edition = normalizeEdition(parsed?.settings?.edition) || edition;
     } catch {
       /* JSON破損時は既定値のまま */
     }
