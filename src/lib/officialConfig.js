@@ -11,14 +11,15 @@
 // セットアップ手順: docs/firebase-setup.md
 // ============================================================
 
-const FILE_CONFIG = null;
-// 例:
-// const FILE_CONFIG = {
-//   apiKey: 'AIza...',
-//   authDomain: 'aibss-xxxx.firebaseapp.com',
-//   projectId: 'aibss-xxxx',
-//   appId: '1:1234:web:abcd',
-// };
+// AI-BSS公式クラウドの本番接続情報(公開可: アクセス制御はfirestore.rulesがサーバ側で強制)
+const FILE_CONFIG = {
+  apiKey: 'AIzaSyBX16jLR0M_y2ZCyp6742Mt9ITOKOHjP0w',
+  authDomain: 'aibss-55619.firebaseapp.com',
+  projectId: 'aibss-55619',
+  storageBucket: 'aibss-55619.firebasestorage.app',
+  messagingSenderId: '118549046137',
+  appId: '1:118549046137:web:101c3e18bbcb13968145a8',
+};
 
 export function getOfficialConfig() {
   try {
