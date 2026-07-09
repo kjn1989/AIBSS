@@ -1,7 +1,7 @@
 {
-  "name": "野球 音声実況＆タップスコアラー",
-  "short_name": "スコアラー",
-  "description": "野球チーム向け 音声実況＆直感タップUIスコアラー",
+  "name": "AI-BASE(アイベース) — AI野球スコア＆成績",
+  "short_name": "AI-BASE",
+  "description": "音声実況＆タップUIのAI野球スコアラー。草野球・ブカツ・少年野球のスコアと成績を一元管理。",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

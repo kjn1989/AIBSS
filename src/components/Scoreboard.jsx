@@ -15,9 +15,12 @@ export default function Scoreboard({ game }) {
       </div>
       <div className="mid">
         <div className="inning">
-          {game.inning}回{game.isTop ? '表' : '裏'}
+          {game.rules && game.inning > game.rules.innings && '延長'}{game.inning}回{game.isTop ? '表' : '裏'}
         </div>
-        <div className="small dim">{batting ? '⚔️ 攻撃中' : '🧤 守備中'}</div>
+        <div className="small dim">
+          {batting ? '⚔️ 攻撃中' : '🧤 守備中'}
+          {game.rules ? `・${game.rules.innings}回制` : ''}
+        </div>
         <div className="outs">
           {[0, 1, 2].map((i) => (
             <span key={i} className={`out-dot${game.outs > i ? ' on' : ''}`} />

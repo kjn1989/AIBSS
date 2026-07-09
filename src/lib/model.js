@@ -80,13 +80,17 @@ export function newMember(name, role = 'マネージャー') {
   };
 }
 
-export function newGame({ opponent = '', isHome = false, date = null, season = '' } = {}) {
+export function newGame({ opponent = '', isHome = false, date = null, season = '', rules = null } = {}) {
   return {
     id: uid(),
     date: date || new Date().toISOString().slice(0, 10),
     opponent,
     season, // シーズン/大会名(任意。集計フィルタに使用)
     isHome, // true=自チーム後攻
+    // 試合ルール(lib/rules.js)。試合作成時のルールをスナップショットとして保持する。
+    // null = ルール管理なし(旧データ含む。終了提案・球数警告などの判定は無効)
+    rules,
+    startedAt: Date.now(), // 試合開始時刻(時間制限ルールの判定に使用)
     status: 'ongoing', // 'ongoing' | 'finished'
     inning: 1,
     isTop: true, // 表/裏

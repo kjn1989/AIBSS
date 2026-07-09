@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useStore, useCurrentGame, usePlayerName, isMyTeamBatting, currentBatter, currentOppBatter } from '../state/store.jsx';
 import Scoreboard from './Scoreboard.jsx';
 import Diamond from './Diamond.jsx';
@@ -13,6 +13,7 @@ import HighlightSheet from './HighlightSheet.jsx';
 import GameProgressView from './GameProgressView.jsx';
 import { POSITIONS, OPP_LETTERS } from '../lib/model.js';
 import { playLabel } from '../lib/voiceParser.js';
+import { RULE_PRESETS, presetById, defaultPresetIdForEdition, describeRules, gameEndCheck, pitchLimitCheck, timeLimitCheck } from '../lib/rules.js';
 
 // ---- 直近の打席結果を「1. 左翼単打 2. 見逃し三振」のように並べる小さな履歴表示 ----
 function AtBatHistory({ items }) {
@@ -34,9 +35,49 @@ function GameSetup() {
   const [opponent, setOpponent] = useState('');
   const [isHome, setIsHome] = useState(false);
   const [season, setSeason] = useState('');
+  const edition = state.settings.edition || '草野球';
+  // ルール選択: 前回の選択を記憶。初回はエディションの既定プリセット
+  const [presetId, setPresetId] = useState(state.settings.lastRulePresetId || defaultPresetIdForEdition(edition));
+  const [custom, setCustom] = useState({ innings: '7', mercyAfter: '', mercyDiff: '', pitchPerGame: '', timeLimitMin: '' });
   const ongoing = Object.values(state.games).filter((g) => g.status === 'ongoing' && !g.id.startsWith('demo-'));
   // 既存試合で使われたシーズン名(サジェスト用)
   const knownSeasons = [...new Set(Object.values(state.games).map((g) => g.season).filter(Boolean))];
+
+  const resolveRules = () => {
+    if (presetId === 'none') return null;
+    if (presetId === 'custom') {
+      const innings = Math.max(1, parseInt(custom.innings, 10) || 7);
+      const after = parseInt(custom.mercyAfter, 10);
+      const diff = parseInt(custom.mercyDiff, 10);
+      const mercy = Number.isFinite(after) && Number.isFinite(diff) && after > 0 && diff > 0 ? [{ after, diff }] : [];
+      const perGame = parseInt(custom.pitchPerGame, 10);
+      const pitchLimit = Number.isFinite(perGame) && perGame > 0 ? { perGame, warnAt: Math.max(1, perGame - 10) } : null;
+      const tl = parseInt(custom.timeLimitMin, 10);
+      const timeLimitMin = Number.isFinite(tl) && tl > 0 ? tl : null;
+      return { innings, mercy, pitchLimit, timeLimitMin };
+    }
+    return presetById(presetId)?.rules || null;
+  };
+
+  const onPresetChange = (id) => {
+    setPresetId(id);
+    // カスタム選択時は、直前のプリセット内容を初期値として引き継ぐ
+    if (id === 'custom') {
+      const base = presetById(presetId)?.rules || { innings: 7, mercy: [], pitchLimit: null };
+      setCustom({
+        innings: String(base.innings),
+        mercyAfter: base.mercy?.[0] ? String(base.mercy[0].after) : '',
+        mercyDiff: base.mercy?.[0] ? String(base.mercy[0].diff) : '',
+        pitchPerGame: base.pitchLimit?.perGame ? String(base.pitchLimit.perGame) : '',
+        timeLimitMin: base.timeLimitMin ? String(base.timeLimitMin) : '',
+      });
+    }
+  };
+
+  const startGame = () => {
+    dispatch({ type: 'CREATE_GAME', payload: { opponent, isHome, season: season.trim(), rules: resolveRules() } });
+    dispatch({ type: 'UPDATE_SETTINGS', patch: { lastRulePresetId: presetId } });
+  };
 
   return (
     <div>
@@ -60,7 +101,49 @@ function GameSetup() {
           <button className={!isHome ? 'active' : ''} onClick={() => setIsHome(false)}>先攻</button>
           <button className={isHome ? 'active' : ''} onClick={() => setIsHome(true)}>後攻</button>
         </div>
-        <button className="primary" style={{ width: '100%' }} onClick={() => dispatch({ type: 'CREATE_GAME', payload: { opponent, isHome, season: season.trim() } })}>
+
+        <label className="small dim" style={{ display: 'block' }}>試合ルール</label>
+        <select value={presetId} onChange={(e) => onPresetChange(e.target.value)}>
+          {RULE_PRESETS.map((p) => (
+            <option key={p.id} value={p.id}>{p.label}{p.edition === edition ? '' : ` (${p.edition})`}</option>
+          ))}
+          <option value="custom">カスタム(自分で設定)</option>
+          <option value="none">ルール管理なし</option>
+        </select>
+        {presetId === 'custom' && (
+          <div className="mt8">
+            <div className="grid3">
+              <div>
+                <label className="small dim">回数</label>
+                <input type="number" inputMode="numeric" value={custom.innings} onChange={(e) => setCustom({ ...custom, innings: e.target.value })} />
+              </div>
+              <div>
+                <label className="small dim">コールド回</label>
+                <input type="number" inputMode="numeric" placeholder="なし" value={custom.mercyAfter} onChange={(e) => setCustom({ ...custom, mercyAfter: e.target.value })} />
+              </div>
+              <div>
+                <label className="small dim">点差</label>
+                <input type="number" inputMode="numeric" placeholder="なし" value={custom.mercyDiff} onChange={(e) => setCustom({ ...custom, mercyDiff: e.target.value })} />
+              </div>
+            </div>
+            <div className="grid2 mt8">
+              <div>
+                <label className="small dim">球数制限(空欄=なし)</label>
+                <input type="number" inputMode="numeric" placeholder="例: 70" value={custom.pitchPerGame} onChange={(e) => setCustom({ ...custom, pitchPerGame: e.target.value })} />
+              </div>
+              <div>
+                <label className="small dim">時間制限・分(空欄=なし)</label>
+                <input type="number" inputMode="numeric" placeholder="例: 90" value={custom.timeLimitMin} onChange={(e) => setCustom({ ...custom, timeLimitMin: e.target.value })} />
+              </div>
+            </div>
+          </div>
+        )}
+        <p className="small dim mt8">
+          {describeRules(resolveRules())}
+          {presetId !== 'none' && <><br />※ プリセットは代表例です。連盟・大会の要項に合わせて調整してください。成立時も自動終了はせず、確認してから終了できます。</>}
+        </p>
+
+        <button className="primary" style={{ width: '100%' }} onClick={startGame}>
           試合開始
         </button>
       </div>
@@ -314,6 +397,57 @@ function UndoBar({ game }) {
   );
 }
 
+// ---- ルールエンジンの提案バナー(試合終了条件・時間制限・球数警告) ----
+// 判定はlib/rules.jsの純関数。成立しても強制終了はせず、提案として表示するだけ。
+function RuleBanners({ game, onFinish }) {
+  const nameOf = usePlayerName();
+  const [dismissed, setDismissed] = useState(''); // 「続行」を押した提案文(同じ状況の再表示を防ぐ)
+  const [timeDismissed, setTimeDismissed] = useState(false);
+  const [, setTick] = useState(0); // 時間制限は操作がなくても表示されるよう1分ごとに再描画
+  useEffect(() => {
+    if (!game.rules?.timeLimitMin) return;
+    const t = setInterval(() => setTick((n) => n + 1), 60000);
+    return () => clearInterval(t);
+  }, [game.rules?.timeLimitMin]);
+
+  const end = gameEndCheck(game);
+  const time = timeLimitCheck(game);
+  // 球数警告は自チーム守備時(=自チーム投手が投げている間)のみ
+  const pitch = !isMyTeamBatting(game) ? pitchLimitCheck(game) : null;
+
+  return (
+    <>
+      {end && dismissed !== end.text && (
+        <div className="card" style={{ borderColor: 'var(--gold)' }}>
+          <p style={{ fontWeight: 700, marginBottom: 8 }}>🏁 {end.text}</p>
+          <div className="grid2">
+            <button className="ghost" onClick={() => setDismissed(end.text)}>このまま続行</button>
+            <button className="primary" onClick={onFinish}>試合を終了する</button>
+          </div>
+        </div>
+      )}
+      {!end && time && !timeDismissed && (
+        <div className="card" style={{ borderColor: 'var(--gold)' }}>
+          <p style={{ fontWeight: 700, marginBottom: 8 }}>
+            ⏱ 開始から{time.elapsedMin}分が経過し、時間制限({time.limit}分)に達しました。慣例では新しい回には入らず、この回までで終了します。
+          </p>
+          <div className="grid2">
+            <button className="ghost" onClick={() => setTimeDismissed(true)}>このまま続行</button>
+            <button className="primary" onClick={onFinish}>試合を終了する</button>
+          </div>
+        </div>
+      )}
+      {pitch && (
+        <div className="warn-box" style={pitch.level === 'over' ? { borderColor: 'var(--red)', color: 'var(--red)' } : {}}>
+          {pitch.level === 'over'
+            ? `🚨 投手 ${nameOf(game.currentPitcherId)}: ${pitch.pitches}球 — 球数制限(${pitch.limit}球)に到達しています。交代を検討してください。`
+            : `⚠️ 投手 ${nameOf(game.currentPitcherId)}: ${pitch.pitches}球 — 球数制限(${pitch.limit}球)が近づいています。`}
+        </div>
+      )}
+    </>
+  );
+}
+
 // ---- メイン ----
 export default function ScoreTab() {
   const { state, dispatch } = useStore();
@@ -343,6 +477,13 @@ export default function ScoreTab() {
   return (
     <div>
       <Scoreboard game={game} />
+      <RuleBanners
+        game={game}
+        onFinish={() => {
+          dispatch({ type: 'FINISH_GAME', id: game.id });
+          setSheet({ kind: 'highlight' });
+        }}
+      />
       <Diamond game={game} onBaseTap={(b) => setSheet({ kind: 'runner', base: b })} />
 
       {myBatting ? (

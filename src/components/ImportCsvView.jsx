@@ -123,7 +123,7 @@ export default function ImportCsvView({ onClose }) {
   const [editPitcherIdx, setEditPitcherIdx] = useState(null);
 
   // downloadCSV()はUTF-8 BOM付きでダウンロードする(BOM無しだとExcelがShift-JIS等と誤認して文字化けするため)
-  const downloadTemplate = () => downloadCSV('aibss-import-template.csv', buildTemplateCsv(myTeam));
+  const downloadTemplate = () => downloadCSV('ai-base-import-template.csv', buildTemplateCsv(myTeam));
 
   const onFile = (file) => {
     setError('');

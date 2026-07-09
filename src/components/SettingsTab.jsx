@@ -277,6 +277,7 @@ function BackupCard() {
 
   const exportBackup = () => {
     const payload = {
+      // リブランド後も旧バージョンのアプリで復元できるよう、識別子は旧名のまま維持する
       app: 'aibss-baseball-scorer',
       version: 1,
       exportedAt: new Date().toISOString(),
@@ -292,7 +293,7 @@ function BackupCard() {
     const a = document.createElement('a');
     a.href = url;
     // 一部ブラウザは非ASCIIのdownload属性を無視するためASCIIファイル名にする
-    a.download = `aibss-backup_${stamp}.json`;
+    a.download = `ai-base-backup_${stamp}.json`;
     a.click();
     URL.revokeObjectURL(url);
     dispatch({ type: 'UPDATE_SETTINGS', patch: { lastBackupAt: Date.now() } });
@@ -304,7 +305,7 @@ function BackupCard() {
       try {
         const data = JSON.parse(reader.result);
         if (data.app !== 'aibss-baseball-scorer' || typeof data.games !== 'object') {
-          window.alert('このファイルはAIBSSのバックアップではないようです。');
+          window.alert('このファイルはAI-BASEのバックアップではないようです。');
           return;
         }
         const nGames = Object.keys(data.games || {}).length;
