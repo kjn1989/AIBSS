@@ -154,7 +154,7 @@ export default function ImportCsvView({ onClose }) {
               <div className="atbat-history" style={{ marginBottom: 8 }}>
                 {parsed.batters.map((b, i) => (
                   <span className="hist-chip" key={i}>
-                    {b.aiFilled && '🤖 '}{b.name}（{b.h ?? 0}安打{b.hr ? ` ${b.hr}本` : ''}{b.rbi ? ` ${b.rbi}打点` : ''}）
+                    {b.aiFilled && '🤖 '}{b.name}{b.position && `(${b.position})`}（{b.h ?? 0}安打{b.hr ? ` ${b.hr}本` : ''}{b.rbi ? ` ${b.rbi}打点` : ''}）
                     {b.memo && <span className="dim"> ・{b.memo}</span>}
                   </span>
                 ))}

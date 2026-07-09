@@ -5,7 +5,7 @@
 // ============================================================
 
 // ---- テンプレートCSVの生成 ----
-const BATTERS_HEADER = ['名前', '背番号', '打席', '打数', '安打', '二塁打', '三塁打', '本塁打', '打点', '四球', '死球', '三振', '犠打', '盗塁', '得点', 'メモ'];
+const BATTERS_HEADER = ['名前', '背番号', '守備位置', '打席', '打数', '安打', '二塁打', '三塁打', '本塁打', '打点', '四球', '死球', '三振', '犠打', '盗塁', '得点', 'メモ'];
 const PITCHERS_HEADER = ['名前', '投球回', '失点', '自責点', '被安打', '与四球', '与死球', '奪三振', '投球数', '勝', 'セーブ', 'ホールド', 'メモ'];
 const blankRow = (n) => Array(n).fill('').join(',');
 
@@ -32,9 +32,10 @@ export function buildTemplateCsv(myTeam = 'マイチーム') {
     '自,,,,,,,,,,',
     '相手,,,,,,,,,,',
     '',
-    '[BATTERS]  (打者のボックススコア。1人1行。メモは自由記述、AI補完のヒントに使えます)',
+    '[BATTERS]  (打者のボックススコア。1人1行。守備位置は 投/捕/一/二/三/遊/左/中/右/DH、' +
+      'スコアブック番号(1〜9)、投手/捕手等、ピッチャー/キャッチャー等いずれの表記でもOK。メモは自由記述、AI補完のヒントに使えます)',
     BATTERS_HEADER.join(','),
-    '例)山田,10,4,4,2,1,0,0,2,0,0,1,0,1,1,',
+    '例)山田,10,三塁,4,4,2,1,0,0,2,0,0,1,0,1,1,',
     ...Array.from({ length: 12 }, () => blankRow(BATTERS_HEADER.length)),
     '',
     '[PITCHERS]  (投手成績。分かる範囲でOK。投球回は 4.2 = 4回2/3)',
@@ -85,11 +86,33 @@ const ipToOuts = (v) => {
 
 const BAT_SYN = {
   名前: 'name', 選手: 'name', 選手名: 'name', 背番号: 'number', 番号: 'number',
+  守備位置: 'position', 守備: 'position', ポジション: 'position', 位置: 'position',
   打席: 'pa', 打席数: 'pa', 打数: 'ab', 安打: 'h', 単打: 'single',
   二塁打: 'double', '2塁打': 'double', 三塁打: 'triple', '3塁打': 'triple',
   本塁打: 'hr', 本: 'hr', 打点: 'rbi', 四球: 'bb', 死球: 'hbp', 三振: 'so',
   犠打: 'sacBunt', 犠飛: 'sacFly', 盗塁: 'sb', 得点: 'runs', メモ: 'memo', 備考: 'memo',
 };
+
+// 守備位置の表記ゆれを吸収: 数字(スコアブック番号1〜9)/漢字1文字/漢字フル/カタカナ いずれも受け付ける
+const POSITION_SYN = {
+  '1': '投', '2': '捕', '3': '一', '4': '二', '5': '三', '6': '遊', '7': '左', '8': '中', '9': '右',
+  投: '投', 捕: '捕', 一: '一', 二: '二', 三: '三', 遊: '遊', 左: '左', 中: '中', 右: '右',
+  投手: '投', 捕手: '捕',
+  一塁: '一', 一塁手: '一', ファースト: '一',
+  二塁: '二', 二塁手: '二', セカンド: '二',
+  三塁: '三', 三塁手: '三', サード: '三',
+  遊撃: '遊', 遊撃手: '遊', ショート: '遊',
+  左翼: '左', 左翼手: '左', レフト: '左',
+  中堅: '中', 中堅手: '中', センター: '中',
+  右翼: '右', 右翼手: '右', ライト: '右',
+  ピッチャー: '投', キャッチャー: '捕',
+  DH: 'DH', 指名打者: 'DH', ディーエイチ: 'DH',
+};
+function normalizePosition(v) {
+  const s = String(v ?? '').trim();
+  if (!s) return '';
+  return POSITION_SYN[s.toUpperCase()] || POSITION_SYN[s] || '';
+}
 const PIT_SYN = {
   名前: 'name', 選手: 'name', 選手名: 'name', 投球回: 'ip', 回: 'ip',
   失点: 'runs', 自責点: 'earnedRuns', 自責: 'earnedRuns', 被安打: 'hitsAllowed',
@@ -171,6 +194,7 @@ export function parseGameCsv(text) {
       batters.push({
         name,
         number: (rec.number || '').trim(),
+        position: normalizePosition(rec.position),
         pa: intOrU(rec.pa), ab: intOrU(rec.ab), h: intOrU(rec.h),
         single: intOrU(rec.single), double: intOrU(rec.double), triple: intOrU(rec.triple), hr: intOrU(rec.hr),
         rbi: intOrU(rec.rbi), bb: intOrU(rec.bb), hbp: intOrU(rec.hbp), so: intOrU(rec.so),
