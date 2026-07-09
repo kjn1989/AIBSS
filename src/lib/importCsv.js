@@ -154,10 +154,12 @@ export function parseGameCsv(text) {
   for (const row of sections.GAME || []) {
     const k = (row[0] || '').replace(/\s/g, '');
     const v = (row[1] || '').trim();
+    // 「自チームは先攻か後攻」の行は"自チーム"を含むため、先攻/後攻の判定を先に行う
+    // (自チーム名の行より後に置くと、そちらのelse ifに先に一致してmyTeamが上書きされてしまう)
     if (/日付|date/i.test(k)) meta.date = v;
+    else if (/先攻|後攻/.test(k)) meta.isHome = /後攻/.test(v);
     else if (/自チーム|自軍|マイ/.test(k)) meta.myTeam = v;
     else if (/相手/.test(k)) meta.opponent = v;
-    else if (/先攻|後攻/.test(k)) meta.isHome = /後攻/.test(v);
     else if (/大会|シーズン|season/i.test(k)) meta.season = v;
     else if (/自得点/.test(k)) meta.myScore = intOrU(v);
     else if (/相手得点/.test(k)) meta.oppScore = intOrU(v);

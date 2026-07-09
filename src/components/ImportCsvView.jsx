@@ -343,12 +343,21 @@ export default function ImportCsvView({ onClose }) {
 
             <div className="section-title small">打者 {parsed.batters.length}人(タップして修正)</div>
             {parsed.batters.length > 0 && (
-              <div className="atbat-history" style={{ marginBottom: 8 }}>
+              <div style={{ marginBottom: 8 }}>
                 {parsed.batters.map((b, i) => (
-                  <span className="hist-chip" key={i} role="button" onClick={() => setEditBatterIdx(i)}>
-                    {b.aiFilled && '🤖 '}{b.name}{b.position && `(${b.position})`}（{b.h ?? 0}安打{b.hr ? ` ${b.hr}本` : ''}{b.rbi ? ` ${b.rbi}打点` : ''}）
-                    {b.memo && <span className="dim"> ・{b.memo}</span>}
-                  </span>
+                  <div className="row" key={i} role="button" onClick={() => setEditBatterIdx(i)}>
+                    <div className="grow">
+                      <div>
+                        {b.aiFilled && '🤖 '}<b>{b.name || '(名前未入力)'}</b>
+                        {b.position && <span className="pill" style={{ marginLeft: 6 }}>{b.position}</span>}
+                        <span className="dim small" style={{ marginLeft: 8 }}>
+                          {b.h ?? 0}安打{b.hr ? ` ${b.hr}本` : ''}{b.rbi ? ` ${b.rbi}打点` : ''}
+                        </span>
+                      </div>
+                      {b.memo && <div className="dim small" style={{ marginTop: 2 }}>{b.memo}</div>}
+                    </div>
+                    <span className="dim">›</span>
+                  </div>
                 ))}
               </div>
             )}
@@ -356,12 +365,21 @@ export default function ImportCsvView({ onClose }) {
 
             <div className="section-title small mt12">投手 {parsed.pitchers.length}人(タップして修正)</div>
             {parsed.pitchers.length > 0 && (
-              <div className="atbat-history" style={{ marginBottom: 8 }}>
+              <div style={{ marginBottom: 8 }}>
                 {parsed.pitchers.map((p, i) => (
-                  <span className="hist-chip" key={i} role="button" onClick={() => setEditPitcherIdx(i)}>
-                    {p.aiFilled && '🤖 '}{p.name}（{p.outsRecorded != null ? `${formatIP(p.outsRecorded)}回` : '回不明'}{p.earnedRuns != null ? ` 自責${p.earnedRuns}` : ''}）
-                    {p.memo && <span className="dim"> ・{p.memo}</span>}
-                  </span>
+                  <div className="row" key={i} role="button" onClick={() => setEditPitcherIdx(i)}>
+                    <div className="grow">
+                      <div>
+                        {p.aiFilled && '🤖 '}<b>{p.name || '(名前未入力)'}</b>
+                        <span className="dim small" style={{ marginLeft: 8 }}>
+                          {p.outsRecorded != null ? `${formatIP(p.outsRecorded)}回` : '回不明'}
+                          {p.earnedRuns != null ? ` 自責${p.earnedRuns}` : ''}
+                        </span>
+                      </div>
+                      {p.memo && <div className="dim small" style={{ marginTop: 2 }}>{p.memo}</div>}
+                    </div>
+                    <span className="dim">›</span>
+                  </div>
                 ))}
               </div>
             )}
