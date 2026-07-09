@@ -147,7 +147,7 @@ export default function ScoreSheetView({ game, onClose }) {
             </table>
           )}
 
-          <div className="ss-footer">AI-BASE — AI野球スコア&成績</div>
+          <div className="ss-footer">AI-BSS — AI野球スコア&成績</div>
         </div>
       </div>
     </FullscreenView>

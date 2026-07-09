@@ -293,7 +293,7 @@ function BackupCard() {
     const a = document.createElement('a');
     a.href = url;
     // 一部ブラウザは非ASCIIのdownload属性を無視するためASCIIファイル名にする
-    a.download = `ai-base-backup_${stamp}.json`;
+    a.download = `aibss-backup_${stamp}.json`;
     a.click();
     URL.revokeObjectURL(url);
     dispatch({ type: 'UPDATE_SETTINGS', patch: { lastBackupAt: Date.now() } });
@@ -305,7 +305,7 @@ function BackupCard() {
       try {
         const data = JSON.parse(reader.result);
         if (data.app !== 'aibss-baseball-scorer' || typeof data.games !== 'object') {
-          window.alert('このファイルはAI-BASEのバックアップではないようです。');
+          window.alert('このファイルはAI-BSSのバックアップではないようです。');
           return;
         }
         const nGames = Object.keys(data.games || {}).length;

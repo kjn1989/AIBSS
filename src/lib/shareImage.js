@@ -97,7 +97,7 @@ export function generateHighlightImage(game, h, teamName) {
   ctx.textAlign = 'center';
   ctx.font = '20px sans-serif';
   ctx.fillStyle = '#8b949e';
-  ctx.fillText('AI-BASE — AI野球スコア&成績', W / 2, H - 30);
+  ctx.fillText('AI-BSS — AI野球スコア&成績', W / 2, H - 30);
 
   return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
 }
