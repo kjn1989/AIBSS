@@ -12,12 +12,11 @@
 // セットアップ手順: docs/supabase-setup.md
 // ============================================================
 
-const FILE_CONFIG = null;
-// 例:
-// const FILE_CONFIG = {
-//   url: 'https://xxxx.supabase.co',
-//   anonKey: 'eyJhbGciOi...',
-// };
+// 本番: AI-BSS公式Supabaseプロジェクト(aibss)。値は公開されても安全(RLSが権限を強制)。
+const FILE_CONFIG = {
+  url: 'https://kkajcckyplzuujhsrwxa.supabase.co',
+  anonKey: 'sb_publishable_mm1-s8BRfpvGeJYDelgUUg_EN19k365',
+};
 
 export function getOfficialConfig() {
   try {
