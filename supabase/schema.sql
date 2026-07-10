@@ -70,6 +70,15 @@ as $$
   select role from public.team_members where team_id = t and uid = auth.uid()
 $$;
 
+-- チーム作成者本人か(team_membersのowner行を作る最初のinsert時、まだ自分がmembersに
+-- 居ないためteamsテーブルへの素の参照はRLSでブロックされる。security definerで迂回する)
+create or replace function public.is_team_owner(t text)
+returns boolean language sql security definer stable
+set search_path = public
+as $$
+  select exists(select 1 from public.teams where id = t and owner_uid = auth.uid())
+$$;
+
 -- 招待トークンの検証(insertポリシー内から呼ぶ。invitesのRLSを迂回して判定)
 create or replace function public.invite_valid(tok text, t text, r text)
 returns boolean language sql security definer stable
@@ -117,7 +126,7 @@ create policy members_select on public.team_members for select
 create policy members_insert on public.team_members for insert
   with check (
     uid = auth.uid() and (
-      (role = 'owner' and exists(select 1 from public.teams t where t.id = team_id and t.owner_uid = auth.uid()))
+      (role = 'owner' and public.is_team_owner(team_id))
       or public.invite_valid(invite, team_id, role)
     )
   );
