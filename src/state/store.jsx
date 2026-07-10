@@ -40,6 +40,7 @@ export const initialState = {
     geminiApiKey: '', // AI選手名鑑のスカウト寸評生成(任意)
     lastBackupAt: null, // 最後にJSONバックアップを保存した時刻(データ消失対策のリマインド用)
     officialTeamId: null, // 公式クラウド(lib/officialCloud.js)のチームID。null=未接続
+    officialRole: null, // 公式クラウドでの自分のロール(owner/scorer/viewer)。CloudSyncが接続時に更新
   },
   demoLoaded: false,
   // ---- 以下は永続化しないセッション状態 ----

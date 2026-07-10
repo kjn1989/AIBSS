@@ -456,6 +456,30 @@ export default function ScoreTab() {
   const [sheet, setSheet] = useState(null); // {kind:'play',result} | {kind:'runner',base} | {kind:'batter'}
   const [showProgress, setShowProgress] = useState(false);
 
+  // 公式クラウドの観戦(viewer)ロール: 入力UIを出さず閲覧専用にする(書き込みはRLSでも拒否される)
+  if (state.settings.officialTeamId && state.settings.officialRole === 'viewer') {
+    return (
+      <div>
+        {game && <Scoreboard game={game} />}
+        <div className="big-note">
+          👀 観戦モード(閲覧専用)です。チームの記録係が入力したスコアが自動で反映されます。
+          成績・試合結果タブから記録を閲覧できます。
+        </div>
+        {game && (
+          <div className="card">
+            <h2>試合経過</h2>
+            {[...game.playLogs].filter((l) => l.kind !== 'run').slice(-10).reverse().map((l) => (
+              <div className="log-line" key={l.id}>
+                <b>{l.inning}回{l.isTop ? '表' : '裏'}</b> {l.text}
+              </div>
+            ))}
+            {game.playLogs.length === 0 && <div className="dim small">まだプレイがありません。</div>}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   // 試合終了直後もハイライト/試合経過だけは表示し続ける(閉じたらGameSetupに戻る)
   if (!game || (game.status === 'finished' && sheet?.kind !== 'highlight' && !showProgress)) return <GameSetup />;
 

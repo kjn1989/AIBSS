@@ -93,6 +93,11 @@ export default function OrderTab() {
   // AIスタメン提案は「草野球」エディション限定の機能
   const aiCoachEnabled = state.settings.edition === '草野球';
 
+  // 公式クラウドの観戦(viewer)ロールは編集不可
+  if (state.settings.officialTeamId && state.settings.officialRole === 'viewer') {
+    return <div className="big-note">👀 観戦モード(閲覧専用)のため、オーダーの編集はできません。</div>;
+  }
+
   if (!game || game.status === 'finished') {
     return <div className="big-note">📋 スコア入力タブで試合を開始すると、オーダーを設定できます。</div>;
   }

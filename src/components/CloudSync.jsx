@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../state/store.jsx';
 import { connectCloud } from '../lib/cloud.js';
-import { connectOfficial, watchAuth, officialAvailable } from '../lib/officialCloud.js';
+import { connectOfficial, watchAuth, officialAvailable, listMyTeams } from '../lib/officialCloud.js';
 
 // ヘッドレス同期コンポーネント: 設定に応じて Firestore と双方向同期する。
 // 接続先は2系統(公式クラウドを優先):
@@ -41,6 +41,13 @@ export default function CloudSync() {
         dispatch({ type: 'SET_CLOUD_STATUS', status: 'off' });
         return;
       }
+      // 自分のロール(owner/scorer/viewer)を取得してUI制御用に保存(観戦ロールは入力UIを隠す)
+      listMyTeams().then((teams) => {
+        const role = teams.find((t) => t.teamId === officialTeamId)?.role || null;
+        if (role !== state.settings.officialRole) {
+          dispatch({ type: 'UPDATE_SETTINGS', patch: { officialRole: role } });
+        }
+      }).catch(() => {});
       const conn = connectOfficial({
         teamId: officialTeamId,
         onStatus: (status) => dispatch({ type: 'SET_CLOUD_STATUS', status }),
@@ -86,6 +93,8 @@ export default function CloudSync() {
   // ローカル変更のプッシュ(デバウンス)
   useEffect(() => {
     if (!connRef.current) return;
+    // 観戦(viewer)ロールは書き込み権限が無い(RLSで拒否される)のでpushしない
+    if (useOfficial && state.settings.officialRole === 'viewer') return;
     const t = setTimeout(async () => {
       const conn = connRef.current;
       if (!conn) return;
