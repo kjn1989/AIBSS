@@ -1,4 +1,4 @@
-// AI-BSS のPWAアイコン(PNG)を public/favicon.svg と同じデザインから生成する。
+// AI-BASE DIAMOND のPWAアイコン(PNG)を public/favicon.svg と同じデザインから生成する。
 // 実行: node scripts/gen-icons.mjs  (playwright-core + 同梱chromiumを使用)
 // - icon-192/512: maskable対応のため角丸なし全面背景(OS側が切り抜く)
 // - apple-touch-icon(180): iOSが角丸を付けるため同じく角丸なし

@@ -8,7 +8,7 @@
  *  - Firestore 等の外部APIリクエストはキャッシュ対象外(SDK側が
  *    オフラインキューを持つため素通しする)。
  */
-const CACHE = 'aibss-v2'; // リブランド時にキャッシュ名を更新(旧キャッシュはactivateで削除される)
+const CACHE = 'aibss-v3'; // リブランド時にキャッシュ名を更新(旧キャッシュはactivateで削除される)
 const APP_SHELL = ['./', './index.html', './manifest.webmanifest', './favicon.svg', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', (e) => {

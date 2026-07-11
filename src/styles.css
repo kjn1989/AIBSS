@@ -99,12 +99,13 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .app-header h1 { font-size: 20px; font-weight: 800; letter-spacing: 0.02em; display: flex; align-items: center; gap: 8px; }
 .app-header .sub { font-size: 12px; color: var(--text-dim); margin-top: 1px; }
 .header-btns { display: flex; gap: 8px; align-items: center; }
-/* AI-BSS ワードマーク(ヘッダー) */
+/* AI-BASE DIAMOND ワードマーク(ヘッダー) */
 .brand-mark { flex-shrink: 0; }
 .brand-ai { color: var(--accent); font-weight: 800; letter-spacing: 0.04em; }
 .brand-dash { color: var(--text-dim); font-weight: 800; }
 .brand-base { color: var(--gold); font-weight: 800; letter-spacing: 0.04em; }
-.brand-for { color: var(--accent); font-size: 13px; font-weight: 800; }
+.brand-diamond { color: var(--text); font-weight: 800; letter-spacing: 0.12em; font-size: 0.82em; }
+.brand-for { color: var(--accent); font-weight: 800; }
 
 .main {
   flex: 1;

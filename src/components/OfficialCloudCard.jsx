@@ -8,7 +8,7 @@ import QRCode from './QRCode.jsx';
 
 const ROLE_LABEL = { owner: '管理者', scorer: '記録係', viewer: '観戦' };
 
-// AI-BSS公式クラウド(Supabase): ログイン+チーム登録+招待+メンバー管理。
+// AI-BASE公式クラウド(Supabase): ログイン+チーム登録+招待+メンバー管理。
 // 旧方式(自前Firebase)のCloudCardとは独立(公式が設定されていれば同期はこちらを優先)。
 export default function OfficialCloudCard() {
   const { state, dispatch } = useStore();
@@ -80,7 +80,7 @@ export default function OfficialCloudCard() {
   if (!available) {
     return (
       <div className="card">
-        <h2>☁️ AI-BSS公式クラウド</h2>
+        <h2>☁️ AI-BASE公式クラウド</h2>
         <p className="small dim">
           準備中です。ログイン+招待リンクだけでチーム同期ができる公式クラウド機能が、まもなく使えるようになります。
           (運営者向け: docs/supabase-setup.md の手順で接続設定を注入すると有効になります)
@@ -91,7 +91,7 @@ export default function OfficialCloudCard() {
 
   return (
     <div className="card">
-      <h2>☁️ AI-BSS公式クラウド</h2>
+      <h2>☁️ AI-BASE公式クラウド</h2>
 
       {user === undefined && <p className="small dim">ログイン状態を確認中…</p>}
 

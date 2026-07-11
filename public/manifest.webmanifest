@@ -1,6 +1,6 @@
 {
-  "name": "AI-BSS(アイブス) — AI野球スコア＆成績",
-  "short_name": "AI-BSS",
+  "name": "AI-BASE DIAMOND — AI野球スコア＆成績",
+  "short_name": "AI-BASE",
   "description": "音声実況＆タップUIのAI野球スコアラー。草野球・ブカツ・少年野球のスコアと成績を一元管理。",
   "start_url": "./",
   "scope": "./",

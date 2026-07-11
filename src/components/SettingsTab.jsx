@@ -307,7 +307,7 @@ function BackupCard() {
       try {
         const data = JSON.parse(reader.result);
         if (data.app !== 'aibss-baseball-scorer' || typeof data.games !== 'object') {
-          window.alert('このファイルはAI-BSSのバックアップではないようです。');
+          window.alert('このファイルはAI-BASEのバックアップではないようです。');
           return;
         }
         const nGames = Object.keys(data.games || {}).length;
@@ -392,7 +392,7 @@ function CloudCard() {
       <h2>クラウド共有 (上級者向け・自前Firebase)</h2>
       <p className="small dim" style={{ marginBottom: 10 }}>
         自分のFirebaseプロジェクトで同期したい上級者向けの旧方式です。
-        通常は上の「AI-BSS公式クラウド」をお使いください(公式クラウド接続中はこちらは使われません)。
+        通常は上の「AI-BASE公式クラウド」をお使いください(公式クラウド接続中はこちらは使われません)。
         Firebaseコンソールで作ったプロジェクトの構成(firebaseConfig)を貼り付け、
         チームで共通の「チームコード」を決めて全員が同じ値を入力すると、試合データがリアルタイムで共有されます。
       </p>

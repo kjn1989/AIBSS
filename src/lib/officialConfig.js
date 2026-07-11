@@ -1,5 +1,5 @@
 // ============================================================
-// AI-BSS公式クラウド(Supabase)の接続設定
+// AI-BASE公式クラウド(Supabase)の接続設定
 // 全ユーザー共通の「公式」Supabaseプロジェクトへの接続情報。
 // URLとanonキーは公開されても安全な値(権限はRLS: supabase/schema.sql が強制する)。
 // Supabase無料プランはカード登録が不要なため、従量課金が構造的に発生しない。
@@ -12,7 +12,7 @@
 // セットアップ手順: docs/supabase-setup.md
 // ============================================================
 
-// 本番: AI-BSS公式Supabaseプロジェクト(aibss)。値は公開されても安全(RLSが権限を強制)。
+// 本番: AI-BASE DIAMOND公式Supabaseプロジェクト(aibss)。値は公開されても安全(RLSが権限を強制)。
 const FILE_CONFIG = {
   url: 'https://kkajcckyplzuujhsrwxa.supabase.co',
   anonKey: 'sb_publishable_mm1-s8BRfpvGeJYDelgUUg_EN19k365',

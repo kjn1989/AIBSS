@@ -1,4 +1,4 @@
-// 第12段階: AI-BSS公式クラウド(Supabase版)のUI状態検証
+// 第12段階: AI-BASE公式クラウド(Supabase版)のUI状態検証
 // バックエンド無しで検証できる範囲: 未設定時の「準備中」表示 / 設定時のログインUI /
 // 招待リンクの参加オーバーレイ表示。
 // フル同期フロー(ログイン→チーム登録→招待→参加→双方向同期→RLS拒否)は
@@ -18,7 +18,7 @@ await page.goto('http://localhost:4173/', { waitUntil: 'load' });
 await page.evaluate(() => localStorage.clear());
 await page.reload({ waitUntil: 'load' });
 await page.click('[aria-label="設定"]');
-await page.waitForSelector('text=AI-BSS公式クラウド');
+await page.waitForSelector('text=AI-BASE公式クラウド');
 console.log('1. 未設定時に準備中表示:', (await page.locator('text=準備中です').count()) > 0 ? 'OK' : 'NG');
 
 // ---- 2. 設定あり → メール+パスワードのログインUI ----
@@ -31,7 +31,7 @@ console.log('   パスワード欄あり:', (await page.locator('.card:has(h2:ha
 
 // ---- 3. 招待リンク(?ct=) → 参加オーバーレイ+ログイン欄 ----
 await page.goto('http://localhost:4173/?ct=dummy-token', { waitUntil: 'load' });
-await page.waitForSelector('text=チームに参加 (AI-BSS公式クラウド)', { timeout: 10000 });
+await page.waitForSelector('text=チームに参加 (AI-BASE公式クラウド)', { timeout: 10000 });
 await page.waitForSelector('.invite-overlay input[type="email"]', { timeout: 10000 });
 console.log('3. 招待リンクで参加オーバーレイ+ログイン欄表示: OK');
 await page.click('text=今はしない');

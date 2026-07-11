@@ -72,7 +72,7 @@ export async function generateNewspaperImage({ article, game, teamName, photo })
   // マストヘッド
   ctx.textAlign = 'center';
   ctx.font = MAST_FONT(54);
-  ctx.fillText('AI-BSS スポーツ', W / 2, y + 44);
+  ctx.fillText('AI-BASE DIAMOND スポーツ', W / 2, y + 44);
   y += 60;
   ctx.fillStyle = '#141414';
   ctx.fillRect(M, y, CW, 3);
@@ -162,7 +162,7 @@ export async function generateNewspaperImage({ article, game, teamName, photo })
   y += 8;
   ctx.fillStyle = '#555';
   ctx.font = BODY_FONT(16);
-  ctx.fillText('AI-BSS — AI野球スコア&成績', M, y + 16);
+  ctx.fillText('AI-BASE DIAMOND — AI野球スコア&成績', M, y + 16);
 
   return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
 }

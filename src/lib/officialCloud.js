@@ -1,5 +1,5 @@
 // ============================================================
-// AI-BSS公式クラウド(Supabase)
+// AI-BASE公式クラウド(Supabase)
 //  - 認証: メール+パスワード(確認メール不要設定を推奨) / マジックリンク(任意)
 //  - チーム管理: teams + team_members(権限: owner/scorer/viewer) + invites(招待トークン)
 //  - 同期: team_games|team_players|team_crew を初回全取得+Realtime購読、push=upsert
