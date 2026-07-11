@@ -5,6 +5,7 @@ import { formatIP } from '../lib/model.js';
 import GameScopeToggle, { scopedGames } from './GameScopeToggle.jsx';
 import PlayerView from './PlayerView.jsx';
 import MemberSection from './MemberSection.jsx';
+import TitleCards from './TitleCards.jsx';
 
 // 成績・詳細ランキング(10大メトリクス) + 投手成績(旧「投手」タブを統合)
 export default function StatsTab() {
@@ -27,6 +28,9 @@ export default function StatsTab() {
   return (
     <div>
       <GameScopeToggle value={scope} onChange={setScope} />
+
+      {/* タイトルホルダー(👑)。ホームから移設 */}
+      <TitleCards games={games} />
 
       <div className="section-title">打者メトリクス</div>
       <div className="grid3">

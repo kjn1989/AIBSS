@@ -27,9 +27,7 @@ for (const m of ['出塁率', '被打率', 'ホールド', 'セーブ']) {
   console.log(`${title} → ${row}`);
 }
 
-// ホームのホールド王カード
-await page.click('.tabbar button:has-text("ホーム")');
-await page.waitForTimeout(200);
+// 成績タブのホールド王カード(タイトルカードはホームから成績タブへ移設)
 const holdCard = await page.$('.title-card:has-text("ホールド王")');
 console.log('ホールド王カード:', holdCard ? (await holdCard.textContent()).replace(/\s+/g, ' ').trim() : 'なし');
 

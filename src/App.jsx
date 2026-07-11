@@ -175,7 +175,7 @@ export default function App() {
       </header>
 
       <main className="main">
-        {tab === 'home' && <HomeTab />}
+        {tab === 'home' && <HomeTab onNavigate={setTab} />}
         {tab === 'score' && <ScoreTab />}
         {tab === 'order' && <OrderTab />}
         {tab === 'stats' && <StatsTab />}

@@ -6,6 +6,24 @@ import { GameProgressContent } from './GameProgressView.jsx';
 import { PitchingGameManagement } from './PitchingTab.jsx';
 import ScoreSheetView from './ScoreSheetView.jsx';
 import NewspaperView from './NewspaperView.jsx';
+import ImportCsvView from './ImportCsvView.jsx';
+
+// 過去試合のCSV取り込み(ホームから移設): 紙のスコアブック等を成績に取り込む入口
+function ImportCard() {
+  const [showImport, setShowImport] = useState(false);
+  return (
+    <div className="card">
+      <h2>過去の試合を取り込む</h2>
+      <p className="small dim" style={{ marginBottom: 8 }}>
+        紙のスコアブックや他アプリの記録を、CSVテンプレート経由でまとめて成績に取り込めます。
+      </p>
+      <button style={{ width: '100%' }} onClick={() => setShowImport(true)}>
+        📄 CSVで過去試合を取り込む
+      </button>
+      {showImport && <ImportCsvView onClose={() => setShowImport(false)} />}
+    </div>
+  );
+}
 
 // 試合レポート(ハイライト)カード。HighlightSheetと同じ内容をタブ内に埋め込む形で表示
 function HighlightCard({ game }) {
@@ -92,7 +110,12 @@ export default function ResultTab() {
   const knownSeasons = [...new Set(games.map((g) => g.season).filter(Boolean))];
 
   if (!game) {
-    return <div className="big-note">まだ試合データがありません。「スコア入力」タブから試合を始めましょう。</div>;
+    return (
+      <div>
+        <div className="big-note">まだ試合データがありません。「スコア入力」タブから試合を始めましょう。</div>
+        <ImportCard />
+      </div>
+    );
   }
 
   return (
@@ -172,6 +195,8 @@ export default function ResultTab() {
           <PitchingGameManagement game={game} />
         </>
       )}
+
+      <ImportCard />
 
       {showSheet && <ScoreSheetView game={game} onClose={() => setShowSheet(false)} />}
       {showNewspaper && <NewspaperView game={game} onClose={() => setShowNewspaper(false)} />}
