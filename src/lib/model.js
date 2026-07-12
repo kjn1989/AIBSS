@@ -143,7 +143,7 @@ export function newAtBat({ gameId, playerId, order, snapshot }) {
     direction: null, // DIRECTIONS のキー
     rbi: 0,
     runsOnPlay: 0,
-    // 投球(Pitch構造の配列): { type: 'ball'|'strike'|'foul'|'inplay', ts }
+    // 投球(Pitch構造の配列): { type: 'ball'|'strike'|'foul'|'inplay', sub?, ts }
     pitches: [],
     pitchCount: 0,
     firstPitch: null, // 初球結果
@@ -163,8 +163,11 @@ export function newAtBat({ gameId, playerId, order, snapshot }) {
 }
 
 // Pitch: 1球。AtBat.pitches に格納(同一スキーマでCSVにも展開)
-export function newPitch(type) {
-  return { type, ts: Date.now() }; // type: 'ball'|'strike'|'foul'|'inplay'
+// type: 'ball'|'strike'|'foul'|'inplay' / sub: ストライクの種別 'looking'(見逃し)|'swinging'(空振り)。任意。
+export function newPitch(type, sub = null) {
+  const p = { type, ts: Date.now() };
+  if (sub) p.sub = sub;
+  return p;
 }
 
 // PlayLog: 全プレイの時系列ログ

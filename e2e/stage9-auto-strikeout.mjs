@@ -24,27 +24,26 @@ await page.click('button:has-text("試合開始")');
 await page.click('button:has-text("登録選手から打順を自動セット")');
 await page.waitForTimeout(200);
 
-// ==== 1. ストライク×2 → ヒント表示 → 3球目ストライクで三振カード ====
-await page.click('.count-btns .strike');
-await page.click('.count-btns .strike');
+// ==== 1. 見逃しストライク×3 → 三振カードは「見逃し」が事前選択されている ====
+await page.click('.count-btns .strike:has-text("見逃し")');
+await page.click('.count-btns .strike:has-text("見逃し")');
 console.log('hint shown:', await page.isVisible('.pill.amber:has-text("次のストライクで三振")'));
-await page.click('.count-btns .strike');
+await page.click('.count-btns .strike:has-text("見逃し")');
 await page.waitForSelector('.sheet');
 console.log('strikeout card:', (await page.textContent('.sheet .q')).trim());
-// 見逃し三振を選んで確定
-await page.click('.sheet button:has-text("見逃し三振")');
+console.log('見逃し pre-selected:', await page.isVisible('.sheet button.primary:has-text("見逃し三振")'));
 await page.click('.sheet-actions button:has-text("三振アウトで確定")');
 await page.waitForTimeout(200);
 const log1 = await page.textContent('.log-line');
 console.log('log:', log1.trim(), '/ outs:', await page.$$eval('.out-dot.on', (e) => e.length));
 
-// ==== 2. ファウル2球 + ストライク1球 でも三振カード ====
+// ==== 2. ファウル2球 + 空振りストライク → 「空振り」が事前選択されている ====
 await page.click('.count-btns .foul');
 await page.click('.count-btns .foul');
-await page.click('.count-btns .strike');
+await page.click('.count-btns .strike:has-text("空振り")');
 await page.waitForSelector('.sheet');
-console.log('K via fouls+strike card shown: true');
-// 空振り(デフォルト)のまま確定
+console.log('空振り pre-selected:', await page.isVisible('.sheet button.primary:has-text("空振り三振")'));
+// 空振りのまま確定
 await page.click('.sheet-actions button:has-text("三振アウトで確定")');
 await page.waitForTimeout(200);
 console.log('log:', (await page.textContent('.log-line')).trim());

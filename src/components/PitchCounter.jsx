@@ -18,10 +18,11 @@ export default function PitchCounter({ game, onAutoEvent }) {
   const dispS = Math.min(strikes + fouls, 2);
   const firstLabel = { ball: 'ボール', strike: 'ストライク', foul: 'ファウル' }[pitches[0]?.type];
 
-  const add = (pitchType) => {
-    dispatch({ type: 'ADD_PITCH', gameId: game.id, pitchType });
+  const add = (pitchType, sub = null) => {
+    dispatch({ type: 'ADD_PITCH', gameId: game.id, pitchType, sub });
     // 自動判定: 3球目のストライク=三振 / 4球目のボール=四球
-    if (pitchType === 'strike' && dispS >= 2) onAutoEvent?.('so');
+    // 三振時は押したボタン(見逃し/空振り)を三振種別として引き継ぐ
+    if (pitchType === 'strike' && dispS >= 2) onAutoEvent?.('so', sub === 'looking' ? 'looking' : 'swinging');
     else if (pitchType === 'ball' && dispB >= 3) onAutoEvent?.('bb');
   };
 
@@ -31,7 +32,7 @@ export default function PitchCounter({ game, onAutoEvent }) {
         <span className="bs b">B {dispB}</span>
         <span className="bs s">S {dispS}</span>
         <span className="pitches">
-          {pitches.length}球{firstLabel ? ` (初球:${firstLabel})` : ''}
+          この打席{pitches.length}球{firstLabel ? ` (初球:${firstLabel})` : ''}
         </span>
       </div>
       {(dispS === 2 || dispB === 3) && (
@@ -40,9 +41,10 @@ export default function PitchCounter({ game, onAutoEvent }) {
           {dispB === 3 && <span className="pill green">次のボールで四球</span>}
         </div>
       )}
-      <div className="count-btns">
+      <div className="count-btns two">
+        <button className="strike" onClick={() => add('strike', 'looking')}>見逃し<span className="btn-sub">ストライク</span></button>
+        <button className="strike" onClick={() => add('strike', 'swinging')}>空振り<span className="btn-sub">ストライク</span></button>
         <button className="ball" onClick={() => add('ball')}>ボール</button>
-        <button className="strike" onClick={() => add('strike')}>ストライク</button>
         <button className="foul" onClick={() => add('foul')}>ファウル</button>
       </div>
       {pitches.length > 0 && (

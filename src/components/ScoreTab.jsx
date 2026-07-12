@@ -29,6 +29,36 @@ function AtBatHistory({ items }) {
   );
 }
 
+// ---- 現在の投手の累積球数メーター(スコア入力中・守備時に常時表示) ----
+// 打席ごとのB/Sカウンター(PitchCounter)とは別に、この試合の投手の総球数を大きく見せる。
+// 球数制限がある場合は「XX / 上限」+バー+色(緑→琥珀→赤)で疲労・交代の目安を示す。
+function PitcherLoad({ game }) {
+  const nameOf = usePlayerName();
+  const pid = game.currentPitcherId;
+  if (!pid) return null;
+  const pr = (game.pitchingRecords || []).find((r) => r.playerId === pid);
+  const pitches = pr?.pitches || 0;
+  const limit = game.rules?.pitchLimit?.perGame || null;
+  const warnAt = limit ? (game.rules.pitchLimit.warnAt ?? Math.max(1, limit - 10)) : null;
+  const level = !limit ? '' : pitches >= limit ? 'over' : pitches >= warnAt ? 'warn' : '';
+  const pct = limit ? Math.min(100, Math.round((pitches / limit) * 100)) : 0;
+
+  return (
+    <div className={`pitch-meter ${level}`}>
+      <div className="pm-body">
+        <div className="pm-label">⚾ {nameOf(pid)} のこの試合の球数{limit ? `(上限${limit}球)` : ''}</div>
+        {limit && (
+          <div className="pm-bar"><div className="pm-fill" style={{ width: `${pct}%` }} /></div>
+        )}
+      </div>
+      <div className="pm-count">
+        <b>{pitches}</b>
+        <span className="pm-unit">{limit ? `/ ${limit}球` : '球'}</span>
+      </div>
+    </div>
+  );
+}
+
 // ---- 試合セットアップ(試合がない/選択されていないとき) ----
 function GameSetup() {
   const { state, dispatch } = useStore();
@@ -328,9 +358,9 @@ function ScoreAdjustSheet({ game, onClose }) {
 }
 
 // ---- 三振確認カード(2ストライク後のストライクで自動表示) ----
-function StrikeoutSheet({ game, batterName, onClose, onFurinige }) {
+function StrikeoutSheet({ game, batterName, initialSoType, onClose, onFurinige }) {
   const { dispatch } = useStore();
-  const [soType, setSoType] = useState('swinging');
+  const [soType, setSoType] = useState(initialSoType || 'swinging');
 
   const confirmOut = () => {
     dispatch({
@@ -568,6 +598,7 @@ export default function ScoreTab() {
               ))}
             </select>
           </div>
+          <PitcherLoad game={game} />
           {oppBatter && (
             <>
               <div className="flex mt12">
@@ -590,8 +621,8 @@ export default function ScoreTab() {
 
       <PitchCounter
         game={game}
-        onAutoEvent={(kind) =>
-          setSheet(kind === 'so' ? { kind: 'strikeout' } : { kind: 'play', result: 'bb' })
+        onAutoEvent={(kind, soType) =>
+          setSheet(kind === 'so' ? { kind: 'strikeout', soType } : { kind: 'play', result: 'bb' })
         }
       />
 
@@ -655,6 +686,7 @@ export default function ScoreTab() {
         <StrikeoutSheet
           game={game}
           batterName={myBatting && batter ? nameOf(batter.playerId) : null}
+          initialSoType={sheet.soType}
           onClose={() => setSheet(null)}
           onFurinige={(soType) => setSheet({ kind: 'play', result: 'so', soType, batterTo: 1 })}
         />

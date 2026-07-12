@@ -288,10 +288,32 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .count-display .bs.s { color: var(--amber); }
 .count-display .pitches { font-size: 12px; color: var(--text-dim); }
 .count-btns { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
-.count-btns button { min-height: 52px; font-size: 17px; font-weight: 800; }
+.count-btns.two { grid-template-columns: 1fr 1fr; }
+.count-btns button { min-height: 52px; font-size: 17px; font-weight: 800; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; line-height: 1.1; }
+.count-btns button .btn-sub { font-size: 10px; font-weight: 600; opacity: 0.75; }
 .count-btns .ball { border-color: var(--green); color: var(--green); }
 .count-btns .strike { border-color: var(--amber); color: var(--amber); }
 .count-btns .foul { border-color: var(--text-dim); }
+
+/* ---- 投手の累積球数メーター(スコア入力中に常時表示) ---- */
+.pitch-meter {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--bg-3); border: 1px solid var(--line);
+  border-radius: 10px; padding: 8px 12px; margin-top: 10px;
+}
+.pitch-meter.warn { border-color: var(--amber); }
+.pitch-meter.over { border-color: var(--red); }
+.pitch-meter .pm-body { flex: 1; min-width: 0; }
+.pitch-meter .pm-label { font-size: 11px; color: var(--text-dim); }
+.pitch-meter .pm-bar { height: 6px; background: var(--bg); border-radius: 3px; margin-top: 6px; overflow: hidden; }
+.pitch-meter .pm-fill { height: 100%; background: var(--green); border-radius: 3px; transition: width .2s ease; }
+.pitch-meter.warn .pm-fill { background: var(--amber); }
+.pitch-meter.over .pm-fill { background: var(--red); }
+.pitch-meter .pm-count { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pitch-meter .pm-count b { font-size: 28px; font-weight: 900; line-height: 1; }
+.pitch-meter.warn .pm-count b { color: var(--amber); }
+.pitch-meter.over .pm-count b { color: var(--red); }
+.pitch-meter .pm-count .pm-unit { font-size: 13px; color: var(--text-dim); margin-left: 2px; }
 
 /* ---- 結果パッド ---- */
 .result-pad { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }

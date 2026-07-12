@@ -489,10 +489,10 @@ export function reducer(state, action) {
 
     // ===== 投球カウンター =====
     case 'ADD_PITCH': {
-      // action.pitchType: 'ball' | 'strike' | 'foul'
+      // action.pitchType: 'ball' | 'strike' | 'foul' / action.sub: 'looking' | 'swinging'(ストライクのみ)
       const g = deep(state.games[action.gameId]);
       const pending = ensurePending(g);
-      pending.pitches.push(newPitch(action.pitchType));
+      pending.pitches.push(newPitch(action.pitchType, action.sub));
       // 守備時は投手の球数も加算
       if (!isMyTeamBatting(g) && g.currentPitcherId) {
         ensurePitchingRecord(g, g.currentPitcherId).pitches += 1;
