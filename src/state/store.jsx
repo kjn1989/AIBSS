@@ -154,7 +154,16 @@ function ensurePitchingRecord(game, playerId) {
     pr = newPitchingRecord({ gameId: game.id, playerId, appearanceOrder: game.pitchingRecords.length + 1 });
     game.pitchingRecords.push(pr);
   }
+  if (!pr.pitchesByInning) pr.pitchesByInning = {}; // 旧レコード互換
   return pr;
+}
+
+// 投手の球数を delta 分だけ増減(総数+イニング別を同時に更新)。現在のイニングを鍵にする。
+function bumpPitches(game, playerId, delta) {
+  const pr = ensurePitchingRecord(game, playerId);
+  pr.pitches = Math.max(0, pr.pitches + delta);
+  const key = String(game.inning);
+  pr.pitchesByInning[key] = Math.max(0, (pr.pitchesByInning[key] || 0) + delta);
 }
 
 // クラッチ判定: 打席開始時点差 + この打席の打点
@@ -493,9 +502,9 @@ export function reducer(state, action) {
       const g = deep(state.games[action.gameId]);
       const pending = ensurePending(g);
       pending.pitches.push(newPitch(action.pitchType, action.sub));
-      // 守備時は投手の球数も加算
+      // 守備時は投手の球数も加算(総数+イニング別)
       if (!isMyTeamBatting(g) && g.currentPitcherId) {
-        ensurePitchingRecord(g, g.currentPitcherId).pitches += 1;
+        bumpPitches(g, g.currentPitcherId, +1);
       }
       g.updatedAt = Date.now();
       return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
@@ -505,8 +514,7 @@ export function reducer(state, action) {
       if (g.pending?.pitches.length) {
         const removed = g.pending.pitches.pop();
         if (!isMyTeamBatting(g) && g.currentPitcherId && removed) {
-          const pr = ensurePitchingRecord(g, g.currentPitcherId);
-          pr.pitches = Math.max(0, pr.pitches - 1);
+          bumpPitches(g, g.currentPitcherId, -1);
         }
       }
       g.updatedAt = Date.now();
@@ -557,7 +565,7 @@ export function reducer(state, action) {
       const resultDef = RESULTS[p.result];
       if (resultDef && (resultDef.hit || ['out', 'error', 'sacBunt', 'sacFly', 'interference'].includes(p.result))) {
         pitches.push(newPitch('inplay')); // インプレーの1球を自動加算
-        if (!myBatting && g.currentPitcherId) ensurePitchingRecord(g, g.currentPitcherId).pitches += 1;
+        if (!myBatting && g.currentPitcherId) bumpPitches(g, g.currentPitcherId, +1);
       }
       pitches = ensureMinimumPitches(pitches, p.result);
       const balls = pitches.filter((pt) => pt.type === 'ball').length;

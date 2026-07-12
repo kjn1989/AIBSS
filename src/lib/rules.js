@@ -55,6 +55,17 @@ export function defaultPresetIdForEdition(edition) {
   return { 草野球: 'kusa7', 少年野球: 'gakudo6', 'ブカツ(中高大)': 'chu7' }[edition] || 'kusa7';
 }
 
+// 記憶したプリセットは「同じエディションのプリセット」か「明示指定(custom/none)」の場合のみ
+// 引き継ぎ、それ以外はエディションの既定に戻す。
+// (例: 草野球の試合に、以前使った学童の球数制限が漏れて付くのを防ぐ)
+export function initialPresetIdFor(lastId, edition) {
+  if (!lastId) return defaultPresetIdForEdition(edition);
+  if (lastId === 'custom' || lastId === 'none') return lastId;
+  const p = presetById(lastId);
+  if (p && p.edition === edition) return lastId;
+  return defaultPresetIdForEdition(edition);
+}
+
 // ルール内容の1行説明(選択UI・確認表示用)
 export function describeRules(rules) {
   if (!rules) return 'ルール管理なし(回数無制限・判定なし)';

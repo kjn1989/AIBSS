@@ -13,7 +13,7 @@ import HighlightSheet from './HighlightSheet.jsx';
 import GameProgressView from './GameProgressView.jsx';
 import { POSITIONS, OPP_LETTERS } from '../lib/model.js';
 import { playLabel } from '../lib/voiceParser.js';
-import { RULE_PRESETS, presetById, defaultPresetIdForEdition, describeRules, gameEndCheck, pitchLimitCheck, timeLimitCheck } from '../lib/rules.js';
+import { RULE_PRESETS, presetById, describeRules, initialPresetIdFor, gameEndCheck, pitchLimitCheck, timeLimitCheck } from '../lib/rules.js';
 
 // ---- 直近の打席結果を「1. 左翼単打 2. 見逃し三振」のように並べる小さな履歴表示 ----
 function AtBatHistory({ items }) {
@@ -42,20 +42,150 @@ function PitcherLoad({ game }) {
   const warnAt = limit ? (game.rules.pitchLimit.warnAt ?? Math.max(1, limit - 10)) : null;
   const level = !limit ? '' : pitches >= limit ? 'over' : pitches >= warnAt ? 'warn' : '';
   const pct = limit ? Math.min(100, Math.round((pitches / limit) * 100)) : 0;
+  // イニング別投球数(ペース把握用)。回順にチップ表示、現在の回を強調。
+  const byInning = Object.entries(pr?.pitchesByInning || {})
+    .map(([inn, n]) => [Number(inn), n])
+    .filter(([, n]) => n > 0)
+    .sort((a, b) => a[0] - b[0]);
 
   return (
-    <div className={`pitch-meter ${level}`}>
-      <div className="pm-body">
-        <div className="pm-label">⚾ {nameOf(pid)} のこの試合の球数{limit ? `(上限${limit}球)` : ''}</div>
-        {limit && (
-          <div className="pm-bar"><div className="pm-fill" style={{ width: `${pct}%` }} /></div>
-        )}
+    <>
+      <div className={`pitch-meter ${level}`}>
+        <div className="pm-body">
+          <div className="pm-label">⚾ {nameOf(pid)} のこの試合の球数{limit ? `(上限${limit}球)` : ''}</div>
+          {limit && (
+            <div className="pm-bar"><div className="pm-fill" style={{ width: `${pct}%` }} /></div>
+          )}
+        </div>
+        <div className="pm-count">
+          <b>{pitches}</b>
+          <span className="pm-unit">{limit ? `/ ${limit}球` : '球'}</span>
+        </div>
       </div>
-      <div className="pm-count">
-        <b>{pitches}</b>
-        <span className="pm-unit">{limit ? `/ ${limit}球` : '球'}</span>
+      {byInning.length > 0 && (
+        <div className="pitch-innings">
+          <span className="pi-title">回別</span>
+          {byInning.map(([inn, n]) => (
+            <span className={`pi-chip ${inn === game.inning ? 'now' : ''}`} key={inn}>
+              {inn}回<b>{n}</b>
+            </span>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+// ---- ルール選択の共有ロジック(試合作成/進行中の変更で共用) ----
+const EMPTY_CUSTOM = { innings: '7', mercyAfter: '', mercyDiff: '', pitchPerGame: '', timeLimitMin: '' };
+
+// presetId + customフォーム → rulesオブジェクト(またはnull)
+function resolveRulesFrom(presetId, custom) {
+  if (presetId === 'none') return null;
+  if (presetId === 'custom') {
+    const innings = Math.max(1, parseInt(custom.innings, 10) || 7);
+    const after = parseInt(custom.mercyAfter, 10);
+    const diff = parseInt(custom.mercyDiff, 10);
+    const mercy = Number.isFinite(after) && Number.isFinite(diff) && after > 0 && diff > 0 ? [{ after, diff }] : [];
+    const perGame = parseInt(custom.pitchPerGame, 10);
+    const pitchLimit = Number.isFinite(perGame) && perGame > 0 ? { perGame, warnAt: Math.max(1, perGame - 10) } : null;
+    const tl = parseInt(custom.timeLimitMin, 10);
+    const timeLimitMin = Number.isFinite(tl) && tl > 0 ? tl : null;
+    return { innings, mercy, pitchLimit, timeLimitMin };
+  }
+  return presetById(presetId)?.rules || null;
+}
+
+// rulesオブジェクト → カスタムフォームの初期値
+function customFromRules(rules) {
+  const base = rules || { innings: 7, mercy: [], pitchLimit: null, timeLimitMin: null };
+  return {
+    innings: String(base.innings || 7),
+    mercyAfter: base.mercy?.[0] ? String(base.mercy[0].after) : '',
+    mercyDiff: base.mercy?.[0] ? String(base.mercy[0].diff) : '',
+    pitchPerGame: base.pitchLimit?.perGame ? String(base.pitchLimit.perGame) : '',
+    timeLimitMin: base.timeLimitMin ? String(base.timeLimitMin) : '',
+  };
+}
+
+// ルール選択UI(プリセット選択+カスタム入力+説明)。作成時・変更時で共用。
+function RulePicker({ presetId, custom, edition, onPresetChange, setCustom }) {
+  return (
+    <>
+      <label className="small dim" style={{ display: 'block' }}>試合ルール</label>
+      <select value={presetId} onChange={(e) => onPresetChange(e.target.value)}>
+        {RULE_PRESETS.map((p) => (
+          <option key={p.id} value={p.id}>{p.label}{p.edition === edition ? '' : ` (${p.edition})`}</option>
+        ))}
+        <option value="custom">カスタム(自分で設定)</option>
+        <option value="none">ルール管理なし</option>
+      </select>
+      {presetId === 'custom' && (
+        <div className="mt8">
+          <div className="grid3">
+            <div>
+              <label className="small dim">回数</label>
+              <input type="number" inputMode="numeric" value={custom.innings} onChange={(e) => setCustom({ ...custom, innings: e.target.value })} />
+            </div>
+            <div>
+              <label className="small dim">コールド回</label>
+              <input type="number" inputMode="numeric" placeholder="なし" value={custom.mercyAfter} onChange={(e) => setCustom({ ...custom, mercyAfter: e.target.value })} />
+            </div>
+            <div>
+              <label className="small dim">点差</label>
+              <input type="number" inputMode="numeric" placeholder="なし" value={custom.mercyDiff} onChange={(e) => setCustom({ ...custom, mercyDiff: e.target.value })} />
+            </div>
+          </div>
+          <div className="grid2 mt8">
+            <div>
+              <label className="small dim">球数制限(空欄=なし)</label>
+              <input type="number" inputMode="numeric" placeholder="例: 70" value={custom.pitchPerGame} onChange={(e) => setCustom({ ...custom, pitchPerGame: e.target.value })} />
+            </div>
+            <div>
+              <label className="small dim">時間制限・分(空欄=なし)</label>
+              <input type="number" inputMode="numeric" placeholder="例: 90" value={custom.timeLimitMin} onChange={(e) => setCustom({ ...custom, timeLimitMin: e.target.value })} />
+            </div>
+          </div>
+        </div>
+      )}
+      <p className="small dim mt8">
+        {describeRules(resolveRulesFrom(presetId, custom))}
+        {presetId !== 'none' && <><br />※ プリセットは代表例です。連盟・大会の要項に合わせて調整してください。成立時も自動終了はせず、確認してから終了できます。</>}
+      </p>
+    </>
+  );
+}
+
+// ---- 進行中の試合のルールを後から変更するシート ----
+function EditRulesSheet({ game, edition, onClose }) {
+  const { dispatch } = useStore();
+  // 現在のルールがどのプリセットと一致するか探し、なければカスタム(ルール無しはnone)
+  const matched = game.rules ? RULE_PRESETS.find((p) => JSON.stringify(p.rules) === JSON.stringify(game.rules)) : null;
+  const [presetId, setPresetId] = useState(game.rules ? (matched?.id || 'custom') : 'none');
+  const [custom, setCustom] = useState(customFromRules(game.rules));
+
+  const onPresetChange = (id) => {
+    setPresetId(id);
+    if (id === 'custom') setCustom(customFromRules(presetById(presetId)?.rules || game.rules));
+  };
+
+  return (
+    <Sheet title="試合ルールを変更" onClose={onClose}>
+      <p className="small dim">この試合のルール(回数・コールド・球数制限・時間制限)を変更します。既に記録済みのスコアはそのままです。</p>
+      <RulePicker presetId={presetId} custom={custom} edition={edition} onPresetChange={onPresetChange} setCustom={setCustom} />
+      <div className="sheet-actions">
+        <button className="ghost" onClick={onClose}>キャンセル</button>
+        <button
+          className="primary"
+          onClick={() => {
+            dispatch({ type: 'UPDATE_GAME_META', id: game.id, patch: { rules: resolveRulesFrom(presetId, custom) } });
+            onClose();
+          }}
+        >
+          この内容に変更
+        </button>
       </div>
-    </div>
+    </Sheet>
   );
 }
 
@@ -66,46 +196,21 @@ function GameSetup() {
   const [isHome, setIsHome] = useState(false);
   const [season, setSeason] = useState('');
   const edition = state.settings.edition || '草野球';
-  // ルール選択: 前回の選択を記憶。初回はエディションの既定プリセット
-  const [presetId, setPresetId] = useState(state.settings.lastRulePresetId || defaultPresetIdForEdition(edition));
-  const [custom, setCustom] = useState({ innings: '7', mercyAfter: '', mercyDiff: '', pitchPerGame: '', timeLimitMin: '' });
+  // ルール選択: 前回の選択を記憶(ただしエディションが一致する場合のみ)。初回はエディションの既定プリセット
+  const [presetId, setPresetId] = useState(initialPresetIdFor(state.settings.lastRulePresetId, edition));
+  const [custom, setCustom] = useState(EMPTY_CUSTOM);
   const ongoing = Object.values(state.games).filter((g) => g.status === 'ongoing' && !g.id.startsWith('demo-'));
   // 既存試合で使われたシーズン名(サジェスト用)
   const knownSeasons = [...new Set(Object.values(state.games).map((g) => g.season).filter(Boolean))];
 
-  const resolveRules = () => {
-    if (presetId === 'none') return null;
-    if (presetId === 'custom') {
-      const innings = Math.max(1, parseInt(custom.innings, 10) || 7);
-      const after = parseInt(custom.mercyAfter, 10);
-      const diff = parseInt(custom.mercyDiff, 10);
-      const mercy = Number.isFinite(after) && Number.isFinite(diff) && after > 0 && diff > 0 ? [{ after, diff }] : [];
-      const perGame = parseInt(custom.pitchPerGame, 10);
-      const pitchLimit = Number.isFinite(perGame) && perGame > 0 ? { perGame, warnAt: Math.max(1, perGame - 10) } : null;
-      const tl = parseInt(custom.timeLimitMin, 10);
-      const timeLimitMin = Number.isFinite(tl) && tl > 0 ? tl : null;
-      return { innings, mercy, pitchLimit, timeLimitMin };
-    }
-    return presetById(presetId)?.rules || null;
-  };
-
   const onPresetChange = (id) => {
     setPresetId(id);
     // カスタム選択時は、直前のプリセット内容を初期値として引き継ぐ
-    if (id === 'custom') {
-      const base = presetById(presetId)?.rules || { innings: 7, mercy: [], pitchLimit: null };
-      setCustom({
-        innings: String(base.innings),
-        mercyAfter: base.mercy?.[0] ? String(base.mercy[0].after) : '',
-        mercyDiff: base.mercy?.[0] ? String(base.mercy[0].diff) : '',
-        pitchPerGame: base.pitchLimit?.perGame ? String(base.pitchLimit.perGame) : '',
-        timeLimitMin: base.timeLimitMin ? String(base.timeLimitMin) : '',
-      });
-    }
+    if (id === 'custom') setCustom(customFromRules(presetById(presetId)?.rules));
   };
 
   const startGame = () => {
-    dispatch({ type: 'CREATE_GAME', payload: { opponent, isHome, season: season.trim(), rules: resolveRules() } });
+    dispatch({ type: 'CREATE_GAME', payload: { opponent, isHome, season: season.trim(), rules: resolveRulesFrom(presetId, custom) } });
     dispatch({ type: 'UPDATE_SETTINGS', patch: { lastRulePresetId: presetId } });
   };
 
@@ -132,46 +237,7 @@ function GameSetup() {
           <button className={isHome ? 'active' : ''} onClick={() => setIsHome(true)}>後攻</button>
         </div>
 
-        <label className="small dim" style={{ display: 'block' }}>試合ルール</label>
-        <select value={presetId} onChange={(e) => onPresetChange(e.target.value)}>
-          {RULE_PRESETS.map((p) => (
-            <option key={p.id} value={p.id}>{p.label}{p.edition === edition ? '' : ` (${p.edition})`}</option>
-          ))}
-          <option value="custom">カスタム(自分で設定)</option>
-          <option value="none">ルール管理なし</option>
-        </select>
-        {presetId === 'custom' && (
-          <div className="mt8">
-            <div className="grid3">
-              <div>
-                <label className="small dim">回数</label>
-                <input type="number" inputMode="numeric" value={custom.innings} onChange={(e) => setCustom({ ...custom, innings: e.target.value })} />
-              </div>
-              <div>
-                <label className="small dim">コールド回</label>
-                <input type="number" inputMode="numeric" placeholder="なし" value={custom.mercyAfter} onChange={(e) => setCustom({ ...custom, mercyAfter: e.target.value })} />
-              </div>
-              <div>
-                <label className="small dim">点差</label>
-                <input type="number" inputMode="numeric" placeholder="なし" value={custom.mercyDiff} onChange={(e) => setCustom({ ...custom, mercyDiff: e.target.value })} />
-              </div>
-            </div>
-            <div className="grid2 mt8">
-              <div>
-                <label className="small dim">球数制限(空欄=なし)</label>
-                <input type="number" inputMode="numeric" placeholder="例: 70" value={custom.pitchPerGame} onChange={(e) => setCustom({ ...custom, pitchPerGame: e.target.value })} />
-              </div>
-              <div>
-                <label className="small dim">時間制限・分(空欄=なし)</label>
-                <input type="number" inputMode="numeric" placeholder="例: 90" value={custom.timeLimitMin} onChange={(e) => setCustom({ ...custom, timeLimitMin: e.target.value })} />
-              </div>
-            </div>
-          </div>
-        )}
-        <p className="small dim mt8">
-          {describeRules(resolveRules())}
-          {presetId !== 'none' && <><br />※ プリセットは代表例です。連盟・大会の要項に合わせて調整してください。成立時も自動終了はせず、確認してから終了できます。</>}
-        </p>
+        <RulePicker presetId={presetId} custom={custom} edition={edition} onPresetChange={onPresetChange} setCustom={setCustom} />
 
         <button className="primary" style={{ width: '100%' }} onClick={startGame}>
           試合開始
@@ -643,6 +709,9 @@ export default function ScoreTab() {
             手動チェンジ
           </button>
           <button onClick={() => setSheet({ kind: 'scoreAdjust' })}>スコア修正</button>
+          <button style={{ gridColumn: '1 / -1' }} onClick={() => setSheet({ kind: 'editRules' })}>
+            ⚙️ 試合ルールを変更{game.rules ? `(${describeRules(game.rules)})` : '(現在: ルール管理なし)'}
+          </button>
           <button
             className="danger"
             style={{ gridColumn: '1 / -1' }}
@@ -731,6 +800,9 @@ export default function ScoreTab() {
       )}
       {sheet?.kind === 'scoreAdjust' && (
         <ScoreAdjustSheet game={game} onClose={() => setSheet(null)} />
+      )}
+      {sheet?.kind === 'editRules' && (
+        <EditRulesSheet game={game} edition={state.settings.edition || '草野球'} onClose={() => setSheet(null)} />
       )}
     </div>
   );

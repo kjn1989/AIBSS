@@ -288,12 +288,18 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .count-display .bs.s { color: var(--amber); }
 .count-display .pitches { font-size: 12px; color: var(--text-dim); }
 .count-btns { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
-.count-btns.two { grid-template-columns: 1fr 1fr; }
 .count-btns button { min-height: 52px; font-size: 17px; font-weight: 800; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; line-height: 1.1; }
 .count-btns button .btn-sub { font-size: 10px; font-weight: 600; opacity: 0.75; }
 .count-btns .ball { border-color: var(--green); color: var(--green); }
 .count-btns .strike { border-color: var(--amber); color: var(--amber); }
 .count-btns .foul { border-color: var(--text-dim); }
+/* 左ボール(縦長)・中央二段(空振り/見逃し)・右ファウル(縦長) */
+.count-btns.pitch3 { grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 1fr 1fr; }
+.count-btns.pitch3 .ball { grid-column: 1; grid-row: 1 / span 2; }
+.count-btns.pitch3 .swing { grid-column: 2; grid-row: 1; }
+.count-btns.pitch3 .look { grid-column: 2; grid-row: 2; }
+.count-btns.pitch3 .foul { grid-column: 3; grid-row: 1 / span 2; }
+.count-btns.pitch3 .swing, .count-btns.pitch3 .look { min-height: 44px; font-size: 16px; }
 
 /* ---- 投手の累積球数メーター(スコア入力中に常時表示) ---- */
 .pitch-meter {
@@ -314,6 +320,13 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .pitch-meter.warn .pm-count b { color: var(--amber); }
 .pitch-meter.over .pm-count b { color: var(--red); }
 .pitch-meter .pm-count .pm-unit { font-size: 13px; color: var(--text-dim); margin-left: 2px; }
+/* イニング別投球数(ペース把握) */
+.pitch-innings { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.pitch-innings .pi-title { font-size: 11px; color: var(--text-dim); margin-right: 2px; }
+.pitch-innings .pi-chip { font-size: 12px; color: var(--text-dim); background: var(--bg-3); border: 1px solid var(--line); border-radius: 6px; padding: 2px 7px; font-variant-numeric: tabular-nums; }
+.pitch-innings .pi-chip b { color: var(--text); font-weight: 800; margin-left: 3px; }
+.pitch-innings .pi-chip.now { border-color: var(--blue); color: var(--blue); }
+.pitch-innings .pi-chip.now b { color: var(--blue); }
 
 /* ---- 結果パッド ---- */
 .result-pad { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }

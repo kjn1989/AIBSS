@@ -48,6 +48,18 @@ function RecordCard({ game, pr }) {
         <div><div className="dim">奪三振</div><b>{pr.strikeouts}</b></div>
       </div>
       <div className="center small dim mt8">投球数 {pr.pitches}</div>
+      {pr.pitchesByInning && Object.keys(pr.pitchesByInning).length > 0 && (
+        <div className="pitch-innings" style={{ justifyContent: 'center' }}>
+          <span className="pi-title">回別</span>
+          {Object.entries(pr.pitchesByInning)
+            .map(([inn, n]) => [Number(inn), n])
+            .filter(([, n]) => n > 0)
+            .sort((a, b) => a[0] - b[0])
+            .map(([inn, n]) => (
+              <span className="pi-chip" key={inn}>{inn}回<b>{n}</b></span>
+            ))}
+        </div>
+      )}
 
       <div className="flex mt12">
         <span className="small dim grow">自責点の微調整</span>

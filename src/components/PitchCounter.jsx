@@ -41,10 +41,11 @@ export default function PitchCounter({ game, onAutoEvent }) {
           {dispB === 3 && <span className="pill green">次のボールで四球</span>}
         </div>
       )}
-      <div className="count-btns two">
-        <button className="strike" onClick={() => add('strike', 'looking')}>見逃し<span className="btn-sub">ストライク</span></button>
-        <button className="strike" onClick={() => add('strike', 'swinging')}>空振り<span className="btn-sub">ストライク</span></button>
+      {/* 左=ボール(縦長) / 中央=二段(上:空振り 下:見逃し) / 右=ファウル(縦長) */}
+      <div className="count-btns pitch3">
         <button className="ball" onClick={() => add('ball')}>ボール</button>
+        <button className="strike swing" onClick={() => add('strike', 'swinging')}>空振り</button>
+        <button className="strike look" onClick={() => add('strike', 'looking')}>見逃し</button>
         <button className="foul" onClick={() => add('foul')}>ファウル</button>
       </div>
       {pitches.length > 0 && (

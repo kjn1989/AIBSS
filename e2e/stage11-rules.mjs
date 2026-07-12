@@ -1,6 +1,12 @@
 // 第11段階: ルールエンジン(規定回数終了・コールド・球数・時間制限の提案) + AI-BASEブランド表示
 import { chromium } from 'playwright-core';
-import { timeLimitCheck, gameEndCheck } from '../src/lib/rules.js';
+import { timeLimitCheck, gameEndCheck, initialPresetIdFor } from '../src/lib/rules.js';
+
+// ---- エディション整合(記憶プリセットが他エディションへ漏れない) ----
+console.log('整合 学童記憶→草野球:', initialPresetIdFor('gakudo6', '草野球'), '(kusa7期待)');
+console.log('整合 草野球記憶→草野球:', initialPresetIdFor('kusa7', '草野球'), '(kusa7期待)');
+console.log('整合 custom記憶は尊重:', initialPresetIdFor('custom', '草野球'), '(custom期待)');
+console.log('整合 記憶なし→少年野球:', initialPresetIdFor(null, '少年野球'), '(gakudo6期待)');
 
 // ---- 純関数の単体チェック(時間制限・X勝ち) ----
 const past = Date.now() - 95 * 60000;
@@ -89,6 +95,37 @@ await page.click('.tabbar button:has-text("スコア入力")');
 await page.waitForTimeout(300);
 await page.selectOption('select', 'gakudo6');
 console.log('gakudo desc:', (await page.textContent('.card:has(h2:has-text("新しい試合を開始")) p.small.dim')).split('\n')[0].trim());
+
+// ---- シナリオ3: イニング別球数・進行中のルール後変更(UI) ----
+await page.reload({ waitUntil: 'networkidle' });
+await page.click('button[aria-label="設定"]');
+for (const name of ['磯野', '中島']) {
+  await page.fill('input[placeholder="選手名"]', name);
+  await page.click('.card:has(h2:has-text("選手登録")) button:has-text("追加")');
+}
+await page.click('.tabbar button:has-text("スコア入力")');
+await page.fill('input[placeholder="対戦相手名"]', 'ペース確認');
+await page.selectOption('select', 'none'); // ルール管理なしで開始(制限なしメーターの確認)
+await page.click('button:has-text("後攻")');
+await page.click('text=試合開始');
+await page.waitForTimeout(300);
+await page.selectOption('.card:has-text("投手") select', { label: '磯野' });
+for (let i = 0; i < 6; i++) await page.click('.count-btns .foul'); // 1回に6球
+await page.click('.card:has(h2:has-text("試合操作")) button:has-text("手動チェンジ")');
+await page.waitForTimeout(120);
+await page.click('.card:has(h2:has-text("試合操作")) button:has-text("手動チェンジ")');
+await page.waitForTimeout(200);
+for (let i = 0; i < 4; i++) await page.click('.count-btns .foul'); // 2回に4球
+await page.waitForTimeout(150);
+console.log('制限なしメーター:', (await page.textContent('.pitch-meter')).replace(/\s+/g, ' ').trim(), '/ バー非表示?', !(await page.isVisible('.pitch-meter .pm-bar')));
+console.log('イニング別チップ:', (await page.textContent('.pitch-innings')).replace(/\s+/g, ' ').trim());
+// ルール後変更: 学童(70球)へ → 上限バーが出る
+await page.click('button:has-text("試合ルールを変更")');
+await page.waitForSelector('.sheet');
+await page.selectOption('.sheet select', 'gakudo6');
+await page.click('.sheet-actions button:has-text("この内容に変更")');
+await page.waitForTimeout(200);
+console.log('ルール変更後メーター:', (await page.textContent('.pitch-meter')).replace(/\s+/g, ' ').trim(), '/ バー表示?', await page.isVisible('.pitch-meter .pm-bar'));
 
 console.log('errors:', errors.length ? errors : 'none');
 await browser.close();
