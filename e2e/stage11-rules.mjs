@@ -127,5 +127,26 @@ await page.click('.sheet-actions button:has-text("この内容に変更")');
 await page.waitForTimeout(200);
 console.log('ルール変更後メーター:', (await page.textContent('.pitch-meter')).replace(/\s+/g, ' ').trim(), '/ バー表示?', await page.isVisible('.pitch-meter .pm-bar'));
 
+// ---- シナリオ4: 相手投手の球数(打撃時) ----
+// 手動チェンジで自軍打撃の裏へ。相手投手Aを選び球数を積む → 相手投手メーターが出る
+await page.click('.card:has(h2:has-text("試合操作")) button:has-text("手動チェンジ")');
+await page.waitForTimeout(200);
+// オーダー未設定なら自動セット(打撃ビューに相手投手カードを出すため)
+if (await page.isVisible('button:has-text("登録選手から打順を自動セット")')) {
+  await page.click('button:has-text("登録選手から打順を自動セット")');
+  await page.waitForTimeout(200);
+}
+await page.selectOption('.card:has-text("相手投手") select', 'A');
+await page.waitForTimeout(150);
+for (let i = 0; i < 7; i++) await page.click('.count-btns .foul');
+await page.waitForTimeout(150);
+console.log('相手投手メーター:', (await page.textContent('.pitch-meter')).replace(/\s+/g, ' ').trim());
+// 相手投手Bに交代 → 独立カウント(3球)
+await page.selectOption('.card:has-text("相手投手") select', 'B');
+await page.waitForTimeout(150);
+for (let i = 0; i < 3; i++) await page.click('.count-btns .foul');
+await page.waitForTimeout(150);
+console.log('相手投手交代後メーター(独立):', (await page.textContent('.pitch-meter')).replace(/\s+/g, ' ').trim());
+
 console.log('errors:', errors.length ? errors : 'none');
 await browser.close();

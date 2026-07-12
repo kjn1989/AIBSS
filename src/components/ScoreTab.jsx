@@ -29,21 +29,16 @@ function AtBatHistory({ items }) {
   );
 }
 
-// ---- 現在の投手の累積球数メーター(スコア入力中・守備時に常時表示) ----
+// ---- 投手の累積球数メーター(スコア入力中に常時表示) ----
 // 打席ごとのB/Sカウンター(PitchCounter)とは別に、この試合の投手の総球数を大きく見せる。
 // 球数制限がある場合は「XX / 上限」+バー+色(緑→琥珀→赤)で疲労・交代の目安を示す。
-function PitcherLoad({ game }) {
-  const nameOf = usePlayerName();
-  const pid = game.currentPitcherId;
-  if (!pid) return null;
-  const pr = (game.pitchingRecords || []).find((r) => r.playerId === pid);
-  const pitches = pr?.pitches || 0;
-  const limit = game.rules?.pitchLimit?.perGame || null;
-  const warnAt = limit ? (game.rules.pitchLimit.warnAt ?? Math.max(1, limit - 10)) : null;
-  const level = !limit ? '' : pitches >= limit ? 'over' : pitches >= warnAt ? 'warn' : '';
+// 自軍投手・相手投手のどちらも同じ見た目で表示できるよう、データを受け取る純表示コンポーネント。
+function PitchLoadMeter({ label, pitches, byInningMap, limit, warnAt, currentInning }) {
+  const wa = limit ? (warnAt ?? Math.max(1, limit - 10)) : null;
+  const level = !limit ? '' : pitches >= limit ? 'over' : pitches >= wa ? 'warn' : '';
   const pct = limit ? Math.min(100, Math.round((pitches / limit) * 100)) : 0;
   // イニング別投球数(ペース把握用)。回順にチップ表示、現在の回を強調。
-  const byInning = Object.entries(pr?.pitchesByInning || {})
+  const byInning = Object.entries(byInningMap || {})
     .map(([inn, n]) => [Number(inn), n])
     .filter(([, n]) => n > 0)
     .sort((a, b) => a[0] - b[0]);
@@ -52,7 +47,7 @@ function PitcherLoad({ game }) {
     <>
       <div className={`pitch-meter ${level}`}>
         <div className="pm-body">
-          <div className="pm-label">⚾ {nameOf(pid)} のこの試合の球数{limit ? `(上限${limit}球)` : ''}</div>
+          <div className="pm-label">{label}{limit ? `(上限${limit}球)` : ''}</div>
           {limit && (
             <div className="pm-bar"><div className="pm-fill" style={{ width: `${pct}%` }} /></div>
           )}
@@ -66,13 +61,49 @@ function PitcherLoad({ game }) {
         <div className="pitch-innings">
           <span className="pi-title">回別</span>
           {byInning.map(([inn, n]) => (
-            <span className={`pi-chip ${inn === game.inning ? 'now' : ''}`} key={inn}>
+            <span className={`pi-chip ${inn === currentInning ? 'now' : ''}`} key={inn}>
               {inn}回<b>{n}</b>
             </span>
           ))}
         </div>
       )}
     </>
+  );
+}
+
+// 自軍投手(守備時)
+function PitcherLoad({ game }) {
+  const nameOf = usePlayerName();
+  const pid = game.currentPitcherId;
+  if (!pid) return null;
+  const pr = (game.pitchingRecords || []).find((r) => r.playerId === pid);
+  return (
+    <PitchLoadMeter
+      label={`⚾ ${nameOf(pid)} のこの試合の球数`}
+      pitches={pr?.pitches || 0}
+      byInningMap={pr?.pitchesByInning}
+      limit={game.rules?.pitchLimit?.perGame || null}
+      warnAt={game.rules?.pitchLimit?.warnAt}
+      currentInning={game.inning}
+    />
+  );
+}
+
+// 相手投手(打撃時)。球数だけを記号ごとに追跡(oppPitchers)。同じ球数制限が両チームに
+// 適用される年代では、相手投手の交代時期の目安にもなる。
+function OppPitcherLoad({ game }) {
+  const letter = game.oppPitcherLetter;
+  if (!letter) return null;
+  const op = game.oppPitchers?.[letter];
+  return (
+    <PitchLoadMeter
+      label={`⚾ 相手投手 ${letter} のこの試合の球数`}
+      pitches={op?.pitches || 0}
+      byInningMap={op?.pitchesByInning}
+      limit={game.rules?.pitchLimit?.perGame || null}
+      warnAt={game.rules?.pitchLimit?.warnAt}
+      currentInning={game.inning}
+    />
   );
 }
 
@@ -645,6 +676,7 @@ export default function ScoreTab() {
                   ))}
                 </select>
               </div>
+              <OppPitcherLoad game={game} />
             </div>
           </>
         )

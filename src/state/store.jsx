@@ -166,6 +166,15 @@ function bumpPitches(game, playerId, delta) {
   pr.pitchesByInning[key] = Math.max(0, (pr.pitchesByInning[key] || 0) + delta);
 }
 
+// 相手投手(記号)の球数を delta 分だけ増減。自軍打撃時に相手投手が投げた球を記録する。
+function bumpOppPitches(game, letter, delta) {
+  if (!game.oppPitchers) game.oppPitchers = {};
+  const op = game.oppPitchers[letter] || (game.oppPitchers[letter] = { pitches: 0, pitchesByInning: {} });
+  op.pitches = Math.max(0, op.pitches + delta);
+  const key = String(game.inning);
+  op.pitchesByInning[key] = Math.max(0, (op.pitchesByInning[key] || 0) + delta);
+}
+
 // クラッチ判定: 打席開始時点差 + この打席の打点
 function judgeClutch(scoreDiffBefore, rbi, myScoreBefore, oppScoreBefore) {
   if (rbi <= 0) return null;
@@ -502,9 +511,11 @@ export function reducer(state, action) {
       const g = deep(state.games[action.gameId]);
       const pending = ensurePending(g);
       pending.pitches.push(newPitch(action.pitchType, action.sub));
-      // 守備時は投手の球数も加算(総数+イニング別)
+      // 守備時は自軍投手、打撃時は相手投手の球数を加算(総数+イニング別)
       if (!isMyTeamBatting(g) && g.currentPitcherId) {
         bumpPitches(g, g.currentPitcherId, +1);
+      } else if (isMyTeamBatting(g) && g.oppPitcherLetter) {
+        bumpOppPitches(g, g.oppPitcherLetter, +1);
       }
       g.updatedAt = Date.now();
       return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
@@ -513,8 +524,10 @@ export function reducer(state, action) {
       const g = deep(state.games[action.gameId]);
       if (g.pending?.pitches.length) {
         const removed = g.pending.pitches.pop();
-        if (!isMyTeamBatting(g) && g.currentPitcherId && removed) {
+        if (removed && !isMyTeamBatting(g) && g.currentPitcherId) {
           bumpPitches(g, g.currentPitcherId, -1);
+        } else if (removed && isMyTeamBatting(g) && g.oppPitcherLetter) {
+          bumpOppPitches(g, g.oppPitcherLetter, -1);
         }
       }
       g.updatedAt = Date.now();
@@ -566,6 +579,7 @@ export function reducer(state, action) {
       if (resultDef && (resultDef.hit || ['out', 'error', 'sacBunt', 'sacFly', 'interference'].includes(p.result))) {
         pitches.push(newPitch('inplay')); // インプレーの1球を自動加算
         if (!myBatting && g.currentPitcherId) bumpPitches(g, g.currentPitcherId, +1);
+        else if (myBatting && g.oppPitcherLetter) bumpOppPitches(g, g.oppPitcherLetter, +1);
       }
       pitches = ensureMinimumPitches(pitches, p.result);
       const balls = pitches.filter((pt) => pt.type === 'ball').length;
