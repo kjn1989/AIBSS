@@ -338,10 +338,15 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 /* ---- 結果パッド ---- */
 .result-pad { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .result-pad button { min-height: 54px; font-size: 14px; font-weight: 700; padding: 4px; }
-.result-pad button.hit { border-color: var(--accent); color: var(--accent); }
-.result-pad button.onbase { border-color: var(--green); color: var(--green); }
-.result-pad button.outres { border-color: var(--red); color: var(--red); }
-.result-pad button.sac { border-color: var(--purple); color: var(--purple); }
+/* プレイ結果カテゴリの色(単一基準)。resultCategory()の分類を
+   入力パッド・ログ・スコアシート・PDFで共通に使う。視認性優先で
+   ヒット/四死球/エラーを目立たせ、アウトは控えめにする。 */
+.result-pad button.hit    { border-color: var(--green);  color: var(--green); }
+.result-pad button.walk   { border-color: var(--accent); color: var(--accent); }
+.result-pad button.outres { border-color: var(--red);    color: var(--red); }
+.result-pad button.error  { border-color: var(--amber);  color: var(--amber); }
+.result-pad button.sac    { border-color: var(--purple); color: var(--purple); }
+.result-pad button.intf   { border-color: var(--gold);   color: var(--gold); }
 .dir-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .dir-pad button { min-height: 50px; font-weight: 700; }
 
@@ -565,10 +570,14 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 .pill.red { color: var(--red); border-color: var(--red); }
 .pill.amber { color: var(--amber); border-color: var(--amber); }
 .pill.blue { color: var(--accent); border-color: var(--accent); }
-.pill.hit { color: var(--accent); border-color: var(--accent); }
+.pill.hit { color: var(--green); border-color: var(--green); }
+.pill.walk { color: var(--accent); border-color: var(--accent); }
 .pill.onbase { color: var(--green); border-color: var(--green); }
 .pill.outres { color: var(--red); border-color: var(--red); }
+.pill.error { color: var(--amber); border-color: var(--amber); }
 .pill.sac { color: var(--purple); border-color: var(--purple); }
+.pill.intf { color: var(--gold); border-color: var(--gold); }
+.pill.multiout { color: var(--gold); border-color: var(--gold); background: rgba(227,179,65,0.14); font-weight: 800; }
 .mt8 { margin-top: 8px; } .mt12 { margin-top: 12px; } .mt16 { margin-top: 16px; } .mb8 { margin-bottom: 8px; }
 .flex { display: flex; gap: 8px; align-items: center; }
 .flex .grow { flex: 1; }
@@ -787,17 +796,49 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 .ss-table .ss-team, .ss-table .ss-name { text-align: left; white-space: nowrap; padding: 4px 6px; }
 .ss-matrix { display: block; overflow-x: auto; }
 .ss-footer { text-align: center; font-size: 10px; color: var(--text-dim); }
+/* スコアシートのセル色分け(画面・PDF共通) */
+.ss-cell { font-weight: 700; }
+.ss-cell.hit { color: var(--green); }
+.ss-cell.walk { color: var(--accent); }
+.ss-cell.error { color: var(--amber); }
+.ss-cell.sac { color: var(--purple); }
+.ss-cell.intf { color: var(--gold); }
+.ss-cell.outres, .ss-cell.other { color: var(--text-dim); font-weight: 400; }
+.ss-sep { color: var(--text-dim); margin: 0 1px; }
+.ss-mp { color: var(--gold); font-size: 0.9em; }
+/* 打席履歴チップの色分け */
+.hist-chip.hit b, .hist-chip.hit { }
+.hist-chip.hit { color: var(--green); }
+.hist-chip.walk { color: var(--accent); }
+.hist-chip.error { color: var(--amber); }
+.hist-chip.sac { color: var(--purple); }
+.hist-chip.intf { color: var(--gold); }
+.hist-chip .mini-badge { color: var(--gold); font-weight: 800; }
 
 @media print {
+  @page { size: A4 portrait; margin: 14mm; }
   body * { visibility: hidden; }
   .scoresheet-root, .scoresheet-root * { visibility: visible; }
+  /* 用紙の余白は@pageで確保。中央寄せで左上への偏りを解消する */
   .scoresheet-root {
-    position: absolute; left: 0; top: 0; width: 100%;
-    background: #fff !important; color: #000 !important; border: none; border-radius: 0;
+    position: absolute; left: 0; right: 0; top: 0; margin: 0 auto; width: auto; max-width: 100%;
+    background: #fff !important; color: #000; border: none; border-radius: 0; padding: 0;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
-  .scoresheet-root .ss-table th, .scoresheet-root .ss-table td { border-color: #000; color: #000; }
+  .scoresheet-root * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .scoresheet-root .ss-title b { font-size: 18px; }
+  .scoresheet-root .ss-table { font-size: 12px; margin-bottom: 14px; }
+  .scoresheet-root .ss-table th, .scoresheet-root .ss-table td { border-color: #000; color: #000; padding: 5px 4px; }
   .scoresheet-root .ss-title span, .scoresheet-root .ss-footer, .scoresheet-root .ss-table th { color: #333; }
   .ss-matrix { display: table; overflow: visible; }
+  /* PDFでも結果色を保持(印刷向けに濃いめの値へ) */
+  .scoresheet-root .ss-cell.hit { color: #1a7f37 !important; }
+  .scoresheet-root .ss-cell.walk { color: #0969da !important; }
+  .scoresheet-root .ss-cell.error { color: #bc4c00 !important; }
+  .scoresheet-root .ss-cell.sac { color: #6639ba !important; }
+  .scoresheet-root .ss-cell.intf { color: #9a6700 !important; }
+  .scoresheet-root .ss-cell.outres, .scoresheet-root .ss-cell.other { color: #57606a !important; }
+  .scoresheet-root .ss-mp { color: #9a6700 !important; }
 }
 .pc-body { display: flex; gap: 10px; align-items: flex-start; margin-top: 8px; }
 .pc-body .mini-diamond { flex-shrink: 0; margin-top: 2px; }

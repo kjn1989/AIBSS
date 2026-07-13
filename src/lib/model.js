@@ -15,7 +15,7 @@ export const RESULTS = {
   bb: { label: '四球', short: 'BB', hit: false, bases: 0, ab: false, onBase: true },
   hbp: { label: '死球', short: 'HBP', hit: false, bases: 0, ab: false, onBase: true },
   so: { label: '三振', short: 'K', hit: false, bases: 0, ab: true, onBase: false },
-  error: { label: '失策出塁', short: 'E', hit: false, bases: 0, ab: true, onBase: true },
+  error: { label: 'エラー', short: 'E', hit: false, bases: 0, ab: true, onBase: true },
   sacBunt: { label: '犠打', short: 'SAC', hit: false, bases: 0, ab: false, onBase: false },
   sacFly: { label: '犠飛', short: 'SF', hit: false, bases: 0, ab: false, onBase: false },
   interference: { label: '打撃妨害', short: 'IF', hit: false, bases: 0, ab: false, onBase: true },
@@ -31,6 +31,33 @@ export const OUT_TYPES = {
   liner: 'ライナー',
   dp: '併殺打',
 };
+
+// プレイ結果の分類(スコアシート・ログの色分け用。画面とPDFで同一のクラス名を使う)。
+// hit=ヒット / outres=アウト / walk=四死球 / error=エラー / sac=犠打犠飛 / intf=妨害 / other=その他
+export function resultCategory(result) {
+  const r = RESULTS[result];
+  if (!r) return 'other';
+  if (r.hit) return 'hit';
+  if (result === 'error') return 'error';
+  if (result === 'bb' || result === 'hbp') return 'walk';
+  if (result === 'sacBunt' || result === 'sacFly') return 'sac';
+  if (result === 'interference' || result === 'obstruction' || result === 'fieldInterference') return 'intf';
+  if (result === 'out' || result === 'so') return 'outres';
+  return 'other';
+}
+
+// 1プレイでまとめて取ったアウト数の強調表記(2=ダブルプレー, 3=トリプルプレー)。
+export function multiOutLabel(outsOnPlay) {
+  if (outsOnPlay >= 3) return 'トリプルプレー';
+  if (outsOnPlay === 2) return 'ダブルプレー';
+  return null;
+}
+
+// 凡打の内訳ラベル。少年野球エディションでは親しみやすい表記に差し替える(併殺打→ゲッツー)。
+export function outTypeLabel(outType, edition) {
+  if (edition === '少年野球' && outType === 'dp') return 'ゲッツー';
+  return OUT_TYPES[outType] || '';
+}
 
 // ---- 打球方向 ----
 export const DIRECTIONS = {

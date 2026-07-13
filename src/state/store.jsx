@@ -7,7 +7,7 @@
 import React, { createContext, useContext, useReducer, useEffect, useRef } from 'react';
 import {
   newPlayer, newMember, newGame, newAtBat, newPitch, newPlayLog, newPitchingRecord, RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES,
-  OPP_LETTERS, DEFAULT_EDITION, normalizeEdition,
+  OPP_LETTERS, DEFAULT_EDITION, normalizeEdition, multiOutLabel,
 } from '../lib/model.js';
 import { generateDemoData } from '../lib/demo.js';
 import { idbSave } from '../lib/durableStore.js';
@@ -617,6 +617,9 @@ export function reducer(state, action) {
       if (p.outType === 'dp') g.outs += 1;
       if (p.extraOuts) g.outs += p.extraOuts;
 
+      // このプレイでまとめて取ったアウト数(ダブル/トリプルプレー判定用)。changeHalf前に確定。
+      const outsOnPlay = Math.max(0, g.outs - outsBefore);
+
       const totalRuns = runsInfo.runs + (batterScored ? 1 : 0);
 
       // --- 自チーム打席なら AtBat レコードを作成 ---
@@ -637,6 +640,7 @@ export function reducer(state, action) {
         }
         ab.rbi = rbi;
         ab.runsOnPlay = totalRuns;
+        ab.outsOnPlay = outsOnPlay;
         // 進塁打: 走者あり凡打(三振以外のアウト)のみ対象
         const hadRunners = pending.snapshot.runners[1] || pending.snapshot.runners[2] || pending.snapshot.runners[3];
         if (p.result === 'out' && hadRunners) {
@@ -645,15 +649,17 @@ export function reducer(state, action) {
         ab.clutch = judgeClutch(pending.snapshot.scoreDiff, rbi, scoreBefore.my, scoreBefore.opp);
         g.atBats.push(ab);
         const resultLabel = (p.result === 'so' && SO_TYPES[p.soType]) || resultDef?.label || p.result;
+        const multiOut = multiOutLabel(outsOnPlay);
         g.playLogs.push(newPlayLog({
           gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'atbat',
           text: `${action.batterName || ''} ${DIRECTIONS[p.direction] || ''}${resultLabel}` +
+            (multiOut ? ` ⚡${multiOut}` : '') +
             (totalRuns ? ` (${totalRuns}点)` : '') +
             (p.result === 'so' && p.batterTo === 1 ? ' 振り逃げ' : ''),
           payload: {
             atBatId: ab.id, playerId: batter.playerId, order: batter.order, result: p.result,
             outType: p.outType || null, soType: p.result === 'so' ? p.soType || null : null,
-            direction: p.direction, rbi, runs: totalRuns,
+            direction: p.direction, rbi, runs: totalRuns, outsOnPlay,
             beforeRunners: pending.snapshot.runners, outsBefore, balls, strikes, fouls, pitchCount: pitches.length,
             moveLines, scoreAfter: { my: g.myScore, opp: g.oppScore },
           },
@@ -682,12 +688,14 @@ export function reducer(state, action) {
       // (投手未選択でも打順表示・履歴は追えるよう、投手成績とは別に常に記録する)
       if (!myBatting && oppBatter) {
         const oppResultLabel = (p.result === 'so' && SO_TYPES[p.soType]) || resultDef?.label || p.result;
+        const oppMultiOut = multiOutLabel(outsOnPlay);
         g.playLogs.push(newPlayLog({
           gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'defense',
-          text: `相手打者${oppBatter.letter}(${oppBatter.order}番): ${DIRECTIONS[p.direction] || ''}${oppResultLabel}` + (totalRuns ? ` (${totalRuns}失点)` : ''),
+          text: `相手打者${oppBatter.letter}(${oppBatter.order}番): ${DIRECTIONS[p.direction] || ''}${oppResultLabel}` +
+            (oppMultiOut ? ` ⚡${oppMultiOut}` : '') + (totalRuns ? ` (${totalRuns}失点)` : ''),
           payload: {
             result: p.result, direction: p.direction, outType: p.outType || null,
-            soType: p.result === 'so' ? p.soType || null : null, runs: totalRuns,
+            soType: p.result === 'so' ? p.soType || null : null, runs: totalRuns, outsOnPlay,
             letter: oppBatter.letter, order: oppBatter.order,
             beforeRunners: pending.snapshot.runners, outsBefore, balls, strikes, fouls, pitchCount: pitches.length,
             moveLines, scoreAfter: { my: g.myScore, opp: g.oppScore },

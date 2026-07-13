@@ -11,18 +11,19 @@ import VoiceControl from './VoiceControl.jsx';
 import { SubstituteSheet } from './OrderTab.jsx';
 import HighlightSheet from './HighlightSheet.jsx';
 import GameProgressView from './GameProgressView.jsx';
-import { POSITIONS, OPP_LETTERS } from '../lib/model.js';
+import { POSITIONS, OPP_LETTERS, resultCategory, multiOutLabel } from '../lib/model.js';
 import { playLabel } from '../lib/voiceParser.js';
 import { RULE_PRESETS, presetById, describeRules, initialPresetIdFor, gameEndCheck, pitchLimitCheck, timeLimitCheck } from '../lib/rules.js';
 
 // ---- 直近の打席結果を「1. 左翼単打 2. 見逃し三振」のように並べる小さな履歴表示 ----
-function AtBatHistory({ items }) {
+function AtBatHistory({ items, edition }) {
   if (!items || items.length === 0) return null;
   return (
     <div className="atbat-history">
       {items.map((it, i) => (
-        <span className="hist-chip" key={it.id}>
-          {i + 1}. {playLabel(it.result, it.direction, it.outType, it.soType)}
+        <span className={`hist-chip ${resultCategory(it.result)}`} key={it.id}>
+          {i + 1}. {playLabel(it.result, it.direction, it.outType, it.soType, edition)}
+          {multiOutLabel(it.outsOnPlay || 0) && <span className="mini-badge"> ⚡</span>}
         </span>
       ))}
     </div>
@@ -684,7 +685,7 @@ export default function ScoreTab() {
                 </div>
                 <span className="pill blue">打者変更 ▾</span>
               </div>
-              <AtBatHistory items={game.atBats.filter((ab) => ab.playerId === batter.playerId)} />
+              <AtBatHistory items={game.atBats.filter((ab) => ab.playerId === batter.playerId)} edition={state.settings.edition} />
             </div>
             <div className="card">
               <div className="flex">
@@ -738,6 +739,7 @@ export default function ScoreTab() {
                 items={game.playLogs
                   .filter((l) => l.kind === 'defense' && l.payload.letter === oppBatter.letter)
                   .map((l) => ({ id: l.id, ...l.payload }))}
+                edition={state.settings.edition}
               />
             </>
           )}

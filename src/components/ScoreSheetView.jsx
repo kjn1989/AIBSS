@@ -1,25 +1,29 @@
 import React from 'react';
 import { useStore, usePlayerName } from '../state/store.jsx';
-import { RESULTS, DIRECTIONS, formatIP } from '../lib/model.js';
+import { RESULTS, DIRECTIONS, formatIP, resultCategory, multiOutLabel } from '../lib/model.js';
 import { computeBoxScore } from '../lib/boxscore.js';
 import FullscreenView from './FullscreenView.jsx';
 
 // 打席結果の超短縮表記(スコアシートのセル用): 例「中安」「遊ゴ」「左本」「四球」
-function shortLabel(ab) {
+// editionが少年野球のときは 併殺→ゲ, エラー→エ の親しみ表記。
+function shortLabel(ab, edition) {
   const dir = ab.direction ? DIRECTIONS[ab.direction][0] : '';
+  const dpShort = edition === '少年野球' ? 'ゲ' : '併';
   switch (ab.result) {
     case 'single': return `${dir}安`;
     case 'double': return `${dir}2`;
     case 'triple': return `${dir}3`;
     case 'hr': return `${dir}本`;
-    case 'out': return `${dir}${{ ground: 'ゴ', fly: '飛', liner: '直', dp: '併' }[ab.outType] || 'ゴ'}`;
+    case 'out': return `${dir}${{ ground: 'ゴ', fly: '飛', liner: '直', dp: dpShort }[ab.outType] || 'ゴ'}`;
     case 'so': return ab.soType === 'looking' ? '見三振' : '三振';
     case 'bb': return '四球';
     case 'hbp': return '死球';
-    case 'error': return `${dir}失`;
+    case 'error': return `${dir}エ`;
     case 'sacBunt': return '犠打';
     case 'sacFly': return `${dir}犠飛`;
     case 'interference': return '打妨';
+    case 'obstruction': return '走妨';
+    case 'fieldInterference': return '守妨';
     default: return RESULTS[ab.result]?.short || '';
   }
 }
@@ -29,6 +33,7 @@ export default function ScoreSheetView({ game, onClose }) {
   const { state } = useStore();
   const nameOf = usePlayerName();
   const box = computeBoxScore(game);
+  const edition = state.settings.edition;
   const teamName = state.settings.teamName || 'マイチーム';
   const oppName = game.opponent || '対戦相手';
   const maxInning = Math.max(9, game.inning || 1);
@@ -46,7 +51,11 @@ export default function ScoreSheetView({ game, onClose }) {
     const byInning = {};
     for (const ab of abs) {
       const inn = ab.snapshot?.inning || 1;
-      (byInning[inn] = byInning[inn] || []).push(shortLabel(ab));
+      (byInning[inn] = byInning[inn] || []).push({
+        txt: shortLabel(ab, edition),
+        cat: resultCategory(ab.result),
+        multi: multiOutLabel(ab.outsOnPlay || 0),
+      });
     }
     const totals = {
       ab: abs.filter((a) => RESULTS[a.result]?.ab).length,
@@ -112,7 +121,16 @@ export default function ScoreSheetView({ game, onClose }) {
                   <tr key={s.order}>
                     <td>{s.order}</td>
                     <td className="ss-name">{s.playerIds.map((id) => nameOf(id)).join(' → ')}</td>
-                    {innings.map((i) => <td key={i}>{(s.byInning[i] || []).join('/')}</td>)}
+                    {innings.map((i) => (
+                      <td key={i}>
+                        {(s.byInning[i] || []).map((c, ci) => (
+                          <React.Fragment key={ci}>
+                            {ci > 0 && <span className="ss-sep">/</span>}
+                            <span className={`ss-cell ${c.cat}`}>{c.txt}{c.multi ? <b className="ss-mp" title={c.multi}>⚡</b> : ''}</span>
+                          </React.Fragment>
+                        ))}
+                      </td>
+                    ))}
                     <td>{s.totals.ab}</td>
                     <td>{s.totals.h}</td>
                     <td>{s.totals.rbi}</td>

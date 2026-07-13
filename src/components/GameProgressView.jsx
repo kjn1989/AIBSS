@@ -1,20 +1,10 @@
 import React, { useState } from 'react';
 import { useStore, usePlayerName } from '../state/store.jsx';
-import { RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES } from '../lib/model.js';
+import { RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES, resultCategory, multiOutLabel, outTypeLabel } from '../lib/model.js';
 import { playLabel } from '../lib/voiceParser.js';
 import { computeBoxScore } from '../lib/boxscore.js';
 import Sheet from './Sheet.jsx';
 import FullscreenView from './FullscreenView.jsx';
-
-// 打席結果のカテゴリ(色分け用)
-function resultCategory(result) {
-  const def = RESULTS[result];
-  if (!def) return 'outres';
-  if (def.hit) return 'hit';
-  if (result === 'sacBunt' || result === 'sacFly') return 'sac';
-  if (def.onBase) return 'onbase';
-  return 'outres';
-}
 
 // 塁上の走者を丸で示す簡易ダイヤモンド(そのプレイ開始時点の状況)
 function MiniDiamond({ runners }) {
@@ -42,19 +32,21 @@ function CountDots({ balls, strikes, outsBefore }) {
 }
 
 // 打席系プレイ(kind: atbat/defense)の1件カード
-function PlayCard({ log, nameOf, numberOf, onEdit }) {
+function PlayCard({ log, nameOf, numberOf, onEdit, edition }) {
   const p = log.payload || {};
   const isDefense = log.kind === 'defense';
   const name = isDefense ? p.letter : nameOf(p.playerId);
   const number = isDefense ? null : numberOf(p.playerId);
   const category = resultCategory(p.result);
-  const label = playLabel(p.result, p.direction, p.outType, p.soType);
+  const label = playLabel(p.result, p.direction, p.outType, p.soType, edition);
+  const multiOut = multiOutLabel(p.outsOnPlay || 0);
 
   return (
     <div className="play-card">
       <div className="pc-head">
         <span className="rank-badge">{p.order ?? ''}</span>
         <span className="pc-name">{name}{number ? ` #${number}` : ''}</span>
+        {multiOut && <span className="pill multiout">⚡{multiOut}</span>}
         <span className={`pill pc-pill ${category}`}>{label}</span>
         {p.runs > 0 && (
           <span className="pill amber pc-score">
@@ -81,7 +73,7 @@ function PlayCard({ log, nameOf, numberOf, onEdit }) {
 // 結果種別・方向・打点を後から修正/削除できる(成績は自動で再計算)。
 // スコア・走者・投手成績はここでは変えず、必要なら手動修正機能を案内する。
 function EditPlaySheet({ game, log, onClose }) {
-  const { dispatch } = useStore();
+  const { state, dispatch } = useStore();
   const p = log.payload || {};
   const [result, setResult] = useState(p.result);
   const [direction, setDirection] = useState(p.direction || null);
@@ -130,8 +122,8 @@ function EditPlaySheet({ game, log, onClose }) {
         <>
           <div className="section-title">凡打の種類</div>
           <div className="grid2">
-            {Object.entries(OUT_TYPES).map(([k, v]) => (
-              <button key={k} className={`small ${outType === k ? 'primary' : ''}`} onClick={() => setOutType(k)}>{v}</button>
+            {Object.keys(OUT_TYPES).map((k) => (
+              <button key={k} className={`small ${outType === k ? 'primary' : ''}`} onClick={() => setOutType(k)}>{outTypeLabel(k, state.settings.edition)}</button>
             ))}
           </div>
         </>
@@ -255,6 +247,7 @@ export function GameProgressContent({ game, editable = false }) {
                     log={log}
                     nameOf={nameOf}
                     numberOf={numberOf}
+                    edition={state.settings.edition}
                     onEdit={editable ? setEditLog : null}
                   />
                 )

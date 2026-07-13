@@ -5,7 +5,7 @@
 // のような曖昧・ラフな発話を、同義語辞書 + 部分一致スコアリングで解釈する。
 // 戻り値: 信頼度順の候補配列(上位2〜3件を確認カードに表示)
 // ============================================================
-import { RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES } from './model.js';
+import { RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES, outTypeLabel } from './model.js';
 
 // ---- 音声認識(ASR)の定番誤変換を補正 ----
 // iOS/Androidの音声認識が野球用語を一般語に誤変換するパターンを吸収する。
@@ -243,11 +243,11 @@ function needsDirection(result) {
   return ['single', 'double', 'triple', 'hr', 'out', 'error', 'sacBunt', 'sacFly'].includes(result);
 }
 
-export function playLabel(result, direction, outType, soType) {
+export function playLabel(result, direction, outType, soType, edition) {
   const dir = direction ? DIRECTIONS[direction] : '';
-  if (result === 'out') return `${dir}${OUT_TYPES[outType || 'ground']}・アウト`;
+  if (result === 'out') return `${dir}${outTypeLabel(outType || 'ground', edition)}・アウト`;
   if (result === 'so') return SO_TYPES[soType || 'swinging'];
-  return `${dir ? dir + ' ' : ''}${RESULTS[result].label}`;
+  return `${dir ? dir + ' ' : ''}${RESULTS[result]?.label || result}`;
 }
 
 // ============================================================

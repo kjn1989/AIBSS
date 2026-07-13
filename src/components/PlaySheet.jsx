@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import Sheet from './Sheet.jsx';
 import { useStore, usePlayerName, isMyTeamBatting } from '../state/store.jsx';
-import { RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES } from '../lib/model.js';
+import { RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES, outTypeLabel } from '../lib/model.js';
 import { proposeMoves, batterDestOptions, runnerDestOptions, DEST_LABEL, judgeAdvance } from '../lib/plays.js';
 import FieldPad from './FieldPad.jsx';
 
@@ -9,8 +9,9 @@ const NEEDS_DIRECTION = ['single', 'double', 'triple', 'hr', 'out', 'error', 'sa
 
 // プレイ確定シート: 方向・走者進塁・打点をまとめて確認して1タップ確定
 export default function PlaySheet({ game, initial, batterName, onClose }) {
-  const { dispatch } = useStore();
+  const { state, dispatch } = useStore();
   const nameOf = usePlayerName();
+  const edition = state.settings.edition;
   const result = initial.result;
   const def = RESULTS[result];
   const myBatting = isMyTeamBatting(game);
@@ -76,7 +77,7 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
 
   const summary = () => {
     const dir = direction ? DIRECTIONS[direction] : '';
-    const ot = result === 'out' && outType ? OUT_TYPES[outType] : '';
+    const ot = result === 'out' && outType ? outTypeLabel(outType, edition) : '';
     const label = result === 'so' ? SO_TYPES[soType] + (batterTo === 1 ? '(振り逃げ)' : '') : result === 'out' ? '' : def.label;
     return `${dir}${ot}${label}${runs ? `・${runs}点` : ''}`;
   };
@@ -152,14 +153,14 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
         <>
           <div className="section-title">凡打の種類</div>
           <div className="grid2">
-            {Object.entries(OUT_TYPES).map(([k, v]) => (
+            {Object.keys(OUT_TYPES).map((k) => (
               <button
                 key={k}
                 className={outType === k ? 'primary' : ''}
                 onClick={() => setOutType(k)}
                 disabled={k === 'dp' && !hadRunners}
               >
-                {v}
+                {outTypeLabel(k, edition)}
               </button>
             ))}
           </div>
