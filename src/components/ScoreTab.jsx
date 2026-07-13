@@ -71,39 +71,66 @@ function PitchLoadMeter({ label, pitches, byInningMap, limit, warnAt, currentInn
   );
 }
 
-// 自軍投手(守備時)
-function PitcherLoad({ game }) {
-  const nameOf = usePlayerName();
-  const pid = game.currentPitcherId;
-  if (!pid) return null;
-  const pr = (game.pitchingRecords || []).find((r) => r.playerId === pid);
+// 控え投手の1行サマリー(帯)。タップで大メーターに入れ替える。
+function PitchMiniStrip({ data, limit, onClick }) {
+  const inn = Object.entries(data.byInning || {})
+    .map(([k, n]) => [Number(k), n]).filter(([, n]) => n > 0).sort((a, b) => a[0] - b[0]);
   return (
-    <PitchLoadMeter
-      label={`⚾ ${nameOf(pid)} のこの試合の球数`}
-      pitches={pr?.pitches || 0}
-      byInningMap={pr?.pitchesByInning}
-      limit={game.rules?.pitchLimit?.perGame || null}
-      warnAt={game.rules?.pitchLimit?.warnAt}
-      currentInning={game.inning}
-    />
+    <button className="pitch-mini" onClick={onClick}>
+      <span className="pm-mini-name">{data.shortLabel}</span>
+      <span className="pm-mini-count"><b>{data.pitches}</b>{limit ? `/${limit}` : ''}球</span>
+      {inn.length > 0 && <span className="pm-mini-inn">回別 {inn.map(([, n]) => n).join('/')}</span>}
+      <span className="pm-mini-swap">大きく ▸</span>
+    </button>
   );
 }
 
-// 相手投手(打撃時)。球数だけを記号ごとに追跡(oppPitchers)。同じ球数制限が両チームに
-// 適用される年代では、相手投手の交代時期の目安にもなる。
-function OppPitcherLoad({ game }) {
-  const letter = game.oppPitcherLetter;
-  if (!letter) return null;
-  const op = game.oppPitchers?.[letter];
+// 両投手の球数を表示する。アクティブ投手(守備=自軍/攻撃=相手)を大メーター、
+// もう一方(控え)を下に1行の帯で常時表示。帯タップで主役を入れ替える。
+// ハーフが変わると別カードとして再マウントされるため、入れ替え状態は自動リセットされる。
+function PitchLoadPair({ game }) {
+  const nameOf = usePlayerName();
+  const [swapped, setSwapped] = useState(false);
+  const limit = game.rules?.pitchLimit?.perGame || null;
+  const warnAt = game.rules?.pitchLimit?.warnAt;
+
+  const myPid = game.currentPitcherId;
+  const myPr = myPid ? (game.pitchingRecords || []).find((r) => r.playerId === myPid) : null;
+  const mine = myPid ? {
+    key: 'mine',
+    label: `⚾ ${nameOf(myPid)} のこの試合の球数`,
+    shortLabel: `🧤 自軍 ${nameOf(myPid)}`,
+    pitches: myPr?.pitches || 0,
+    byInning: myPr?.pitchesByInning,
+  } : null;
+
+  const oppLetter = game.oppPitcherLetter;
+  const oppRec = oppLetter ? game.oppPitchers?.[oppLetter] : null;
+  const opp = oppLetter ? {
+    key: 'opp',
+    label: `⚾ 相手投手 ${oppLetter} のこの試合の球数`,
+    shortLabel: `🧢 相手 ${oppLetter}`,
+    pitches: oppRec?.pitches || 0,
+    byInning: oppRec?.pitchesByInning,
+  } : null;
+
+  if (!mine && !opp) return null;
+
+  // 既定の主役はアクティブ投手(守備=自軍, 攻撃=相手)。swappedで入れ替え。
+  const activeIsMine = !isMyTeamBatting(game);
+  let primary = activeIsMine ? mine : opp;
+  let secondary = activeIsMine ? opp : mine;
+  if (swapped) { const t = primary; primary = secondary; secondary = t; }
+  if (!primary) { primary = secondary; secondary = null; } // 片方未設定なら在る方を主役に
+
   return (
-    <PitchLoadMeter
-      label={`⚾ 相手投手 ${letter} のこの試合の球数`}
-      pitches={op?.pitches || 0}
-      byInningMap={op?.pitchesByInning}
-      limit={game.rules?.pitchLimit?.perGame || null}
-      warnAt={game.rules?.pitchLimit?.warnAt}
-      currentInning={game.inning}
-    />
+    <>
+      <PitchLoadMeter
+        label={primary.label} pitches={primary.pitches} byInningMap={primary.byInning}
+        limit={limit} warnAt={warnAt} currentInning={game.inning}
+      />
+      {secondary && <PitchMiniStrip data={secondary} limit={limit} onClick={() => setSwapped((s) => !s)} />}
+    </>
   );
 }
 
@@ -676,7 +703,7 @@ export default function ScoreTab() {
                   ))}
                 </select>
               </div>
-              <OppPitcherLoad game={game} />
+              <PitchLoadPair game={game} />
             </div>
           </>
         )
@@ -696,7 +723,7 @@ export default function ScoreTab() {
               ))}
             </select>
           </div>
-          <PitcherLoad game={game} />
+          <PitchLoadPair game={game} />
           {oppBatter && (
             <>
               <div className="flex mt12">

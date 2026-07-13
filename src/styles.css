@@ -327,6 +327,13 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .pitch-innings .pi-chip b { color: var(--text); font-weight: 800; margin-left: 3px; }
 .pitch-innings .pi-chip.now { border-color: var(--blue); color: var(--blue); }
 .pitch-innings .pi-chip.now b { color: var(--blue); }
+/* 控え投手の1行サマリー(帯)。タップで大メーターに入れ替え */
+.pitch-mini { display: flex; align-items: center; gap: 8px; width: 100%; margin-top: 8px; padding: 7px 12px; min-height: 0; font-weight: 600; background: var(--bg-3); border: 1px solid var(--line); border-radius: 8px; }
+.pitch-mini .pm-mini-name { color: var(--text-dim); font-size: 12px; white-space: nowrap; }
+.pitch-mini .pm-mini-count { font-size: 14px; font-variant-numeric: tabular-nums; }
+.pitch-mini .pm-mini-count b { font-size: 17px; font-weight: 900; }
+.pitch-mini .pm-mini-inn { font-size: 11px; color: var(--text-dim); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pitch-mini .pm-mini-swap { margin-left: auto; font-size: 11px; color: var(--blue); white-space: nowrap; }
 
 /* ---- 結果パッド ---- */
 .result-pad { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }

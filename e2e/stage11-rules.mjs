@@ -140,7 +140,15 @@ await page.selectOption('.card:has-text("相手投手") select', 'A');
 await page.waitForTimeout(150);
 for (let i = 0; i < 7; i++) await page.click('.count-btns .foul');
 await page.waitForTimeout(150);
-console.log('相手投手メーター:', (await page.textContent('.pitch-meter')).replace(/\s+/g, ' ').trim());
+console.log('相手投手メーター(主役):', (await page.textContent('.pitch-meter')).replace(/\s+/g, ' ').trim());
+// 打撃時も控えの自軍投手(磯野)が帯で見える(オプション①)
+console.log('控え帯(自軍投手):', (await page.textContent('.pitch-mini')).replace(/\s+/g, ' ').trim());
+// 帯タップで主役が自軍投手に入れ替わる
+await page.click('.pitch-mini');
+await page.waitForTimeout(150);
+console.log('入替後 主役メーター(自軍):', (await page.textContent('.pitch-meter')).replace(/\s+/g, ' ').trim(), '/ 磯野?', /磯野/.test(await page.textContent('.pitch-meter')));
+await page.click('.pitch-mini'); // 元に戻す
+await page.waitForTimeout(150);
 // 相手投手Bに交代 → 独立カウント(3球)
 await page.selectOption('.card:has-text("相手投手") select', 'B');
 await page.waitForTimeout(150);
