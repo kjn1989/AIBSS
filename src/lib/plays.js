@@ -33,8 +33,11 @@ export function proposeMoves(result, runners) {
       return { moves, batterTo: 1 };
     }
     case 'error':
+    case 'obstruction': // 走塁妨害: 打者走者は出塁が認められる(走者も1つ進塁を提案)
       push(3, 4); push(2, 3); push(1, 2);
       return { moves, batterTo: 1 };
+    case 'fieldInterference': // 守備妨害: 打者(または走者)アウト。走者はとどまるを既定に
+      return { moves: [], batterTo: 'out' };
     case 'sacBunt':
       push(3, 4); push(2, 3); push(1, 2);
       // 三塁走者はスクイズ時のみ生還だが、デフォルトは進塁させ手動調整可
@@ -61,6 +64,8 @@ export function batterDestOptions(result) {
     case 'hr': return [4];
     case 'bb': case 'hbp': case 'interference': return [1];
     case 'error': return [1, 2, 3, 'out'];
+    case 'obstruction': return [1, 2, 3]; // 走塁妨害: 進塁が認められた塁へ
+    case 'fieldInterference': return ['out', 1]; // 守備妨害: 通常は打者アウト(保険で1塁も)
     case 'sacBunt': case 'sacFly': return ['out', 1];
     case 'so': return ['out', 1]; // 振り逃げ
     case 'out': return ['out', 1]; // 打撃妨害改訂等の保険

@@ -16,6 +16,8 @@ const BUTTONS = [
   { key: 'sacBunt', label: '犠打' },
   { key: 'sacFly', label: '犠飛' },
   { key: 'interference', label: '打撃妨害' },
+  { key: 'fieldInterference', label: '守備妨害' },
+  { key: 'obstruction', label: '走塁妨害' },
 ];
 
 export default function ResultPad({ onSelect }) {

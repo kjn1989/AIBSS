@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import Sheet from './Sheet.jsx';
 import { useStore, usePlayerName, isMyTeamBatting } from '../state/store.jsx';
 
@@ -7,8 +7,9 @@ import { useStore, usePlayerName, isMyTeamBatting } from '../state/store.jsx';
 // onPinchRunner(slot): 代走シートを開く(自チーム攻撃時)
 // onPinchRunnerOpp(slot): 相手走者への代走シートを開く(相手チーム攻撃時)
 export default function RunnerEventSheet({ game, base, onClose, onPinchRunner, onPinchRunnerOpp }) {
-  const { dispatch } = useStore();
+  const { state, dispatch } = useStore();
   const nameOf = usePlayerName();
+  const [showCR, setShowCR] = useState(false);
   const runner = game.runners[base];
   const baseName = ['', '一塁', '二塁', '三塁'][base];
   const next = base + 1 >= 4 ? 4 : base + 1;
@@ -76,6 +77,35 @@ export default function RunnerEventSheet({ game, base, onClose, onPinchRunner, o
           🔄 代走を送る({name}に代えて)
         </button>
       )}
+      {/* 臨時代走: 塁上だけ差し替え、打順は変えず元の選手は次打席で復帰する */}
+      {runner.playerId && (
+        <>
+          <button className="ghost" style={{ width: '100%', marginBottom: showCR ? 6 : 10 }} onClick={() => setShowCR((v) => !v)}>
+            🏃 臨時代走({name}の代わりに走る・打順はそのまま)
+          </button>
+          {showCR && (
+            <div className="mb8">
+              <p className="small dim">臨時代走を選ぶと、この塁の走者だけが入れ替わります。{name}さんは打順に残り、次の打席で通常どおり出場(復帰)します。</p>
+              <div className="grid2">
+                {state.players
+                  .filter((p) => !p.id.startsWith('demo-') && ![1, 2, 3].some((b) => game.runners[b]?.playerId === p.id))
+                  .map((p) => (
+                    <button
+                      key={p.id}
+                      className="small"
+                      onClick={() => {
+                        dispatch({ type: 'COURTESY_RUNNER', gameId: game.id, base, playerId: p.id });
+                        onClose();
+                      }}
+                    >
+                      {p.name}{p.number ? ` #${p.number}` : ''}
+                    </button>
+                  ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
       {oppRunnerSlot && onPinchRunnerOpp && (
         <button
           className="primary"
@@ -97,6 +127,7 @@ export default function RunnerEventSheet({ game, base, onClose, onPinchRunner, o
         <button className="danger" onClick={() => fire('pickoff', [{ from: base, to: 'out' }])}>
           牽制死
         </button>
+        <button onClick={() => fire('pickoffThrow', [])}>牽制(セーフ)</button>
         {base < 3 && (
           <button onClick={() => fire('wp', chainAdvance(base))}>
             この走者が進塁

@@ -19,6 +19,9 @@ export const RESULTS = {
   sacBunt: { label: '犠打', short: 'SAC', hit: false, bases: 0, ab: false, onBase: false },
   sacFly: { label: '犠飛', short: 'SF', hit: false, bases: 0, ab: false, onBase: false },
   interference: { label: '打撃妨害', short: 'IF', hit: false, bases: 0, ab: false, onBase: true },
+  // 守備妨害(攻撃側の妨害): 打者/走者アウト。走塁妨害(守備側の妨害/オブストラクション): 出塁が認められる。
+  fieldInterference: { label: '守備妨害', short: '守妨', hit: false, bases: 0, ab: true, onBase: false },
+  obstruction: { label: '走塁妨害', short: '走妨', hit: false, bases: 0, ab: false, onBase: true },
 };
 
 // ---- 三振の内訳 ----

@@ -297,6 +297,26 @@ export function reducer(state, action) {
     case 'DELETE_PLAYER':
       return { ...state, players: state.players.filter((p) => p.id !== action.id) };
 
+    // 臨時代走(courtesy runner): 塁上の走者だけを別選手に差し替え、打順(lineup)は変えない。
+    // → 元の選手は次の打席で通常どおり出場でき、ラインナップに"復帰"する。
+    // 得点・盗塁などの走塁記録は臨時代走側(runner.playerId)に付く。
+    case 'COURTESY_RUNNER': {
+      const g = deep(state.games[action.gameId]);
+      const r = g.runners[action.base];
+      if (!r) return state;
+      const origId = r.playerId;
+      const nm = (id) => state.players.find((p) => p.id === id)?.name || '走者';
+      g.runners[action.base] = { ...r, playerId: action.playerId, courtesyFor: origId };
+      g.usedPlayerIds = [...new Set([...g.usedPlayerIds, action.playerId])];
+      g.playLogs.push(newPlayLog({
+        gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'runner',
+        text: `臨時代走: ${nm(action.playerId)} (${nm(origId)}に代わり)`,
+        payload: { moves: [], playerId: action.playerId, courtesyFor: origId },
+      }));
+      g.updatedAt = Date.now();
+      return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
+    }
+
     // 左右別split用: 相手投手/相手打者の投打(記号ごと)を記録
     case 'SET_OPP_HAND': {
       const g = deep(state.games[action.gameId]);
@@ -556,7 +576,7 @@ export function reducer(state, action) {
       if (!isMyTeamBatting(g) && g.currentPitcherId && g.outs > outsBefore) {
         ensurePitchingRecord(g, g.currentPitcherId).outsRecorded += g.outs - outsBefore;
       }
-      const labels = { sb: '盗塁', cs: '盗塁死', wp: '暴投', pb: '捕逸', pickoff: '牽制死' };
+      const labels = { sb: '盗塁', cs: '盗塁死', wp: '暴投', pb: '捕逸', pickoff: '牽制死', pickoffThrow: '牽制', balk: 'ボーク' };
       g.playLogs.push(newPlayLog({
         gameId: g.id, inning: g.inning, isTop: g.isTop, kind: action.event === 'sb' ? 'sb' : 'runner',
         text: labels[action.event] || '走者イベント',
