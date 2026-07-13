@@ -76,9 +76,15 @@ export const OPP_LETTERS = Array.from({ length: 20 }, (_, i) => String.fromCharC
 // ファクトリ関数(スキーマ定義を兼ねる)
 // ============================================================
 
-export function newPlayer(name, number = '') {
+// 投打の左右。空文字=未設定(任意入力)。
+export const HAND_OPTIONS = ['', 'R', 'L', 'S']; // R=右 / L=左 / S=両(スイッチ)
+export const HAND_LABEL = { R: '右', L: '左', S: '両', '': '—' };
+
+export function newPlayer(name, number = '', opts = {}) {
   return {
     id: uid(), name, number, createdAt: Date.now(),
+    throws: opts.throws || '', // 投げる手: 'R'|'L'|'' (捕手左投げ等の稀少ケースも許容)
+    bats: opts.bats || '',     // 打つ側: 'R'|'L'|'S'|''
     // AI選手名鑑(スカウト寸評)の保存内容。未確定の間は編集画面側のローカル状態のみで保持する。
     scoutTags: [], // { label, type }[]
     scoutCatchphrase: '',
@@ -147,6 +153,9 @@ export function newGame({ opponent = '', isHome = false, date = null, season = '
     // 相手投手の球数(記号ごと)。成績は追わないが球数だけはペース把握のため記録する。
     // { [letter]: { pitches, pitchesByInning: { "1": n, ... } } }
     oppPitchers: {},
+    // 左右別スタッツ用: 相手投手・相手打者の投打(記号ごと)。任意。'R'|'L'|'S'
+    oppPitcherHands: {}, // { [letter]: 'R'|'L' } 自軍打者の対左右投手splitに使う
+    oppBatterHands: {},  // { [letter]: 'R'|'L'|'S' } 自軍投手の対左右打者splitに使う
     atBats: [], // AtBat[]
     playLogs: [], // PlayLog[]
     pitchingRecords: [], // PitchingRecord[]
@@ -187,6 +196,7 @@ export function newAtBat({ gameId, playerId, order, snapshot }) {
       scoreDiff: 0, // 自チーム − 相手 (打席開始時)
     },
     advSuccess: null, // 走者あり凡打: 進塁打成功 true/false、対象外は null
+    vsHand: null, // 対戦した相手投手の投げ手 'R'|'L'(左右別split用。未設定null)
     clutch: null, // 'first'|'tie'|'goahead'|'comeback'|null
     ts: Date.now(),
   };

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useStore } from '../state/store.jsx';
-import { aggregateBatting, aggregatePitching, battingMetrics, pitchingMetrics, fmtAvg } from '../lib/stats.js';
-import { formatIP } from '../lib/model.js';
+import { aggregateBatting, aggregatePitching, battingMetrics, pitchingMetrics, fmtAvg, battingSplits, pitchingSplits, avg3 } from '../lib/stats.js';
+import { formatIP, HAND_LABEL } from '../lib/model.js';
 import { playLabel } from '../lib/voiceParser.js';
 import SprayChart from './SprayChart.jsx';
 import TrendChart from './TrendChart.jsx';
@@ -18,6 +18,8 @@ export default function PlayerView({ playerId, games, onClose }) {
 
   const batting = useMemo(() => aggregateBatting(games)[playerId], [games, playerId]);
   const pitching = useMemo(() => aggregatePitching(games)[playerId], [games, playerId]);
+  const batSplit = useMemo(() => battingSplits(games)[playerId], [games, playerId]);
+  const pitSplit = useMemo(() => pitchingSplits(games)[playerId], [games, playerId]);
 
   // この選手の全打席(試合の古い順 → 各試合内は記録順)
   const atBatsByGame = useMemo(() => {
@@ -44,6 +46,11 @@ export default function PlayerView({ playerId, games, onClose }) {
       </header>
       <div className="fullscreen-body">
         <h1 className="player-page-name">{player?.name || '選手'}{player?.number ? ` #${player.number}` : ''}</h1>
+        {(player?.throws || player?.bats) && (
+          <div className="dim small" style={{ marginTop: -6, marginBottom: 8 }}>
+            {player?.throws ? `投${HAND_LABEL[player.throws]}` : ''}{player?.throws && player?.bats ? '・' : ''}{player?.bats ? `打${HAND_LABEL[player.bats]}` : ''}
+          </div>
+        )}
         {batting ? (
           <div className="card">
             <h2>打撃成績 <span className="dim small">({atBatsByGame.length}試合)</span></h2>
@@ -77,6 +84,36 @@ export default function PlayerView({ playerId, games, onClose }) {
               <div><div className="dim small">勝/S/H</div><b>{pitching.wins}/{pitching.saves}/{pitching.holds}</b></div>
               <div><div className="dim small">自責点</div><b>{pitching.earnedRuns}</b></div>
             </div>
+          </div>
+        )}
+
+        {batSplit && (batSplit.R.pa > 0 || batSplit.L.pa > 0) && (
+          <div className="card">
+            <h2>左右別打撃(対戦投手の左右)</h2>
+            <table className="split-table">
+              <thead><tr><th></th><th>打率</th><th>打席</th><th>打数</th><th>安打</th><th>本</th><th>四死</th><th>三振</th></tr></thead>
+              <tbody>
+                {[['対左投手', batSplit.L], ['対右投手', batSplit.R]].map(([lbl, s]) => (
+                  <tr key={lbl}><td className="sp-lbl">{lbl}</td><td><b>{avg3(s.h, s.ab) ?? '-'}</b></td><td>{s.pa}</td><td>{s.ab}</td><td>{s.h}</td><td>{s.hr}</td><td>{s.bb}</td><td>{s.so}</td></tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="small dim mt8">相手投手の左右を記録した打席のみ集計(スコア入力の相手投手欄で設定)。</p>
+          </div>
+        )}
+
+        {pitSplit && (pitSplit.R.bf > 0 || pitSplit.L.bf > 0) && (
+          <div className="card">
+            <h2>左右別投球(対戦打者の左右)</h2>
+            <table className="split-table">
+              <thead><tr><th></th><th>被打率</th><th>対戦</th><th>被安</th><th>被本</th><th>奪三振</th><th>与四死</th></tr></thead>
+              <tbody>
+                {[['対左打者', pitSplit.L], ['対右打者', pitSplit.R]].map(([lbl, s]) => (
+                  <tr key={lbl}><td className="sp-lbl">{lbl}</td><td><b>{avg3(s.h, s.ab) ?? '-'}</b></td><td>{s.bf}</td><td>{s.h}</td><td>{s.hr}</td><td>{s.so}</td><td>{s.bb}</td></tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="small dim mt8">相手打者の左右を記録した対戦のみ集計(スコア入力の相手打者欄で設定)。</p>
           </div>
         )}
 

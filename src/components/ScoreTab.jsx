@@ -30,6 +30,24 @@ function AtBatHistory({ items, edition }) {
   );
 }
 
+// ---- 相手投手/相手打者の左右を任意入力する小さなトグル(左右別スタッツ用) ----
+// 記号(letter)ごとに R/L(打者は両=S)を game に保存。空=未設定は集計対象外。
+function OppHandToggle({ game, which, letter, allowSwitch = false }) {
+  const { dispatch } = useStore();
+  if (!letter) return null;
+  const cur = (which === 'pitcher' ? game.oppPitcherHands : game.oppBatterHands)?.[letter] || '';
+  const opts = allowSwitch ? [['R', '右'], ['L', '左'], ['S', '両']] : [['R', '右'], ['L', '左']];
+  const set = (h) => dispatch({ type: 'SET_OPP_HAND', gameId: game.id, which, letter, hand: cur === h ? '' : h });
+  return (
+    <div className="hand-inline">
+      <span className="small dim">{which === 'pitcher' ? '投' : '打'}</span>
+      {opts.map(([h, lbl]) => (
+        <button key={h} className={`hl-btn ${cur === h ? 'on' : ''}`} onClick={(e) => { e.stopPropagation(); set(h); }}>{lbl}</button>
+      ))}
+    </div>
+  );
+}
+
 // ---- 投手の累積球数メーター(スコア入力中に常時表示) ----
 // 打席ごとのB/Sカウンター(PitchCounter)とは別に、この試合の投手の総球数を大きく見せる。
 // 球数制限がある場合は「XX / 上限」+バー+色(緑→琥珀→赤)で疲労・交代の目安を示す。
@@ -703,6 +721,7 @@ export default function ScoreTab() {
                     <option key={l} value={l}>{l}</option>
                   ))}
                 </select>
+                {game.oppPitcherLetter && <OppHandToggle game={game} which="pitcher" letter={game.oppPitcherLetter} />}
               </div>
               <PitchLoadPair game={game} />
             </div>
@@ -734,6 +753,9 @@ export default function ScoreTab() {
                   <span className="dim small"> 打順{oppBatter.order}番</span>
                 </div>
                 <span className="pill blue">相手 交代 ▾</span>
+              </div>
+              <div className="flex" onClick={(e) => e.stopPropagation()} style={{ justifyContent: 'flex-end' }}>
+                <OppHandToggle game={game} which="batter" letter={oppBatter.letter} allowSwitch />
               </div>
               <AtBatHistory
                 items={game.playLogs

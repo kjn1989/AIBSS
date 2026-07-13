@@ -343,3 +343,66 @@ export function detailRanking(metricDef, battingMap, pitchingMap) {
   }
   return rankRows(rows);
 }
+
+// ============================================================
+// 左右別スプリット集計
+//  - 打者splits: 各AtBatの vsHand(対戦相手投手の左右)で分ける → 対左投手/対右投手
+//  - 投手splits: 守備ログ(kind:'defense')の pitcherId + batterHand で分ける → 対左打者/対右打者
+//  未設定(hand不明)の対戦は集計から除外する。任意入力なので分かるものだけ積み上がる。
+// ============================================================
+const emptyBatSplit = () => ({ pa: 0, ab: 0, h: 0, hr: 0, bb: 0, so: 0, tb: 0, rbi: 0 });
+const emptyPitSplit = () => ({ bf: 0, ab: 0, h: 0, hr: 0, so: 0, bb: 0 });
+
+// { [playerId]: { R: {...}, L: {...} } }
+export function battingSplits(games) {
+  const map = {};
+  for (const g of games) {
+    for (const ab of g.atBats || []) {
+      if (!ab.result || !ab.vsHand) continue;
+      const def = RESULTS[ab.result];
+      if (!def) continue;
+      const rec = (map[ab.playerId] = map[ab.playerId] || { R: emptyBatSplit(), L: emptyBatSplit() });
+      const s = rec[ab.vsHand];
+      if (!s) continue;
+      s.pa += 1;
+      if (def.ab) s.ab += 1;
+      if (def.hit) { s.h += 1; s.tb += def.bases; }
+      if (ab.result === 'hr') s.hr += 1;
+      if (ab.result === 'bb' || ab.result === 'hbp') s.bb += 1;
+      if (ab.result === 'so') s.so += 1;
+      s.rbi += ab.rbi || 0;
+    }
+  }
+  return map;
+}
+
+// { [pitcherId]: { R: {...}, L: {...} } } (対戦打者の左右別)
+export function pitchingSplits(games) {
+  const map = {};
+  for (const g of games) {
+    for (const log of g.playLogs || []) {
+      if (log.kind !== 'defense') continue;
+      const p = log.payload || {};
+      if (!p.pitcherId || !p.batterHand || !p.result) continue;
+      const hand = p.batterHand === 'S' ? null : p.batterHand; // 両打はsplit対象外
+      if (!hand) continue;
+      const def = RESULTS[p.result];
+      if (!def) continue;
+      const rec = (map[p.pitcherId] = map[p.pitcherId] || { R: emptyPitSplit(), L: emptyPitSplit() });
+      const s = rec[hand];
+      s.bf += 1;
+      if (def.ab) s.ab += 1;
+      if (def.hit) s.h += 1;
+      if (p.result === 'hr') s.hr += 1;
+      if (p.result === 'so') s.so += 1;
+      if (p.result === 'bb' || p.result === 'hbp') s.bb += 1;
+    }
+  }
+  return map;
+}
+
+// 打率などの表示用: 割り算(分母0はnull)
+export function avg3(num, den) {
+  if (!den) return null;
+  return (num / den).toFixed(3).replace(/^0/, '');
+}

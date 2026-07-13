@@ -4,7 +4,7 @@ import { parseFirebaseConfig } from '../lib/cloud.js';
 import { encodeWatchLink, encodeInviteLink } from './WatchView.jsx';
 import QRCode from './QRCode.jsx';
 import { battingCSV, pitchingCSV, playLogCSV, atBatCSV, downloadCSV, shareCSV } from '../lib/csv.js';
-import { EDITIONS } from '../lib/model.js';
+import { EDITIONS, HAND_LABEL } from '../lib/model.js';
 import { listProfiles, getActiveProfileId, addProfile, switchActiveProfile, deleteProfile } from '../lib/profiles.js';
 import OfficialCloudCard from './OfficialCloudCard.jsx';
 
@@ -12,12 +12,16 @@ export default function SettingsTab() {
   const { state, dispatch } = useStore();
   const [newName, setNewName] = useState('');
   const [newNumber, setNewNumber] = useState('');
+  const [newThrows, setNewThrows] = useState('');
+  const [newBats, setNewBats] = useState('');
 
   const addPlayer = () => {
     if (!newName.trim()) return;
-    dispatch({ type: 'ADD_PLAYER', name: newName.trim(), number: newNumber.trim() });
+    dispatch({ type: 'ADD_PLAYER', name: newName.trim(), number: newNumber.trim(), throws: newThrows, bats: newBats });
     setNewName('');
     setNewNumber('');
+    setNewThrows('');
+    setNewBats('');
   };
 
   return (
@@ -57,11 +61,30 @@ export default function SettingsTab() {
           <input style={{ width: 70 }} value={newNumber} onChange={(e) => setNewNumber(e.target.value)} placeholder="背番号" inputMode="numeric" />
           <button className="primary" onClick={addPlayer}>追加</button>
         </div>
+        <div className="flex mt8">
+          <label className="small dim" style={{ width: 28 }}>投</label>
+          <select style={{ width: 68 }} value={newThrows} onChange={(e) => setNewThrows(e.target.value)}>
+            <option value="">—</option><option value="R">右</option><option value="L">左</option>
+          </select>
+          <label className="small dim" style={{ width: 28, marginLeft: 8 }}>打</label>
+          <select style={{ width: 68 }} value={newBats} onChange={(e) => setNewBats(e.target.value)}>
+            <option value="">—</option><option value="R">右</option><option value="L">左</option><option value="S">両</option>
+          </select>
+          <span className="small dim grow" style={{ textAlign: 'right' }}>投打の左右(任意)</span>
+        </div>
         <div className="mt12">
           {state.players.map((p) => (
             <div className="row" key={p.id}>
               <span className="pill">{p.number || '-'}</span>
               <span className="grow">{p.name}</span>
+              <label className="small dim">投</label>
+              <select className="hand-select" value={p.throws || ''} onChange={(e) => dispatch({ type: 'UPDATE_PLAYER', id: p.id, patch: { throws: e.target.value } })}>
+                <option value="">—</option><option value="R">右</option><option value="L">左</option>
+              </select>
+              <label className="small dim">打</label>
+              <select className="hand-select" value={p.bats || ''} onChange={(e) => dispatch({ type: 'UPDATE_PLAYER', id: p.id, patch: { bats: e.target.value } })}>
+                <option value="">—</option><option value="R">右</option><option value="L">左</option><option value="S">両</option>
+              </select>
               <button className="small danger ghost" onClick={() => dispatch({ type: 'DELETE_PLAYER', id: p.id })}>削除</button>
             </div>
           ))}

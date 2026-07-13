@@ -287,7 +287,7 @@ export function reducer(state, action) {
 
     // ===== 選手 =====
     case 'ADD_PLAYER': {
-      const p = newPlayer(action.name, action.number || '');
+      const p = newPlayer(action.name, action.number || '', { throws: action.throws || '', bats: action.bats || '' });
       return { ...state, players: [...state.players, p] };
     }
     case 'UPDATE_PLAYER': {
@@ -296,6 +296,15 @@ export function reducer(state, action) {
     }
     case 'DELETE_PLAYER':
       return { ...state, players: state.players.filter((p) => p.id !== action.id) };
+
+    // 左右別split用: 相手投手/相手打者の投打(記号ごと)を記録
+    case 'SET_OPP_HAND': {
+      const g = deep(state.games[action.gameId]);
+      const key = action.which === 'pitcher' ? 'oppPitcherHands' : 'oppBatterHands';
+      g[key] = { ...(g[key] || {}), [action.letter]: action.hand };
+      g.updatedAt = Date.now();
+      return { ...state, games: { ...state.games, [g.id]: g } };
+    }
 
     // ===== 参加メンバー(マネージャー/応援等) =====
     case 'ADD_MEMBER':
@@ -641,6 +650,7 @@ export function reducer(state, action) {
         ab.rbi = rbi;
         ab.runsOnPlay = totalRuns;
         ab.outsOnPlay = outsOnPlay;
+        ab.vsHand = (g.oppPitcherLetter && g.oppPitcherHands?.[g.oppPitcherLetter]) || null; // 対戦相手投手の左右
         // 進塁打: 走者あり凡打(三振以外のアウト)のみ対象
         const hadRunners = pending.snapshot.runners[1] || pending.snapshot.runners[2] || pending.snapshot.runners[3];
         if (p.result === 'out' && hadRunners) {
@@ -697,6 +707,8 @@ export function reducer(state, action) {
             result: p.result, direction: p.direction, outType: p.outType || null,
             soType: p.result === 'so' ? p.soType || null : null, runs: totalRuns, outsOnPlay,
             letter: oppBatter.letter, order: oppBatter.order,
+            pitcherId: g.currentPitcherId || null, // どの自軍投手が投げたか(対左右打者split用)
+            batterHand: g.oppBatterHands?.[oppBatter.letter] || null, // 相手打者の左右
             beforeRunners: pending.snapshot.runners, outsBefore, balls, strikes, fouls, pitchCount: pitches.length,
             moveLines, scoreAfter: { my: g.myScore, opp: g.oppScore },
           },
