@@ -297,6 +297,19 @@ export function reducer(state, action) {
     case 'DELETE_PLAYER':
       return { ...state, players: state.players.filter((p) => p.id !== action.id) };
 
+    // その他(記述式メモ): 判断に迷う不明なプレイを、とりあえず自由記述で残す。
+    // 後からAIが正式なスコア記録へ変換・提案する材料にする(payload.memoに原文を保持)。
+    case 'ADD_NOTE': {
+      const g = deep(state.games[action.gameId]);
+      g.playLogs.push(newPlayLog({
+        gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'note',
+        text: `📝 メモ: ${action.text}`,
+        payload: { memo: action.text, resolved: false },
+      }));
+      g.updatedAt = Date.now();
+      return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
+    }
+
     // 臨時代走(courtesy runner): 塁上の走者だけを別選手に差し替え、打順(lineup)は変えない。
     // → 元の選手は次の打席で通常どおり出場でき、ラインナップに"復帰"する。
     // 得点・盗塁などの走塁記録は臨時代走側(runner.playerId)に付く。

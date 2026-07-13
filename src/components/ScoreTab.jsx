@@ -500,6 +500,39 @@ function ScoreAdjustSheet({ game, onClose }) {
   );
 }
 
+// ---- その他(記述式メモ)シート: 判断に迷うプレイをとりあえず文章で残す ----
+// 将来: このメモをAIが解釈して正式なスコア記録へ変換・提案する(#5)。
+function NoteSheet({ game, onClose }) {
+  const { dispatch } = useStore();
+  const [text, setText] = useState('');
+  return (
+    <Sheet title="その他 — 不明なプレイをメモ" onClose={onClose}>
+      <p className="small dim">
+        判断に迷うプレイは、まず起きたことをそのまま書いて残せます(例:「ピッチャーが弾いてショートが拾って一塁へ投げたがセーフ」)。
+        試合経過に記録され、後から正式な結果に直せます。
+      </p>
+      <textarea
+        className="note-input"
+        rows={4}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="起きたことを自由に入力…"
+        autoFocus
+      />
+      <div className="sheet-actions">
+        <button className="ghost" onClick={onClose}>キャンセル</button>
+        <button
+          className="primary"
+          disabled={!text.trim()}
+          onClick={() => { dispatch({ type: 'ADD_NOTE', gameId: game.id, text: text.trim() }); onClose(); }}
+        >
+          メモを記録
+        </button>
+      </div>
+    </Sheet>
+  );
+}
+
 // ---- 三振確認カード(2ストライク後のストライクで自動表示) ----
 function StrikeoutSheet({ game, batterName, initialSoType, onClose, onFurinige }) {
   const { dispatch } = useStore();
@@ -792,6 +825,9 @@ export default function ScoreTab() {
             手動チェンジ
           </button>
           <button onClick={() => setSheet({ kind: 'scoreAdjust' })}>スコア修正</button>
+          <button style={{ gridColumn: '1 / -1' }} onClick={() => setSheet({ kind: 'note' })}>
+            📝 その他(不明なプレイをメモ)
+          </button>
           <button style={{ gridColumn: '1 / -1' }} onClick={() => setSheet({ kind: 'editRules' })}>
             ⚙️ 試合ルールを変更{game.rules ? `(${describeRules(game.rules)})` : '(現在: ルール管理なし)'}
           </button>
@@ -886,6 +922,9 @@ export default function ScoreTab() {
       )}
       {sheet?.kind === 'editRules' && (
         <EditRulesSheet game={game} edition={state.settings.edition || '草野球'} onClose={() => setSheet(null)} />
+      )}
+      {sheet?.kind === 'note' && (
+        <NoteSheet game={game} onClose={() => setSheet(null)} />
       )}
     </div>
   );
