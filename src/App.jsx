@@ -149,26 +149,27 @@ export default function App() {
         </div>
       )}
       <header className="app-header">
-        <div>
-          {/* ブランドを主役に: アイコン+LEDワードマーク「AI◆BASE」+DIAMONDサブタイトルを1つのロックアップとして表示。
-              LEDドットマトリクスは装飾(aria-hidden)、実テキストはsr-onlyで併記してh1のアクセシビリティ/SEOを担保。 */}
-          <h1 className="brand-row">
-            <DiamondIcon size={32} className="brand-mark" />
-            <div className="brand-text" aria-hidden="true">
-              <LedWordmark dot={3.2} gap={1} letterGap={2.2} sepGap={2.4} />
-              <div className="brand-diamond-sub">DIAMOND</div>
-            </div>
-            <span className="sr-only">AI-BASE DIAMOND</span>
-          </h1>
+        {/* ブランドを主役に: アイコン+LEDワードマーク「AI◆BASE」+DIAMONDサブタイトルを1つのロックアップとして表示。
+            LEDドットマトリクスは装飾(aria-hidden)、実テキストはsr-onlyで併記してh1のアクセシビリティ/SEOを担保。
+            左は完全にロゴ専用、右にチーム情報+設定を縦積みしてバランスを取る。 */}
+        <h1 className="brand-row">
+          <DiamondIcon size={32} className="brand-mark" />
+          <div className="brand-text" aria-hidden="true">
+            <LedWordmark dot={3.2} gap={1} letterGap={2.2} sepGap={2.4} />
+            <div className="brand-diamond-sub">DIAMOND</div>
+          </div>
+          <span className="sr-only">AI-BASE DIAMOND</span>
+        </h1>
+        <div className="header-right">
           <div className="sub">
             <span className="brand-for">for {state.settings.edition || '草野球'}</span>
             {' ・ '}{state.settings.teamName || 'マイチーム'} {cloudBadge}
           </div>
-        </div>
-        <div className="header-btns">
-          <button className="ghost small" onClick={() => setTab('settings')} aria-label="設定">
-            ⚙️
-          </button>
+          <div className="header-btns">
+            <button className="ghost small" onClick={() => setTab('settings')} aria-label="設定">
+              ⚙️
+            </button>
+          </div>
         </div>
       </header>
 
