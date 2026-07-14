@@ -29,7 +29,7 @@ await page.reload({ waitUntil: 'networkidle' });
 
 // ---- ブランド表示 ----
 console.log('title:', await page.title());
-console.log('brand sub:', (await page.textContent('.app-header .sub')).trim());
+console.log('brand team info:', (await page.textContent('.header-team')).replace(/\s+/g, ' ').trim());
 
 // 選手登録
 await page.click('button[aria-label="設定"]');

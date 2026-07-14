@@ -146,28 +146,26 @@ export default function App() {
         </div>
       )}
       <header className="app-header">
-        {/* ブランドを主役に: アイコン+LEDワードマーク「AI◆BASE」+DIAMONDサブタイトルを1つのロックアップとして表示。
-            LEDドットマトリクスは装飾(aria-hidden)、実テキストはsr-onlyで併記してh1のアクセシビリティ/SEOを担保。
-            左は完全にロゴ専用、右にチーム情報+設定を縦積みしてバランスを取る。 */}
-        <h1 className="brand-row">
-          <DiamondIcon size={36} className="brand-mark" />
-          <div className="brand-text" aria-hidden="true">
-            <LedWordmark dot={3.6} gap={1.1} letterGap={2.45} sepGap={2.7} />
-            <div className="brand-diamond-sub">DIAMOND</div>
-          </div>
-          <span className="sr-only">AI-BASE DIAMOND</span>
-        </h1>
-        <div className="header-right">
-          <div className="sub">
+        {/* ロゴ(アイコン+LEDワードマーク+DIAMOND)の右隣にチーム情報を寄せてひとまとまりにし、
+            設定歯車だけを右上角に固定。下部の余白を詰めてコンパクトに見せる。
+            LEDドットマトリクスは装飾(aria-hidden)、実テキストはsr-onlyで併記。 */}
+        <div className="header-brand">
+          <h1 className="brand-row">
+            <DiamondIcon size={36} className="brand-mark" />
+            <div className="brand-text" aria-hidden="true">
+              <LedWordmark dot={3.6} gap={1.1} letterGap={2.45} sepGap={2.7} />
+              <div className="brand-diamond-sub">DIAMOND</div>
+            </div>
+            <span className="sr-only">AI-BASE DIAMOND</span>
+          </h1>
+          <div className="header-team">
             <div className="brand-for">for {state.settings.edition || '草野球'}</div>
             <div className="brand-team">{state.settings.teamName || 'マイチーム'}</div>
           </div>
-          <div className="header-btns">
-            <button className="ghost small" onClick={() => setTab('settings')} aria-label="設定">
-              ⚙️
-            </button>
-          </div>
         </div>
+        <button className="ghost small header-gear" onClick={() => setTab('settings')} aria-label="設定">
+          ⚙️
+        </button>
       </header>
 
       <main className="main">

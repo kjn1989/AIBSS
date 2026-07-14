@@ -89,23 +89,29 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 /* ---- レイアウト ---- */
 .app { display: flex; flex-direction: column; height: 100%; height: 100dvh; }
 .app-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 14px calc(6px);
-  padding-top: max(10px, env(safe-area-inset-top));
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
+  padding: 8px 12px 8px;
+  padding-top: max(8px, env(safe-area-inset-top));
   background: var(--bg-2);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 .app-header h1 { font-size: 20px; font-weight: 800; letter-spacing: 0.02em; margin: 0; }
-/* 右側: チーム情報(上)+設定ボタン(下)を縦積み。左のロゴブロックとは高さが完全には
-   揃わないため、ヘッダー全体を align-items:center にして余った分を上下均等に分散させる
-   (どちらかの下だけに隙間が寄って見えるのを防ぐ)。 */
-.header-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
-.app-header .sub { font-size: 12px; color: var(--text-dim); text-align: right; line-height: 1.4; max-width: 175px; overflow-wrap: anywhere; }
-.brand-team { color: var(--text-dim); }
-.header-btns { display: flex; gap: 8px; align-items: center; }
+/* ロゴ + チーム情報を1グループにまとめ、間に細い区切り。高さはロゴが基準になる。
+   header-brand を flex:1/min-width:0 にし、ロゴは縮まず、チーム情報が残り幅の中で
+   折り返す(歯車に重ならない)。長い名前でも自分の枠内で改行される。 */
+.header-brand { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; }
+.header-team {
+  display: flex; flex-direction: column; justify-content: center; gap: 2px;
+  flex: 1; min-width: 0; padding-left: 12px; border-left: 1px solid var(--border);
+  align-self: stretch;
+}
+.header-team .brand-for { font-size: 12px; line-height: 1.25; overflow-wrap: anywhere; }
+.header-team .brand-team { font-size: 12px; line-height: 1.25; color: var(--text-dim); overflow-wrap: anywhere; }
+/* 設定歯車は右上角に固定 */
+.header-gear { flex-shrink: 0; }
 /* AI-BASE DIAMOND ブランドロックアップ(ロゴ5a): アイコン+LEDワードマーク+DIAMONDサブタイトル */
-.brand-row { display: flex; align-items: center; gap: 11px; }
+.brand-row { display: flex; align-items: center; gap: 11px; flex-shrink: 0; }
 .brand-mark { flex-shrink: 0; }
 .brand-text { display: flex; flex-direction: column; gap: 4px; }
 .brand-diamond-sub { color: var(--gold); font-weight: 500; letter-spacing: 0.4em; font-size: 10px; line-height: 1; }
