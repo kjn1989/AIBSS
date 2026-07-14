@@ -21,6 +21,18 @@ const TABS = [
   { id: 'result', label: '試合結果', icon: '🏟️' },
 ];
 
+// ヘッダーのエディション表示。「ブカツ(中高大)」の括弧補足だけを小さく・控えめにして
+// 1行に収め、主語(ブカツ)を主役に見せる(タイポグラフィのメリハリ)。
+function EditionLabel({ edition }) {
+  const m = edition.match(/^(.+?)(（.*）|\(.*\))$/); // 全角/半角括弧どちらも対応
+  return (
+    <>
+      for {m ? m[1] : edition}
+      {m && <span className="ed-paren">{m[2]}</span>}
+    </>
+  );
+}
+
 // 招待リンク(?invite=1&team=...&cfg=...)で開かれたら、同期設定を取り込むか確認する
 function useInvite(dispatch) {
   const [invite, setInvite] = useState(null);
@@ -159,7 +171,7 @@ export default function App() {
             <span className="sr-only">AI-BASE DIAMOND</span>
           </h1>
           <div className="header-team">
-            <div className="brand-for">for {state.settings.edition || '草野球'}</div>
+            <div className="brand-for"><EditionLabel edition={state.settings.edition || '草野球'} /></div>
             <div className="brand-team">{state.settings.teamName || 'マイチーム'}</div>
           </div>
         </div>

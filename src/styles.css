@@ -106,7 +106,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
   flex: 1; min-width: 0; padding-left: 12px; border-left: 1px solid var(--border);
   align-self: stretch;
 }
-.header-team .brand-for { font-size: 12px; line-height: 1.25; overflow-wrap: anywhere; }
+.header-team .brand-for { font-size: 12px; line-height: 1.25; white-space: nowrap; }
+.header-team .brand-for .ed-paren { font-size: 0.76em; opacity: 0.8; letter-spacing: -0.02em; }
 .header-team .brand-team { font-size: 12px; line-height: 1.25; color: var(--text-dim); overflow-wrap: anywhere; }
 /* 設定歯車は右上角に固定 */
 .header-gear { flex-shrink: 0; }
