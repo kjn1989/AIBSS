@@ -1,7 +1,7 @@
 {
   "name": "AI-BASE DIAMOND — AI野球スコア＆成績",
   "short_name": "AI-BASE",
-  "description": "音声実況＆タップUIのAI野球スコアラー。草野球・ブカツ・少年野球のスコアと成績を一元管理。",
+  "description": "指先ひとつでプロレベル。野球を、もっと楽しく力強く。すべてのベンチに、専属のAIスコアラーを。",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

@@ -11,6 +11,7 @@ import { decodeConfig } from './components/WatchView.jsx';
 import { officialAvailable, currentUserAsync, loginWithPassword, joinByInvite } from './lib/officialCloud.js';
 import { addProfile, switchActiveProfile } from './lib/profiles.js';
 import { persist } from './state/store.jsx';
+import { DiamondIcon, LedWordmark } from './components/BrandMark.jsx';
 
 const TABS = [
   { id: 'home', label: 'ホーム', icon: '🏆' },
@@ -149,21 +150,15 @@ export default function App() {
       )}
       <header className="app-header">
         <div>
-          {/* ブランドを主役に: ロゴ+AI-BASE DIAMONDワードマークを1行目、エディション+チーム名を2行目に */}
-          <h1>
-            {/* AI-BASEモノグラム(favicon.svgと同デザインの縮小版・背景なし) */}
-            <svg className="brand-mark" viewBox="0 0 100 100" width="30" height="30" aria-hidden="true">
-              <path d="M27 27 H73 V56 L50 79 L27 56 Z" fill="none" stroke="#e3b341" strokeWidth="7" strokeLinejoin="round" />
-              <path d="M35 57 L50 68 L65 57" fill="none" stroke="#388bfd" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-              <circle cx="35" cy="57" r="4.5" fill="#58a6ff" />
-              <circle cx="65" cy="57" r="4.5" fill="#58a6ff" />
-              <circle cx="50" cy="68" r="4.5" fill="#58a6ff" />
-              <text x="50" y="50" textAnchor="middle" fontFamily="'Helvetica Neue',Arial,sans-serif" fontWeight="800" fontSize="24" fill="#58a6ff">AI</text>
-            </svg>
-            <span>
-              <span className="brand-ai">AI</span><span className="brand-dash">-</span><span className="brand-base">BASE</span>
-              <span className="brand-diamond"> DIAMOND</span>
-            </span>
+          {/* ブランドを主役に: アイコン+LEDワードマーク「AI◆BASE」+DIAMONDサブタイトルを1つのロックアップとして表示。
+              LEDドットマトリクスは装飾(aria-hidden)、実テキストはsr-onlyで併記してh1のアクセシビリティ/SEOを担保。 */}
+          <h1 className="brand-row">
+            <DiamondIcon size={32} className="brand-mark" />
+            <div className="brand-text" aria-hidden="true">
+              <LedWordmark dot={3.2} gap={1} letterGap={2.2} sepGap={2.4} />
+              <div className="brand-diamond-sub">DIAMOND</div>
+            </div>
+            <span className="sr-only">AI-BASE DIAMOND</span>
           </h1>
           <div className="sub">
             <span className="brand-for">for {state.settings.edition || '草野球'}</span>

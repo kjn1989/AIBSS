@@ -9,7 +9,7 @@ import { fileURLToPath } from 'url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const svg = fs.readFileSync(path.join(root, 'public/favicon.svg'), 'utf-8')
-  .replace('rx="22"', 'rx="0"'); // PNGアイコンは全面塗り(maskable/角丸はOS側で処理)
+  .replace('rx="28"', 'rx="0"'); // PNGアイコンは全面塗り(maskable/角丸はOS側で処理)
 
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 const page = await browser.newPage({ viewport: { width: 512, height: 512 }, deviceScaleFactor: 1 });

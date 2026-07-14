@@ -96,16 +96,20 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
-.app-header h1 { font-size: 20px; font-weight: 800; letter-spacing: 0.02em; display: flex; align-items: center; gap: 8px; }
-.app-header .sub { font-size: 12px; color: var(--text-dim); margin-top: 1px; }
+.app-header h1 { font-size: 20px; font-weight: 800; letter-spacing: 0.02em; margin: 0; }
+.app-header .sub { font-size: 12px; color: var(--text-dim); margin-top: 3px; }
 .header-btns { display: flex; gap: 8px; align-items: center; }
-/* AI-BASE DIAMOND ワードマーク(ヘッダー) */
+/* AI-BASE DIAMOND ブランドロックアップ(ロゴ5a): アイコン+LEDワードマーク+DIAMONDサブタイトル */
+.brand-row { display: flex; align-items: center; gap: 10px; }
 .brand-mark { flex-shrink: 0; }
-.brand-ai { color: var(--accent); font-weight: 800; letter-spacing: 0.04em; }
-.brand-dash { color: var(--text-dim); font-weight: 800; }
-.brand-base { color: var(--gold); font-weight: 800; letter-spacing: 0.04em; }
-.brand-diamond { color: var(--text); font-weight: 800; letter-spacing: 0.12em; font-size: 0.82em; }
+.brand-text { display: flex; flex-direction: column; gap: 3px; }
+.brand-diamond-sub { color: var(--gold); font-weight: 500; letter-spacing: 0.42em; font-size: 9px; line-height: 1; }
 .brand-for { color: var(--accent); font-weight: 800; }
+/* 視覚的には隠すがスクリーンリーダー/SEOには実テキストとして残す */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
 
 .main {
   flex: 1;
