@@ -97,9 +97,6 @@ export default function App() {
   const { invite, accept, dismiss } = useInvite(dispatch);
   const officialJoin = useOfficialJoin(state);
 
-  const cloudBadge =
-    state.cloudStatus === 'on' ? '☁️' : state.cloudStatus === 'connecting' ? '⏳' : state.cloudStatus === 'error' ? '⚠️' : '';
-
   return (
     <div className="app" data-edition={state.settings.edition || '草野球'}>
       <CloudSync />
@@ -162,8 +159,8 @@ export default function App() {
         </h1>
         <div className="header-right">
           <div className="sub">
-            <span className="brand-for">for {state.settings.edition || '草野球'}</span>
-            {' ・ '}{state.settings.teamName || 'マイチーム'} {cloudBadge}
+            <div className="brand-for">for {state.settings.edition || '草野球'}</div>
+            <div className="brand-team">{state.settings.teamName || 'マイチーム'}</div>
           </div>
           <div className="header-btns">
             <button className="ghost small" onClick={() => setTab('settings')} aria-label="設定">

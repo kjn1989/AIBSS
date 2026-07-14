@@ -101,7 +101,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
    揃わないため、ヘッダー全体を align-items:center にして余った分を上下均等に分散させる
    (どちらかの下だけに隙間が寄って見えるのを防ぐ)。 */
 .header-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
-.app-header .sub { font-size: 12px; color: var(--text-dim); text-align: right; }
+.app-header .sub { font-size: 12px; color: var(--text-dim); text-align: right; line-height: 1.4; max-width: 175px; overflow-wrap: anywhere; }
+.brand-team { color: var(--text-dim); }
 .header-btns { display: flex; gap: 8px; align-items: center; }
 /* AI-BASE DIAMOND ブランドロックアップ(ロゴ5a): アイコン+LEDワードマーク+DIAMONDサブタイトル */
 .brand-row { display: flex; align-items: center; gap: 11px; }
