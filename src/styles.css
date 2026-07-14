@@ -103,12 +103,13 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .header-brand { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; }
 .header-team {
   display: flex; flex-direction: column; justify-content: center; gap: 2px;
-  flex: 1; min-width: 0; padding-left: 12px; border-left: 1px solid var(--border);
+  flex: 1; min-width: 0; padding-left: 10px; border-left: 1px solid var(--border);
   align-self: stretch;
 }
-.header-team .brand-for { font-size: 12px; line-height: 1.25; white-space: nowrap; }
-.header-team .brand-for .ed-paren { font-size: 0.76em; opacity: 0.8; letter-spacing: -0.02em; }
-.header-team .brand-team { font-size: 12px; line-height: 1.25; color: var(--text-dim); overflow-wrap: anywhere; }
+/* forラインは「for エディション」を必ず1行に。草野球・社会人は同サイズで並列表示。 */
+.header-team .brand-for { font-size: 11px; line-height: 1.3; white-space: nowrap; }
+.header-team .brand-for .ed-paren { font-size: 0.78em; opacity: 0.8; letter-spacing: -0.02em; }
+.header-team .brand-team { font-size: 12px; line-height: 1.3; color: var(--text-dim); overflow-wrap: anywhere; }
 /* 設定歯車は右上角に固定 */
 .header-gear { flex-shrink: 0; }
 /* AI-BASE DIAMOND ブランドロックアップ(ロゴ5a): アイコン+LEDワードマーク+DIAMONDサブタイトル */

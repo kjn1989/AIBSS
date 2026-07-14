@@ -22,13 +22,11 @@ const TABS = [
   { id: 'result', label: '試合結果', icon: '🏟️' },
 ];
 
-// ヘッダーのエディション表示。表示ラベル(editionLabel)の補足部分だけを小さく・控えめにして
-// 1行に収め、主語を主役に見せる(タイポグラフィのメリハリ)。
-//   「ブカツ(中高大)」→ ブカツ + 小さな(中高大)
-//   「草野球・社会人」→ 草野球 + 小さな・社会人
+// ヘッダーのエディション表示。括弧の補足(例: ブカツ(中高大)の「(中高大)」)だけを
+// 小さく控えめにして1行に収める。「草野球・社会人」は両者を並列(同サイズ)で表示する。
 function EditionLabel({ edition }) {
   const label = editionLabel(edition);
-  const m = label.match(/^(.+?)(（.*）|\(.*\)|・.+|\/.+)$/); // 括弧 / ・ / スラッシュ以降を補足扱い
+  const m = label.match(/^(.+?)(（.*）|\(.*\))$/); // 括弧内のみ補足扱い(・区切りは同サイズ)
   return (
     <>
       for {m ? m[1] : label}
@@ -169,7 +167,7 @@ export default function App() {
           <h1 className="brand-row">
             <DiamondIcon size={36} className="brand-mark" />
             <div className="brand-text" aria-hidden="true">
-              <LedWordmark dot={3.6} gap={1.1} letterGap={2.45} sepGap={2.7} />
+              <LedWordmark dot={3.4} gap={1.05} letterGap={2.3} sepGap={2.55} />
               <div className="brand-diamond-sub">DIAMOND</div>
             </div>
             <span className="sr-only">AI-BASE DIAMOND</span>
