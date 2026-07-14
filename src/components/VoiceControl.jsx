@@ -3,7 +3,7 @@ import Sheet from './Sheet.jsx';
 import PlaySheet from './PlaySheet.jsx';
 import { useStore, usePlayerName, isMyTeamBatting, currentBatter } from '../state/store.jsx';
 import { parseUtterance, playLabel, normalize, stripWakeWord, parseCommand, needsComplexConfirm, parseOperation, matchPlayer } from '../lib/voiceParser.js';
-import { interpretWithLLM } from '../lib/llm.js';
+import { interpretUtterance, maskNames } from '../lib/gemini.js';
 import { speechAvailable, createRecognizer } from '../lib/speech.js';
 import { createContinuousRecognizer } from '../lib/continuousSpeech.js';
 import { speak, beep, beepForPitch } from '../lib/tts.js';
@@ -36,8 +36,8 @@ export default function VoiceControl({ game }) {
     setLlmUsed(false);
     // 信頼度が低ければ LLM 拡張(APIキー設定時のみ)
     const top = cands[0];
-    if ((!top || top.confidence < LLM_THRESHOLD) && state.settings.useLLM && state.settings.anthropicApiKey) {
-      const llm = await interpretWithLLM(text, state.settings.anthropicApiKey);
+    if ((!top || top.confidence < LLM_THRESHOLD) && state.settings.useLLM && state.settings.geminiApiKey) {
+      const llm = await interpretUtterance(state.settings.maskAiNames ? maskNames(text, state.players.map((p) => p.name)) : text, state.settings.geminiApiKey);
       if (llm && llm.kind !== 'unknown') {
         const cand = {
           kind: llm.kind,
@@ -257,8 +257,8 @@ export default function VoiceControl({ game }) {
     let cands = parseUtterance(text);
     let usedLLM = false;
     const top = cands[0];
-    if ((!top || top.confidence < LLM_THRESHOLD) && state.settings.useLLM && state.settings.anthropicApiKey) {
-      const llm = await interpretWithLLM(text, state.settings.anthropicApiKey);
+    if ((!top || top.confidence < LLM_THRESHOLD) && state.settings.useLLM && state.settings.geminiApiKey) {
+      const llm = await interpretUtterance(state.settings.maskAiNames ? maskNames(text, state.players.map((p) => p.name)) : text, state.settings.geminiApiKey);
       if (llm && llm.kind !== 'unknown') {
         const cand = {
           kind: llm.kind,

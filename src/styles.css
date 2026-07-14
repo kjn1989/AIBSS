@@ -580,6 +580,9 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 .pill.multiout { color: var(--gold); border-color: var(--gold); background: rgba(227,179,65,0.14); font-weight: 800; }
 .hand-select { width: 52px; padding: 4px 2px; font-size: 12px; }
 .note-input { width: 100%; resize: vertical; font-size: 15px; line-height: 1.5; padding: 10px; border-radius: 8px; background: var(--bg-3); border: 1px solid var(--border); color: var(--text); }
+.cand-row { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; margin-bottom: 8px; padding: 10px 12px; }
+.cand-row b { font-size: 15px; }
+.cand-row .small.dim { flex: 1; }
 .split-table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
 .split-table th, .split-table td { border: 1px solid var(--border); padding: 4px 3px; text-align: center; }
 .split-table th { color: var(--text-dim); font-weight: 600; }

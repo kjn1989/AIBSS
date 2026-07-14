@@ -50,6 +50,91 @@ async function callGeminiJSON(apiKey, prompt, { maxOutputTokens = 1024, temperat
   }
 }
 
+// 送信前のプライバシー保護: テキスト内の登録選手名を「選手」に置換する。
+// 出力(結果種別/方向/塁)には名前が含まれないため、逆写像は不要。
+// (名鑑・スタメン・新聞は名前が本質的に必要なので適用しない)
+export function maskNames(text, names = []) {
+  if (!text) return text;
+  let out = text;
+  for (const n of [...new Set(names.filter((x) => x && x.length >= 2))].sort((a, b) => b.length - a.length)) {
+    out = out.split(n).join('選手');
+  }
+  return out;
+}
+
+// ---------------- 音声発話の解釈(旧Anthropic版から統一。Geminiで実行) ----------------
+// VoiceControlのオフラインエンジンの信頼度が低いときだけ呼ぶ。戻り値: 解釈JSON or null。
+const VOICE_SYSTEM = `あなたは野球のスコアラー補助AIです。日本語の実況発話を解釈し、次のJSONだけを出力してください(説明文は禁止):
+{"kind":"play"|"pitch"|"sb"|"cs"|"unknown","result":"single"|"double"|"triple"|"hr"|"out"|"bb"|"hbp"|"so"|"error"|"sacBunt"|"sacFly"|null,"outType":"ground"|"fly"|"liner"|"dp"|null,"direction":"P"|"C"|"1B"|"2B"|"3B"|"SS"|"LF"|"CF"|"RF"|null,"pitchType":"ball"|"strike"|"foul"|null,"confidence":0.0〜1.0}
+kindの意味: play=打撃結果, pitch=1球の判定のみ, sb=盗塁成功, cs=盗塁死。判断できない場合はkind="unknown"。`;
+
+export async function interpretUtterance(text, apiKey) {
+  const r = await callGeminiJSON(apiKey, `${VOICE_SYSTEM}\n\n発話: ${text}`, { maxOutputTokens: 200, temperature: 0.2 });
+  if (!r || r.error) return null; // 失敗時はオフライン結果にフォールバック
+  const parsed = r.data;
+  if (!parsed?.kind || parsed.kind === 'unknown') return null;
+  return parsed;
+}
+
+// ---------------- その他メモ → 正式なスコア記録の候補へ変換(#5) ----------------
+// situation: 現在の状況(イニング/アウト/走者/打者)の人間可読テキスト。
+// 戻り値: 成功 { candidates:[{result,outType,direction,batterTo,why,confidence}] } / 失敗 { error } / 未設定null
+function memoPrompt(memo, situation) {
+  return `あなたは野球の公式記録員です。記録員が残した自由記述メモを、アプリのスコア記録スキーマ(JSON)に変換します。断定できない場合は候補を複数返し、必ずconfidence(0-1)とwhy(理由)を付けてください。与えられた現在状況の範囲だけで解釈し、存在しない走者を作らないこと。
+
+# 現在の状況
+${situation}
+
+# メモ(記録員の自由記述)
+${memo}
+
+# 変換ルール
+- 「弾く/はじく/後逸/トンネル/こぼす」→ error を第一候補
+- 「振り逃げ」→ result:"so", batterTo:1
+- 「ゲッツー/併殺/ダブルプレー」→ result:"out", outType:"dp"
+- 守備位置番号: 1投 2捕 3一 4二 5三 6遊 7左 8中 9右。方向はP/C/1B/2B/3B/SS/LF/CF/RF
+- batterTo は打者の到達塁(1/2/3、4=生還、"out"=アウト)
+- 曖昧なら candidates を最大3件、confidence降順で
+- 出力は次のJSONのみ(前置き禁止):
+{"candidates":[{"result":"single|double|triple|hr|out|bb|hbp|so|error|sacBunt|sacFly|fieldInterference|obstruction","outType":"ground|fly|liner|dp|null","direction":"P|C|1B|2B|3B|SS|LF|CF|RF|null","batterTo":"1|2|3|4|out","why":"理由","confidence":0.0}]}`;
+}
+
+export async function convertMemoToPlay({ apiKey, memo, situation }) {
+  const r = await callGeminiJSON(apiKey, memoPrompt(memo, situation), { maxOutputTokens: 1024, temperature: 0.2 });
+  if (!r || r.error) return r;
+  if (!Array.isArray(r.data.candidates) || r.data.candidates.length === 0) {
+    return { error: 'AIが変換候補を返しませんでした' };
+  }
+  return { candidates: r.data.candidates };
+}
+
+// APIキーが無い/オフライン時の簡易フォールバック(キーワード規則)。1件の候補を返す。
+export function guessPlayFromMemo(memo) {
+  const t = (memo || '').toLowerCase();
+  const has = (...ws) => ws.some((w) => memo.includes(w) || t.includes(w));
+  let result = null, outType = null, batterTo = 'out', why = 'キーワードからの簡易推定';
+  if (has('弾', 'はじ', '後逸', 'トンネル', 'こぼ', 'エラー', '悪送球')) { result = 'error'; batterTo = 1; }
+  else if (has('ゲッツー', '併殺', 'ダブルプレー', 'ゲツ')) { result = 'out'; outType = 'dp'; }
+  else if (has('振り逃げ')) { result = 'so'; batterTo = 1; }
+  else if (has('三振', 'さんしん')) { result = 'so'; }
+  else if (has('ホームラン', '本塁打', 'ホーマー')) { result = 'hr'; batterTo = 4; }
+  else if (has('タイムリー', 'ヒット', '安打', 'シングル')) { result = 'single'; batterTo = 1; }
+  else if (has('二塁打', 'ツーベース')) { result = 'double'; batterTo = 2; }
+  else if (has('四球', 'フォアボール', 'フォア')) { result = 'bb'; batterTo = 1; }
+  else if (has('死球', 'デッドボール')) { result = 'hbp'; batterTo = 1; }
+  else if (has('犠', 'バント', 'スクイズ')) { result = 'sacBunt'; }
+  else if (has('走塁妨害', 'オブストラクション')) { result = 'obstruction'; batterTo = 1; }
+  else if (has('守備妨害', '打撃妨害')) { result = 'fieldInterference'; }
+  else if (has('凡打', 'ゴロ', 'フライ', 'アウト')) { result = 'out'; outType = has('フライ') ? 'fly' : 'ground'; }
+  if (!result) return null;
+  const dir = (() => {
+    const m = { 投: 'P', ピッチャー: 'P', 捕: 'C', キャッチャー: 'C', 一塁: '1B', ファースト: '1B', 二塁: '2B', セカンド: '2B', 三塁: '3B', サード: '3B', 遊: 'SS', ショート: 'SS', 左: 'LF', レフト: 'LF', 中: 'CF', センター: 'CF', 右: 'RF', ライト: 'RF' };
+    for (const [k, v] of Object.entries(m)) if (memo.includes(k)) return v;
+    return null;
+  })();
+  return { result, outType, direction: dir, batterTo, why, confidence: 0.4 };
+}
+
 // ---------------- AI選手名鑑(スカウト寸評) ----------------
 function scoutPrompt({ name, number, tags, statsSummary }) {
   const plus = tags.filter((t) => t.type === 'plus').map((t) => t.label);

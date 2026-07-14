@@ -35,9 +35,10 @@ export const initialState = {
     firebaseConfigText: '', // 設定画面で貼り付けるJSON
     cloudEnabled: false,
     teamCode: '', // Firestore上のチーム識別子
-    anthropicApiKey: '', // 音声解釈のLLM拡張(任意)
+    anthropicApiKey: '', // 廃止(GeminiへAI機能を一本化)。旧データ互換のため残置・未使用
     useLLM: false,
     geminiApiKey: '', // AI選手名鑑のスカウト寸評生成(任意)
+    maskAiNames: true, // AI送信前に選手名を「選手」に伏せる(メモ変換・音声解釈に適用。既定ON)
     lastBackupAt: null, // 最後にJSONバックアップを保存した時刻(データ消失対策のリマインド用)
     officialTeamId: null, // 公式クラウド(lib/officialCloud.js)のチームID。null=未接続
     officialRole: null, // 公式クラウドでの自分のロール(owner/scorer/viewer)。CloudSyncが接続時に更新

@@ -105,13 +105,23 @@ export default function SettingsTab() {
       </div>
 
       <div className="card">
-        <h2>音声入力の設定</h2>
+        <h2>AI機能(Gemini)の設定</h2>
         <p className="small dim" style={{ marginBottom: 10 }}>
-          音声解釈はオフラインのルールエンジンで動作します。曖昧な発話の解釈精度を上げたい場合のみ、
-          外部LLM API(Anthropic)を任意で連携できます(信頼度が低いときだけ呼び出し)。
+          Geminiキーを1つ入れれば、すべてのAI機能が使えます:
+          {state.settings.edition === '草野球' ? '📇AI選手名鑑・🤖AIスタメン提案・' : ''}
+          🗞️AIスポーツ新聞・CSV取り込みのAI補完・🎙️音声解釈の精度向上・📝その他メモの記録変換。
+          <br />Google AI Studio の無料枠はカード登録不要で使えます(未設定でも各機能はオフラインの
+          簡易処理やダミー文言でフォールバックします)。
         </p>
-        <div className="flex">
-          <span className="grow small">LLM解釈を有効にする</span>
+        <label className="small dim">Gemini APIキー</label>
+        <input
+          type="password"
+          value={state.settings.geminiApiKey}
+          onChange={(e) => dispatch({ type: 'UPDATE_SETTINGS', patch: { geminiApiKey: e.target.value } })}
+          placeholder="未入力の場合はオフライン/ダミーで動作"
+        />
+        <div className="flex mt12">
+          <span className="grow small">🎙️ 音声のAI解釈を有効にする(曖昧な発話のみGeminiに問い合わせ)</span>
           <button
             className={`small ${state.settings.useLLM ? 'primary' : ''}`}
             onClick={() => dispatch({ type: 'UPDATE_SETTINGS', patch: { useLLM: !state.settings.useLLM } })}
@@ -119,35 +129,19 @@ export default function SettingsTab() {
             {state.settings.useLLM ? 'ON' : 'OFF'}
           </button>
         </div>
-        {state.settings.useLLM && (
-          <div className="mt8">
-            <label className="small dim">Anthropic APIキー (sk-ant-...)</label>
-            <input
-              type="password"
-              value={state.settings.anthropicApiKey}
-              onChange={(e) => dispatch({ type: 'UPDATE_SETTINGS', patch: { anthropicApiKey: e.target.value } })}
-              placeholder="未入力の場合はオフラインエンジンのみ"
-            />
-            <p className="small dim mt8">⚠️ キーはこの端末のブラウザ内にのみ保存されます。</p>
-          </div>
-        )}
-      </div>
-
-      <div className="card">
-        <h2>AI機能(Gemini)の設定</h2>
-        <p className="small dim" style={{ marginBottom: 10 }}>
-          {state.settings.edition === '草野球'
-            ? '選手個人ページの「📇 名鑑」でのスカウト寸評生成、🤖AIスタメン提案、CSV取り込み時のAI補完等に使用します(任意)。未設定の場合はダミー文言が表示されます。'
-            : 'CSV取り込み時のAI補完等に使用します(任意)。📇AI選手名鑑・🤖AIスタメン提案は「草野球」エディションのみの機能です。'}
+        <div className="flex mt8">
+          <span className="grow small">🔒 AI送信前に選手名を伏せる(メモ変換・音声解釈)</span>
+          <button
+            className={`small ${state.settings.maskAiNames ? 'primary' : ''}`}
+            onClick={() => dispatch({ type: 'UPDATE_SETTINGS', patch: { maskAiNames: !state.settings.maskAiNames } })}
+          >
+            {state.settings.maskAiNames ? 'ON' : 'OFF'}
+          </button>
+        </div>
+        <p className="small dim mt8">
+          ⚠️ キーはこの端末のブラウザ内にのみ保存されます。「選手名を伏せる」がONの場合、メモや発話に含まれる
+          登録選手名は送信前に「選手」へ置換されます(名鑑・スタメン・新聞は選手名が必要なため対象外)。
         </p>
-        <label className="small dim">Gemini APIキー</label>
-        <input
-          type="password"
-          value={state.settings.geminiApiKey}
-          onChange={(e) => dispatch({ type: 'UPDATE_SETTINGS', patch: { geminiApiKey: e.target.value } })}
-          placeholder="未入力の場合はダミー文言のみ"
-        />
-        <p className="small dim mt8">⚠️ キーはこの端末のブラウザ内にのみ保存されます。</p>
       </div>
 
       <OfficialCloudCard />

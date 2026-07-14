@@ -13,6 +13,7 @@ import HighlightSheet from './HighlightSheet.jsx';
 import GameProgressView from './GameProgressView.jsx';
 import { POSITIONS, OPP_LETTERS, resultCategory, multiOutLabel } from '../lib/model.js';
 import { playLabel } from '../lib/voiceParser.js';
+import { convertMemoToPlay, guessPlayFromMemo, maskNames } from '../lib/gemini.js';
 import { RULE_PRESETS, presetById, describeRules, initialPresetIdFor, gameEndCheck, pitchLimitCheck, timeLimitCheck } from '../lib/rules.js';
 
 // ---- 直近の打席結果を「1. 左翼単打 2. 見逃し三振」のように並べる小さな履歴表示 ----
@@ -500,33 +501,78 @@ function ScoreAdjustSheet({ game, onClose }) {
   );
 }
 
-// ---- その他(記述式メモ)シート: 判断に迷うプレイをとりあえず文章で残す ----
-// 将来: このメモをAIが解釈して正式なスコア記録へ変換・提案する(#5)。
-function NoteSheet({ game, onClose }) {
-  const { dispatch } = useStore();
+// ---- その他(記述式メモ)シート: 判断に迷うプレイを文章で残す / AIで正式記録へ変換 ----
+// #5: Geminiがメモを解釈して CONFIRM_PLAY の候補(result/direction/outType/batterTo)を返し、
+// onConvert経由でPlaySheetに下書きとして流し込む。最終確定は必ず人間が行う。
+// APIキー未設定/オフライン時はキーワード規則(guessPlayFromMemo)でフォールバック。
+function NoteSheet({ game, onClose, onConvert }) {
+  const { state, dispatch } = useStore();
+  const nameOf = usePlayerName();
   const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [cands, setCands] = useState(null);
+  const [err, setErr] = useState('');
+  const apiKey = state.settings.geminiApiKey;
+
+  // 状況は塁の在/不在のみ(名前を送らない)。走者の動きは塁番号で返るため十分。
+  const situation = () => {
+    const r = (b) => (game.runners[b] ? 'あり' : 'なし');
+    return `${game.inning}回${game.isTop ? '表' : '裏'} / アウト${game.outs} / 走者: 一塁=${r(1)}, 二塁=${r(2)}, 三塁=${r(3)}`;
+  };
+
+  const convert = async () => {
+    setErr(''); setBusy(true);
+    try {
+      // プライバシー: 送信前にメモ内の選手名を伏せる(設定でON/OFF、既定ON)
+      const memoToSend = state.settings.maskAiNames
+        ? maskNames(text.trim(), state.players.map((p) => p.name))
+        : text.trim();
+      if (apiKey && navigator.onLine) {
+        const res = await convertMemoToPlay({ apiKey, memo: memoToSend, situation: situation() });
+        if (res?.error) { setErr(res.error + '(簡易推定に切替)'); const g = guessPlayFromMemo(text); setCands(g ? [g] : []); }
+        else setCands(res?.candidates || []);
+      } else {
+        const g = guessPlayFromMemo(text);
+        setCands(g ? [g] : []);
+        if (!g) setErr('キーワードから推定できませんでした。手入力で結果を選んでください。');
+      }
+    } catch (e) {
+      setErr('変換に失敗しました。' + (e?.message || ''));
+    } finally { setBusy(false); }
+  };
+
   return (
-    <Sheet title="その他 — 不明なプレイをメモ" onClose={onClose}>
+    <Sheet title="その他 — 不明なプレイ" onClose={onClose}>
       <p className="small dim">
-        判断に迷うプレイは、まず起きたことをそのまま書いて残せます(例:「ピッチャーが弾いてショートが拾って一塁へ投げたがセーフ」)。
-        試合経過に記録され、後から正式な結果に直せます。
+        判断に迷うプレイは、起きたことをそのまま書けます(例:「ピッチャーが弾いてショートが拾って一塁へ投げたがセーフ」)。
+        AIが正式な記録の候補に変換します(最終確定は確認画面で行います)。
       </p>
       <textarea
-        className="note-input"
-        rows={4}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="起きたことを自由に入力…"
-        autoFocus
+        className="note-input" rows={3} value={text}
+        onChange={(e) => { setText(e.target.value); setCands(null); }}
+        placeholder="起きたことを自由に入力…" autoFocus
       />
-      <div className="sheet-actions">
-        <button className="ghost" onClick={onClose}>キャンセル</button>
-        <button
-          className="primary"
-          disabled={!text.trim()}
-          onClick={() => { dispatch({ type: 'ADD_NOTE', gameId: game.id, text: text.trim() }); onClose(); }}
-        >
-          メモを記録
+      {err && <div className="warn-box mt8">{err}</div>}
+      {cands && cands.length > 0 && (
+        <div className="mt8">
+          <div className="section-title">変換候補(タップで確認画面へ)</div>
+          {cands.map((c, i) => (
+            <button key={i} className="cand-row" onClick={() => onConvert(c)}>
+              <b>{playLabel(c.result, c.direction, c.outType, c.soType, state.settings.edition)}</b>
+              {typeof c.confidence === 'number' && <span className="pill small">{Math.round(c.confidence * 100)}%</span>}
+              {c.why && <span className="small dim">{c.why}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+      {cands && cands.length === 0 && !err && <div className="small dim mt8">変換候補がありませんでした。</div>}
+      <div className="sheet-actions" style={{ flexWrap: 'wrap', gap: 8 }}>
+        <button className="ghost" onClick={onClose}>閉じる</button>
+        <button disabled={!text.trim()} onClick={() => { dispatch({ type: 'ADD_NOTE', gameId: game.id, text: text.trim() }); onClose(); }}>
+          メモだけ記録
+        </button>
+        <button className="primary" disabled={!text.trim() || busy} onClick={convert}>
+          {busy ? '変換中…' : `🤖 AIで変換${apiKey ? '' : '(簡易)'}`}
         </button>
       </div>
     </Sheet>
@@ -865,7 +911,7 @@ export default function ScoreTab() {
       {sheet?.kind === 'play' && (
         <PlaySheet
           game={game}
-          initial={{ result: sheet.result, soType: sheet.soType, batterTo: sheet.batterTo }}
+          initial={{ result: sheet.result, soType: sheet.soType, batterTo: sheet.batterTo, direction: sheet.direction, outType: sheet.outType }}
           batterName={myBatting && batter ? nameOf(batter.playerId) : null}
           onClose={() => setSheet(null)}
         />
@@ -924,7 +970,15 @@ export default function ScoreTab() {
         <EditRulesSheet game={game} edition={state.settings.edition || '草野球'} onClose={() => setSheet(null)} />
       )}
       {sheet?.kind === 'note' && (
-        <NoteSheet game={game} onClose={() => setSheet(null)} />
+        <NoteSheet
+          game={game}
+          onClose={() => setSheet(null)}
+          onConvert={(c) => setSheet({
+            kind: 'play', result: c.result, direction: c.direction || undefined,
+            outType: c.outType || undefined, soType: c.soType || undefined,
+            batterTo: c.batterTo === 'out' ? 'out' : (c.batterTo != null ? Number(c.batterTo) : undefined),
+          })}
+        />
       )}
     </div>
   );
