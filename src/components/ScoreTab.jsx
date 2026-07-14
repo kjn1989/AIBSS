@@ -863,9 +863,6 @@ export default function ScoreTab() {
 
       <div className="card">
         <h2>試合操作</h2>
-        <button className="mb8" style={{ width: '100%' }} onClick={() => setSheet({ kind: 'highlight' })}>
-          🏆 ハイライトを見る・共有
-        </button>
         <div className="grid2">
           <button onClick={() => window.confirm('攻守交代(チェンジ)しますか？') && dispatch({ type: 'FORCE_CHANGE_HALF', gameId: game.id })}>
             手動チェンジ

@@ -338,6 +338,9 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 /* ---- 結果パッド ---- */
 .result-pad { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .result-pad button { min-height: 54px; font-size: 14px; font-weight: 700; padding: 4px; }
+/* 妨害系3種(打撃/守備/走塁妨害)は常に横1列にまとめる */
+.result-pad.result-pad-intf { grid-template-columns: repeat(3, 1fr); margin-top: 8px; }
+.result-pad.result-pad-intf button { font-size: 12.5px; padding: 4px 2px; }
 /* プレイ結果カテゴリの色(単一基準)。resultCategory()の分類を
    入力パッド・ログ・スコアシート・PDFで共通に使う。視認性優先で
    ヒット/四死球/エラーを目立たせ、アウトは控えめにする。 */

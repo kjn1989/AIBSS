@@ -15,6 +15,10 @@ const BUTTONS = [
   { key: 'error', label: 'エラー' },
   { key: 'sacBunt', label: '犠打' },
   { key: 'sacFly', label: '犠飛' },
+];
+
+// 妨害系3種は打撃結果とは別枠で、常に横1列にまとめて表示する
+const INTERFERENCE_BUTTONS = [
   { key: 'interference', label: '打撃妨害' },
   { key: 'fieldInterference', label: '守備妨害' },
   { key: 'obstruction', label: '走塁妨害' },
@@ -22,12 +26,21 @@ const BUTTONS = [
 
 export default function ResultPad({ onSelect }) {
   return (
-    <div className="result-pad">
-      {BUTTONS.map((b) => (
-        <button key={b.key} className={resultCategory(b.key)} onClick={() => onSelect(b.key)}>
-          {b.label}
-        </button>
-      ))}
+    <div>
+      <div className="result-pad">
+        {BUTTONS.map((b) => (
+          <button key={b.key} className={resultCategory(b.key)} onClick={() => onSelect(b.key)}>
+            {b.label}
+          </button>
+        ))}
+      </div>
+      <div className="result-pad result-pad-intf">
+        {INTERFERENCE_BUTTONS.map((b) => (
+          <button key={b.key} className={resultCategory(b.key)} onClick={() => onSelect(b.key)}>
+            {b.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
