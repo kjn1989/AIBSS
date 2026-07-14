@@ -234,39 +234,6 @@ function RulePicker({ presetId, custom, edition, onPresetChange, setCustom }) {
   );
 }
 
-// ---- 進行中の試合のルールを後から変更するシート ----
-function EditRulesSheet({ game, edition, onClose }) {
-  const { dispatch } = useStore();
-  // 現在のルールがどのプリセットと一致するか探し、なければカスタム(ルール無しはnone)
-  const matched = game.rules ? RULE_PRESETS.find((p) => JSON.stringify(p.rules) === JSON.stringify(game.rules)) : null;
-  const [presetId, setPresetId] = useState(game.rules ? (matched?.id || 'custom') : 'none');
-  const [custom, setCustom] = useState(customFromRules(game.rules));
-
-  const onPresetChange = (id) => {
-    setPresetId(id);
-    if (id === 'custom') setCustom(customFromRules(presetById(presetId)?.rules || game.rules));
-  };
-
-  return (
-    <Sheet title="試合ルールを変更" onClose={onClose}>
-      <p className="small dim">この試合のルール(回数・コールド・球数制限・時間制限)を変更します。既に記録済みのスコアはそのままです。</p>
-      <RulePicker presetId={presetId} custom={custom} edition={edition} onPresetChange={onPresetChange} setCustom={setCustom} />
-      <div className="sheet-actions">
-        <button className="ghost" onClick={onClose}>キャンセル</button>
-        <button
-          className="primary"
-          onClick={() => {
-            dispatch({ type: 'UPDATE_GAME_META', id: game.id, patch: { rules: resolveRulesFrom(presetId, custom) } });
-            onClose();
-          }}
-        >
-          この内容に変更
-        </button>
-      </div>
-    </Sheet>
-  );
-}
-
 // ---- 試合セットアップ(試合がない/選択されていないとき) ----
 function GameSetup() {
   const { state, dispatch } = useStore();
@@ -871,9 +838,6 @@ export default function ScoreTab() {
           <button style={{ gridColumn: '1 / -1' }} onClick={() => setSheet({ kind: 'note' })}>
             📝 その他(不明なプレイをメモ)
           </button>
-          <button style={{ gridColumn: '1 / -1' }} onClick={() => setSheet({ kind: 'editRules' })}>
-            ⚙️ 試合ルールを変更{game.rules ? `(${describeRules(game.rules)})` : '(現在: ルール管理なし)'}
-          </button>
           <button
             className="danger"
             style={{ gridColumn: '1 / -1' }}
@@ -962,9 +926,6 @@ export default function ScoreTab() {
       )}
       {sheet?.kind === 'scoreAdjust' && (
         <ScoreAdjustSheet game={game} onClose={() => setSheet(null)} />
-      )}
-      {sheet?.kind === 'editRules' && (
-        <EditRulesSheet game={game} edition={state.settings.edition || '草野球'} onClose={() => setSheet(null)} />
       )}
       {sheet?.kind === 'note' && (
         <NoteSheet
