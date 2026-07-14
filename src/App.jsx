@@ -153,9 +153,9 @@ export default function App() {
             LEDドットマトリクスは装飾(aria-hidden)、実テキストはsr-onlyで併記してh1のアクセシビリティ/SEOを担保。
             左は完全にロゴ専用、右にチーム情報+設定を縦積みしてバランスを取る。 */}
         <h1 className="brand-row">
-          <DiamondIcon size={32} className="brand-mark" />
+          <DiamondIcon size={36} className="brand-mark" />
           <div className="brand-text" aria-hidden="true">
-            <LedWordmark dot={3.2} gap={1} letterGap={2.2} sepGap={2.4} />
+            <LedWordmark dot={3.6} gap={1.1} letterGap={2.45} sepGap={2.7} />
             <div className="brand-diamond-sub">DIAMOND</div>
           </div>
           <span className="sr-only">AI-BASE DIAMOND</span>
