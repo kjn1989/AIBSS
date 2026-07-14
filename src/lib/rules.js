@@ -33,6 +33,11 @@ export const RULE_PRESETS = [
     rules: { innings: 7, mercy: [], pitchLimit: null, timeLimitMin: null },
   },
   {
+    // 社会人野球(企業・クラブ)の公式戦は9回制が主流。草野球エディションに含める。
+    id: 'shakaijin9', label: '社会人・クラブ 9回制', edition: '草野球',
+    rules: { innings: 9, mercy: [], pitchLimit: null, timeLimitMin: null },
+  },
+  {
     id: 'gakudo6', label: '学童(少年野球) 6回制・70球', edition: '少年野球',
     rules: { innings: 6, mercy: [{ after: 4, diff: 10 }, { after: 5, diff: 7 }], pitchLimit: { perGame: 70, warnAt: 60 }, timeLimitMin: null },
   },

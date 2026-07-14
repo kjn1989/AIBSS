@@ -12,6 +12,7 @@ import { officialAvailable, currentUserAsync, loginWithPassword, joinByInvite } 
 import { addProfile, switchActiveProfile } from './lib/profiles.js';
 import { persist } from './state/store.jsx';
 import { DiamondIcon, LedWordmark } from './components/BrandMark.jsx';
+import { editionLabel } from './lib/model.js';
 
 const TABS = [
   { id: 'home', label: 'ホーム', icon: '🏆' },
@@ -21,13 +22,16 @@ const TABS = [
   { id: 'result', label: '試合結果', icon: '🏟️' },
 ];
 
-// ヘッダーのエディション表示。「ブカツ(中高大)」の括弧補足だけを小さく・控えめにして
-// 1行に収め、主語(ブカツ)を主役に見せる(タイポグラフィのメリハリ)。
+// ヘッダーのエディション表示。表示ラベル(editionLabel)の補足部分だけを小さく・控えめにして
+// 1行に収め、主語を主役に見せる(タイポグラフィのメリハリ)。
+//   「ブカツ(中高大)」→ ブカツ + 小さな(中高大)
+//   「草野球・社会人」→ 草野球 + 小さな・社会人
 function EditionLabel({ edition }) {
-  const m = edition.match(/^(.+?)(（.*）|\(.*\))$/); // 全角/半角括弧どちらも対応
+  const label = editionLabel(edition);
+  const m = label.match(/^(.+?)(（.*）|\(.*\)|・.+|\/.+)$/); // 括弧 / ・ / スラッシュ以降を補足扱い
   return (
     <>
-      for {m ? m[1] : edition}
+      for {m ? m[1] : label}
       {m && <span className="ed-paren">{m[2]}</span>}
     </>
   );

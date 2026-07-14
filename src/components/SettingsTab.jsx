@@ -4,7 +4,7 @@ import { parseFirebaseConfig } from '../lib/cloud.js';
 import { encodeWatchLink, encodeInviteLink } from './WatchView.jsx';
 import QRCode from './QRCode.jsx';
 import { battingCSV, pitchingCSV, playLogCSV, atBatCSV, downloadCSV, shareCSV } from '../lib/csv.js';
-import { EDITIONS, HAND_LABEL } from '../lib/model.js';
+import { EDITIONS, HAND_LABEL, editionLabel } from '../lib/model.js';
 import { listProfiles, getActiveProfileId, addProfile, switchActiveProfile, deleteProfile } from '../lib/profiles.js';
 import OfficialCloudCard from './OfficialCloudCard.jsx';
 
@@ -44,12 +44,12 @@ export default function SettingsTab() {
               className={state.settings.edition === ed ? 'active' : ''}
               onClick={() => dispatch({ type: 'UPDATE_SETTINGS', patch: { edition: ed } })}
             >
-              {ed}
+              {editionLabel(ed)}
             </button>
           ))}
         </div>
         <p className="small dim mt8">
-          「草野球」では📇AI選手名鑑・🤖AIスタメン提案が使えます(パワプロ風の際どい寸評を含むため)。
+          「草野球・社会人」(大人向け)では📇AI選手名鑑・🤖AIスタメン提案が使えます(パワプロ風の際どい寸評を含むため)。
           「ブカツ(中高大)」「少年野球」ではこの2機能は表示されません。
         </p>
       </div>
@@ -207,7 +207,7 @@ function TeamSwitcherCard() {
             <b style={{ color: p.id === activeId ? 'var(--accent)' : 'var(--text)' }}>
               {p.id === activeId ? '✅ ' : ''}{p.name}
             </b>
-            <span className="pill" style={{ marginLeft: 6 }}>{p.edition}</span>
+            <span className="pill" style={{ marginLeft: 6 }}>{editionLabel(p.edition)}</span>
           </div>
           {p.id !== activeId && (
             <button className="small ghost" style={{ color: 'var(--red)' }} onClick={() => remove(p.id, p.name)}>削除</button>
@@ -221,7 +221,7 @@ function TeamSwitcherCard() {
           <label className="small dim mt8" style={{ display: 'block' }}>エディション</label>
           <div className="toggle-row">
             {EDITIONS.map((ed) => (
-              <button key={ed} className={newEdition === ed ? 'active' : ''} onClick={() => setNewEdition(ed)}>{ed}</button>
+              <button key={ed} className={newEdition === ed ? 'active' : ''} onClick={() => setNewEdition(ed)}>{editionLabel(ed)}</button>
             ))}
           </div>
           <div className="grid2 mt8">
