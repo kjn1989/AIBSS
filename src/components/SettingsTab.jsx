@@ -5,6 +5,7 @@ import { encodeWatchLink, encodeInviteLink } from './WatchView.jsx';
 import QRCode from './QRCode.jsx';
 import { battingCSV, pitchingCSV, playLogCSV, atBatCSV, downloadCSV, shareCSV } from '../lib/csv.js';
 import { EDITIONS, HAND_LABEL, editionLabel } from '../lib/model.js';
+import EditionText from './EditionText.jsx';
 import { listProfiles, getActiveProfileId, addProfile, switchActiveProfile, deleteProfile } from '../lib/profiles.js';
 import OfficialCloudCard from './OfficialCloudCard.jsx';
 
@@ -37,14 +38,14 @@ export default function SettingsTab() {
           placeholder="マイチーム"
         />
         <label className="small dim mt8" style={{ display: 'block' }}>エディション</label>
-        <div className="toggle-row">
+        <div className="toggle-row editions">
           {EDITIONS.map((ed) => (
             <button
               key={ed}
               className={state.settings.edition === ed ? 'active' : ''}
               onClick={() => dispatch({ type: 'UPDATE_SETTINGS', patch: { edition: ed } })}
             >
-              {editionLabel(ed)}
+              <EditionText edition={ed} />
             </button>
           ))}
         </div>
@@ -219,9 +220,9 @@ function TeamSwitcherCard() {
           <label className="small dim">チーム名</label>
           <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="例: ○○中学校野球部" />
           <label className="small dim mt8" style={{ display: 'block' }}>エディション</label>
-          <div className="toggle-row">
+          <div className="toggle-row editions">
             {EDITIONS.map((ed) => (
-              <button key={ed} className={newEdition === ed ? 'active' : ''} onClick={() => setNewEdition(ed)}>{editionLabel(ed)}</button>
+              <button key={ed} className={newEdition === ed ? 'active' : ''} onClick={() => setNewEdition(ed)}><EditionText edition={ed} /></button>
             ))}
           </div>
           <div className="grid2 mt8">

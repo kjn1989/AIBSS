@@ -108,7 +108,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 }
 /* forラインは「for エディション」を必ず1行に。草野球・社会人は同サイズで並列表示。 */
 .header-team .brand-for { font-size: 11px; line-height: 1.3; white-space: nowrap; }
-.header-team .brand-for .ed-paren { font-size: 0.78em; opacity: 0.8; letter-spacing: -0.02em; }
+/* 括弧補足を小さく控えめに(ヘッダー・エディション切替トグルで共通) */
+.ed-paren { font-size: 0.78em; opacity: 0.8; letter-spacing: -0.02em; }
 .header-team .brand-team { font-size: 12px; line-height: 1.3; color: var(--text-dim); overflow-wrap: anywhere; }
 /* 設定歯車は右上角に固定 */
 .header-gear { flex-shrink: 0; }
@@ -215,6 +216,14 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
   border-radius: 8px;
 }
 .toggle-row button.active { background: var(--accent-2); color: #fff; font-weight: 700; }
+/* エディション選択トグル: 長いラベルを1行に収める */
+.toggle-row.editions button {
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 8px 6px;
+}
 
 /* ---- ランキングテーブル ---- */
 .rank-table { width: 100%; border-collapse: collapse; font-size: 14px; }

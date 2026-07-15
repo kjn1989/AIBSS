@@ -12,7 +12,7 @@ import { officialAvailable, currentUserAsync, loginWithPassword, joinByInvite } 
 import { addProfile, switchActiveProfile } from './lib/profiles.js';
 import { persist } from './state/store.jsx';
 import { DiamondIcon, LedWordmark } from './components/BrandMark.jsx';
-import { editionLabel } from './lib/model.js';
+import EditionText from './components/EditionText.jsx';
 
 const TABS = [
   { id: 'home', label: 'ホーム', icon: '🏆' },
@@ -21,19 +21,6 @@ const TABS = [
   { id: 'stats', label: '成績', icon: '📊' },
   { id: 'result', label: '試合結果', icon: '🏟️' },
 ];
-
-// ヘッダーのエディション表示。括弧の補足(例: ブカツ(中高大)の「(中高大)」)だけを
-// 小さく控えめにして1行に収める。「草野球・社会人」は両者を並列(同サイズ)で表示する。
-function EditionLabel({ edition }) {
-  const label = editionLabel(edition);
-  const m = label.match(/^(.+?)(（.*）|\(.*\))$/); // 括弧内のみ補足扱い(・区切りは同サイズ)
-  return (
-    <>
-      for {m ? m[1] : label}
-      {m && <span className="ed-paren">{m[2]}</span>}
-    </>
-  );
-}
 
 // 招待リンク(?invite=1&team=...&cfg=...)で開かれたら、同期設定を取り込むか確認する
 function useInvite(dispatch) {
@@ -173,7 +160,7 @@ export default function App() {
             <span className="sr-only">AI-BASE DIAMOND</span>
           </h1>
           <div className="header-team">
-            <div className="brand-for"><EditionLabel edition={state.settings.edition || '草野球'} /></div>
+            <div className="brand-for"><EditionText edition={state.settings.edition || '草野球'} withFor /></div>
             <div className="brand-team">{state.settings.teamName || 'マイチーム'}</div>
           </div>
         </div>
