@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useStore } from '../state/store.jsx';
-import { aggregateBatting, aggregatePitching, battingMetrics, pitchingMetrics, fmtAvg, battingSplits, pitchingSplits, avg3 } from '../lib/stats.js';
+import { aggregateBatting, aggregatePitching, battingMetrics, pitchingMetrics, fmtAvg, battingSplits, pitchingSplits, avg3, teamHighlights } from '../lib/stats.js';
 import { formatIP, HAND_LABEL } from '../lib/model.js';
 import { playLabel } from '../lib/voiceParser.js';
 import SprayChart from './SprayChart.jsx';
@@ -16,10 +16,17 @@ export default function PlayerView({ playerId, games, onClose }) {
   // AI選手名鑑は「草野球」エディション限定の機能
   const scoutEnabled = state.settings.edition === '草野球';
 
-  const batting = useMemo(() => aggregateBatting(games)[playerId], [games, playerId]);
-  const pitching = useMemo(() => aggregatePitching(games)[playerId], [games, playerId]);
+  const battingMap = useMemo(() => aggregateBatting(games), [games]);
+  const pitchingMap = useMemo(() => aggregatePitching(games), [games]);
+  const batting = battingMap[playerId];
+  const pitching = pitchingMap[playerId];
   const batSplit = useMemo(() => battingSplits(games)[playerId], [games, playerId]);
   const pitSplit = useMemo(() => pitchingSplits(games)[playerId], [games, playerId]);
+  // AI選手名鑑向け: 他の選手と比べて明確に上回っている項目(タイトル・レートスタッツ首位)
+  const uniqueFacts = useMemo(
+    () => teamHighlights(playerId, battingMap, pitchingMap),
+    [playerId, battingMap, pitchingMap]
+  );
 
   // この選手の全打席(試合の古い順 → 各試合内は記録順)
   const atBatsByGame = useMemo(() => {
@@ -148,6 +155,7 @@ export default function PlayerView({ playerId, games, onClose }) {
           pitching={pitching}
           battingM={m}
           pitchingM={pm}
+          uniqueFacts={uniqueFacts}
           onClose={() => setShowScout(false)}
         />
       )}

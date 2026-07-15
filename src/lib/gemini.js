@@ -136,28 +136,32 @@ export function guessPlayFromMemo(memo) {
 }
 
 // ---------------- AI選手名鑑(スカウト寸評) ----------------
-function scoutPrompt({ name, number, tags, statsSummary }) {
+// uniqueFacts: チーム内タイトル・レートスタッツ首位など、この選手だけが持つ数字上の裏付け
+// (stats.jsのteamHighlights()で算出。あれば「他の選手にはない強み」として具体的に触れさせる)
+function scoutPrompt({ name, number, tags, statsSummary, uniqueFacts = [] }) {
   const plus = tags.filter((t) => t.type === 'plus').map((t) => t.label);
   const minus = tags.filter((t) => t.type === 'minus').map((t) => t.label);
   const joke = tags.filter((t) => t.type === 'joke').map((t) => t.label);
-  return `あなたは草野球チームのベテランスカウトです。以下の選手情報から、パワプロ風の「愛のある辛口スカウト寸評」を作成してください。
+  return `あなたは選手一人ひとりの長所を見抜き、伸びしろを前向きに引き出す、部員から慕われる人格者のベテランコーチです。以下の選手情報から、コメントを作成してください。
 
 選手名: ${name}${number ? ` #${number}` : ''}
 今季成績: ${statsSummary || 'まだ実戦データなし'}
+チーム内での特筆データ(他の選手と比較した客観的な裏付け): ${uniqueFacts.join('、') || 'なし'}
 長所タグ: ${plus.join('、') || 'なし'}
-短所タグ: ${minus.join('、') || 'なし'}
+伸びしろタグ: ${minus.join('、') || 'なし'}
 個性・チーム貢献タグ: ${joke.join('、') || 'なし'}
 
 条件:
-- catchphraseは12文字程度の短いキャッチコピー
-- reportは100〜150文字程度、今季成績の具体的な数字に触れつつ、親しみを込めて長所と短所の両方に言及する文章(成績データがない場合は数字への言及は省略してよい)
+- catchphraseは12文字程度の短いキャッチコピー(長所を活かした前向きなもの)
+- reportは100〜150文字程度。「チーム内での特筆データ」があれば、その中から最も際立つもの(複数あれば同率よりも単独首位を優先)を具体的な数字とともに「他の選手にはない独自の強み」として一番に取り上げる(無ければ今季成績の数字や長所タグから一番の武器を1つ選んで具体的に褒める)。伸びしろタグがあれば、欠点の指摘ではなく「ここを意識すればもっと伸びる」という具体的なアドバイスとして1つだけ前向きに触れる(成績データがない場合は数字への言及は省略してよい)
+- 皮肉・辛口・ダメ出しのニュアンスは一切禁止。常に応援口調で、選手の可能性を信じるコーチの温かい言葉遣いにする
 - 出力は次のJSON形式のみ。説明文や前置きは一切禁止:
 {"catchphrase":"...","report":"..."}`;
 }
 
 // 戻り値: 成功 { catchphrase, report } / 失敗 { error } / 未設定・オフライン null
-export async function generateScoutReport({ apiKey, name, number, tags, statsSummary }) {
-  const r = await callGeminiJSON(apiKey, scoutPrompt({ name, number, tags, statsSummary }));
+export async function generateScoutReport({ apiKey, name, number, tags, statsSummary, uniqueFacts = [] }) {
+  const r = await callGeminiJSON(apiKey, scoutPrompt({ name, number, tags, statsSummary, uniqueFacts }));
   if (!r || r.error) return r;
   if (!r.data.report) return { error: 'AIの応答にreportが含まれていません' };
   return { catchphrase: r.data.catchphrase || '', report: r.data.report };

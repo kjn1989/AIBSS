@@ -45,21 +45,24 @@ const CATCHPHRASES = [
   '頼れる4番打者候補', '一振りに賭ける男', 'チームの心臓', '無冠の職人', '最後の切り札',
 ];
 
-function buildDummyReport(name, tags, statsSummary) {
+function buildDummyReport(name, tags, statsSummary, uniqueFacts = []) {
   const plus = tags.filter((t) => t.type === 'plus').map((t) => t.label);
   const minus = tags.filter((t) => t.type === 'minus').map((t) => t.label);
   const joke = tags.filter((t) => t.type === 'joke').map((t) => t.label);
 
   if (tags.length === 0 && !statsSummary) {
-    return `${name || '無名の選手'}……まだタグも成績データも登録されていない。素材としては未知数だが、伸びしろは無限大かもしれない。`;
+    return `${name || '無名の選手'}……まだタグも成績データも登録されていない。伸びしろは無限大、これからが楽しみな存在だ。`;
   }
   let s = `${name || '無名の選手'}、`;
-  if (statsSummary) s += `今季${statsSummary}という数字を残す。`;
-  if (plus.length) s += `「${plus[0]}」の看板に嘘はない。`;
-  if (plus.length > 1) s += `加えて${plus.slice(1).join('・')}も持ち味で、使い勝手は抜群だ。`;
-  if (minus.length) s += `ただし${minus.join('・')}が課題で、そこを克服できれば化ける。`;
-  if (joke.length) s += `グラウンド外では${joke.join('・')}としても欠かせない存在……なのは間違いない。`;
-  s += ' 愛すべきキャラクターであることは、球団としても認めざるを得ない。';
+  if (uniqueFacts.length) {
+    // 同率よりも単独首位の方が際立つので優先して取り上げる
+    const best = uniqueFacts.find((f) => !f.includes('タイ')) || uniqueFacts[0];
+    s += `${best}という結果は、他の誰にも真似できない立派な武器だ。`;
+  } else if (statsSummary) s += `今季${statsSummary}という数字を残している。`;
+  if (plus.length) s += `「${plus[0]}」は紛れもない持ち味で、${plus.length > 1 ? `${plus.slice(1).join('・')}も含めて` : ''}チームにとって頼れる存在だ。`;
+  if (minus.length) s += `${minus[0]}を意識して練習を重ねれば、次のステージへ間違いなく伸びる。`;
+  if (joke.length) s += `グラウンド外でも${joke.join('・')}として欠かせない存在だ。`;
+  s += ' 応援したくなる、良いキャラクターだ。';
   return s;
 }
 
@@ -104,7 +107,7 @@ function fileToAvatarDataURL(file, size = 256) {
 
 // ---- AI選手名鑑&スカウト寸評 ----
 // Gemini APIキーが設定タブで入力されていれば実際にAI生成し、未設定/失敗時はダミー文言にフォールバックする。
-export default function ScoutCard({ player, batting, pitching, battingM, pitchingM, saveType = 'UPDATE_PLAYER', onClose }) {
+export default function ScoutCard({ player, batting, pitching, battingM, pitchingM, uniqueFacts = [], saveType = 'UPDATE_PLAYER', onClose }) {
   const { state, dispatch } = useStore();
   const apiKey = state.settings.geminiApiKey;
   const statsSummary = buildStatsSummary(batting, pitching, battingM, pitchingM);
@@ -157,12 +160,12 @@ export default function ScoutCard({ player, batting, pitching, battingM, pitchin
     setDirty(true);
     if (!apiKey) {
       setCatchphrase(CATCHPHRASES[Math.floor(Math.random() * CATCHPHRASES.length)]);
-      setReport(buildDummyReport(name, tags, statsSummary));
+      setReport(buildDummyReport(name, tags, statsSummary, uniqueFacts));
       setSource('dummy-no-key');
       return;
     }
     setLoading(true);
-    const result = await generateScoutReport({ apiKey, name, number: player?.number, tags, statsSummary });
+    const result = await generateScoutReport({ apiKey, name, number: player?.number, tags, statsSummary, uniqueFacts });
     setLoading(false);
     if (result && !result.error) {
       if (result.catchphrase) setCatchphrase(result.catchphrase);
@@ -170,7 +173,7 @@ export default function ScoutCard({ player, batting, pitching, battingM, pitchin
       setSource('ai');
     } else {
       setCatchphrase(CATCHPHRASES[Math.floor(Math.random() * CATCHPHRASES.length)]);
-      setReport(buildDummyReport(name, tags, statsSummary));
+      setReport(buildDummyReport(name, tags, statsSummary, uniqueFacts));
       setErrorDetail(result?.error || '');
       setSource('dummy-error');
     }
@@ -224,6 +227,9 @@ export default function ScoutCard({ player, batting, pitching, battingM, pitchin
 
           <div className="scout-mid">
             {statsSummary && <p className="small dim mb8">📊 今季成績: {statsSummary}</p>}
+            {uniqueFacts.length > 0 && (
+              <p className="small dim mb8">🏆 チーム内での強み: {uniqueFacts.join('・')}</p>
+            )}
             <div className="selected-tags-panel">
               <div className="section-title" style={{ margin: 0 }}>
                 特殊能力タグ {tags.length > 0 && <span className="tag-count-badge">{tags.length}</span>}
@@ -285,7 +291,7 @@ export default function ScoutCard({ player, batting, pitching, battingM, pitchin
               </button>
             </div>
             <div className="scout-report">
-              {report || buildDummyReport(name, tags, statsSummary)}
+              {report || buildDummyReport(name, tags, statsSummary, uniqueFacts)}
             </div>
             {source === 'ai' && <p className="small mt8" style={{ color: 'var(--green)' }}>✨ Gemini AIによる生成です。</p>}
             {source === 'dummy-error' && (

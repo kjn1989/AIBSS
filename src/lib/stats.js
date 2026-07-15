@@ -344,6 +344,32 @@ export function detailRanking(metricDef, battingMap, pitchingMap) {
   return rankRows(rows);
 }
 
+// この選手が「チーム内で他の誰にも負けていない」と言える項目を抽出する(AI選手名鑑で
+// 独自の強みを具体的な数字とともに指摘するために使う)。タイトル系は同率首位も含め、
+// レートスタッツ(打率・OPS・防御率等)は比較対象が2人以上いる時だけ意味を持つので絞る。
+export function teamHighlights(playerId, battingMap, pitchingMap) {
+  const facts = [];
+  for (const t of BATTING_TITLES) {
+    const { leaders, value, display } = titleLeaders(battingMap, t.key);
+    if (value > 0 && leaders.includes(playerId)) {
+      facts.push(`${t.label}チーム${leaders.length > 1 ? '1位タイ' : '1位'}(${display})`);
+    }
+  }
+  for (const t of PITCHING_TITLES) {
+    const { leaders, value, display } = titleLeaders(pitchingMap, t.key);
+    if (value > 0 && leaders.includes(playerId)) {
+      facts.push(`${t.label}チーム${leaders.length > 1 ? '1位タイ' : '1位'}(${display})`);
+    }
+  }
+  for (const md of DETAIL_METRICS) {
+    const rows = detailRanking(md, battingMap, pitchingMap);
+    if (rows.length < 2) continue; // 比較対象が1人以下なら「独自の強み」として意味がない
+    const row = rows.find((r) => r.playerId === playerId);
+    if (row && row.rank === 1) facts.push(`${md.label}チーム1位(${row.display})`);
+  }
+  return facts;
+}
+
 // ============================================================
 // 左右別スプリット集計
 //  - 打者splits: 各AtBatの vsHand(対戦相手投手の左右)で分ける → 対左投手/対右投手
