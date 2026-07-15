@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useStore } from '../state/store.jsx';
 import { generateScoutReport } from '../lib/gemini.js';
-import { fmtAvg } from '../lib/stats.js';
+import { buildStatsSummary } from '../lib/stats.js';
 import FullscreenView from './FullscreenView.jsx';
 
 // ---- プリセット特殊能力タグ(パワプロ風) ----
@@ -40,18 +40,23 @@ const TAG_GROUPS = [
 
 const TYPE_LABEL = { plus: 'プラス評価', minus: 'マイナス評価', joke: '個性・その他' };
 
-// ダミーのスカウト寸評テンプレート(実際のAI生成の代わりに文言を組み立てるモック)
+// ダミーのAIコーチコメントテンプレート(実際のAI生成の代わりに文言を組み立てるモック)
 const CATCHPHRASES = [
   '頼れる4番打者候補', '一振りに賭ける男', 'チームの心臓', '無冠の職人', '最後の切り札',
 ];
 
-function buildDummyReport(name, tags, statsSummary, uniqueFacts = []) {
+// 戻り値: { report, nextGameTip, practiceTip }(Gemini生成時と同じ形にして表示側を共通化)
+function buildDummyReport(name, tags, statsSummary, uniqueFacts = [], recentSummary = '') {
   const plus = tags.filter((t) => t.type === 'plus').map((t) => t.label);
   const minus = tags.filter((t) => t.type === 'minus').map((t) => t.label);
   const joke = tags.filter((t) => t.type === 'joke').map((t) => t.label);
 
   if (tags.length === 0 && !statsSummary) {
-    return `${name || '無名の選手'}……まだタグも成績データも登録されていない。伸びしろは無限大、これからが楽しみな存在だ。`;
+    return {
+      report: `${name || '無名の選手'}……まだタグも成績データも登録されていない。伸びしろは無限大、これからが楽しみな存在だ。`,
+      nextGameTip: 'まずは結果を恐れず、思い切って自分のプレーをすることだけを考えよう。',
+      practiceTip: '素振り・キャッチボールなど基本を丁寧に。今はフォームづくりの時期だ。',
+    };
   }
   let s = `${name || '無名の選手'}、`;
   if (uniqueFacts.length) {
@@ -63,19 +68,15 @@ function buildDummyReport(name, tags, statsSummary, uniqueFacts = []) {
   if (minus.length) s += `${minus[0]}を意識して練習を重ねれば、次のステージへ間違いなく伸びる。`;
   if (joke.length) s += `グラウンド外でも${joke.join('・')}として欠かせない存在だ。`;
   s += ' 応援したくなる、良いキャラクターだ。';
-  return s;
-}
 
-// 選手の集計成績(打撃/投手)を短い日本語サマリーに変換し、スカウト寸評に反映させる
-function buildStatsSummary(batting, pitching, m, pm) {
-  const parts = [];
-  if (batting && batting.pa > 0 && m) {
-    parts.push(`打率${fmtAvg(m.ba)} 本塁打${batting.hr} 打点${batting.rbi} OPS${m.ops === null ? '-' : m.ops.toFixed(3)}`);
-  }
-  if (pitching && (pitching.outsRecorded > 0 || pitching.games > 0) && pm) {
-    parts.push(`防御率${pm.era7 === null ? '-' : pm.era7.toFixed(2)} 奪三振${pitching.strikeouts} WHIP${pm.whip === null ? '-' : pm.whip.toFixed(2)}`);
-  }
-  return parts.join(' / ');
+  const nextGameTip = recentSummary
+    ? `${recentSummary}という今の調子を信じて、次の試合も目の前の一球に集中していこう。`
+    : '次の試合は、今持っている持ち味を思い切り出すことだけを考えよう。';
+  const practiceTip = minus.length
+    ? `普段の練習では${minus[0]}の克服を意識した反復を。焦らず一歩ずつ積み重ねよう。`
+    : '普段の練習では基本の反復を大切に。今の持ち味にさらに磨きをかけよう。';
+
+  return { report: s, nextGameTip, practiceTip };
 }
 
 function TagPill({ label, type, onClick }) {
@@ -105,9 +106,9 @@ function fileToAvatarDataURL(file, size = 256) {
   });
 }
 
-// ---- AI選手名鑑&スカウト寸評 ----
+// ---- AI選手名鑑&AIコーチコメント ----
 // Gemini APIキーが設定タブで入力されていれば実際にAI生成し、未設定/失敗時はダミー文言にフォールバックする。
-export default function ScoutCard({ player, batting, pitching, battingM, pitchingM, uniqueFacts = [], saveType = 'UPDATE_PLAYER', onClose }) {
+export default function ScoutCard({ player, batting, pitching, battingM, pitchingM, uniqueFacts = [], recentSummary = '', saveType = 'UPDATE_PLAYER', onClose }) {
   const { state, dispatch } = useStore();
   const apiKey = state.settings.geminiApiKey;
   const statsSummary = buildStatsSummary(batting, pitching, battingM, pitchingM);
@@ -117,6 +118,8 @@ export default function ScoutCard({ player, batting, pitching, battingM, pitchin
   const [freeText, setFreeText] = useState('');
   const [freeType, setFreeType] = useState('plus');
   const [report, setReport] = useState(player?.scoutReport || '');
+  const [nextGameTip, setNextGameTip] = useState(player?.scoutNextGameTip || '');
+  const [practiceTip, setPracticeTip] = useState(player?.scoutPracticeTip || '');
   const [loading, setLoading] = useState(false);
   const [source, setSource] = useState(null); // 'ai' | 'dummy-no-key' | 'dummy-error' | null(未生成)
   const [errorDetail, setErrorDetail] = useState('');
@@ -156,24 +159,32 @@ export default function ScoutCard({ player, batting, pitching, battingM, pitchin
 
   const initial = name.slice(0, 1);
 
+  const applyDummy = () => {
+    setCatchphrase(CATCHPHRASES[Math.floor(Math.random() * CATCHPHRASES.length)]);
+    const d = buildDummyReport(name, tags, statsSummary, uniqueFacts, recentSummary);
+    setReport(d.report);
+    setNextGameTip(d.nextGameTip);
+    setPracticeTip(d.practiceTip);
+  };
+
   const generate = async () => {
     setDirty(true);
     if (!apiKey) {
-      setCatchphrase(CATCHPHRASES[Math.floor(Math.random() * CATCHPHRASES.length)]);
-      setReport(buildDummyReport(name, tags, statsSummary, uniqueFacts));
+      applyDummy();
       setSource('dummy-no-key');
       return;
     }
     setLoading(true);
-    const result = await generateScoutReport({ apiKey, name, number: player?.number, tags, statsSummary, uniqueFacts });
+    const result = await generateScoutReport({ apiKey, name, number: player?.number, tags, statsSummary, uniqueFacts, recentSummary });
     setLoading(false);
     if (result && !result.error) {
       if (result.catchphrase) setCatchphrase(result.catchphrase);
       setReport(result.report);
+      setNextGameTip(result.nextGameTip || '');
+      setPracticeTip(result.practiceTip || '');
       setSource('ai');
     } else {
-      setCatchphrase(CATCHPHRASES[Math.floor(Math.random() * CATCHPHRASES.length)]);
-      setReport(buildDummyReport(name, tags, statsSummary, uniqueFacts));
+      applyDummy();
       setErrorDetail(result?.error || '');
       setSource('dummy-error');
     }
@@ -188,7 +199,10 @@ export default function ScoutCard({ player, batting, pitching, battingM, pitchin
     dispatch({
       type: saveType,
       id: player.id,
-      patch: { scoutTags: tags, scoutCatchphrase: catchphrase, scoutReport: report, scoutPhoto: photo },
+      patch: {
+        scoutTags: tags, scoutCatchphrase: catchphrase, scoutReport: report, scoutPhoto: photo,
+        scoutNextGameTip: nextGameTip, scoutPracticeTip: practiceTip,
+      },
     });
     setDirty(false);
     onClose();
@@ -227,6 +241,7 @@ export default function ScoutCard({ player, batting, pitching, battingM, pitchin
 
           <div className="scout-mid">
             {statsSummary && <p className="small dim mb8">📊 今季成績: {statsSummary}</p>}
+            {recentSummary && <p className="small dim mb8">📈 直近の調子: {recentSummary}</p>}
             {uniqueFacts.length > 0 && (
               <p className="small dim mb8">🏆 チーム内での強み: {uniqueFacts.join('・')}</p>
             )}
@@ -285,13 +300,13 @@ export default function ScoutCard({ player, batting, pitching, battingM, pitchin
 
           <div className="scout-bottom">
             <div className="flex" style={{ marginBottom: 8 }}>
-              <div className="grow section-title" style={{ margin: 0 }}>スカウト寸評</div>
+              <div className="grow section-title" style={{ margin: 0 }}>AIコーチコメント</div>
               <button className="small primary" onClick={generate} disabled={loading}>
                 {loading ? '生成中...' : apiKey ? '✨ AIで生成' : '🎲 生成(ダミー)'}
               </button>
             </div>
             <div className="scout-report">
-              {report || buildDummyReport(name, tags, statsSummary, uniqueFacts)}
+              {report || buildDummyReport(name, tags, statsSummary, uniqueFacts, recentSummary).report}
             </div>
             {source === 'ai' && <p className="small mt8" style={{ color: 'var(--green)' }}>✨ Gemini AIによる生成です。</p>}
             {source === 'dummy-error' && (
@@ -303,6 +318,22 @@ export default function ScoutCard({ player, batting, pitching, battingM, pitchin
               <p className="small dim mt8">
                 {apiKey ? '※ まだ生成していません。' : '※ Gemini APIキー未設定のため、ダミー文言です。設定タブから追加できます。'}
               </p>
+            )}
+            {(nextGameTip || practiceTip) && (
+              <div className="scout-tips mt12">
+                {nextGameTip && (
+                  <div className="scout-tip">
+                    <div className="scout-tip-label">🎯 次の試合のワンポイント</div>
+                    <div className="scout-tip-body">{nextGameTip}</div>
+                  </div>
+                )}
+                {practiceTip && (
+                  <div className="scout-tip">
+                    <div className="scout-tip-label">🏃 普段の練習で意識したいこと</div>
+                    <div className="scout-tip-body">{practiceTip}</div>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>

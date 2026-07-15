@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useStore } from '../state/store.jsx';
-import { aggregateBatting, aggregatePitching, battingMetrics, pitchingMetrics, fmtAvg, battingSplits, pitchingSplits, avg3, teamHighlights } from '../lib/stats.js';
+import { aggregateBatting, aggregatePitching, battingMetrics, pitchingMetrics, fmtAvg, battingSplits, pitchingSplits, avg3, teamHighlights, recentGames, buildStatsSummary } from '../lib/stats.js';
 import { formatIP, HAND_LABEL } from '../lib/model.js';
 import { playLabel } from '../lib/voiceParser.js';
 import SprayChart from './SprayChart.jsx';
@@ -27,6 +27,20 @@ export default function PlayerView({ playerId, games, onClose }) {
     () => teamHighlights(playerId, battingMap, pitchingMap),
     [playerId, battingMap, pitchingMap]
   );
+  // AIコーチの「直近の調子」向け: この選手が出場した直近3試合だけの成績
+  const recentSummary = useMemo(() => {
+    const playerGames = games.filter(
+      (g) => (g.atBats || []).some((ab) => ab.playerId === playerId && ab.result) || (g.pitchingRecords || []).some((r) => r.playerId === playerId)
+    );
+    const recent = recentGames(playerGames, 3);
+    if (recent.length === 0) return '';
+    const rb = aggregateBatting(recent)[playerId];
+    const rp = aggregatePitching(recent)[playerId];
+    const rm = rb ? battingMetrics(rb) : null;
+    const rpm = rp ? pitchingMetrics(rp) : null;
+    const summary = buildStatsSummary(rb, rp, rm, rpm);
+    return summary ? `直近${recent.length}試合 ${summary}` : '';
+  }, [games, playerId]);
 
   // この選手の全打席(試合の古い順 → 各試合内は記録順)
   const atBatsByGame = useMemo(() => {
@@ -156,6 +170,7 @@ export default function PlayerView({ playerId, games, onClose }) {
           battingM={m}
           pitchingM={pm}
           uniqueFacts={uniqueFacts}
+          recentSummary={recentSummary}
           onClose={() => setShowScout(false)}
         />
       )}

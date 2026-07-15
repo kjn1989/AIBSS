@@ -135,17 +135,20 @@ export function guessPlayFromMemo(memo) {
   return { result, outType, direction: dir, batterTo, why, confidence: 0.4 };
 }
 
-// ---------------- AI選手名鑑(スカウト寸評) ----------------
+// ---------------- AI選手名鑑(AIコーチコメント) ----------------
 // uniqueFacts: チーム内タイトル・レートスタッツ首位など、この選手だけが持つ数字上の裏付け
 // (stats.jsのteamHighlights()で算出。あれば「他の選手にはない強み」として具体的に触れさせる)
-function scoutPrompt({ name, number, tags, statsSummary, uniqueFacts = [] }) {
+// recentSummary: 直近数試合だけの成績サマリー(stats.jsのrecentGames()で抽出)。
+// 今季通算と見比べて「今の調子」を具体的に踏まえた伸びしろ分析・アドバイスに使う。
+function scoutPrompt({ name, number, tags, statsSummary, uniqueFacts = [], recentSummary = '' }) {
   const plus = tags.filter((t) => t.type === 'plus').map((t) => t.label);
   const minus = tags.filter((t) => t.type === 'minus').map((t) => t.label);
   const joke = tags.filter((t) => t.type === 'joke').map((t) => t.label);
-  return `あなたは選手一人ひとりの長所を見抜き、伸びしろを前向きに引き出す、部員から慕われる人格者のベテランコーチです。以下の選手情報から、コメントを作成してください。
+  return `あなたはAIコーチです。選手一人ひとりの長所を見抜き、伸びしろを前向きに引き出す、部員から慕われる人格者のベテランコーチとして、以下の選手情報からコメントを作成してください。
 
 選手名: ${name}${number ? ` #${number}` : ''}
-今季成績: ${statsSummary || 'まだ実戦データなし'}
+今季通算成績: ${statsSummary || 'まだ実戦データなし'}
+直近数試合の成績: ${recentSummary || 'データなし'}
 チーム内での特筆データ(他の選手と比較した客観的な裏付け): ${uniqueFacts.join('、') || 'なし'}
 長所タグ: ${plus.join('、') || 'なし'}
 伸びしろタグ: ${minus.join('、') || 'なし'}
@@ -153,18 +156,25 @@ function scoutPrompt({ name, number, tags, statsSummary, uniqueFacts = [] }) {
 
 条件:
 - catchphraseは12文字程度の短いキャッチコピー(長所を活かした前向きなもの)
-- reportは100〜150文字程度。「チーム内での特筆データ」があれば、その中から最も際立つもの(複数あれば同率よりも単独首位を優先)を具体的な数字とともに「他の選手にはない独自の強み」として一番に取り上げる(無ければ今季成績の数字や長所タグから一番の武器を1つ選んで具体的に褒める)。伸びしろタグがあれば、欠点の指摘ではなく「ここを意識すればもっと伸びる」という具体的なアドバイスとして1つだけ前向きに触れる(成績データがない場合は数字への言及は省略してよい)
+- reportは100〜150文字程度。「チーム内での特筆データ」があれば、その中から最も際立つもの(複数あれば同率よりも単独首位を優先)を具体的な数字とともに「他の選手にはない独自の強み」として一番に取り上げる(無ければ今季成績の数字や長所タグから一番の武器を1つ選んで具体的に褒める)。伸びしろタグがあれば、今季通算成績と直近数試合の成績を見比べて具体的な傾向(好調が続いている/やや停滞気味など)を踏まえ、欠点の指摘ではなく「ここを意識すればもっと伸びる」という具体的なアドバイスとして1つだけ前向きに触れる(データがない場合は言及を省略してよい)
+- nextGameTipは30〜50文字程度。直近数試合の調子を踏まえて、次の試合で意識すると良い具体的なワンポイントアドバイス
+- practiceTipは30〜50文字程度。伸びしろタグや今季通算成績を踏まえて、普段の練習で意識すると良い基本に忠実なアドバイス
 - 皮肉・辛口・ダメ出しのニュアンスは一切禁止。常に応援口調で、選手の可能性を信じるコーチの温かい言葉遣いにする
 - 出力は次のJSON形式のみ。説明文や前置きは一切禁止:
-{"catchphrase":"...","report":"..."}`;
+{"catchphrase":"...","report":"...","nextGameTip":"...","practiceTip":"..."}`;
 }
 
-// 戻り値: 成功 { catchphrase, report } / 失敗 { error } / 未設定・オフライン null
-export async function generateScoutReport({ apiKey, name, number, tags, statsSummary, uniqueFacts = [] }) {
-  const r = await callGeminiJSON(apiKey, scoutPrompt({ name, number, tags, statsSummary, uniqueFacts }));
+// 戻り値: 成功 { catchphrase, report, nextGameTip, practiceTip } / 失敗 { error } / 未設定・オフライン null
+export async function generateScoutReport({ apiKey, name, number, tags, statsSummary, uniqueFacts = [], recentSummary = '' }) {
+  const r = await callGeminiJSON(apiKey, scoutPrompt({ name, number, tags, statsSummary, uniqueFacts, recentSummary }));
   if (!r || r.error) return r;
   if (!r.data.report) return { error: 'AIの応答にreportが含まれていません' };
-  return { catchphrase: r.data.catchphrase || '', report: r.data.report };
+  return {
+    catchphrase: r.data.catchphrase || '',
+    report: r.data.report,
+    nextGameTip: r.data.nextGameTip || '',
+    practiceTip: r.data.practiceTip || '',
+  };
 }
 
 // ---------------- AIヘッドコーチ(スタメン提案) ----------------

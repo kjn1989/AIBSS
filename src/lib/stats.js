@@ -370,6 +370,24 @@ export function teamHighlights(playerId, battingMap, pitchingMap) {
   return facts;
 }
 
+// 直近N試合(新しい順)だけを取り出す。AIコーチが「今季通算」と「直近の調子」を
+// 比べて伸びしろ・ワンポイントアドバイスを組み立てるための材料。
+export function recentGames(games, n = 3) {
+  return [...games].sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, n);
+}
+
+// 選手の集計成績(打撃/投手)を短い日本語サマリーに変換する(AI選手名鑑・個人ページ共通)
+export function buildStatsSummary(batting, pitching, m, pm) {
+  const parts = [];
+  if (batting && batting.pa > 0 && m) {
+    parts.push(`打率${fmtAvg(m.ba)} 本塁打${batting.hr} 打点${batting.rbi} OPS${m.ops === null ? '-' : m.ops.toFixed(3)}`);
+  }
+  if (pitching && (pitching.outsRecorded > 0 || pitching.games > 0) && pm) {
+    parts.push(`防御率${pm.era7 === null ? '-' : pm.era7.toFixed(2)} 奪三振${pitching.strikeouts} WHIP${pm.whip === null ? '-' : pm.whip.toFixed(2)}`);
+  }
+  return parts.join(' / ');
+}
+
 // ============================================================
 // 左右別スプリット集計
 //  - 打者splits: 各AtBatの vsHand(対戦相手投手の左右)で分ける → 対左投手/対右投手
