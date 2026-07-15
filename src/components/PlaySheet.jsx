@@ -32,6 +32,11 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
         d[b] = mv ? mv.to : b; // 提案がなければ「そのまま」
       }
     }
+    // 併殺打が最初から選ばれている場合(音声認識等)も、フォース走者を既定でアウトにする
+    if (initial.outType === 'dp') {
+      const forced = [1, 2, 3].find((b) => runnersOn[b]);
+      if (forced) d[forced] = 'out';
+    }
     return d;
   });
   const [batterTo, setBatterTo] = useState(initial.batterTo ?? proposal.batterTo);
@@ -61,6 +66,22 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
   const isAdvTarget = result === 'out' && hadRunners;
   const autoAdv = judgeAdvance(moves);
   const advSuccess = advOverride ?? autoAdv;
+
+  // 併殺打: 打者アウトに加え走者も1人以上アウトが成立条件。走者が誰もアウトになっていなければ確定不可
+  const dpNoRunnerOut = outType === 'dp' && ![1, 2, 3].some((b) => runnersOn[b] && dests[b] === 'out');
+
+  // 凡打の種類を選ぶ(併殺打選択時は、強制されるフォース走者(一塁→二塁→三塁の順で先頭)を
+  // 自動でアウトに。既に誰かアウトになっていれば上書きしない)
+  const selectOutType = (k) => {
+    setOutType(k);
+    if (k === 'dp') {
+      const alreadyOut = [1, 2, 3].some((b) => runnersOn[b] && dests[b] === 'out');
+      if (!alreadyOut) {
+        const forced = [1, 2, 3].find((b) => runnersOn[b]);
+        if (forced) setDests((d) => ({ ...d, [forced]: 'out' }));
+      }
+    }
+  };
 
   // 衝突チェック: 複数の走者(+打者)が同じ塁に到達していないか
   const collision = useMemo(() => {
@@ -157,7 +178,7 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
               <button
                 key={k}
                 className={outType === k ? 'primary' : ''}
-                onClick={() => setOutType(k)}
+                onClick={() => selectOutType(k)}
                 disabled={k === 'dp' && !hadRunners}
               >
                 {outTypeLabel(k, edition)}
@@ -275,6 +296,7 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
       )}
 
       {collision && <div className="warn-box mt12">⚠️ 複数の走者が同じ塁に到達しています。行き先を修正してください。</div>}
+      {dpNoRunnerOut && <div className="warn-box mt12">⚠️ 併殺打には走者のアウトが必要です。走者の行き先を「アウト」にしてください。</div>}
 
       <div className="confirm-card mt16" style={{ marginBottom: 0, padding: 12 }}>
         <div className="q" style={{ fontSize: 16, marginBottom: 0 }}>
@@ -284,7 +306,7 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
 
       <div className="sheet-actions">
         <button className="ghost" onClick={onClose}>キャンセル</button>
-        <button className="primary" onClick={confirm} disabled={(needsDir && !direction) || collision}>
+        <button className="primary" onClick={confirm} disabled={(needsDir && !direction) || collision || dpNoRunnerOut}>
           確定
         </button>
       </div>
