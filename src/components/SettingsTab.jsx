@@ -178,8 +178,9 @@ function GeminiKeyHelpSheet({ onClose }) {
       <ol className="small" style={{ paddingLeft: 18, marginBottom: 12, lineHeight: 1.8 }}>
         <li>Google AI Studio(aistudio.google.com)にアクセス</li>
         <li>お手持ちのGoogleアカウントでログイン</li>
-        <li>「Get API key」→「Create API key」でキーを発行</li>
-        <li>表示されたキーをコピーし、この画面の「Gemini APIキー」欄に貼り付け</li>
+        <li>「Get API key」→「Create API key」を選択</li>
+        <li>初めての場合はGoogle Cloudプロジェクトの作成を求められるので、任意の名前(例: AI-BASE)を付けて作成</li>
+        <li>キーが発行されるので、表示されたキーをコピーし、この画面の「Gemini APIキー」欄に貼り付け</li>
       </ol>
 
       <div className="section-title">② 無料で使えます</div>
