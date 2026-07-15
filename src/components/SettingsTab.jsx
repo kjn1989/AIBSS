@@ -8,6 +8,7 @@ import { EDITIONS, HAND_LABEL, editionLabel } from '../lib/model.js';
 import EditionText from './EditionText.jsx';
 import { listProfiles, getActiveProfileId, addProfile, switchActiveProfile, deleteProfile } from '../lib/profiles.js';
 import OfficialCloudCard from './OfficialCloudCard.jsx';
+import Sheet from './Sheet.jsx';
 
 export default function SettingsTab() {
   const { state, dispatch } = useStore();
@@ -15,6 +16,7 @@ export default function SettingsTab() {
   const [newNumber, setNewNumber] = useState('');
   const [newThrows, setNewThrows] = useState('');
   const [newBats, setNewBats] = useState('');
+  const [showGeminiHelp, setShowGeminiHelp] = useState(false);
 
   const addPlayer = () => {
     if (!newName.trim()) return;
@@ -114,7 +116,12 @@ export default function SettingsTab() {
           <br />Google AI Studio の無料枠はカード登録不要で使えます(未設定でも各機能はオフラインの
           簡易処理やダミー文言でフォールバックします)。
         </p>
-        <label className="small dim">Gemini APIキー</label>
+        <div className="flex" style={{ alignItems: 'center' }}>
+          <label className="small dim grow">Gemini APIキー</label>
+          <button type="button" className="small ghost" style={{ color: 'var(--accent)' }} onClick={() => setShowGeminiHelp(true)}>
+            ❓ 出し方と注意点はこちら
+          </button>
+        </div>
         <input
           type="password"
           value={state.settings.geminiApiKey}
@@ -144,6 +151,7 @@ export default function SettingsTab() {
           登録選手名は送信前に「選手」へ置換されます(名鑑・スタメン・新聞は選手名が必要なため対象外)。
         </p>
       </div>
+      {showGeminiHelp && <GeminiKeyHelpSheet onClose={() => setShowGeminiHelp(false)} />}
 
       <OfficialCloudCard />
       <CloudCard />
@@ -159,6 +167,52 @@ export default function SettingsTab() {
         </p>
       </div>
     </div>
+  );
+}
+
+// ---- Gemini APIキーの出し方・注意点(ポップアップ解説) ----
+function GeminiKeyHelpSheet({ onClose }) {
+  return (
+    <Sheet title="Gemini APIキーの取得方法と注意点" onClose={onClose}>
+      <div className="section-title" style={{ marginTop: 0 }}>① 取得手順</div>
+      <ol className="small" style={{ paddingLeft: 18, marginBottom: 12, lineHeight: 1.8 }}>
+        <li>Google AI Studio(aistudio.google.com)にアクセス</li>
+        <li>お手持ちのGoogleアカウントでログイン</li>
+        <li>「Get API key」→「Create API key」でキーを発行</li>
+        <li>表示されたキーをコピーし、この画面の「Gemini APIキー」欄に貼り付け</li>
+      </ol>
+
+      <div className="section-title">② 無料で使えます</div>
+      <p className="small dim mb8">
+        Google AI Studio で発行したキーは、Cloud Billing(請求先アカウント)を紐付けない限り、
+        無料枠の範囲内で課金は発生しません。カード登録も不要です。
+      </p>
+
+      <div className="section-title">③ キーの保存場所</div>
+      <p className="small dim mb8">
+        このキーはこの端末のブラウザ内にのみ保存されます。クラウド同期をONにしていても、
+        他の端末やAIBSSのサーバーに送信されることはありません。Gemini APIへの通信も、
+        このアプリのサーバーを経由せずブラウザから直接Googleに送られます。
+      </p>
+
+      <div className="section-title">④ データの取り扱いについて</div>
+      <p className="small dim mb8">
+        無料枠(Cloud Billing未設定)でご利用の場合、送信した内容がGoogle側のサービス改善に
+        利用されることがあります。最新の取り扱い条件は、Google AI Studio / Gemini API の
+        公式ページで必ずご確認ください。選手名を送信したくない場合は、上の
+        「AI送信前に選手名を伏せる」もあわせてご利用いただけます。
+      </p>
+
+      <div className="section-title">⑤ キーの取り扱いにご注意</div>
+      <p className="small dim mb8">
+        APIキーはパスワードと同様に、第三者と共有しないでください。万が一漏洩した場合も、
+        Google AI Studio側からいつでも無効化・再発行できます。
+      </p>
+
+      <div className="sheet-actions">
+        <button className="primary" onClick={onClose}>閉じる</button>
+      </div>
+    </Sheet>
   );
 }
 
