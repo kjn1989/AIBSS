@@ -53,28 +53,28 @@ function buildDummyReport(name, tags, statsSummary, uniqueFacts = [], recentSumm
 
   if (tags.length === 0 && !statsSummary) {
     return {
-      report: `${name || '無名の選手'}……まだタグも成績データも登録されていない。伸びしろは無限大、これからが楽しみな存在だ。`,
-      nextGameTip: 'まずは結果を恐れず、思い切って自分のプレーをすることだけを考えよう。',
-      practiceTip: '素振り・キャッチボールなど基本を丁寧に。今はフォームづくりの時期だ。',
+      report: `${name || '無名の選手'}さんは、まだタグも成績データも登録されていません。伸びしろは無限大、これからが楽しみな選手です。`,
+      nextGameTip: 'まずは結果を恐れず、思い切って自分のプレーをすることだけを考えましょう。',
+      practiceTip: '素振り・キャッチボールなど基本を丁寧に。今はフォームづくりの時期です。',
     };
   }
-  let s = `${name || '無名の選手'}、`;
+  let s = `${name || '無名の選手'}さん、`;
   if (uniqueFacts.length) {
     // 同率よりも単独首位の方が際立つので優先して取り上げる
     const best = uniqueFacts.find((f) => !f.includes('タイ')) || uniqueFacts[0];
-    s += `${best}という結果は、他の誰にも真似できない立派な武器だ。`;
-  } else if (statsSummary) s += `今季${statsSummary}という数字を残している。`;
-  if (plus.length) s += `「${plus[0]}」は紛れもない持ち味で、${plus.length > 1 ? `${plus.slice(1).join('・')}も含めて` : ''}チームにとって頼れる存在だ。`;
-  if (minus.length) s += `${minus[0]}を意識して練習を重ねれば、次のステージへ間違いなく伸びる。`;
-  if (joke.length) s += `グラウンド外でも${joke.join('・')}として欠かせない存在だ。`;
-  s += ' 応援したくなる、良いキャラクターだ。';
+    s += `${best}という結果は、他の誰にも真似できない立派な武器です。`;
+  } else if (statsSummary) s += `今季${statsSummary}という数字を残しています。`;
+  if (plus.length) s += `「${plus[0]}」は紛れもない持ち味で、${plus.length > 1 ? `${plus.slice(1).join('・')}も含めて` : ''}チームにとって頼れる存在です。`;
+  if (minus.length) s += `${minus[0]}を意識して練習を重ねれば、次のステージへ間違いなく伸びるでしょう。`;
+  // キャラクター・チーム貢献は実際のタグがある時だけ触れる(無いのに褒めると嘘くさくなるため)
+  if (joke.length) s += `グラウンド外でも${joke.join('・')}として欠かせない存在です。`;
 
   const nextGameTip = recentSummary
-    ? `${recentSummary}という今の調子を信じて、次の試合も目の前の一球に集中していこう。`
-    : '次の試合は、今持っている持ち味を思い切り出すことだけを考えよう。';
+    ? `${recentSummary}という今の調子を信じて、次の試合も目の前の一球に集中していきましょう。`
+    : '次の試合は、今持っている持ち味を思い切り出すことだけを考えましょう。';
   const practiceTip = minus.length
-    ? `普段の練習では${minus[0]}の克服を意識した反復を。焦らず一歩ずつ積み重ねよう。`
-    : '普段の練習では基本の反復を大切に。今の持ち味にさらに磨きをかけよう。';
+    ? `普段の練習では${minus[0]}の克服を意識した反復を。焦らず一歩ずつ積み重ねていきましょう。`
+    : '普段の練習では基本の反復を大切に。今の持ち味にさらに磨きをかけていきましょう。';
 
   return { report: s, nextGameTip, practiceTip };
 }
