@@ -584,18 +584,34 @@ export function reducer(state, action) {
       const g = deep(state.games[action.gameId]);
       ensurePending(g); // スナップショットは打席開始時のまま保持
       const outsBefore = g.outs;
-      const movedPlayerId = runnerPlayerIdBefore(state, action);
+      // 適用後は runners が書き換わるため、動いた走者のIDを塁ごとに先に控える
+      const idsByFrom = {};
+      for (const mv of action.moves || []) {
+        idsByFrom[mv.from] = state.games[action.gameId].runners?.[mv.from]?.playerId || null;
+      }
       applyRunnerMoves(g, action.moves, { eventKind: action.event, erChoices: action.erChoices });
       // 守備時: 走塁アウト(盗塁死・牽制死等)も投手のアウト数に加算
       if (!isMyTeamBatting(g) && g.currentPitcherId && g.outs > outsBefore) {
         ensurePitchingRecord(g, g.currentPitcherId).outsRecorded += g.outs - outsBefore;
       }
       const labels = { sb: '盗塁', cs: '盗塁死', wp: '暴投', pb: '捕逸', pickoff: '牽制死', pickoffThrow: '牽制', balk: 'ボーク' };
-      g.playLogs.push(newPlayLog({
-        gameId: g.id, inning: g.inning, isTop: g.isTop, kind: action.event === 'sb' ? 'sb' : 'runner',
-        text: labels[action.event] || '走者イベント',
-        payload: { moves: action.moves, playerId: movedPlayerId },
-      }));
+      if (action.event === 'sb') {
+        // 盗塁は「成功した走者ごと」に1ログ。重盗でも全員の個人成績(盗塁数)に正しく反映される
+        const safe = (action.moves || []).filter((mv) => mv.to !== 'out');
+        for (const mv of safe) {
+          g.playLogs.push(newPlayLog({
+            gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'sb',
+            text: safe.length > 1 ? '盗塁(重盗)' : '盗塁',
+            payload: { moves: [mv], playerId: idsByFrom[mv.from] },
+          }));
+        }
+      } else {
+        g.playLogs.push(newPlayLog({
+          gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'runner',
+          text: labels[action.event] || '走者イベント',
+          payload: { moves: action.moves, playerId: idsByFrom[action.moves?.[0]?.from] ?? null },
+        }));
+      }
       if (g.outs >= 3) changeHalf(g);
       g.updatedAt = Date.now();
       return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
@@ -931,12 +947,6 @@ function addRun(game, { playerId, erChoice, viaError }) {
       if (!viaError) pr.earnedRuns += 1;
     }
   }
-}
-
-function runnerPlayerIdBefore(state, action) {
-  const g = state.games[action.gameId];
-  const mv = action.moves[0];
-  return g?.runners?.[mv.from]?.playerId || null;
 }
 
 // ------------------------------------------------------------
