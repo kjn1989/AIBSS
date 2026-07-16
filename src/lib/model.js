@@ -7,17 +7,19 @@ export const uid = () => Date.now().toString(36) + Math.random().toString(36).sl
 
 // ---- 打撃結果種別 ----
 export const RESULTS = {
-  single: { label: '単打', short: 'H', hit: true, bases: 1, ab: true, onBase: true },
-  double: { label: '二塁打', short: '2B', hit: true, bases: 2, ab: true, onBase: true },
-  triple: { label: '三塁打', short: '3B', hit: true, bases: 3, ab: true, onBase: true },
-  hr: { label: '本塁打', short: 'HR', hit: true, bases: 4, ab: true, onBase: true },
-  out: { label: '凡打', short: 'OUT', hit: false, bases: 0, ab: true, onBase: false },
+  // labelは初心者にも分かりやすい口語表記(スコア入力パッド・ログ・確認・編集で共通)。
+  // shortはスコアシート/PDFの略号なので従来の野球公式表記を維持する。
+  single: { label: 'ヒット', short: 'H', hit: true, bases: 1, ab: true, onBase: true },
+  double: { label: 'ツーベース', short: '2B', hit: true, bases: 2, ab: true, onBase: true },
+  triple: { label: 'スリーベース', short: '3B', hit: true, bases: 3, ab: true, onBase: true },
+  hr: { label: 'ホームラン', short: 'HR', hit: true, bases: 4, ab: true, onBase: true },
+  out: { label: '凡打(アウト)', short: 'OUT', hit: false, bases: 0, ab: true, onBase: false },
   bb: { label: '四球', short: 'BB', hit: false, bases: 0, ab: false, onBase: true },
   hbp: { label: '死球', short: 'HBP', hit: false, bases: 0, ab: false, onBase: true },
   so: { label: '三振', short: 'K', hit: false, bases: 0, ab: true, onBase: false },
   error: { label: 'エラー', short: 'E', hit: false, bases: 0, ab: true, onBase: true },
-  sacBunt: { label: '犠打', short: 'SAC', hit: false, bases: 0, ab: false, onBase: false },
-  sacFly: { label: '犠飛', short: 'SF', hit: false, bases: 0, ab: false, onBase: false },
+  sacBunt: { label: 'バント', short: 'SAC', hit: false, bases: 0, ab: false, onBase: false },
+  sacFly: { label: '犠牲フライ', short: 'SF', hit: false, bases: 0, ab: false, onBase: false },
   interference: { label: '打撃妨害', short: 'IF', hit: false, bases: 0, ab: false, onBase: true },
   // 守備妨害(攻撃側の妨害): 打者/走者アウト。走塁妨害(守備側の妨害/オブストラクション): 出塁が認められる。
   fieldInterference: { label: '守備妨害', short: '守妨', hit: false, bases: 0, ab: true, onBase: false },
@@ -32,7 +34,7 @@ export const OUT_TYPES = {
   ground: 'ゴロ',
   fly: 'フライ',
   liner: 'ライナー',
-  dp: '併殺打',
+  dp: 'ダブルプレー',
 };
 
 // プレイ結果の分類(スコアシート・ログの色分け用。画面とPDFで同一のクラス名を使う)。

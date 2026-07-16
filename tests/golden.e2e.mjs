@@ -83,13 +83,13 @@ try {
   };
 
   // --- 1. 単打 → 一塁に走者 ---
-  await playResult('単打');
+  await playResult('ヒット');
   await confirmSheet();
   check('単打後: 一塁に走者', (await baseOn(1)) === 1);
 
   // --- 2. 併殺打 → 2アウト(3アウト二重計上の再発防止)・回は継続 ---
   await playResult('凡打');
-  await page.click('.sheet button:has-text("併殺打")');
+  await page.click('.sheet button:has-text("ダブルプレー")');
   await page.waitForTimeout(250);
   await confirmSheet();
   check('併殺打後: アウトは2', (await outs()) === 2, `actual=${await outs()}`);

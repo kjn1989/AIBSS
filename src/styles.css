@@ -363,10 +363,12 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 
 /* ---- 結果パッド ---- */
 .result-pad { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-.result-pad button { min-height: 54px; font-size: 14px; font-weight: 700; padding: 4px; }
-/* 妨害系3種(打撃/守備/走塁妨害)は常に横1列にまとめる */
+/* 口語ラベル(スリーベース/凡打(アウト)等)が4列セルに収まるよう13px・行間詰め。
+   長い語は2行まで許容(min-height 54pxが2行を吸収する)。 */
+.result-pad button { min-height: 54px; font-size: 12px; font-weight: 700; padding: 4px 2px; line-height: 1.2; white-space: nowrap; }
+/* エラー・バント・犠牲フライ / 妨害3種は3列均一で横幅いっぱいに揃える(3列なので少し大きめ) */
 .result-pad.result-pad-intf { grid-template-columns: repeat(3, 1fr); margin-top: 8px; }
-.result-pad.result-pad-intf button { font-size: 12.5px; padding: 4px 2px; }
+.result-pad.result-pad-intf button { font-size: 13px; padding: 4px 2px; white-space: nowrap; }
 /* プレイ結果カテゴリの色(単一基準)。resultCategory()の分類を
    入力パッド・ログ・スコアシート・PDFで共通に使う。視認性優先で
    ヒット/四死球/エラーを目立たせ、アウトは控えめにする。 */
@@ -575,6 +577,18 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
   z-index: 90; min-height: 58px; padding: 0 18px;
   background: var(--red); border: none; color: #fff; font-size: 15px; font-weight: 800;
   border-radius: 16px; box-shadow: 0 4px 20px rgba(248, 81, 73, 0.4);
+}
+/* 常時モードのライブ字幕(聞き取り中テキスト)。画面下部・確定トーストより上に浮かせる */
+.cont-live-caption {
+  position: fixed; left: 12px; right: 12px; bottom: calc(var(--tab-h) + var(--safe-bottom) + 150px);
+  z-index: 90; background: rgba(13, 17, 23, 0.92); border: 1px solid var(--border);
+  border-radius: 12px; padding: 10px 14px; color: var(--text); font-size: 15px; font-weight: 600;
+  display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(6px);
+}
+.cont-live-dot {
+  flex-shrink: 0; width: 9px; height: 9px; border-radius: 50%; background: var(--green);
+  animation: pulse-green 1.2s infinite;
 }
 .pending-toast {
   position: fixed; left: 12px; right: 12px; bottom: calc(var(--tab-h) + var(--safe-bottom) + 84px);

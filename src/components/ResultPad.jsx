@@ -1,44 +1,41 @@
 import React from 'react';
-import { resultCategory } from '../lib/model.js';
+import { RESULTS, resultCategory } from '../lib/model.js';
 
-// 打撃結果のワンタップ選択パッド。色分けは resultCategory() を単一の基準にして
-// スコアシート・PDF・ログと完全に同期させる(既存レイアウトは維持)。
-const BUTTONS = [
-  { key: 'single', label: '単打' },
-  { key: 'double', label: '二塁打' },
-  { key: 'triple', label: '三塁打' },
-  { key: 'hr', label: '本塁打' },
-  { key: 'out', label: '凡打' },
-  { key: 'so', label: '三振' },
-  { key: 'bb', label: '四球' },
-  { key: 'hbp', label: '死球' },
-  { key: 'error', label: 'エラー' },
-  { key: 'sacBunt', label: '犠打' },
-  { key: 'sacFly', label: '犠飛' },
-];
+// 打撃結果のワンタップ選択パッド。表示名は RESULTS.label(初心者にも分かる口語表記)を
+// 単一の基準にして、ログ・確認・編集・スコアシートと完全に同期させる。
+// レイアウト:
+//  - 主要結果(ヒット系4種 + 凡打/三振/四球/死球)は4列グリッド
+//  - エラー・バント・犠牲フライは3列均一(下段の妨害3種と横幅を揃える)
+//  - 打撃/守備/走塁妨害の3種も3列均一
+const MAIN_KEYS = ['single', 'double', 'triple', 'hr', 'out', 'so', 'bb', 'hbp'];
+const SECONDARY_KEYS = ['error', 'sacBunt', 'sacFly'];
+const INTERFERENCE_KEYS = ['interference', 'fieldInterference', 'obstruction'];
 
-// 妨害系3種は打撃結果とは別枠で、常に横1列にまとめて表示する
-const INTERFERENCE_BUTTONS = [
-  { key: 'interference', label: '打撃妨害' },
-  { key: 'fieldInterference', label: '守備妨害' },
-  { key: 'obstruction', label: '走塁妨害' },
-];
+function PadButton({ k, onSelect }) {
+  return (
+    <button className={resultCategory(k)} onClick={() => onSelect(k)}>
+      {RESULTS[k].label}
+    </button>
+  );
+}
 
 export default function ResultPad({ onSelect }) {
   return (
     <div>
       <div className="result-pad">
-        {BUTTONS.map((b) => (
-          <button key={b.key} className={resultCategory(b.key)} onClick={() => onSelect(b.key)}>
-            {b.label}
-          </button>
+        {MAIN_KEYS.map((k) => (
+          <PadButton key={k} k={k} onSelect={onSelect} />
+        ))}
+      </div>
+      {/* エラー・バント・犠牲フライを3列均一(下段の妨害と横幅を揃える) */}
+      <div className="result-pad result-pad-intf">
+        {SECONDARY_KEYS.map((k) => (
+          <PadButton key={k} k={k} onSelect={onSelect} />
         ))}
       </div>
       <div className="result-pad result-pad-intf">
-        {INTERFERENCE_BUTTONS.map((b) => (
-          <button key={b.key} className={resultCategory(b.key)} onClick={() => onSelect(b.key)}>
-            {b.label}
-          </button>
+        {INTERFERENCE_KEYS.map((k) => (
+          <PadButton key={k} k={k} onSelect={onSelect} />
         ))}
       </div>
     </div>

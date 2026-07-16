@@ -7,13 +7,21 @@ export function speechAvailable() {
   return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
 }
 
-export function createRecognizer({ onInterim, onResult, onError, onEnd }) {
+// iOS/iPadOS(WebKit)判定。SpeechRecognitionのcontinuousが不安定なため再起動方式に切り替える
+export function isIOSWebKit() {
+  const ua = navigator.userAgent;
+  return /iP(hone|ad|od)/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+export function createRecognizer({ onInterim, onResult, onError, onEnd, continuous = false }) {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) return null;
   const rec = new SR();
   rec.lang = 'ja-JP';
   rec.interimResults = true;
-  rec.continuous = false;
+  // continuous=true: 1セッションで複数発話を受け続ける(Android Chrome/デスクトップ)。
+  // 発話ごとのセッション終了→再起動のギャップ(0.5〜1秒の取りこぼし)が無くなる。
+  rec.continuous = continuous;
   rec.maxAlternatives = 1;
 
   rec.onresult = (e) => {

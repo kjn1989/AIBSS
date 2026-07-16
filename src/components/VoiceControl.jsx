@@ -231,6 +231,7 @@ export default function VoiceControl({ game }) {
   const [contMode, setContMode] = useState(false);
   const [muted, setMuted] = useState(false);
   const [contStatus, setContStatus] = useState('idle'); // idle|listening|error|stopped|unsupported
+  const [contInterim, setContInterim] = useState(''); // 常時モードの「今聞き取り中」テキスト(ライブ字幕)
   const [pendingCommit, setPendingCommit] = useState(null); // { cand, commitNow, startedAt }
   const contRecRef = useRef(null);
   const pendingTimerRef = useRef(null);
@@ -438,11 +439,13 @@ export default function VoiceControl({ game }) {
       contRecRef.current?.stop?.();
       contRecRef.current = null;
       setContStatus('idle');
+      setContInterim('');
       cancelPendingCommit();
       return;
     }
     const rec = createContinuousRecognizer({
-      onFinal: (text) => handlerRef.current(text),
+      onFinal: (text) => { setContInterim(''); handlerRef.current(text); },
+      onInterim: (text) => setContInterim(text),
       onStatus: (status) => setContStatus(status),
     });
     contRecRef.current = rec;
@@ -507,6 +510,12 @@ export default function VoiceControl({ game }) {
             {muted ? '🔇 ミュート' : contStatus === 'listening' ? '🎙️ LIVE' : '🤔 接続中'}
           </button>
           <button className="cont-exit-btn" onClick={() => setContMode(false)}>常時モード終了</button>
+          {/* ライブ字幕: 今マイクが聞き取っている途中経過を表示し、手放しでも認識状況が分かるようにする */}
+          {!muted && contInterim && (
+            <div className="cont-live-caption" aria-live="polite">
+              <span className="cont-live-dot" />{contInterim}
+            </div>
+          )}
           {canUndo && (
             <button
               className="cont-undo-btn"

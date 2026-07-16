@@ -296,7 +296,7 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
       )}
 
       {collision && <div className="warn-box mt12">⚠️ 複数の走者が同じ塁に到達しています。行き先を修正してください。</div>}
-      {dpNoRunnerOut && <div className="warn-box mt12">⚠️ 併殺打には走者のアウトが必要です。走者の行き先を「アウト」にしてください。</div>}
+      {dpNoRunnerOut && <div className="warn-box mt12">⚠️ ダブルプレーには走者のアウトが必要です。走者の行き先を「アウト」にしてください。</div>}
 
       <div className="confirm-card mt16" style={{ marginBottom: 0, padding: 12 }}>
         <div className="q" style={{ fontSize: 16, marginBottom: 0 }}>
