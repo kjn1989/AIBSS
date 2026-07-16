@@ -154,7 +154,7 @@ export default function App() {
           <h1 className="brand-row">
             <DiamondIcon size={36} className="brand-mark" />
             <div className="brand-text" aria-hidden="true">
-              <LedWordmark dot={3.4} gap={1.05} letterGap={2.3} sepGap={2.55} />
+              <LedWordmark dot={4} gap={0.5} letterGap={2.3} sepGap={2.55} glow />
               <div className="brand-diamond-sub">DIAMOND</div>
             </div>
             <span className="sr-only">AI-BASE DIAMOND</span>

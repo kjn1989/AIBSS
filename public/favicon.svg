@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
   <!-- AI-BASE DIAMOND アイコン(完全自作・ロゴ5a): 内野ダイヤモンド+点線オービット+塁ノード+本塁ノード -->
   <rect width="128" height="128" rx="28" fill="#0A0D10"/>
-  <circle cx="64" cy="64" r="54" stroke="#E8B44C" stroke-width="1.5" pathLength="360" stroke-dasharray="2 7" fill="none" opacity="0.45"/>
+  <circle cx="64" cy="64" r="54" stroke="#F2A15F" stroke-width="1.5" pathLength="360" stroke-dasharray="2 7" fill="none" opacity="0.3"/>
   <path d="M64 20 L108 64 L64 108 L20 64 Z" stroke="#E8B44C" stroke-width="5" fill="none" stroke-linejoin="round"/>
   <circle cx="64" cy="20" r="7" fill="#2DD4BF"/>
   <circle cx="108" cy="64" r="7" fill="#2DD4BF"/>

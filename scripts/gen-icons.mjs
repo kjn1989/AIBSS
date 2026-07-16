@@ -11,7 +11,18 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const svg = fs.readFileSync(path.join(root, 'public/favicon.svg'), 'utf-8')
   .replace('rx="28"', 'rx="0"'); // PNGアイコンは全面塗り(maskable/角丸はOS側で処理)
 
-const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+// 環境によりchromiumの置き場所が異なるため候補から解決する
+function resolveChromium() {
+  const base = '/opt/pw-browsers';
+  const candidates = [path.join(base, 'chromium')];
+  for (const d of fs.existsSync(base) ? fs.readdirSync(base) : []) {
+    if (d.startsWith('chromium-')) candidates.push(path.join(base, d, 'chrome-linux', 'chrome'));
+  }
+  for (const c of candidates) if (fs.existsSync(c) && fs.statSync(c).isFile()) return c;
+  return undefined; // playwright既定の解決に任せる
+}
+
+const browser = await chromium.launch({ executablePath: resolveChromium() });
 const page = await browser.newPage({ viewport: { width: 512, height: 512 }, deviceScaleFactor: 1 });
 
 const targets = [

@@ -14,10 +14,12 @@ export const BRAND_COLORS = {
   ivory: '#F5F1E6',
   aiGold: '#F4D9A0',
   off: 'rgba(255,255,255,0.05)',
+  orbit: '#F2A15F', // オービット(軌道)専用の薄いオレンジ。低不透明度で「ほんのり」見せる
 };
 
 // ---- ① ダイヤモンドアイコン(viewBox 0 0 128 128) ----
 // favicon/PWAアイコンとヘッダーの両方でこの1つのSVGを共用する(単一マスター)。
+// 十字線なしの内野ダイヤモンド(ひし形のみ)+薄いオレンジの点線オービット(確定仕様)。
 export function DiamondIcon({ size = 32, showOrbit = true, className, ...rest }) {
   return (
     <svg
@@ -31,9 +33,9 @@ export function DiamondIcon({ size = 32, showOrbit = true, className, ...rest })
       {showOrbit && (
         <circle
           cx="64" cy="64" r="54"
-          stroke={BRAND_COLORS.gold} strokeWidth="1.5"
+          stroke={BRAND_COLORS.orbit} strokeWidth="1.5"
           pathLength="360" strokeDasharray="2 7"
-          fill="none" opacity="0.45"
+          fill="none" opacity="0.3"
         />
       )}
       <path
@@ -90,13 +92,14 @@ function Glyph({ pattern, x, dot, gap, color, glow }) {
 }
 
 // dot/gap(px)でサイズ調整可能。letterGap=文字間、sepGap=セパレータ前後の間隔。
-// glow=true で微光フィルタを付与(小サイズでは視認性が下がるため既定offを推奨)。
-export function LedWordmark({ dot = 15, gap = 4, letterGap = 6, sepGap = 6, glow = false, className }) {
+// 高視認性LED仕様: ドット大きめ・隙間狭め(gap/dot≈0.125)を既定にし、縮小時も
+// 文字が「線の塊」として読めるようにする。glow=true で高輝度の発光フィルタを付与。
+export function LedWordmark({ dot = 16, gap = 2, letterGap = 6, sepGap = 6, glow = false, className }) {
   const cols = 5;
   const cell = dot + gap;
   const letterW = cols * dot + (cols - 1) * gap;
   const sepDot = Math.max(1.5, dot * 0.6);
-  const sepGapPx = Math.max(1, gap * 0.75);
+  const sepGapPx = Math.max(0.5, gap * 0.75);
   const sepCell = sepDot + sepGapPx;
   const sepW = 3 * sepDot + 2 * sepGapPx;
 
@@ -119,9 +122,11 @@ export function LedWordmark({ dot = 15, gap = 4, letterGap = 6, sepGap = 6, glow
     <svg className={className} width={totalW} height={totalH} viewBox={`0 0 ${totalW} ${totalH}`} aria-hidden="true">
       {glow && (
         <defs>
+          {/* 高輝度グロウ: ぼかしを2回重ねて発光の芯を強調しつつ、外側の滲みを柔らかく残す */}
           <filter id="ledGlow" x="-100%" y="-100%" width="300%" height="300%">
-            <feGaussianBlur stdDeviation={dot * 0.35} result="blur" />
+            <feGaussianBlur stdDeviation={dot * 0.45} result="blur" />
             <feMerge>
+              <feMergeNode in="blur" />
               <feMergeNode in="blur" />
               <feMergeNode in="SourceGraphic" />
             </feMerge>
