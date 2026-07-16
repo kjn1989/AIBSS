@@ -656,8 +656,10 @@ export function reducer(state, action) {
           viaError: p.result === 'error',
         };
       }
-      // 併殺: 追加アウト
-      if (p.outType === 'dp') g.outs += 1;
+      // 併殺の追加アウト: 走者側のアウトが moves に明示されていない場合のみ+1する。
+      // (現行UIは併殺打選択時に走者を必ず'out'にするため通常はここを通らない。
+      //  movesにアウトがあるのに+1すると打者アウトと合わせて3アウトになる二重計上バグになる)
+      if (p.outType === 'dp' && !(p.moves || []).some((m) => m.to === 'out')) g.outs += 1;
       if (p.extraOuts) g.outs += p.extraOuts;
 
       // このプレイでまとめて取ったアウト数(ダブル/トリプルプレー判定用)。changeHalf前に確定。
