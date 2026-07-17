@@ -529,6 +529,13 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 /* ---- ログ ---- */
 .log-line { font-size: 13px; padding: 6px 4px; border-bottom: 1px solid rgba(48, 54, 61, 0.4); color: var(--text-dim); }
 .log-line b { color: var(--text); }
+/* 連続イベント(牽制など)の回数バッジ */
+.log-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  margin-left: 6px; padding: 1px 8px; border-radius: 999px;
+  background: var(--bg-3); border: 1px solid var(--border);
+  font-size: 11px; font-weight: 800; color: var(--text);
+}
 
 /* ---- 音声ボタン ---- */
 .voice-fab {

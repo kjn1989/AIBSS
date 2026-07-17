@@ -164,9 +164,31 @@ function EditPlaySheet({ game, log, onClose }) {
   );
 }
 
-// その他イベント(交代・投手交代・走者イベント等)の簡易行
-function SimpleLogLine({ log }) {
-  return <div className="log-line">{log.text}</div>;
+// その他イベント(交代・投手交代・走者イベント等)の簡易行。
+// count>1 のときは「牽制 ×3」のように回数バッジ付きで1行にまとめて表示する
+function SimpleLogLine({ log, count = 1 }) {
+  return (
+    <div className="log-line">
+      {log.text}
+      {count > 1 && <span className="log-count">×{count}</span>}
+    </div>
+  );
+}
+
+// 表示用の行リストを作る: プレイカード以外で「同じ文言が連続する」ログ(牽制の連投等)は
+// 1行+回数に集約する。保存データは1件ずつのまま(Undo・記録の正確さに影響しない)。
+function toDisplayRows(logs) {
+  const rows = [];
+  for (const log of logs) {
+    const isCard = log.kind === 'atbat' || log.kind === 'defense';
+    const prev = rows[rows.length - 1];
+    if (!isCard && prev && !prev.isCard && prev.log.text === log.text) {
+      prev.count += 1;
+    } else {
+      rows.push({ isCard, log, count: 1 });
+    }
+  }
+  return rows;
 }
 
 function groupByHalfInning(playLogs) {
@@ -239,19 +261,19 @@ export function GameProgressContent({ game, editable = false }) {
               <b>{grp.inning}回{grp.isTop ? '表' : '裏'}</b>
               <span className="dim">{battingTeam}</span>
             </div>
-            {[...grp.logs].reverse().map((log) =>
-              log.kind === 'atbat' || log.kind === 'defense'
+            {toDisplayRows([...grp.logs].reverse()).map((row) =>
+              row.isCard
                 ? (
                   <PlayCard
-                    key={log.id}
-                    log={log}
+                    key={row.log.id}
+                    log={row.log}
                     nameOf={nameOf}
                     numberOf={numberOf}
                     edition={state.settings.edition}
                     onEdit={editable ? setEditLog : null}
                   />
                 )
-                : <SimpleLogLine key={log.id} log={log} />
+                : <SimpleLogLine key={row.log.id} log={row.log} count={row.count} />
             )}
           </div>
         );
