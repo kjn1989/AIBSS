@@ -1,10 +1,11 @@
 import React from 'react';
-import { useStore, isMyTeamBatting } from '../state/store.jsx';
+import { useStore, useT, isMyTeamBatting } from '../state/store.jsx';
 
 export default function Scoreboard({ game }) {
   const { state } = useStore();
-  const my = state.settings.teamName || '自チーム';
-  const opp = game.opponent || '相手';
+  const t = useT();
+  const my = state.settings.teamName || t('scoreboard.you');
+  const opp = game.opponent || t('scoreboard.opponent');
   const batting = isMyTeamBatting(game);
 
   return (
@@ -15,11 +16,12 @@ export default function Scoreboard({ game }) {
       </div>
       <div className="mid">
         <div className="inning">
-          {game.rules && game.inning > game.rules.innings && '延長'}{game.inning}回{game.isTop ? '表' : '裏'}
+          {game.rules && game.inning > game.rules.innings && t('scoreboard.extra')}
+          {t(game.isTop ? 'scoreboard.top' : 'scoreboard.bottom', { n: game.inning })}
         </div>
         <div className="small dim">
-          {batting ? '⚔️ 攻撃中' : '🧤 守備中'}
-          {game.rules ? `・${game.rules.innings}回制` : ''}
+          {batting ? t('scoreboard.batting') : t('scoreboard.fielding')}
+          {game.rules ? `・${game.rules.innings}${t('scoreboard.innings')}` : ''}
         </div>
         <div className="outs">
           {[0, 1, 2].map((i) => (

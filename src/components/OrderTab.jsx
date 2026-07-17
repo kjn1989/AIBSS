@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useStore, useCurrentGame, usePlayerName } from '../state/store.jsx';
+import { useStore, useT, useCurrentGame, usePlayerName } from '../state/store.jsx';
 import { POSITIONS } from '../lib/model.js';
 import Sheet from './Sheet.jsx';
 import LineupWizard from './LineupWizard.jsx';
@@ -9,6 +9,7 @@ import HeadCoachView from './HeadCoachView.jsx';
 // スコア入力タブ(打者カード/走者タップ)からも再利用するため export する
 export function SubstituteSheet({ game, slot, onClose, initialKind = 'ph' }) {
   const { state, dispatch } = useStore();
+  const t = useT();
   const nameOf = usePlayerName();
   const [kind, setKind] = useState(initialKind); // ph=代打 pr=代走 def=守備交代
   const [playerId, setPlayerId] = useState('');
@@ -59,7 +60,7 @@ export function SubstituteSheet({ game, slot, onClose, initialKind = 'ph' }) {
       </select>
 
       <div className="sheet-actions">
-        <button className="ghost" onClick={onClose}>キャンセル</button>
+        <button className="ghost" onClick={onClose}>{t('action.cancel')}</button>
         <button
           className="primary"
           disabled={!playerId}

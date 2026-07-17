@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import Sheet from './Sheet.jsx';
-import { useStore, usePlayerName, isMyTeamBatting } from '../state/store.jsx';
+import { useStore, useT, usePlayerName, isMyTeamBatting } from '../state/store.jsx';
 
 // 塁タップで開く走者イベントシート
 // 盗塁・盗塁死・暴投・捕逸・牽制死などの簡易パターンをワンタップ反映
@@ -8,10 +8,11 @@ import { useStore, usePlayerName, isMyTeamBatting } from '../state/store.jsx';
 // onPinchRunnerOpp(slot): 相手走者への代走シートを開く(相手チーム攻撃時)
 export default function RunnerEventSheet({ game, base, onClose, onPinchRunner, onPinchRunnerOpp }) {
   const { state, dispatch } = useStore();
+  const t = useT();
   const nameOf = usePlayerName();
   const [showCR, setShowCR] = useState(false);
   const runner = game.runners[base];
-  const baseName = ['', '一塁', '二塁', '三塁'][base];
+  const baseName = t(`base.${base}`);
   const next = base + 1 >= 4 ? 4 : base + 1;
 
   const fire = (event, moves) => {
@@ -41,8 +42,8 @@ export default function RunnerEventSheet({ game, base, onClose, onPinchRunner, o
 
   if (!runner) {
     return (
-      <Sheet title={`${baseName} (走者なし)`} onClose={onClose}>
-        <p className="small dim">この塁に走者はいません。修正用に走者を手動配置できます。</p>
+      <Sheet title={t('runner.noRunner', { base: baseName })} onClose={onClose}>
+        <p className="small dim">{t('runner.noRunnerHint')}</p>
         <div className="sheet-actions">
           <button
             onClick={() => {
@@ -53,15 +54,15 @@ export default function RunnerEventSheet({ game, base, onClose, onPinchRunner, o
               onClose();
             }}
           >
-            走者を置く(修正)
+            {t('runner.place')}
           </button>
-          <button className="ghost" onClick={onClose}>閉じる</button>
+          <button className="ghost" onClick={onClose}>{t('action.close')}</button>
         </div>
       </Sheet>
     );
   }
 
-  const name = runner.playerId ? nameOf(runner.playerId) : runner.letter || '走者';
+  const name = runner.playerId ? nameOf(runner.playerId) : runner.letter || t('runner.fallback');
   // 代走: この走者の打順スロット(自チーム攻撃時) / 相手打順スロット(相手チーム攻撃時)
   const runnerSlot = runner.playerId ? game.lineup.find((l) => l.playerId === runner.playerId) : null;
   const oppRunnerSlot = runner.letter ? game.oppLineup?.find((l) => l.letter === runner.letter) : null;
@@ -74,18 +75,18 @@ export default function RunnerEventSheet({ game, base, onClose, onPinchRunner, o
           style={{ width: '100%', marginBottom: 10 }}
           onClick={() => onPinchRunner(runnerSlot)}
         >
-          🔄 代走を送る({name}に代えて)
+          {t('runner.pinch', { name })}
         </button>
       )}
       {/* 臨時代走: 塁上だけ差し替え、打順は変えず元の選手は次打席で復帰する */}
       {runner.playerId && (
         <>
           <button className="ghost" style={{ width: '100%', marginBottom: showCR ? 6 : 10 }} onClick={() => setShowCR((v) => !v)}>
-            🏃 臨時代走({name}の代わりに走る・打順はそのまま)
+            {t('runner.courtesyToggle', { name })}
           </button>
           {showCR && (
             <div className="mb8">
-              <p className="small dim">臨時代走を選ぶと、この塁の走者だけが入れ替わります。{name}さんは打順に残り、次の打席で通常どおり出場(復帰)します。</p>
+              <p className="small dim">{t('runner.courtesyHint', { name })}</p>
               <div className="grid2">
                 {state.players
                   .filter((p) => !p.id.startsWith('demo-') && ![1, 2, 3].some((b) => game.runners[b]?.playerId === p.id))
@@ -112,29 +113,29 @@ export default function RunnerEventSheet({ game, base, onClose, onPinchRunner, o
           style={{ width: '100%', marginBottom: 10 }}
           onClick={() => onPinchRunnerOpp(oppRunnerSlot)}
         >
-          🔄 相手の代走を送る({name}に代えて)
+          {t('runner.oppPinch', { name })}
         </button>
       )}
       <div className="grid2">
         <button className="primary" onClick={() => fire('sb', sbMoves)}>
-          盗塁成功{isDouble ? '(重盗)' : ''} → {next === 4 ? '本塁' : ['', '一', '二', '三'][next] + '塁'}
+          {t('runner.sbSuccess', { double: isDouble ? t('runner.sbDouble') : '', base: t(`base.${next}`) })}
         </button>
         <button className="danger" onClick={() => fire('cs', [{ from: base, to: 'out' }])}>
-          盗塁死
+          {t('runner.cs')}
         </button>
-        <button onClick={() => fire('wp', allAdvanceMoves)}>暴投(全走者進塁)</button>
-        <button onClick={() => fire('pb', allAdvanceMoves)}>捕逸(全走者進塁)</button>
+        <button onClick={() => fire('wp', allAdvanceMoves)}>{t('runner.wp')}</button>
+        <button onClick={() => fire('pb', allAdvanceMoves)}>{t('runner.pb')}</button>
         <button className="danger" onClick={() => fire('pickoff', [{ from: base, to: 'out' }])}>
-          牽制死
+          {t('runner.pickoff')}
         </button>
-        <button onClick={() => fire('pickoffThrow', [])}>牽制(セーフ)</button>
+        <button onClick={() => fire('pickoffThrow', [])}>{t('runner.pickoffSafe')}</button>
         {base < 3 && (
           <button onClick={() => fire('wp', chainAdvance(base))}>
-            この走者が進塁
+            {t('runner.advance')}
           </button>
         )}
         {base === 3 && (
-          <button onClick={() => fire('wp', [{ from: 3, to: 4 }])}>この走者が生還</button>
+          <button onClick={() => fire('wp', [{ from: 3, to: 4 }])}>{t('runner.score')}</button>
         )}
       </div>
       <div className="sheet-actions">
@@ -145,9 +146,9 @@ export default function RunnerEventSheet({ game, base, onClose, onPinchRunner, o
             onClose();
           }}
         >
-          走者を消す(修正)
+          {t('runner.remove')}
         </button>
-        <button className="ghost" onClick={onClose}>閉じる</button>
+        <button className="ghost" onClick={onClose}>{t('action.close')}</button>
       </div>
     </Sheet>
   );

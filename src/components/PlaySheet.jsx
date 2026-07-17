@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import Sheet from './Sheet.jsx';
-import { useStore, usePlayerName, isMyTeamBatting } from '../state/store.jsx';
+import { useStore, useT, usePlayerName, isMyTeamBatting } from '../state/store.jsx';
 import { RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES, outTypeLabel } from '../lib/model.js';
 import { proposeMoves, batterDestOptions, runnerDestOptions, DEST_LABEL, judgeAdvance } from '../lib/plays.js';
 import FieldPad from './FieldPad.jsx';
@@ -10,10 +10,17 @@ const NEEDS_DIRECTION = ['single', 'double', 'triple', 'hr', 'out', 'error', 'sa
 // プレイ確定シート: 方向・走者進塁・打点をまとめて確認して1タップ確定
 export default function PlaySheet({ game, initial, batterName, onClose }) {
   const { state, dispatch } = useStore();
+  const t = useT();
+  const lang = state.settings.lang || 'ja';
   const nameOf = usePlayerName();
   const edition = state.settings.edition;
+  // 凡打の種類ボタンの表示: 日本語モードはエディション別呼称(少年野球のゲッツー等)を維持し、
+  // 英語モードは辞書(outType.*)を使う。※確認文(summary)は打球方向(DIRECTIONS)が未翻訳のため
+  // 現時点では日本語のまま(方向・妨害系の英語化は次フェーズで対応)。
+  const outLabel = (k) => (lang === 'ja' ? outTypeLabel(k, edition) : t(`outType.${k}`));
   const result = initial.result;
   const def = RESULTS[result];
+  const resultLabel = lang === 'ja' ? def.label : t(`result.${result}`);
   const myBatting = isMyTeamBatting(game);
 
   const runnersOn = { 1: !!game.runners[1], 2: !!game.runners[2], 3: !!game.runners[3] };
@@ -139,10 +146,10 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
   };
 
   return (
-    <Sheet title={`${batterName ? batterName + ': ' : '相手打者: '}${def.label}`} onClose={onClose}>
+    <Sheet title={`${batterName ? batterName + ': ' : t('playsheet.oppBatter')}${resultLabel}`} onClose={onClose}>
       {needsDir && (
         <>
-          <div className="section-title" style={{ marginTop: 0 }}>打球方向</div>
+          <div className="section-title" style={{ marginTop: 0 }}>{t('playsheet.direction')}</div>
           {dirOpen ? (
             <FieldPad
               value={direction}
@@ -151,7 +158,7 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
           ) : (
             <button type="button" className="dir-summary" onClick={() => setDirOpen(true)}>
               <span className="dir-label">{DIRECTIONS[direction]}</span>
-              <span className="change">変更</span>
+              <span className="change">{t('playsheet.change')}</span>
             </button>
           )}
         </>
@@ -159,11 +166,11 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
 
       {result === 'so' && (
         <>
-          <div className="section-title">三振の種類</div>
+          <div className="section-title">{t('playsheet.soType')}</div>
           <div className="grid2">
-            {Object.entries(SO_TYPES).map(([k, v]) => (
+            {Object.keys(SO_TYPES).map((k) => (
               <button key={k} className={soType === k ? 'primary' : ''} onClick={() => setSoType(k)}>
-                {v}
+                {lang === 'ja' ? SO_TYPES[k] : t(`soType.${k}`)}
               </button>
             ))}
           </div>
@@ -172,7 +179,7 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
 
       {result === 'out' && (
         <>
-          <div className="section-title">凡打の種類</div>
+          <div className="section-title">{t('playsheet.outType')}</div>
           <div className="grid2">
             {Object.keys(OUT_TYPES).map((k) => (
               <button
@@ -181,7 +188,7 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
                 onClick={() => selectOutType(k)}
                 disabled={k === 'dp' && !hadRunners}
               >
-                {outTypeLabel(k, edition)}
+                {outLabel(k)}
               </button>
             ))}
           </div>
@@ -305,9 +312,9 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
       </div>
 
       <div className="sheet-actions">
-        <button className="ghost" onClick={onClose}>キャンセル</button>
+        <button className="ghost" onClick={onClose}>{t('action.cancel')}</button>
         <button className="primary" onClick={confirm} disabled={(needsDir && !direction) || collision || dpNoRunnerOut}>
-          確定
+          {t('action.confirm')}
         </button>
       </div>
     </Sheet>

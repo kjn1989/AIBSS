@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useStore, useCurrentGame, usePlayerName, isMyTeamBatting, currentBatter, currentOppBatter } from '../state/store.jsx';
+import { useStore, useT, useCurrentGame, usePlayerName, isMyTeamBatting, currentBatter, currentOppBatter } from '../state/store.jsx';
 import Scoreboard from './Scoreboard.jsx';
 import Diamond from './Diamond.jsx';
 import PitchCounter from './PitchCounter.jsx';
@@ -237,6 +237,7 @@ function RulePicker({ presetId, custom, edition, onPresetChange, setCustom }) {
 // ---- 試合セットアップ(試合がない/選択されていないとき) ----
 function GameSetup() {
   const { state, dispatch } = useStore();
+  const t = useT();
   const [opponent, setOpponent] = useState('');
   const [isHome, setIsHome] = useState(false);
   const [season, setSeason] = useState('');
@@ -262,14 +263,14 @@ function GameSetup() {
   return (
     <div>
       <div className="card">
-        <h2>新しい試合を開始</h2>
-        <label className="small dim">対戦相手</label>
-        <input value={opponent} onChange={(e) => setOpponent(e.target.value)} placeholder="対戦相手名" />
-        <label className="small dim mt8" style={{ display: 'block' }}>シーズン/大会名(任意)</label>
+        <h2>{t('gamesetup.title')}</h2>
+        <label className="small dim">{t('gamesetup.opponent')}</label>
+        <input value={opponent} onChange={(e) => setOpponent(e.target.value)} placeholder={t('gamesetup.opponent.placeholder')} />
+        <label className="small dim mt8" style={{ display: 'block' }}>{t('gamesetup.season')}</label>
         <input
           value={season}
           onChange={(e) => setSeason(e.target.value)}
-          placeholder="例: 2026春季大会"
+          placeholder={t('gamesetup.season.placeholder')}
           list="season-suggest"
         />
         {knownSeasons.length > 0 && (
@@ -278,27 +279,27 @@ function GameSetup() {
           </datalist>
         )}
         <div className="toggle-row mt12">
-          <button className={!isHome ? 'active' : ''} onClick={() => setIsHome(false)}>先攻</button>
-          <button className={isHome ? 'active' : ''} onClick={() => setIsHome(true)}>後攻</button>
+          <button className={!isHome ? 'active' : ''} onClick={() => setIsHome(false)}>{t('gamesetup.first')}</button>
+          <button className={isHome ? 'active' : ''} onClick={() => setIsHome(true)}>{t('gamesetup.second')}</button>
         </div>
 
         <RulePicker presetId={presetId} custom={custom} edition={edition} onPresetChange={onPresetChange} setCustom={setCustom} />
 
         <button className="primary" style={{ width: '100%' }} onClick={startGame}>
-          試合開始
+          {t('gamesetup.start')}
         </button>
       </div>
 
       {ongoing.length > 0 && (
         <div className="card">
-          <h2>進行中の試合を再開</h2>
+          <h2>{t('gamesetup.resume.title')}</h2>
           {ongoing.map((g) => (
             <div className="row" key={g.id}>
               <div className="grow">
-                <div>{g.date} vs {g.opponent || '対戦相手'}</div>
-                <div className="dim">{g.myScore}-{g.oppScore} {g.inning}回{g.isTop ? '表' : '裏'}</div>
+                <div>{g.date} {t('gamesetup.resume.vs')} {g.opponent || t('gamesetup.opponent.fallback')}</div>
+                <div className="dim">{g.myScore}-{g.oppScore} {t(g.isTop ? 'scoreboard.top' : 'scoreboard.bottom', { n: g.inning })}</div>
               </div>
-              <button className="small primary" onClick={() => dispatch({ type: 'SELECT_GAME', id: g.id })}>再開</button>
+              <button className="small primary" onClick={() => dispatch({ type: 'SELECT_GAME', id: g.id })}>{t('gamesetup.resume.button')}</button>
             </div>
           ))}
         </div>
@@ -310,11 +311,12 @@ function GameSetup() {
 // ---- 打者変更シート ----
 function BatterSheet({ game, onClose, onPinchHitter }) {
   const { dispatch } = useStore();
+  const t = useT();
   const nameOf = usePlayerName();
   return (
-    <Sheet title="次の打者を選択" onClose={onClose}>
+    <Sheet title={t('sheet.nextBatter')} onClose={onClose}>
       <button className="primary" style={{ width: '100%', marginBottom: 10 }} onClick={onPinchHitter}>
-        🔄 代打を送る({nameOf(currentBatter(game)?.playerId)}に代えて)
+        {t('sheet.pinchHitter', { name: nameOf(currentBatter(game)?.playerId) })}
       </button>
       {game.lineup.map((slot, i) => (
         <div className="row" key={slot.order}>
@@ -366,6 +368,7 @@ function OppBatterSheet({ game, onClose, onPinchHitter }) {
 // ---- 相手選手交代シート(代打・代走・守備交代。実名の代わりにA〜Tの記号を使う) ----
 function OppSubstituteSheet({ game, slot, onClose, initialKind = 'ph' }) {
   const { dispatch } = useStore();
+  const t = useT();
   const [kind, setKind] = useState(initialKind); // ph=代打 pr=代走 def=守備交代
   const [letter, setLetter] = useState('');
 
@@ -407,7 +410,7 @@ function OppSubstituteSheet({ game, slot, onClose, initialKind = 'ph' }) {
       )}
 
       <div className="sheet-actions">
-        <button className="ghost" onClick={onClose}>キャンセル</button>
+        <button className="ghost" onClick={onClose}>{t('action.cancel')}</button>
         <button
           className="primary"
           disabled={!letter}
@@ -433,6 +436,7 @@ function OppSubstituteSheet({ game, slot, onClose, initialKind = 'ph' }) {
 // ---- スコア手動修正シート(回を指定して±。事後編集で点差が狂ったときの帳尻合わせ用) ----
 function ScoreAdjustSheet({ game, onClose }) {
   const { state, dispatch } = useStore();
+  const t = useT();
   const [inning, setInning] = useState(game.inning);
   const myName = state.settings.teamName || 'マイチーム';
   const oppName = game.opponent || '対戦相手';
@@ -462,7 +466,7 @@ function ScoreAdjustSheet({ game, onClose }) {
         </div>
       ))}
       <div className="sheet-actions">
-        <button className="primary" onClick={onClose} style={{ width: '100%' }}>閉じる</button>
+        <button className="primary" onClick={onClose} style={{ width: '100%' }}>{t('action.close')}</button>
       </div>
     </Sheet>
   );
@@ -474,6 +478,7 @@ function ScoreAdjustSheet({ game, onClose }) {
 // APIキー未設定/オフライン時はキーワード規則(guessPlayFromMemo)でフォールバック。
 function NoteSheet({ game, onClose, onConvert }) {
   const { state, dispatch } = useStore();
+  const t = useT();
   const nameOf = usePlayerName();
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -534,7 +539,7 @@ function NoteSheet({ game, onClose, onConvert }) {
       )}
       {cands && cands.length === 0 && !err && <div className="small dim mt8">変換候補がありませんでした。</div>}
       <div className="sheet-actions" style={{ flexWrap: 'wrap', gap: 8 }}>
-        <button className="ghost" onClick={onClose}>閉じる</button>
+        <button className="ghost" onClick={onClose}>{t('action.close')}</button>
         <button disabled={!text.trim()} onClick={() => { dispatch({ type: 'ADD_NOTE', gameId: game.id, text: text.trim() }); onClose(); }}>
           メモだけ記録
         </button>
