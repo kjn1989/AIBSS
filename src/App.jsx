@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useStore, useT } from './state/store.jsx';
 import HomeTab from './components/HomeTab.jsx';
 import ScoreTab from './components/ScoreTab.jsx';
@@ -13,6 +13,7 @@ import { addProfile, switchActiveProfile } from './lib/profiles.js';
 import { persist } from './state/store.jsx';
 import { DiamondIcon, LedWordmark } from './components/BrandMark.jsx';
 import EditionText from './components/EditionText.jsx';
+import { registerBackButtonHandler } from './lib/nativeBridge.js';
 
 // ラベルは i18n キー(lib/i18n.js)。表示時に useT() で現在の言語に解決する
 const TABS = [
@@ -99,6 +100,13 @@ export default function App() {
   const t = useT();
   const { invite, accept, dismiss } = useInvite(dispatch);
   const officialJoin = useOfficialJoin(state);
+
+  // Android物理/ジェスチャー「戻る」: ホーム以外ならホームタブへ、ホームなら最小化(Webでは無効)
+  const tabRef = useRef(tab);
+  tabRef.current = tab;
+  useEffect(() => {
+    return registerBackButtonHandler(() => tabRef.current === 'home', () => setTab('home'));
+  }, []);
 
   return (
     <div className="app" data-edition={state.settings.edition || '草野球'}>

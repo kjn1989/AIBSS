@@ -7,6 +7,11 @@
 //   1. localStorage と IndexedDB の2系統に保存(片方が消えても復旧)
 //   2. 起動時、localStorageが空でIndexedDBに残っていれば自動復旧
 //   3. navigator.storage.persist() で消去対象からの除外を要求(対応環境)
+//
+// 補足(Capacitorネイティブラップ時): iOSのITP自動削除はSafari上のWeb
+// ストレージが対象で、Capacitorアプリが使うWKWebView専用のストレージ
+// (アプリのサンドボックス内)は対象外。ネイティブアプリ化そのものが、
+// この消失リスクの根本的な解決策になる(詳細は docs/mobile-build.md)。
 // ============================================================
 
 const DB_NAME = 'aibss';

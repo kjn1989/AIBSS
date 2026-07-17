@@ -5,6 +5,7 @@ import WatchView from './components/WatchView.jsx';
 import { StoreProvider } from './state/store.jsx';
 import { recoverIfNeeded, requestPersistentStorage } from './lib/durableStore.js';
 import { ensureRegistry, getActiveProfileId, profileStorageKey, LEGACY_DATA_KEY } from './lib/profiles.js';
+import { initNativeChrome } from './lib/nativeBridge.js';
 import './styles.css';
 
 // ?watch=1 が付いたリンクは観戦専用ページ(読み取り専用)を表示する
@@ -36,6 +37,7 @@ recoverIfNeeded(LEGACY_DATA_KEY)
   .finally(() => {
     mount();
     requestPersistentStorage();
+    initNativeChrome(); // ネイティブ(Capacitor)ラップ時のみステータスバー/スプラッシュを制御
   });
 
 // PWA: Service Worker 登録(本番ビルドのみ)
