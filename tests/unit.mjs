@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { proposeMoves, judgeAdvance, batterDestOptions } from '../src/lib/plays.js';
 import { gameEndCheck, initialPresetIdFor, describeRules } from '../src/lib/rules.js';
 import { aggregateBatting, battingMetrics, pitchingMetrics, titleLeaders } from '../src/lib/stats.js';
+import { translate } from '../src/lib/i18n.js';
 
 // ---- plays.js ----
 test('proposeMoves: 単打は三塁・二塁走者が生還し一塁走者は二塁へ', () => {
@@ -125,4 +126,12 @@ test('titleLeaders: 同数首位は全員返す', () => {
   const { leaders, value } = titleLeaders(map, 'h');
   assert.deepEqual(leaders.sort(), ['a', 'b']);
   assert.equal(value, 5);
+});
+
+// ---- i18n ----
+test('translate: 言語別の解決とjaフォールバック', () => {
+  assert.equal(translate('ja', 'tab.home'), 'ホーム');
+  assert.equal(translate('en', 'tab.home'), 'Home');
+  assert.equal(translate('xx', 'tab.home'), 'ホーム'); // 未知言語はjaへ
+  assert.equal(translate('en', 'no.such.key'), 'no.such.key'); // 未定義キーはキー名を返す
 });

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useStore } from './state/store.jsx';
+import { useStore, useT } from './state/store.jsx';
 import HomeTab from './components/HomeTab.jsx';
 import ScoreTab from './components/ScoreTab.jsx';
 import OrderTab from './components/OrderTab.jsx';
@@ -14,12 +14,13 @@ import { persist } from './state/store.jsx';
 import { DiamondIcon, LedWordmark } from './components/BrandMark.jsx';
 import EditionText from './components/EditionText.jsx';
 
+// ラベルは i18n キー(lib/i18n.js)。表示時に useT() で現在の言語に解決する
 const TABS = [
-  { id: 'home', label: 'ホーム', icon: '🏆' },
-  { id: 'score', label: 'スコア入力', icon: '⚾' },
-  { id: 'order', label: 'オーダー', icon: '📋' },
-  { id: 'stats', label: '成績', icon: '📊' },
-  { id: 'result', label: '試合結果', icon: '🏟️' },
+  { id: 'home', labelKey: 'tab.home', icon: '🏆' },
+  { id: 'score', labelKey: 'tab.score', icon: '⚾' },
+  { id: 'order', labelKey: 'tab.order', icon: '📋' },
+  { id: 'stats', labelKey: 'tab.stats', icon: '📊' },
+  { id: 'result', labelKey: 'tab.result', icon: '🏟️' },
 ];
 
 // 招待リンク(?invite=1&team=...&cfg=...)で開かれたら、同期設定を取り込むか確認する
@@ -95,6 +96,7 @@ function useOfficialJoin(state) {
 export default function App() {
   const [tab, setTab] = useState('home');
   const { state, dispatch } = useStore();
+  const t = useT();
   const { invite, accept, dismiss } = useInvite(dispatch);
   const officialJoin = useOfficialJoin(state);
 
@@ -179,10 +181,10 @@ export default function App() {
       </main>
 
       <nav className="tabbar">
-        {TABS.map((t) => (
-          <button key={t.id} className={tab === t.id ? 'active' : ''} onClick={() => setTab(t.id)}>
-            <span className="tab-icon">{t.icon}</span>
-            {t.label}
+        {TABS.map((tb) => (
+          <button key={tb.id} className={tab === tb.id ? 'active' : ''} onClick={() => setTab(tb.id)}>
+            <span className="tab-icon">{tb.icon}</span>
+            {t(tb.labelKey)}
           </button>
         ))}
       </nav>

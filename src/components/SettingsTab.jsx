@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useStore, usePlayerName, persist } from '../state/store.jsx';
+import { useStore, usePlayerName, persist, useT } from '../state/store.jsx';
 import { parseFirebaseConfig } from '../lib/cloud.js';
 import { encodeWatchLink, encodeInviteLink } from './WatchView.jsx';
 import QRCode from './QRCode.jsx';
@@ -12,6 +12,7 @@ import Sheet from './Sheet.jsx';
 
 export default function SettingsTab() {
   const { state, dispatch } = useStore();
+  const t = useT();
   const [newName, setNewName] = useState('');
   const [newNumber, setNewNumber] = useState('');
   const [newThrows, setNewThrows] = useState('');
@@ -30,6 +31,25 @@ export default function SettingsTab() {
   return (
     <div>
       <TeamSwitcherCard />
+
+      <div className="card">
+        <h2>🌐 {t('settings.language')} / Language</h2>
+        <div className="toggle-row">
+          <button
+            className={(state.settings.lang || 'ja') === 'ja' ? 'active' : ''}
+            onClick={() => dispatch({ type: 'UPDATE_SETTINGS', patch: { lang: 'ja' } })}
+          >
+            日本語
+          </button>
+          <button
+            className={state.settings.lang === 'en' ? 'active' : ''}
+            onClick={() => dispatch({ type: 'UPDATE_SETTINGS', patch: { lang: 'en' } })}
+          >
+            English
+          </button>
+        </div>
+        <p className="small dim">{t('settings.language.hint')}</p>
+      </div>
 
       <div className="card">
         <h2>チーム設定</h2>

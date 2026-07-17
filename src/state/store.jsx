@@ -11,6 +11,7 @@ import {
 } from '../lib/model.js';
 import { generateDemoData } from '../lib/demo.js';
 import { idbSave } from '../lib/durableStore.js';
+import { translate, DEFAULT_LANG } from '../lib/i18n.js';
 import { getActiveProfileId, profileStorageKey, listProfiles, updateProfileMeta } from '../lib/profiles.js';
 
 const UNDO_LIMIT = 50;
@@ -31,6 +32,7 @@ export const initialState = {
   currentGameId: null,
   settings: {
     teamName: 'マイチーム',
+    lang: DEFAULT_LANG, // 表示言語 'ja' | 'en'。保存済みログは記録時の言語のまま残す。
     edition: DEFAULT_EDITION, // '草野球' | 'ブカツ(中高大)' | '少年野球'。AIスタメン/AI選手名鑑は草野球限定。
     firebaseConfigText: '', // 設定画面で貼り付けるJSON
     cloudEnabled: false,
@@ -1016,6 +1018,14 @@ export function usePlayerName() {
   const { state } = useStore();
   const map = Object.fromEntries(state.players.map((p) => [p.id, p.name]));
   return (id) => map[id] || '不明';
+}
+
+// 表示言語の翻訳フック。t('tab.home') のように使う(辞書は lib/i18n.js)。
+// 言語は settings.lang(ja/en)。今後の英語化はこの t() 経由に順次移行する。
+export function useT() {
+  const { state } = useStore();
+  const lang = state.settings.lang || DEFAULT_LANG;
+  return (key, params) => translate(lang, key, params);
 }
 
 export function useCurrentGame() {
