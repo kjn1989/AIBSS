@@ -1,17 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { useStore } from '../state/store.jsx';
+import { useStore, useT } from '../state/store.jsx';
 import {
   officialAvailable, watchAuth, loginWithPassword, logout,
   createCloudTeam, createInvite, inviteUrl, listMyTeams, listMembers, setMemberRole, removeMember,
 } from '../lib/officialCloud.js';
 import QRCode from './QRCode.jsx';
 
-const ROLE_LABEL = { owner: '管理者', scorer: '記録係', viewer: '観戦' };
+const ROLE_KEYS = ['owner', 'scorer', 'viewer'];
 
 // AI-BASE公式クラウド(Supabase): ログイン+チーム登録+招待+メンバー管理。
 // 旧方式(自前Firebase)のCloudCardとは独立(公式が設定されていれば同期はこちらを優先)。
 export default function OfficialCloudCard() {
   const { state, dispatch } = useStore();
+  const t = useT();
+  const roleLabel = (k) => t(`occ.role.${k}`);
   const [user, setUser] = useState(undefined); // undefined=確認中 / null=未ログイン
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -38,7 +40,7 @@ export default function OfficialCloudCard() {
         setMyRole(mine?.role || '');
         setMembers(await listMembers(teamId));
       } catch (e) {
-        setErr(e?.message || 'メンバー情報の取得に失敗しました');
+        setErr(e?.message || t('occ.membersError'));
       }
     })();
   }, [user, teamId]);
@@ -56,7 +58,7 @@ export default function OfficialCloudCard() {
   };
 
   const registerTeam = run(async () => {
-    const id = await createCloudTeam({ name: state.settings.teamName || 'マイチーム', edition: state.settings.edition || '草野球' });
+    const id = await createCloudTeam({ name: state.settings.teamName || t('app.teamFallback'), edition: state.settings.edition || '草野球' });
     // officialTeamIdを設定するとCloudSyncが接続し、既存の選手・試合・参加メンバーを自動アップロードする
     dispatch({ type: 'UPDATE_SETTINGS', patch: { officialTeamId: id } });
   });
@@ -74,16 +76,15 @@ export default function OfficialCloudCard() {
   })();
 
   const statusLabel = {
-    off: 'オフ', connecting: '接続中…', on: '✅ 同期中', error: '⚠️ エラー',
+    off: t('occ.status.off'), connecting: t('occ.status.connecting'), on: t('occ.status.on'), error: t('occ.status.error'),
   }[state.cloudStatus];
 
   if (!available) {
     return (
       <div className="card">
-        <h2>☁️ AI-BASE公式クラウド</h2>
+        <h2>{t('occ.title')}</h2>
         <p className="small dim">
-          準備中です。ログイン+招待リンクだけでチーム同期ができる公式クラウド機能が、まもなく使えるようになります。
-          (運営者向け: docs/supabase-setup.md の手順で接続設定を注入すると有効になります)
+          {t('occ.unavailableDesc')}
         </p>
       </div>
     );
@@ -91,19 +92,18 @@ export default function OfficialCloudCard() {
 
   return (
     <div className="card">
-      <h2>☁️ AI-BASE公式クラウド</h2>
+      <h2>{t('occ.title')}</h2>
 
-      {user === undefined && <p className="small dim">ログイン状態を確認中…</p>}
+      {user === undefined && <p className="small dim">{t('occ.checkingAuth')}</p>}
 
       {user === null && (
         <>
           <p className="small dim" style={{ marginBottom: 10 }}>
-            メールアドレスとパスワードでログイン(初めての場合は自動で新規登録)すると、
-            このチームをクラウドに登録して、招待リンクだけでチームメイトと同期できます。
+            {t('occ.loginDesc')}
           </p>
-          <input type="email" placeholder="メールアドレス" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <input type="email" placeholder={t('occ.email')} value={email} onChange={(e) => setEmail(e.target.value)} />
           <input
-            type="password" placeholder="パスワード(6文字以上)" className="mt8"
+            type="password" placeholder={t('occ.password')} className="mt8"
             value={password} onChange={(e) => setPassword(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && email.includes('@') && password.length >= 6 && run(() => loginWithPassword(email.trim(), password))()}
           />
@@ -112,7 +112,7 @@ export default function OfficialCloudCard() {
             disabled={busy || !email.includes('@') || password.length < 6}
             onClick={run(() => loginWithPassword(email.trim(), password))}
           >
-            {busy ? '処理中…' : 'ログイン / 新規登録'}
+            {busy ? t('occ.busy') : t('occ.loginBtn')}
           </button>
         </>
       )}
@@ -120,17 +120,16 @@ export default function OfficialCloudCard() {
       {user && !teamId && (
         <>
           <p className="small" style={{ marginBottom: 8 }}>
-            ログイン中: <b>{user.email}</b>
-            <button className="small ghost" style={{ marginLeft: 8 }} onClick={run(logout)}>ログアウト</button>
+            {t('occ.loggedInAs')}<b>{user.email}</b>
+            <button className="small ghost" style={{ marginLeft: 8 }} onClick={run(logout)}>{t('occ.logout')}</button>
           </p>
           <p className="small dim" style={{ marginBottom: 10 }}>
-            「クラウドに登録」すると、このチームの選手・試合・参加メンバーがアップロードされ、
-            以後の記録が自動同期されます。チームメイトの参加は招待リンクから。
+            {t('occ.registerDesc')}
           </p>
           <button className="primary" style={{ width: '100%' }} disabled={busy} onClick={registerTeam}>
-            ⬆ このチームをクラウドに登録
+            {t('occ.registerBtn')}
           </button>
-          <p className="small dim mt8">別チームへの参加は、管理者から受け取った招待リンクを開いてください。</p>
+          <p className="small dim mt8">{t('occ.joinHint')}</p>
         </>
       )}
 
@@ -138,27 +137,27 @@ export default function OfficialCloudCard() {
         <>
           <div className="flex" style={{ marginBottom: 8 }}>
             <span className="grow small">
-              状態: {statusLabel} / あなた: <b>{ROLE_LABEL[myRole] || myRole || '確認中'}</b>
+              {t('occ.stateYou', { status: statusLabel })}<b>{myRole ? roleLabel(myRole) : t('occ.roleChecking')}</b>
             </span>
-            <button className="small ghost" onClick={run(logout)}>ログアウト</button>
+            <button className="small ghost" onClick={run(logout)}>{t('occ.logout')}</button>
           </div>
 
           {(myRole === 'owner') && (
             <>
-              <div className="section-title">チームメイトを招待</div>
+              <div className="section-title">{t('occ.inviteTitle')}</div>
               <div className="grid2">
-                <button disabled={busy} onClick={() => makeInvite('scorer')}>🔗 記録係を招待</button>
-                <button disabled={busy} onClick={() => makeInvite('viewer')}>👀 観戦を招待</button>
+                <button disabled={busy} onClick={() => makeInvite('scorer')}>{t('occ.inviteScorer')}</button>
+                <button disabled={busy} onClick={() => makeInvite('viewer')}>{t('occ.inviteViewer')}</button>
               </div>
               {invite && (
                 <div className="mt8">
                   <p className="small" style={{ color: 'var(--green)' }}>
-                    ✅ {ROLE_LABEL[invite.role]}用の招待リンクを作成しました(コピー済み・14日有効):
+                    {t('occ.inviteCreated', { role: roleLabel(invite.role) })}
                   </p>
                   <input readOnly value={invite.url} onFocus={(e) => e.target.select()} />
-                  <button className="small mt8" onClick={() => setShowQr(!showQr)}>{showQr ? 'QRを閉じる' : '📱 QRを表示'}</button>
+                  <button className="small mt8" onClick={() => setShowQr(!showQr)}>{showQr ? t('occ.hideQr') : t('occ.showQr')}</button>
                   {showQr && (
-                    <div className="qr-box"><QRCode text={invite.url} /><span className="small dim">スマホのカメラで読み取ってもらってください</span></div>
+                    <div className="qr-box"><QRCode text={invite.url} /><span className="small dim">{t('set.qrHint')}</span></div>
                   )}
                 </div>
               )}
@@ -167,7 +166,7 @@ export default function OfficialCloudCard() {
 
           {members && (
             <>
-              <div className="section-title">メンバー ({members.length}人)</div>
+              <div className="section-title">{t('occ.membersCount', { n: members.length })}</div>
               {members.map((m) => (
                 <div className="row" key={m.uid}>
                   <div className="grow">
@@ -185,21 +184,21 @@ export default function OfficialCloudCard() {
                           setMembers(await listMembers(teamId));
                         })()}
                       >
-                        {Object.entries(ROLE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                        {ROLE_KEYS.map((k) => <option key={k} value={k}>{roleLabel(k)}</option>)}
                       </select>
                       <button
                         className="small ghost"
                         style={{ color: 'var(--red)' }}
-                        onClick={() => window.confirm(`${m.name || m.email} をチームから外しますか？`) && run(async () => {
+                        onClick={() => window.confirm(t('occ.removeConfirm', { name: m.name || m.email })) && run(async () => {
                           await removeMember(teamId, m.uid);
                           setMembers(await listMembers(teamId));
                         })()}
                       >
-                        除名
+                        {t('occ.remove')}
                       </button>
                     </>
                   ) : (
-                    <span className="pill">{ROLE_LABEL[m.role] || m.role}</span>
+                    <span className="pill">{roleLabel(m.role)}</span>
                   )}
                 </div>
               ))}
@@ -210,11 +209,11 @@ export default function OfficialCloudCard() {
             className="ghost small mt12"
             style={{ color: 'var(--red)' }}
             onClick={() => {
-              if (!window.confirm('このチームとクラウドの接続を解除しますか？(クラウド上のデータは残ります。端末のデータもそのまま)')) return;
+              if (!window.confirm(t('occ.disconnectConfirm'))) return;
               dispatch({ type: 'UPDATE_SETTINGS', patch: { officialTeamId: null } });
             }}
           >
-            接続を解除
+            {t('occ.disconnect')}
           </button>
         </>
       )}
