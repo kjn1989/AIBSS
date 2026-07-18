@@ -611,6 +611,26 @@ export const MESSAGES = {
     'occ.removeConfirm': '{name} をチームから外しますか？',
     'occ.disconnect': '接続を解除',
     'occ.disconnectConfirm': 'このチームとクラウドの接続を解除しますか？(クラウド上のデータは残ります。端末のデータもそのまま)',
+
+    // スプレーチャート / 成績推移
+    'spray.title': 'スプレーチャート',
+    'spray.summary': '({n}打球 / 安打{h})',
+    'spray.empty': '打球方向つきの記録がまだありません。',
+    'spray.single': '単打', 'spray.double': '二塁打', 'spray.triple': '三塁打',
+    'spray.hr': '本塁打', 'spray.out': 'アウト', 'spray.other': '失策・犠打等',
+    'trend.title': '成績推移',
+    'trend.needMore': '2試合以上の記録が貯まると推移が表示されます。',
+
+    // 観戦ビュー(WatchView)
+    'watch.linkError': '観戦リンクを読み取れませんでした。共有された最新のリンクを確認してください。',
+    'watch.title': '⚾ 試合速報',
+    'watch.titlePrefix': '⚾ ',
+    'watch.waiting': '待機中',
+    'watch.connecting': '接続中…',
+    'watch.waitingData': '試合データを待っています…',
+    'watch.live': '🔴 ライブ',
+    'watch.playLog': 'プレイログ',
+    'watch.footer': '観戦専用ページです(書き込みはできません)。自動で更新されます。',
   },
   en: {
     'tab.home': 'Home',
@@ -1170,6 +1190,24 @@ export const MESSAGES = {
     'occ.removeConfirm': 'Remove {name} from the team?',
     'occ.disconnect': 'Disconnect',
     'occ.disconnectConfirm': 'Disconnect this team from the cloud? (Cloud data remains. Device data is unchanged too.)',
+
+    'spray.title': 'Spray Chart',
+    'spray.summary': '({n} batted / {h} hits)',
+    'spray.empty': 'No records with batted-ball direction yet.',
+    'spray.single': 'Single', 'spray.double': 'Double', 'spray.triple': 'Triple',
+    'spray.hr': 'HR', 'spray.out': 'Out', 'spray.other': 'Error/Sac, etc.',
+    'trend.title': 'Stat Trends',
+    'trend.needMore': 'Trends appear once you have 2+ games recorded.',
+
+    'watch.linkError': 'Could not read the spectate link. Please check the latest shared link.',
+    'watch.title': '⚾ Live Updates',
+    'watch.titlePrefix': '⚾ ',
+    'watch.waiting': 'Waiting',
+    'watch.connecting': 'Connecting…',
+    'watch.waitingData': 'Waiting for game data…',
+    'watch.live': '🔴 LIVE',
+    'watch.playLog': 'Play Log',
+    'watch.footer': 'Spectate-only page (no writing). Updates automatically.',
   },
 };
 
