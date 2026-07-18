@@ -171,7 +171,7 @@ export default function App() {
           </h1>
           <div className="header-team">
             <div className="brand-for"><EditionText edition={state.settings.edition || '草野球'} withFor /></div>
-            <div className="brand-team">{state.settings.teamName || 'マイチーム'}</div>
+            <div className="brand-team">{state.settings.teamName || t('app.teamFallback')}</div>
           </div>
         </div>
         <button className="ghost small header-gear" onClick={() => setTab('settings')} aria-label="設定">
