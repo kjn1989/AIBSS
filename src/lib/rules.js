@@ -21,39 +21,44 @@
 export const RULE_PRESETS = [
   // 草野球は7回が上限で、90分等の時間制限付き(時間切れ後は新しい回に入らない→5回で終わることも多い)が主流
   {
-    id: 'kusa7', label: '草野球 7回制・90分', edition: '草野球',
+    id: 'kusa7', label: '草野球 7回制・90分', en: 'Amateur 7-inn · 90 min', edition: '草野球',
     rules: { innings: 7, mercy: [], pitchLimit: null, timeLimitMin: 90 },
   },
   {
-    id: 'kusa7-120', label: '草野球 7回制・120分', edition: '草野球',
+    id: 'kusa7-120', label: '草野球 7回制・120分', en: 'Amateur 7-inn · 120 min', edition: '草野球',
     rules: { innings: 7, mercy: [], pitchLimit: null, timeLimitMin: 120 },
   },
   {
-    id: 'kusa7-nolimit', label: '草野球 7回制(時間無制限)', edition: '草野球',
+    id: 'kusa7-nolimit', label: '草野球 7回制(時間無制限)', en: 'Amateur 7-inn (no time limit)', edition: '草野球',
     rules: { innings: 7, mercy: [], pitchLimit: null, timeLimitMin: null },
   },
   {
     // 社会人野球(企業・クラブ)の公式戦は9回制が主流。草野球エディションに含める。
-    id: 'shakaijin9', label: '社会人・クラブ 9回制', edition: '草野球',
+    id: 'shakaijin9', label: '社会人・クラブ 9回制', en: 'Club/Corp 9-inn', edition: '草野球',
     rules: { innings: 9, mercy: [], pitchLimit: null, timeLimitMin: null },
   },
   {
-    id: 'gakudo6', label: '学童(少年野球) 6回制・70球', edition: '少年野球',
+    id: 'gakudo6', label: '学童(少年野球) 6回制・70球', en: 'Youth 6-inn · 70 pitches', edition: '少年野球',
     rules: { innings: 6, mercy: [{ after: 4, diff: 10 }, { after: 5, diff: 7 }], pitchLimit: { perGame: 70, warnAt: 60 }, timeLimitMin: null },
   },
   {
-    id: 'chu7', label: '中学 7回制・100球', edition: 'ブカツ(中高大)',
+    id: 'chu7', label: '中学 7回制・100球', en: 'JH 7-inn · 100 pitches', edition: 'ブカツ(中高大)',
     rules: { innings: 7, mercy: [{ after: 5, diff: 7 }], pitchLimit: { perGame: 100, warnAt: 85 }, timeLimitMin: null },
   },
   {
-    id: 'koko9', label: '高校 9回制(地方大会コールド)', edition: 'ブカツ(中高大)',
+    id: 'koko9', label: '高校 9回制(地方大会コールド)', en: 'HS 9-inn (regional mercy)', edition: 'ブカツ(中高大)',
     rules: { innings: 9, mercy: [{ after: 5, diff: 10 }, { after: 7, diff: 7 }], pitchLimit: null, timeLimitMin: null },
   },
-  { id: 'daigaku9', label: '大学 9回制', edition: 'ブカツ(中高大)', rules: { innings: 9, mercy: [], pitchLimit: null, timeLimitMin: null } },
+  { id: 'daigaku9', label: '大学 9回制', en: 'Univ 9-inn', edition: 'ブカツ(中高大)', rules: { innings: 9, mercy: [], pitchLimit: null, timeLimitMin: null } },
 ];
 
 export function presetById(id) {
   return RULE_PRESETS.find((p) => p.id === id) || null;
+}
+
+// プリセットの表示ラベル(言語別)。保存値(id/rules)は不変。
+export function presetLabel(p, lang) {
+  return lang === 'en' && p.en ? p.en : p.label;
 }
 
 export function defaultPresetIdForEdition(edition) {
@@ -71,14 +76,15 @@ export function initialPresetIdFor(lastId, edition) {
   return defaultPresetIdForEdition(edition);
 }
 
-// ルール内容の1行説明(選択UI・確認表示用)
-export function describeRules(rules) {
-  if (!rules) return 'ルール管理なし(回数無制限・判定なし)';
-  const parts = [`${rules.innings}回制`];
-  if (rules.timeLimitMin) parts.push(`${rules.timeLimitMin}分時間制限`);
-  for (const m of rules.mercy || []) parts.push(`${m.after}回${m.diff}点差コールド`);
-  if (rules.pitchLimit?.perGame) parts.push(`球数${rules.pitchLimit.perGame}球制限`);
-  return parts.join('・');
+// ルール内容の1行説明(選択UI・確認表示用)。lang='en'で英語表記。
+export function describeRules(rules, lang = 'ja') {
+  const en = lang === 'en';
+  if (!rules) return en ? 'No rule tracking (unlimited innings, no checks)' : 'ルール管理なし(回数無制限・判定なし)';
+  const parts = [en ? `${rules.innings}-inn` : `${rules.innings}回制`];
+  if (rules.timeLimitMin) parts.push(en ? `${rules.timeLimitMin}-min limit` : `${rules.timeLimitMin}分時間制限`);
+  for (const m of rules.mercy || []) parts.push(en ? `mercy ${m.diff}+ after ${m.after}` : `${m.after}回${m.diff}点差コールド`);
+  if (rules.pitchLimit?.perGame) parts.push(en ? `${rules.pitchLimit.perGame}-pitch limit` : `球数${rules.pitchLimit.perGame}球制限`);
+  return parts.join(en ? ' · ' : '・');
 }
 
 // ------------------------------------------------------------
@@ -86,7 +92,8 @@ export function describeRules(rules) {
 // 戻り値: { type: 'regulation'|'xwin'|'mercy'|'tie', text } | null
 //  - 強制はせず、ScoreTab側が提案バナーとして表示する
 // ------------------------------------------------------------
-export function gameEndCheck(game) {
+export function gameEndCheck(game, lang = 'ja') {
+  const en = lang === 'en';
   const rules = game.rules;
   if (!rules || game.status === 'finished') return null;
   const { innings } = rules;
@@ -101,12 +108,19 @@ export function gameEndCheck(game) {
     const done = game.inning - 1; // 完了したイニング数
     if (done >= innings) {
       if (game.myScore !== game.oppScore) {
-        const label = done > innings ? `延長${done}回` : `規定の${innings}回`;
-        return { type: 'regulation', text: `${label}を終了しました。試合を終了できます。` };
+        const label = en
+          ? (done > innings ? `${done} extra innings` : `${innings} regulation innings`)
+          : (done > innings ? `延長${done}回` : `規定の${innings}回`);
+        return {
+          type: 'regulation',
+          text: en ? `${label} complete. You can finish the game.` : `${label}を終了しました。試合を終了できます。`,
+        };
       }
       return {
         type: 'tie',
-        text: `${done}回を終了して同点です。引き分けで終了するか、延長戦を続けられます。`,
+        text: en
+          ? `Tied after ${done} innings. You can finish as a draw or play extra innings.`
+          : `${done}回を終了して同点です。引き分けで終了するか、延長戦を続けられます。`,
       };
     }
     // コールド判定(直前の回の終了時点)
@@ -114,7 +128,9 @@ export function gameEndCheck(game) {
       if (done >= m.after && diff >= m.diff) {
         return {
           type: 'mercy',
-          text: `${done}回終了時点で${diff}点差です。コールドゲームの条件(${m.after}回以降${m.diff}点差)を満たしています。`,
+          text: en
+            ? `A ${diff}-run gap after ${done} innings. Meets the mercy-rule condition (${m.diff}+ runs from inning ${m.after}).`
+            : `${done}回終了時点で${diff}点差です。コールドゲームの条件(${m.after}回以降${m.diff}点差)を満たしています。`,
         };
       }
     }
@@ -123,7 +139,9 @@ export function gameEndCheck(game) {
     if (game.inning >= innings && homeScore > awayScore) {
       return {
         type: 'xwin',
-        text: `後攻チームがリードしています。${game.inning}回裏は行わず(または途中で)試合を終了できます(X勝ち/サヨナラ)。`,
+        text: en
+          ? `The home team is leading. You can end the game without playing the bottom of inning ${game.inning} (walk-off / X-win).`
+          : `後攻チームがリードしています。${game.inning}回裏は行わず(または途中で)試合を終了できます(X勝ち/サヨナラ)。`,
       };
     }
     // 後攻リードのコールドは表終了時点(=裏の間)でも判定できる
@@ -131,7 +149,9 @@ export function gameEndCheck(game) {
       if (game.inning >= m.after && homeScore - awayScore >= m.diff) {
         return {
           type: 'mercy',
-          text: `後攻チームが${homeScore - awayScore}点リードしています。コールドゲームの条件(${m.after}回以降${m.diff}点差)を満たしています。`,
+          text: en
+            ? `The home team leads by ${homeScore - awayScore}. Meets the mercy-rule condition (${m.diff}+ runs from inning ${m.after}).`
+            : `後攻チームが${homeScore - awayScore}点リードしています。コールドゲームの条件(${m.after}回以降${m.diff}点差)を満たしています。`,
         };
       }
     }

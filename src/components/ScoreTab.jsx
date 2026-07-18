@@ -14,16 +14,16 @@ import GameProgressView from './GameProgressView.jsx';
 import { POSITIONS, OPP_LETTERS, resultCategory, multiOutLabel, positionLabel } from '../lib/model.js';
 import { playLabel } from '../lib/voiceParser.js';
 import { convertMemoToPlay, guessPlayFromMemo, maskNames } from '../lib/gemini.js';
-import { RULE_PRESETS, presetById, describeRules, initialPresetIdFor, gameEndCheck, pitchLimitCheck, timeLimitCheck } from '../lib/rules.js';
+import { RULE_PRESETS, presetById, presetLabel, describeRules, initialPresetIdFor, gameEndCheck, pitchLimitCheck, timeLimitCheck } from '../lib/rules.js';
 
 // ---- 直近の打席結果を「1. 左翼単打 2. 見逃し三振」のように並べる小さな履歴表示 ----
-function AtBatHistory({ items, edition }) {
+function AtBatHistory({ items, edition, lang }) {
   if (!items || items.length === 0) return null;
   return (
     <div className="atbat-history">
       {items.map((it, i) => (
         <span className={`hist-chip ${resultCategory(it.result)}`} key={it.id}>
-          {i + 1}. {playLabel(it.result, it.direction, it.outType, it.soType, edition)}
+          {i + 1}. {playLabel(it.result, it.direction, it.outType, it.soType, edition, lang)}
           {multiOutLabel(it.outsOnPlay || 0) && <span className="mini-badge"> ⚡</span>}
         </span>
       ))}
@@ -193,12 +193,14 @@ function customFromRules(rules) {
 // ルール選択UI(プリセット選択+カスタム入力+説明)。作成時・変更時で共用。
 function RulePicker({ presetId, custom, edition, onPresetChange, setCustom }) {
   const t = useT();
+  const { state } = useStore();
+  const lang = state.settings.lang || 'ja';
   return (
     <>
       <label className="small dim" style={{ display: 'block' }}>{t('score.rules')}</label>
       <select value={presetId} onChange={(e) => onPresetChange(e.target.value)}>
         {RULE_PRESETS.map((p) => (
-          <option key={p.id} value={p.id}>{p.label}{p.edition === edition ? '' : ` (${p.edition})`}</option>
+          <option key={p.id} value={p.id}>{presetLabel(p, lang)}{p.edition === edition ? '' : ` (${lang === 'en' ? t(`edition.${p.edition}`) : p.edition})`}</option>
         ))}
         <option value="custom">{t('score.rulesCustom')}</option>
         <option value="none">{t('score.rulesNone')}</option>
@@ -232,7 +234,7 @@ function RulePicker({ presetId, custom, edition, onPresetChange, setCustom }) {
         </div>
       )}
       <p className="small dim mt8">
-        {describeRules(resolveRulesFrom(presetId, custom))}
+        {describeRules(resolveRulesFrom(presetId, custom), lang)}
         {presetId !== 'none' && <><br />{t('score.rulesNote')}</>}
       </p>
     </>
@@ -536,7 +538,7 @@ function NoteSheet({ game, onClose, onConvert }) {
           <div className="section-title">{t('score.noteCandidates')}</div>
           {cands.map((c, i) => (
             <button key={i} className="cand-row" onClick={() => onConvert(c)}>
-              <b>{playLabel(c.result, c.direction, c.outType, c.soType, state.settings.edition)}</b>
+              <b>{playLabel(c.result, c.direction, c.outType, c.soType, state.settings.edition, state.settings.lang || 'ja')}</b>
               {typeof c.confidence === 'number' && <span className="pill small">{Math.round(c.confidence * 100)}%</span>}
               {c.why && <span className="small dim">{c.why}</span>}
             </button>
@@ -627,6 +629,8 @@ function UndoBar({ game }) {
 // ---- ルールエンジンの提案バナー(試合終了条件・時間制限・球数警告) ----
 // 判定はlib/rules.jsの純関数。成立しても強制終了はせず、提案として表示するだけ。
 function RuleBanners({ game, onFinish }) {
+  const { state } = useStore();
+  const lang = state.settings.lang || 'ja';
   const nameOf = usePlayerName();
   const t = useT();
   const [dismissed, setDismissed] = useState(''); // 「続行」を押した提案文(同じ状況の再表示を防ぐ)
@@ -638,7 +642,7 @@ function RuleBanners({ game, onFinish }) {
     return () => clearInterval(t);
   }, [game.rules?.timeLimitMin]);
 
-  const end = gameEndCheck(game);
+  const end = gameEndCheck(game, lang);
   const time = timeLimitCheck(game);
   // 球数警告は自チーム守備時(=自チーム投手が投げている間)のみ
   const pitch = !isMyTeamBatting(game) ? pitchLimitCheck(game) : null;
@@ -760,7 +764,7 @@ export default function ScoreTab() {
                 </div>
                 <span className="pill blue">{t('score.changeBatter')}</span>
               </div>
-              <AtBatHistory items={game.atBats.filter((ab) => ab.playerId === batter.playerId)} edition={state.settings.edition} />
+              <AtBatHistory items={game.atBats.filter((ab) => ab.playerId === batter.playerId)} edition={state.settings.edition} lang={lang} />
             </div>
             <div className="card">
               <div className="flex">
@@ -819,6 +823,7 @@ export default function ScoreTab() {
                   .filter((l) => l.kind === 'defense' && l.payload.letter === oppBatter.letter)
                   .map((l) => ({ id: l.id, ...l.payload }))}
                 edition={state.settings.edition}
+                lang={lang}
               />
             </>
           )}

@@ -6,6 +6,7 @@
 // 戻り値: 信頼度順の候補配列(上位2〜3件を確認カードに表示)
 // ============================================================
 import { RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES, outTypeLabel } from './model.js';
+import { translate } from './i18n.js';
 
 // ---- 音声認識(ASR)の定番誤変換を補正 ----
 // iOS/Androidの音声認識が野球用語を一般語に誤変換するパターンを吸収する。
@@ -243,11 +244,18 @@ function needsDirection(result) {
   return ['single', 'double', 'triple', 'hr', 'out', 'error', 'sacBunt', 'sacFly'].includes(result);
 }
 
-export function playLabel(result, direction, outType, soType, edition) {
-  const dir = direction ? DIRECTIONS[direction] : '';
-  if (result === 'out') return `${dir}${outTypeLabel(outType || 'ground', edition)}・アウト`;
-  if (result === 'so') return SO_TYPES[soType || 'swinging'];
-  return `${dir ? dir + ' ' : ''}${RESULTS[result]?.label || result}`;
+// プレイの表示ラベル。lang='en' で英語表記に切替(既定'ja'は従来どおり)。
+// 保存済みログ文言(highlights等)は lang を渡さず日本語のまま維持する。
+export function playLabel(result, direction, outType, soType, edition, lang = 'ja') {
+  const en = lang === 'en';
+  const dir = direction ? (en ? translate('en', `dir.${direction}`) : DIRECTIONS[direction]) : '';
+  if (result === 'out') {
+    const ot = en ? translate('en', `outType.${outType || 'ground'}`) : outTypeLabel(outType || 'ground', edition);
+    return en ? `${dir ? dir + ' ' : ''}${ot}` : `${dir}${ot}・アウト`;
+  }
+  if (result === 'so') return en ? translate('en', `soType.${soType || 'swinging'}`) : SO_TYPES[soType || 'swinging'];
+  const rlabel = en ? translate('en', `result.${result}`) : (RESULTS[result]?.label || result);
+  return `${dir ? dir + ' ' : ''}${rlabel}`;
 }
 
 // ============================================================
