@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { useStore } from '../state/store.jsx';
-import { MEMBER_ROLES } from '../lib/model.js';
+import { useStore, useT } from '../state/store.jsx';
+import { MEMBER_ROLES, memberRoleLabel } from '../lib/model.js';
 import ScoutCard from './ScoutCard.jsx';
 
 // 参加メンバー(マネージャー/応援/スタッフ等): 試合に出なくても参加回数を記録し、名鑑も持てる
 export default function MemberSection() {
   const { state, dispatch } = useStore();
+  const t = useT();
+  const lang = state.settings.lang || 'ja';
   const members = state.members || [];
   const [name, setName] = useState('');
   const [role, setRole] = useState(MEMBER_ROLES[0]);
@@ -29,48 +31,48 @@ export default function MemberSection() {
 
   return (
     <div className="card">
-      <h2>参加メンバー <span className="dim small">(マネージャー・応援など)</span></h2>
+      <h2>{t('member.title')} <span className="dim small">{t('member.titleSub')}</span></h2>
       <p className="small dim" style={{ marginBottom: 10 }}>
-        試合に出場しなくても、マネージャーや応援・宴会などでの参加回数を記録できます。
-        {scoutEnabled && '名前をタップすると名鑑ページが開きます。'}
+        {t('member.desc')}
+        {scoutEnabled && t('member.scoutHint')}
       </p>
 
       <div className="flex" style={{ gap: 6, marginBottom: 12 }}>
         <input
           style={{ flex: 1 }}
-          placeholder="名前"
+          placeholder={t('member.namePlaceholder')}
           value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && add()}
         />
         <select style={{ width: 120 }} value={role} onChange={(e) => setRole(e.target.value)}>
-          {MEMBER_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+          {MEMBER_ROLES.map((r) => <option key={r} value={r}>{memberRoleLabel(r, lang)}</option>)}
         </select>
-        <button className="small" onClick={add}>追加</button>
+        <button className="small" onClick={add}>{t('action.add')}</button>
       </div>
 
       {members.length === 0 ? (
-        <p className="small dim">まだ参加メンバーがいません。上の欄から追加してください。</p>
+        <p className="small dim">{t('member.empty')}</p>
       ) : (
         members.map((m) => (
           <div className="row" key={m.id}>
             <div className="grow" onClick={() => scoutEnabled && setScoutId(m.id)} role={scoutEnabled ? 'button' : undefined}>
               <b style={{ color: 'var(--accent)' }}>{m.name}</b>
-              <span className="pill" style={{ marginLeft: 6 }}>{m.role}</span>
+              <span className="pill" style={{ marginLeft: 6 }}>{memberRoleLabel(m.role, lang)}</span>
             </div>
             <div className="stepper" style={{ gap: 8 }}>
               <button className="small" onClick={() => setCount(m, -1)}>−</button>
-              <span className="val" style={{ minWidth: 54, fontSize: 16 }}>{m.participation || 0}<span className="dim small">回</span></span>
+              <span className="val" style={{ minWidth: 54, fontSize: 16 }}>{m.participation || 0}<span className="dim small">{t('member.timesUnit')}</span></span>
               <button className="small" onClick={() => setCount(m, +1)}>＋</button>
             </div>
             <button
               className="small ghost"
               style={{ color: 'var(--red)' }}
               onClick={() => {
-                if (window.confirm(`${m.name} を参加メンバーから削除しますか？`)) dispatch({ type: 'DELETE_MEMBER', id: m.id });
+                if (window.confirm(t('member.deleteConfirm', { name: m.name }))) dispatch({ type: 'DELETE_MEMBER', id: m.id });
               }}
             >
-              削除
+              {t('action.delete')}
             </button>
           </div>
         ))
