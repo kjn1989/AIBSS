@@ -11,7 +11,7 @@ import VoiceControl from './VoiceControl.jsx';
 import { SubstituteSheet } from './OrderTab.jsx';
 import HighlightSheet from './HighlightSheet.jsx';
 import GameProgressView from './GameProgressView.jsx';
-import { POSITIONS, OPP_LETTERS, resultCategory, multiOutLabel } from '../lib/model.js';
+import { POSITIONS, OPP_LETTERS, resultCategory, multiOutLabel, positionLabel } from '../lib/model.js';
 import { playLabel } from '../lib/voiceParser.js';
 import { convertMemoToPlay, guessPlayFromMemo, maskNames } from '../lib/gemini.js';
 import { RULE_PRESETS, presetById, describeRules, initialPresetIdFor, gameEndCheck, pitchLimitCheck, timeLimitCheck } from '../lib/rules.js';
@@ -35,15 +35,16 @@ function AtBatHistory({ items, edition }) {
 // 記号(letter)ごとに R/L(打者は両=S)を game に保存。空=未設定は集計対象外。
 function OppHandToggle({ game, which, letter, allowSwitch = false }) {
   const { dispatch } = useStore();
+  const t = useT();
   if (!letter) return null;
   const cur = (which === 'pitcher' ? game.oppPitcherHands : game.oppBatterHands)?.[letter] || '';
-  const opts = allowSwitch ? [['R', '右'], ['L', '左'], ['S', '両']] : [['R', '右'], ['L', '左']];
+  const opts = allowSwitch ? ['R', 'L', 'S'] : ['R', 'L'];
   const set = (h) => dispatch({ type: 'SET_OPP_HAND', gameId: game.id, which, letter, hand: cur === h ? '' : h });
   return (
     <div className="hand-inline">
-      <span className="small dim">{which === 'pitcher' ? '投' : '打'}</span>
-      {opts.map(([h, lbl]) => (
-        <button key={h} className={`hl-btn ${cur === h ? 'on' : ''}`} onClick={(e) => { e.stopPropagation(); set(h); }}>{lbl}</button>
+      <span className="small dim">{which === 'pitcher' ? t('score.handP') : t('score.handB')}</span>
+      {opts.map((h) => (
+        <button key={h} className={`hl-btn ${cur === h ? 'on' : ''}`} onClick={(e) => { e.stopPropagation(); set(h); }}>{t(`hand.${h}`)}</button>
       ))}
     </div>
   );
@@ -54,6 +55,7 @@ function OppHandToggle({ game, which, letter, allowSwitch = false }) {
 // 球数制限がある場合は「XX / 上限」+バー+色(緑→琥珀→赤)で疲労・交代の目安を示す。
 // 自軍投手・相手投手のどちらも同じ見た目で表示できるよう、データを受け取る純表示コンポーネント。
 function PitchLoadMeter({ label, pitches, byInningMap, limit, warnAt, currentInning }) {
+  const t = useT();
   const wa = limit ? (warnAt ?? Math.max(1, limit - 10)) : null;
   const level = !limit ? '' : pitches >= limit ? 'over' : pitches >= wa ? 'warn' : '';
   const pct = limit ? Math.min(100, Math.round((pitches / limit) * 100)) : 0;
@@ -67,22 +69,22 @@ function PitchLoadMeter({ label, pitches, byInningMap, limit, warnAt, currentInn
     <>
       <div className={`pitch-meter ${level}`}>
         <div className="pm-body">
-          <div className="pm-label">{label}{limit ? `(上限${limit}球)` : ''}</div>
+          <div className="pm-label">{label}{limit ? t('score.pitchLimitParen', { n: limit }) : ''}</div>
           {limit && (
             <div className="pm-bar"><div className="pm-fill" style={{ width: `${pct}%` }} /></div>
           )}
         </div>
         <div className="pm-count">
           <b>{pitches}</b>
-          <span className="pm-unit">{limit ? `/ ${limit}球` : '球'}</span>
+          <span className="pm-unit">{limit ? t('score.perLimit', { n: limit }) : t('score.pitchesUnit')}</span>
         </div>
       </div>
       {byInning.length > 0 && (
         <div className="pitch-innings">
-          <span className="pi-title">回別</span>
+          <span className="pi-title">{t('score.byInning')}</span>
           {byInning.map(([inn, n]) => (
             <span className={`pi-chip ${inn === currentInning ? 'now' : ''}`} key={inn}>
-              {inn}回<b>{n}</b>
+              {t('score.inningN', { n: inn })}<b>{n}</b>
             </span>
           ))}
         </div>
@@ -93,14 +95,15 @@ function PitchLoadMeter({ label, pitches, byInningMap, limit, warnAt, currentInn
 
 // 控え投手の1行サマリー(帯)。タップで大メーターに入れ替える。
 function PitchMiniStrip({ data, limit, onClick }) {
+  const t = useT();
   const inn = Object.entries(data.byInning || {})
     .map(([k, n]) => [Number(k), n]).filter(([, n]) => n > 0).sort((a, b) => a[0] - b[0]);
   return (
     <button className="pitch-mini" onClick={onClick}>
       <span className="pm-mini-name">{data.shortLabel}</span>
-      <span className="pm-mini-count"><b>{data.pitches}</b>{limit ? `/${limit}` : ''}球</span>
-      {inn.length > 0 && <span className="pm-mini-inn">回別 {inn.map(([, n]) => n).join('/')}</span>}
-      <span className="pm-mini-swap">大きく ▸</span>
+      <span className="pm-mini-count"><b>{data.pitches}</b>{limit ? `/${limit}` : ''}{t('score.pitchesUnit')}</span>
+      {inn.length > 0 && <span className="pm-mini-inn">{t('score.byInning')} {inn.map(([, n]) => n).join('/')}</span>}
+      <span className="pm-mini-swap">{t('score.enlarge')}</span>
     </button>
   );
 }
@@ -110,6 +113,7 @@ function PitchMiniStrip({ data, limit, onClick }) {
 // ハーフが変わると別カードとして再マウントされるため、入れ替え状態は自動リセットされる。
 function PitchLoadPair({ game }) {
   const nameOf = usePlayerName();
+  const t = useT();
   const [swapped, setSwapped] = useState(false);
   const limit = game.rules?.pitchLimit?.perGame || null;
   const warnAt = game.rules?.pitchLimit?.warnAt;
@@ -118,8 +122,8 @@ function PitchLoadPair({ game }) {
   const myPr = myPid ? (game.pitchingRecords || []).find((r) => r.playerId === myPid) : null;
   const mine = myPid ? {
     key: 'mine',
-    label: `⚾ ${nameOf(myPid)} のこの試合の球数`,
-    shortLabel: `🧤 自軍 ${nameOf(myPid)}`,
+    label: t('score.myPitchCount', { name: nameOf(myPid) }),
+    shortLabel: t('score.myShort', { name: nameOf(myPid) }),
     pitches: myPr?.pitches || 0,
     byInning: myPr?.pitchesByInning,
   } : null;
@@ -128,8 +132,8 @@ function PitchLoadPair({ game }) {
   const oppRec = oppLetter ? game.oppPitchers?.[oppLetter] : null;
   const opp = oppLetter ? {
     key: 'opp',
-    label: `⚾ 相手投手 ${oppLetter} のこの試合の球数`,
-    shortLabel: `🧢 相手 ${oppLetter}`,
+    label: t('score.oppPitchCount', { letter: oppLetter }),
+    shortLabel: t('score.oppShort', { letter: oppLetter }),
     pitches: oppRec?.pitches || 0,
     byInning: oppRec?.pitchesByInning,
   } : null;
@@ -188,47 +192,48 @@ function customFromRules(rules) {
 
 // ルール選択UI(プリセット選択+カスタム入力+説明)。作成時・変更時で共用。
 function RulePicker({ presetId, custom, edition, onPresetChange, setCustom }) {
+  const t = useT();
   return (
     <>
-      <label className="small dim" style={{ display: 'block' }}>試合ルール</label>
+      <label className="small dim" style={{ display: 'block' }}>{t('score.rules')}</label>
       <select value={presetId} onChange={(e) => onPresetChange(e.target.value)}>
         {RULE_PRESETS.map((p) => (
           <option key={p.id} value={p.id}>{p.label}{p.edition === edition ? '' : ` (${p.edition})`}</option>
         ))}
-        <option value="custom">カスタム(自分で設定)</option>
-        <option value="none">ルール管理なし</option>
+        <option value="custom">{t('score.rulesCustom')}</option>
+        <option value="none">{t('score.rulesNone')}</option>
       </select>
       {presetId === 'custom' && (
         <div className="mt8">
           <div className="grid3">
             <div>
-              <label className="small dim">回数</label>
+              <label className="small dim">{t('score.innings')}</label>
               <input type="number" inputMode="numeric" value={custom.innings} onChange={(e) => setCustom({ ...custom, innings: e.target.value })} />
             </div>
             <div>
-              <label className="small dim">コールド回</label>
-              <input type="number" inputMode="numeric" placeholder="なし" value={custom.mercyAfter} onChange={(e) => setCustom({ ...custom, mercyAfter: e.target.value })} />
+              <label className="small dim">{t('score.mercyAfter')}</label>
+              <input type="number" inputMode="numeric" placeholder={t('score.none')} value={custom.mercyAfter} onChange={(e) => setCustom({ ...custom, mercyAfter: e.target.value })} />
             </div>
             <div>
-              <label className="small dim">点差</label>
-              <input type="number" inputMode="numeric" placeholder="なし" value={custom.mercyDiff} onChange={(e) => setCustom({ ...custom, mercyDiff: e.target.value })} />
+              <label className="small dim">{t('score.mercyDiff')}</label>
+              <input type="number" inputMode="numeric" placeholder={t('score.none')} value={custom.mercyDiff} onChange={(e) => setCustom({ ...custom, mercyDiff: e.target.value })} />
             </div>
           </div>
           <div className="grid2 mt8">
             <div>
-              <label className="small dim">球数制限(空欄=なし)</label>
-              <input type="number" inputMode="numeric" placeholder="例: 70" value={custom.pitchPerGame} onChange={(e) => setCustom({ ...custom, pitchPerGame: e.target.value })} />
+              <label className="small dim">{t('score.pitchLimitField')}</label>
+              <input type="number" inputMode="numeric" placeholder={t('score.egPitch')} value={custom.pitchPerGame} onChange={(e) => setCustom({ ...custom, pitchPerGame: e.target.value })} />
             </div>
             <div>
-              <label className="small dim">時間制限・分(空欄=なし)</label>
-              <input type="number" inputMode="numeric" placeholder="例: 90" value={custom.timeLimitMin} onChange={(e) => setCustom({ ...custom, timeLimitMin: e.target.value })} />
+              <label className="small dim">{t('score.timeLimitField')}</label>
+              <input type="number" inputMode="numeric" placeholder={t('score.egTime')} value={custom.timeLimitMin} onChange={(e) => setCustom({ ...custom, timeLimitMin: e.target.value })} />
             </div>
           </div>
         </div>
       )}
       <p className="small dim mt8">
         {describeRules(resolveRulesFrom(presetId, custom))}
-        {presetId !== 'none' && <><br />※ プリセットは代表例です。連盟・大会の要項に合わせて調整してください。成立時も自動終了はせず、確認してから終了できます。</>}
+        {presetId !== 'none' && <><br />{t('score.rulesNote')}</>}
       </p>
     </>
   );
@@ -310,8 +315,9 @@ function GameSetup() {
 
 // ---- 打者変更シート ----
 function BatterSheet({ game, onClose, onPinchHitter }) {
-  const { dispatch } = useStore();
+  const { state, dispatch } = useStore();
   const t = useT();
+  const lang = state.settings.lang || 'ja';
   const nameOf = usePlayerName();
   return (
     <Sheet title={t('sheet.nextBatter')} onClose={onClose}>
@@ -321,7 +327,7 @@ function BatterSheet({ game, onClose, onPinchHitter }) {
       {game.lineup.map((slot, i) => (
         <div className="row" key={slot.order}>
           <span className="rank-badge">{slot.order}</span>
-          <span className="grow">{nameOf(slot.playerId)} <span className="dim small">{slot.position}</span></span>
+          <span className="grow">{nameOf(slot.playerId)} <span className="dim small">{positionLabel(slot.position, lang)}</span></span>
           <button
             className={`small ${i === game.batterIndex ? 'primary' : ''}`}
             onClick={() => {
@@ -329,7 +335,7 @@ function BatterSheet({ game, onClose, onPinchHitter }) {
               onClose();
             }}
           >
-            {i === game.batterIndex ? '打席中' : 'この打者'}
+            {i === game.batterIndex ? t('score.atBatNow') : t('score.thisBatter')}
           </button>
         </div>
       ))}
@@ -340,11 +346,12 @@ function BatterSheet({ game, onClose, onPinchHitter }) {
 // ---- 相手打者変更シート(記号A〜Tで管理) ----
 function OppBatterSheet({ game, onClose, onPinchHitter }) {
   const { dispatch } = useStore();
+  const t = useT();
   const current = currentOppBatter(game);
   return (
-    <Sheet title="次の相手打者を選択" onClose={onClose}>
+    <Sheet title={t('score.selectOppBatter')} onClose={onClose}>
       <button className="primary" style={{ width: '100%', marginBottom: 10 }} onClick={onPinchHitter}>
-        🔄 相手に代打を送る({current?.letter}に代えて)
+        {t('score.oppPinchHit', { letter: current?.letter })}
       </button>
       {game.oppLineup.map((slot, i) => (
         <div className="row" key={slot.order}>
@@ -357,7 +364,7 @@ function OppBatterSheet({ game, onClose, onPinchHitter }) {
               onClose();
             }}
           >
-            {i === game.oppBatterIndex ? '打席中' : 'この打者'}
+            {i === game.oppBatterIndex ? t('score.atBatNow') : t('score.thisBatter')}
           </button>
         </div>
       ))}
@@ -375,37 +382,37 @@ function OppSubstituteSheet({ game, slot, onClose, initialKind = 'ph' }) {
   const inLineup = new Set(game.oppLineup.map((l) => l.letter));
   const candidates = OPP_LETTERS.filter((l) => !inLineup.has(l));
   const isRetired = letter && game.oppRetiredLetters.includes(letter);
-  const kindLabel = { ph: '代打', pr: '代走', def: '守備交代' }[kind];
+  const kindLabel = t(`order.sub.${kind}`);
 
   const runnerBase = [1, 2, 3].find((b) => game.runners[b]?.letter === slot.letter);
 
   return (
-    <Sheet title={`${slot.order}番 ${slot.letter} の交代`} onClose={onClose}>
+    <Sheet title={t('score.oppSubTitle', { order: slot.order, letter: slot.letter })} onClose={onClose}>
       <div className="grid3">
-        {[['ph', '代打'], ['pr', '代走'], ['def', '守備交代']].map(([k, label]) => (
+        {['ph', 'pr', 'def'].map((k) => (
           <button key={k} className={kind === k ? 'primary' : ''} onClick={() => setKind(k)}>
-            {label}
+            {t(`order.sub.${k}`)}
           </button>
         ))}
       </div>
 
       {kind === 'pr' && !runnerBase && (
-        <div className="warn-box mt8">この選手は現在塁上にいません。代走は塁上の走者に対して行います。</div>
+        <div className="warn-box mt8">{t('order.sub.prNoRunner')}</div>
       )}
 
-      <div className="section-title">出場する選手</div>
+      <div className="section-title">{t('order.sub.playerIn')}</div>
       <select value={letter} onChange={(e) => setLetter(e.target.value)}>
-        <option value="">記号を選択...</option>
+        <option value="">{t('score.selectLetter')}</option>
         {candidates.map((l) => (
           <option key={l} value={l}>
-            {l}{game.oppRetiredLetters.includes(l) ? ' (⚠️出場済み)' : ''}
+            {l}{game.oppRetiredLetters.includes(l) ? t('order.sub.usedMark') : ''}
           </option>
         ))}
       </select>
 
       {isRetired && (
         <div className="warn-box">
-          ⚠️ {letter} は一度退いた選手です。公式ルールでは再出場できません(記録は継続可能)。
+          {t('order.sub.retiredWarn', { name: letter })}
         </div>
       )}
 
@@ -421,12 +428,12 @@ function OppSubstituteSheet({ game, slot, onClose, initialKind = 'ph' }) {
               order: slot.order,
               letter,
               asRunner: kind === 'pr',
-              label: `相手${kindLabel}: ${letter} (${slot.order}番 ${slot.letter}に代わり)`,
+              label: t('score.oppSubLog', { kind: kindLabel, letter, order: slot.order, outLetter: slot.letter }),
             });
             onClose();
           }}
         >
-          {kindLabel}で出場
+          {t('order.sub.enter', { kind: kindLabel })}
         </button>
       </div>
     </Sheet>
@@ -438,26 +445,26 @@ function ScoreAdjustSheet({ game, onClose }) {
   const { state, dispatch } = useStore();
   const t = useT();
   const [inning, setInning] = useState(game.inning);
-  const myName = state.settings.teamName || 'マイチーム';
-  const oppName = game.opponent || '対戦相手';
+  const myName = state.settings.teamName || t('restab.teamFallback');
+  const oppName = game.opponent || t('restab.opponentFallback');
   const ls = game.linescore?.[String(inning)] || { my: 0, opp: 0 };
 
   const adjust = (team, delta) => dispatch({ type: 'ADJUST_SCORE', gameId: game.id, team, inning, delta });
 
   return (
-    <Sheet title="スコア修正" onClose={onClose}>
-      <p className="small dim">回を選んで得点を直接増減できます(合計スコアも連動)。</p>
-      <div className="section-title">対象の回</div>
+    <Sheet title={t('score.adjustTitle')} onClose={onClose}>
+      <p className="small dim">{t('score.adjustHint')}</p>
+      <div className="section-title">{t('score.targetInning')}</div>
       <div className="grid3">
         {Array.from({ length: Math.max(9, game.inning) }, (_, i) => i + 1).map((i) => (
           <button key={i} className={`small ${inning === i ? 'primary' : ''}`} onClick={() => setInning(i)}>
-            {i}回
+            {t('score.inningN', { n: i })}
           </button>
         ))}
       </div>
       {[['my', myName, ls.my, game.myScore], ['opp', oppName, ls.opp, game.oppScore]].map(([team, name, innScore, total]) => (
         <div className="flex mt12" key={team}>
-          <span className="grow">{name} <span className="dim small">({inning}回: {innScore}点 / 計{total}点)</span></span>
+          <span className="grow">{name} <span className="dim small">{t('score.adjustDetail', { inning, runs: innScore, total })}</span></span>
           <div className="stepper">
             <button onClick={() => adjust(team, -1)}>−</button>
             <span className="val">{innScore}</span>
@@ -501,33 +508,32 @@ function NoteSheet({ game, onClose, onConvert }) {
         : text.trim();
       if (apiKey && navigator.onLine) {
         const res = await convertMemoToPlay({ apiKey, memo: memoToSend, situation: situation() });
-        if (res?.error) { setErr(res.error + '(簡易推定に切替)'); const g = guessPlayFromMemo(text); setCands(g ? [g] : []); }
+        if (res?.error) { setErr(res.error + t('score.noteErrFallback')); const g = guessPlayFromMemo(text); setCands(g ? [g] : []); }
         else setCands(res?.candidates || []);
       } else {
         const g = guessPlayFromMemo(text);
         setCands(g ? [g] : []);
-        if (!g) setErr('キーワードから推定できませんでした。手入力で結果を選んでください。');
+        if (!g) setErr(t('score.noteErrNoGuess'));
       }
     } catch (e) {
-      setErr('変換に失敗しました。' + (e?.message || ''));
+      setErr(t('score.noteErrFail') + (e?.message || ''));
     } finally { setBusy(false); }
   };
 
   return (
-    <Sheet title="その他 — 不明なプレイ" onClose={onClose}>
+    <Sheet title={t('score.noteTitle')} onClose={onClose}>
       <p className="small dim">
-        判断に迷うプレイは、起きたことをそのまま書けます(例:「ピッチャーが弾いてショートが拾って一塁へ投げたがセーフ」)。
-        AIが正式な記録の候補に変換します(最終確定は確認画面で行います)。
+        {t('score.noteDesc')}
       </p>
       <textarea
         className="note-input" rows={3} value={text}
         onChange={(e) => { setText(e.target.value); setCands(null); }}
-        placeholder="起きたことを自由に入力…" autoFocus
+        placeholder={t('score.notePlaceholder')} autoFocus
       />
       {err && <div className="warn-box mt8">{err}</div>}
       {cands && cands.length > 0 && (
         <div className="mt8">
-          <div className="section-title">変換候補(タップで確認画面へ)</div>
+          <div className="section-title">{t('score.noteCandidates')}</div>
           {cands.map((c, i) => (
             <button key={i} className="cand-row" onClick={() => onConvert(c)}>
               <b>{playLabel(c.result, c.direction, c.outType, c.soType, state.settings.edition)}</b>
@@ -537,14 +543,14 @@ function NoteSheet({ game, onClose, onConvert }) {
           ))}
         </div>
       )}
-      {cands && cands.length === 0 && !err && <div className="small dim mt8">変換候補がありませんでした。</div>}
+      {cands && cands.length === 0 && !err && <div className="small dim mt8">{t('score.noteNoCandidates')}</div>}
       <div className="sheet-actions" style={{ flexWrap: 'wrap', gap: 8 }}>
         <button className="ghost" onClick={onClose}>{t('action.close')}</button>
         <button disabled={!text.trim()} onClick={() => { dispatch({ type: 'ADD_NOTE', gameId: game.id, text: text.trim() }); onClose(); }}>
-          メモだけ記録
+          {t('score.noteSaveOnly')}
         </button>
         <button className="primary" disabled={!text.trim() || busy} onClick={convert}>
-          {busy ? '変換中…' : `🤖 AIで変換${apiKey ? '' : '(簡易)'}`}
+          {busy ? t('score.noteConverting') : t('score.noteConvert', { simple: apiKey ? '' : t('score.noteSimpleSuffix') })}
         </button>
       </div>
     </Sheet>
@@ -554,6 +560,7 @@ function NoteSheet({ game, onClose, onConvert }) {
 // ---- 三振確認カード(2ストライク後のストライクで自動表示) ----
 function StrikeoutSheet({ game, batterName, initialSoType, onClose, onFurinige }) {
   const { dispatch } = useStore();
+  const t = useT();
   const [soType, setSoType] = useState(initialSoType || 'swinging');
 
   const confirmOut = () => {
@@ -572,50 +579,46 @@ function StrikeoutSheet({ game, batterName, initialSoType, onClose, onFurinige }
   };
 
   return (
-    <Sheet title="⚡ 三振！" onClose={onClose}>
+    <Sheet title={t('score.soTitle')} onClose={onClose}>
       <div className="confirm-card" style={{ marginBottom: 0, border: 'none', padding: 6 }}>
-        <div className="q">{batterName ? `${batterName}、` : '相手打者、'}三振でよろしいですか？</div>
+        <div className="q">{batterName ? t('score.soConfirmYou', { name: batterName }) : t('score.soConfirmOpp')}</div>
         <div className="grid2">
           <button className={soType === 'swinging' ? 'primary' : ''} onClick={() => setSoType('swinging')}>
-            空振り三振
+            {t('soType.swinging')}
           </button>
           <button className={soType === 'looking' ? 'primary' : ''} onClick={() => setSoType('looking')}>
-            見逃し三振
+            {t('soType.looking')}
           </button>
         </div>
         <button className="mt12" style={{ width: '100%' }} onClick={() => onFurinige(soType)}>
-          振り逃げ(出塁・走者の動きを入力)
+          {t('score.dropThirdBtn')}
         </button>
       </div>
       <div className="sheet-actions">
-        <button className="ghost" onClick={undoPitch}>↩ 誤タップ(1球取消)</button>
-        <button className="primary" onClick={confirmOut}>三振アウトで確定</button>
+        <button className="ghost" onClick={undoPitch}>{t('score.undoMistap')}</button>
+        <button className="primary" onClick={confirmOut}>{t('score.soConfirmBtn')}</button>
       </div>
     </Sheet>
   );
 }
 
 // ---- Undoバー(履歴スタック方式: 直前のプレイ入力を1タップ取り消し) ----
-const UNDO_LABELS = {
-  CONFIRM_PLAY: '打席確定',
-  ADD_PITCH: '投球',
-  RUNNER_EVENT: '走者イベント',
-  SUBSTITUTE: '選手交代',
-  SET_PITCHER: '投手交代',
-  FORCE_CHANGE_HALF: 'チェンジ',
-  SET_RUNNER: '走者修正',
-  OPP_SUBSTITUTE: '相手選手交代',
-  OPP_SET_PITCHER: '相手投手交代',
-};
+// ラベルは score.undo.<action> で翻訳(未知のラベルはそのまま表示)。
+const UNDO_ACTIONS = new Set([
+  'CONFIRM_PLAY', 'ADD_PITCH', 'RUNNER_EVENT', 'SUBSTITUTE', 'SET_PITCHER',
+  'FORCE_CHANGE_HALF', 'SET_RUNNER', 'OPP_SUBSTITUTE', 'OPP_SET_PITCHER',
+]);
 
 function UndoBar({ game }) {
   const { state, dispatch } = useStore();
+  const t = useT();
   const last = state.history[state.history.length - 1];
   if (!last || last.gameId !== game.id) return null;
+  const label = UNDO_ACTIONS.has(last.label) ? t(`score.undo.${last.label}`) : last.label;
   return (
     <div className="undo-bar">
       <button onClick={() => dispatch({ type: 'UNDO' })} style={{ flex: 1 }}>
-        ↩ 取り消し: {UNDO_LABELS[last.label] || last.label}
+        {t('score.undoPrefix', { label })}
       </button>
     </div>
   );
@@ -625,6 +628,7 @@ function UndoBar({ game }) {
 // 判定はlib/rules.jsの純関数。成立しても強制終了はせず、提案として表示するだけ。
 function RuleBanners({ game, onFinish }) {
   const nameOf = usePlayerName();
+  const t = useT();
   const [dismissed, setDismissed] = useState(''); // 「続行」を押した提案文(同じ状況の再表示を防ぐ)
   const [timeDismissed, setTimeDismissed] = useState(false);
   const [, setTick] = useState(0); // 時間制限は操作がなくても表示されるよう1分ごとに再描画
@@ -645,27 +649,27 @@ function RuleBanners({ game, onFinish }) {
         <div className="card" style={{ borderColor: 'var(--gold)' }}>
           <p style={{ fontWeight: 700, marginBottom: 8 }}>🏁 {end.text}</p>
           <div className="grid2">
-            <button className="ghost" onClick={() => setDismissed(end.text)}>このまま続行</button>
-            <button className="primary" onClick={onFinish}>試合を終了する</button>
+            <button className="ghost" onClick={() => setDismissed(end.text)}>{t('score.continue')}</button>
+            <button className="primary" onClick={onFinish}>{t('score.finishGame')}</button>
           </div>
         </div>
       )}
       {!end && time && !timeDismissed && (
         <div className="card" style={{ borderColor: 'var(--gold)' }}>
           <p style={{ fontWeight: 700, marginBottom: 8 }}>
-            ⏱ 開始から{time.elapsedMin}分が経過し、時間制限({time.limit}分)に達しました。慣例では新しい回には入らず、この回までで終了します。
+            {t('score.timeUp', { min: time.elapsedMin, limit: time.limit })}
           </p>
           <div className="grid2">
-            <button className="ghost" onClick={() => setTimeDismissed(true)}>このまま続行</button>
-            <button className="primary" onClick={onFinish}>試合を終了する</button>
+            <button className="ghost" onClick={() => setTimeDismissed(true)}>{t('score.continue')}</button>
+            <button className="primary" onClick={onFinish}>{t('score.finishGame')}</button>
           </div>
         </div>
       )}
       {pitch && (
         <div className="warn-box" style={pitch.level === 'over' ? { borderColor: 'var(--red)', color: 'var(--red)' } : {}}>
           {pitch.level === 'over'
-            ? `🚨 投手 ${nameOf(game.currentPitcherId)}: ${pitch.pitches}球 — 球数制限(${pitch.limit}球)に到達しています。交代を検討してください。`
-            : `⚠️ 投手 ${nameOf(game.currentPitcherId)}: ${pitch.pitches}球 — 球数制限(${pitch.limit}球)が近づいています。`}
+            ? t('score.pitchOver', { name: nameOf(game.currentPitcherId), n: pitch.pitches, limit: pitch.limit })
+            : t('score.pitchWarn', { name: nameOf(game.currentPitcherId), n: pitch.pitches, limit: pitch.limit })}
         </div>
       )}
     </>
@@ -675,10 +679,13 @@ function RuleBanners({ game, onFinish }) {
 // ---- メイン ----
 export default function ScoreTab() {
   const { state, dispatch } = useStore();
+  const t = useT();
+  const lang = state.settings.lang || 'ja';
   const game = useCurrentGame();
   const nameOf = usePlayerName();
   const [sheet, setSheet] = useState(null); // {kind:'play',result} | {kind:'runner',base} | {kind:'batter'}
   const [showProgress, setShowProgress] = useState(false);
+  const logInning = (l) => t('score.logInning', { inning: l.inning, half: t(l.isTop ? 'half.top' : 'half.bottom') });
 
   // 公式クラウドの観戦(viewer)ロール: 入力UIを出さず閲覧専用にする(書き込みはRLSでも拒否される)
   if (state.settings.officialTeamId && state.settings.officialRole === 'viewer') {
@@ -686,18 +693,17 @@ export default function ScoreTab() {
       <div>
         {game && <Scoreboard game={game} />}
         <div className="big-note">
-          👀 観戦モード(閲覧専用)です。チームの記録係が入力したスコアが自動で反映されます。
-          成績・試合結果タブから記録を閲覧できます。
+          {t('score.viewerNote')}
         </div>
         {game && (
           <div className="card">
-            <h2>試合経過</h2>
+            <h2>{t('restab.progress')}</h2>
             {[...game.playLogs].filter((l) => l.kind !== 'run').slice(-10).reverse().map((l) => (
               <div className="log-line" key={l.id}>
-                <b>{l.inning}回{l.isTop ? '表' : '裏'}</b> {l.text}
+                <b>{logInning(l)}</b> {l.text}
               </div>
             ))}
-            {game.playLogs.length === 0 && <div className="dim small">まだプレイがありません。</div>}
+            {game.playLogs.length === 0 && <div className="dim small">{t('score.noPlays')}</div>}
           </div>
         )}
       </div>
@@ -737,11 +743,11 @@ export default function ScoreTab() {
       {myBatting ? (
         noLineup ? (
           <div className="card">
-            <div className="warn-box">オーダーが未設定です。オーダータブで設定するか、登録選手から自動セットできます。</div>
+            <div className="warn-box">{t('score.noLineup')}</div>
             <button className="primary" style={{ width: '100%' }} onClick={quickLineup} disabled={state.players.length === 0}>
-              登録選手から打順を自動セット
+              {t('score.autoLineup')}
             </button>
-            {state.players.length === 0 && <p className="small dim mt8">⚙️ 設定タブで選手を登録してください。</p>}
+            {state.players.length === 0 && <p className="small dim mt8">{t('score.registerFirst')}</p>}
           </div>
         ) : (
           <>
@@ -750,15 +756,15 @@ export default function ScoreTab() {
                 <span className="rank-badge">{batter.order}</span>
                 <div className="grow">
                   <b style={{ fontSize: 18 }}>{nameOf(batter.playerId)}</b>
-                  <span className="dim small"> 打順{batter.order}番 {batter.position}</span>
+                  <span className="dim small">{t('score.batterMeta', { order: batter.order, pos: positionLabel(batter.position, lang) })}</span>
                 </div>
-                <span className="pill blue">打者変更 ▾</span>
+                <span className="pill blue">{t('score.changeBatter')}</span>
               </div>
               <AtBatHistory items={game.atBats.filter((ab) => ab.playerId === batter.playerId)} edition={state.settings.edition} />
             </div>
             <div className="card">
               <div className="flex">
-                <span className="small dim">相手投手</span>
+                <span className="small dim">{t('score.oppPitcher')}</span>
                 <select
                   className="grow"
                   value={game.oppPitcherLetter || ''}
@@ -767,7 +773,7 @@ export default function ScoreTab() {
                     label: `相手投手交代: ${e.target.value}`,
                   })}
                 >
-                  <option value="">投手を選択...</option>
+                  <option value="">{t('score.selectPitcher')}</option>
                   {OPP_LETTERS.map((l) => (
                     <option key={l} value={l}>{l}</option>
                   ))}
@@ -781,14 +787,14 @@ export default function ScoreTab() {
       ) : (
         <div className="card" onClick={() => setSheet({ kind: 'oppBatter' })} role="button">
           <div className="flex">
-            <span className="small dim">投手</span>
+            <span className="small dim">{t('score.pitcher')}</span>
             <select
               className="grow"
               value={game.currentPitcherId || ''}
               onClick={(e) => e.stopPropagation()}
               onChange={(e) => e.target.value && dispatch({ type: 'SET_PITCHER', gameId: game.id, playerId: e.target.value })}
             >
-              <option value="">投手を選択...</option>
+              <option value="">{t('score.selectPitcher')}</option>
               {state.players.map((p) => (
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
@@ -801,9 +807,9 @@ export default function ScoreTab() {
                 <span className="rank-badge">{oppBatter.order}</span>
                 <div className="grow">
                   <b style={{ fontSize: 18 }}>{oppBatter.letter}</b>
-                  <span className="dim small"> 打順{oppBatter.order}番</span>
+                  <span className="dim small">{t('score.oppBatterMeta', { order: oppBatter.order })}</span>
                 </div>
-                <span className="pill blue">相手 交代 ▾</span>
+                <span className="pill blue">{t('score.oppChange')}</span>
               </div>
               <div className="flex" onClick={(e) => e.stopPropagation()} style={{ justifyContent: 'flex-end' }}>
                 <OppHandToggle game={game} which="batter" letter={oppBatter.letter} allowSwitch />
@@ -828,46 +834,46 @@ export default function ScoreTab() {
 
       {(!myBatting || !noLineup) && (
         <div className="card">
-          <h2>{myBatting ? '打撃結果' : '相手打者の結果'}</h2>
+          <h2>{myBatting ? t('score.battingResult') : t('score.oppResult')}</h2>
           <ResultPad onSelect={(result) => setSheet({ kind: 'play', result })} />
         </div>
       )}
 
       <div className="card">
-        <h2>試合操作</h2>
+        <h2>{t('score.gameOps')}</h2>
         <div className="grid2">
-          <button onClick={() => window.confirm('攻守交代(チェンジ)しますか？') && dispatch({ type: 'FORCE_CHANGE_HALF', gameId: game.id })}>
-            手動チェンジ
+          <button onClick={() => window.confirm(t('score.changeConfirm')) && dispatch({ type: 'FORCE_CHANGE_HALF', gameId: game.id })}>
+            {t('score.manualChange')}
           </button>
-          <button onClick={() => setSheet({ kind: 'scoreAdjust' })}>スコア修正</button>
+          <button onClick={() => setSheet({ kind: 'scoreAdjust' })}>{t('score.adjustScore')}</button>
           <button style={{ gridColumn: '1 / -1' }} onClick={() => setSheet({ kind: 'note' })}>
-            📝 その他(不明なプレイをメモ)
+            {t('score.noteBtn')}
           </button>
           <button
             className="danger"
             style={{ gridColumn: '1 / -1' }}
             onClick={() => {
-              if (!window.confirm('試合を終了しますか？')) return;
+              if (!window.confirm(t('score.finishConfirm'))) return;
               dispatch({ type: 'FINISH_GAME', id: game.id });
               setSheet({ kind: 'highlight' });
             }}
           >
-            試合終了
+            {t('score.finish')}
           </button>
         </div>
       </div>
 
       <div className="card" onClick={() => setShowProgress(true)} role="button">
         <div className="flex">
-          <h2 className="grow" style={{ marginBottom: 0 }}>試合経過</h2>
-          <span className="pill blue">すべて見る ▾</span>
+          <h2 className="grow" style={{ marginBottom: 0 }}>{t('restab.progress')}</h2>
+          <span className="pill blue">{t('score.seeAll')}</span>
         </div>
         {[...game.playLogs].filter((l) => l.kind !== 'run').slice(-3).reverse().map((l) => (
           <div className="log-line" key={l.id}>
-            <b>{l.inning}回{l.isTop ? '表' : '裏'}</b> {l.text}
+            <b>{logInning(l)}</b> {l.text}
           </div>
         ))}
-        {game.playLogs.length === 0 && <div className="dim small">まだプレイがありません。</div>}
+        {game.playLogs.length === 0 && <div className="dim small">{t('score.noPlays')}</div>}
       </div>
 
       <UndoBar game={game} />
