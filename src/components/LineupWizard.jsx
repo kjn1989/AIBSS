@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
-import { useStore, usePlayerName } from '../state/store.jsx';
+import { useStore, usePlayerName, useT } from '../state/store.jsx';
+import { positionLabel } from '../lib/model.js';
 import Sheet from './Sheet.jsx';
 
 // 配列の要素を from→to へ移動した新配列を返す(純関数・テスト容易)
@@ -33,6 +34,7 @@ const FIELD_SPOTS = [
 // ============================================================
 export default function LineupWizard({ game }) {
   const { state, dispatch } = useStore();
+  const t = useT();
   const nameOf = usePlayerName();
   const [step, setStep] = useState(1);
   // selected: [{ playerId, position }] を打順順に保持
@@ -108,7 +110,7 @@ export default function LineupWizard({ game }) {
     // 先発投手を確定: DH制なら打順外の投手、DHなしなら打順内で「投」を守る選手
     const pid = useDH ? pitcherId : (lineup.find((l) => l.position === '投')?.playerId || '');
     if (pid) {
-      dispatch({ type: 'SET_PITCHER', gameId: game.id, playerId: pid, label: `先発: ${nameOf(pid)}` });
+      dispatch({ type: 'SET_PITCHER', gameId: game.id, playerId: pid, label: t('pt.starterLog', { name: nameOf(pid) }) });
     }
   };
 
@@ -164,7 +166,8 @@ export default function LineupWizard({ game }) {
 }
 
 function StepHeader({ step }) {
-  const labels = ['選手選択', '打順並べ替え', '守備位置'];
+  const t = useT();
+  const labels = [t('lw.step1'), t('lw.step2'), t('lw.step3')];
   return (
     <div className="wizard-steps">
       {labels.map((l, i) => (
@@ -178,30 +181,31 @@ function StepHeader({ step }) {
 
 // ---- ステップ1: 選手をタップで打順順に選択 ----
 function SelectStep({ players, selected, selectedIds, nameOf, numberOf, pastGames, onToggle, onAutoSelect, onLoadPast, onNext, useDH, onToggleDH, pitcherId, onPitcher }) {
+  const t = useT();
   const orderOf = (pid) => selected.findIndex((s) => s.playerId === pid) + 1;
   const benchForPitcher = players.filter((p) => !selectedIds.has(p.id)); // 打順に入っていない選手=投手候補
   return (
     <div className="card">
       <div className="wizard-nav">
         <span className="grow" />
-        <button className="primary" disabled={selected.length === 0} onClick={onNext}>次へ(打順の並べ替え)</button>
+        <button className="primary" disabled={selected.length === 0} onClick={onNext}>{t('lw.nextReorder')}</button>
       </div>
-      <h2>選手を打順順にタップ ({selected.length}人選択中)</h2>
-      <p className="small dim" style={{ marginBottom: 6 }}>タップした順が打順になります。全員打ち(守備につかない打者)は最大20人までOK。</p>
+      <h2>{t('lw.selectTitle', { n: selected.length })}</h2>
+      <p className="small dim" style={{ marginBottom: 6 }}>{t('lw.selectHint')}</p>
 
       {/* DH制の有無 */}
       <div className="dh-toggle">
-        <span className="grow small">DH制(投手は打たず、DHが代わりに打つ)</span>
+        <span className="grow small">{t('lw.dhLabel')}</span>
         <div className="toggle-row" style={{ width: 140, marginBottom: 0 }}>
-          <button className={!useDH ? 'active' : ''} onClick={() => onToggleDH(false)}>なし</button>
-          <button className={useDH ? 'active' : ''} onClick={() => onToggleDH(true)}>あり</button>
+          <button className={!useDH ? 'active' : ''} onClick={() => onToggleDH(false)}>{t('lw.dhOff')}</button>
+          <button className={useDH ? 'active' : ''} onClick={() => onToggleDH(true)}>{t('lw.dhOn')}</button>
         </div>
       </div>
       {useDH && (
         <div className="flex mt8">
-          <span className="small dim">投手(打順外)</span>
-          <select className="grow" aria-label="投手選択" value={pitcherId} onChange={(e) => onPitcher(e.target.value)}>
-            <option value="">後で選ぶ</option>
+          <span className="small dim">{t('lw.pitcherOffOrder')}</span>
+          <select className="grow" aria-label={t('lw.pitcherAria')} value={pitcherId} onChange={(e) => onPitcher(e.target.value)}>
+            <option value="">{t('lw.chooseLater')}</option>
             {benchForPitcher.map((p) => (
               <option key={p.id} value={p.id}>{p.name}{p.number ? ` #${p.number}` : ''}</option>
             ))}
@@ -209,26 +213,26 @@ function SelectStep({ players, selected, selectedIds, nameOf, numberOf, pastGame
         </div>
       )}
 
-      {players.length === 0 && <div className="warn-box">⚙️ 設定タブで選手を登録してください。</div>}
+      {players.length === 0 && <div className="warn-box">{t('score.registerFirst')}</div>}
 
       {pastGames.length > 0 && (
         <div className="flex mt8">
-          <span className="small dim">過去のオーダーを参照</span>
+          <span className="small dim">{t('lw.refPast')}</span>
           <select
             className="grow"
             defaultValue=""
             onChange={(e) => { if (e.target.value) onLoadPast(e.target.value); e.target.value = ''; }}
           >
-            <option value="">試合を選ぶ…</option>
+            <option value="">{t('lw.chooseGame')}</option>
             {pastGames.map((g) => (
-              <option key={g.id} value={g.id}>{g.date} vs {g.opponent || '対戦相手'}</option>
+              <option key={g.id} value={g.id}>{g.date} vs {g.opponent || t('restab.opponentFallback')}</option>
             ))}
           </select>
         </div>
       )}
       <div className="grid2 mt8">
-        <button className="small" onClick={() => onAutoSelect(9)} disabled={players.length === 0}>登録順に9人選択</button>
-        <button className="small" onClick={() => onAutoSelect(Math.min(20, players.length))} disabled={players.length === 0}>全員選択(全員打ち)</button>
+        <button className="small" onClick={() => onAutoSelect(9)} disabled={players.length === 0}>{t('lw.auto9')}</button>
+        <button className="small" onClick={() => onAutoSelect(Math.min(20, players.length))} disabled={players.length === 0}>{t('lw.autoAll')}</button>
       </div>
 
       <div className="mt12">
@@ -249,6 +253,7 @@ function SelectStep({ players, selected, selectedIds, nameOf, numberOf, pastGame
 
 // ---- ステップ2: ドラッグ/▲▼で打順を並べ替え ----
 function ReorderStep({ selected, nameOf, numberOf, onReorder, onBack, onNext }) {
+  const t = useT();
   // ドラッグ中は配列を並べ替えず、各行を transform でスライドさせて
   // 「掴んだ行が指に追従し、他の行が隙間を空ける」動きをリアルタイムに見せる。
   // 確定(pointerup)時にだけ実際の並べ替えを反映する。
@@ -298,11 +303,11 @@ function ReorderStep({ selected, nameOf, numberOf, onReorder, onBack, onNext }) 
     <div className="card">
       {/* ナビは上部に配置 */}
       <div className="wizard-nav">
-        <button className="ghost" onClick={onBack}>戻る</button>
-        <button className="primary" onClick={onNext}>次へ(守備位置)</button>
+        <button className="ghost" onClick={onBack}>{t('lw.back')}</button>
+        <button className="primary" onClick={onNext}>{t('lw.nextPosition')}</button>
       </div>
-      <h2>打順を並べ替え</h2>
-      <p className="small dim" style={{ marginBottom: 8 }}>右端の ≡ を上下にドラッグ、または ▲▼ で入れ替えできます。</p>
+      <h2>{t('lw.reorderTitle')}</h2>
+      <p className="small dim" style={{ marginBottom: 8 }}>{t('lw.reorderHint')}</p>
       <div className="lineup-droparea">
         {selected.map((s, i) => (
           <div
@@ -314,12 +319,12 @@ function ReorderStep({ selected, nameOf, numberOf, onReorder, onBack, onNext }) 
             <span className="rank-badge">{i + 1}</span>
             <span className="grow">{nameOf(s.playerId)} {numberOf(s.playerId) && <span className="dim small">#{numberOf(s.playerId)}</span>}</span>
             <div className="reorder-arrows">
-              <button className="mini" disabled={i === 0} onClick={() => onReorder(i, i - 1)} aria-label="上へ">▲</button>
-              <button className="mini" disabled={i === selected.length - 1} onClick={() => onReorder(i, i + 1)} aria-label="下へ">▼</button>
+              <button className="mini" disabled={i === 0} onClick={() => onReorder(i, i - 1)} aria-label={t('lw.up')}>▲</button>
+              <button className="mini" disabled={i === selected.length - 1} onClick={() => onReorder(i, i + 1)} aria-label={t('lw.down')}>▼</button>
             </div>
             <button
               className="drag-handle"
-              aria-label="ドラッグして並べ替え"
+              aria-label={t('lw.dragAria')}
               onPointerDown={(e) => onDown(e, i)}
               onPointerMove={onMove}
               onPointerUp={onUp}
@@ -336,23 +341,32 @@ function ReorderStep({ selected, nameOf, numberOf, onReorder, onBack, onNext }) 
 
 // ---- ステップ3: フィールドの各ポジションをタップ → メンバーリストで割り当て/入れ替え ----
 function PositionStep({ selected, nameOf, numberOf, onAssignPlayer, onClearPosition, onBack, onConfirm, useDH, pitcherId }) {
+  const { state } = useStore();
+  const t = useT();
+  const lang = state.settings.lang || 'ja';
   const [pickerPos, setPickerPos] = useState(null); // 割り当て中のポジション値
   const holderOf = (value) => selected.findIndex((s) => s.position === value);
   // DH制なら「投」は打順外の投手が守るので打者からは選べない。DHなしなら「指(DH)」は使わない。
   const spots = FIELD_SPOTS.filter((s) => (useDH ? s.value !== '投' : s.value !== 'DH'));
-  const posLabel = (v) => (!v ? '－' : v === 'DH' ? '指' : v); // 選手の現在守備位置の表示
-  const spotLabel = (v) => FIELD_SPOTS.find((s) => s.value === v)?.label || v;
+  // 選手の現在守備位置の表示(チップ)
+  const posLabel = (v) => (!v ? t('lw.posNone') : v === 'DH' ? t('lw.posDh') : (lang === 'ja' ? v : positionLabel(v, 'en')));
+  // フィールド上/ピッカー見出しの位置表記
+  const spotDisplay = (v) => {
+    if (v === 'DH') return t('lw.posDh');
+    if (lang === 'ja') return FIELD_SPOTS.find((s) => s.value === v)?.label || v;
+    return positionLabel(v, 'en');
+  };
 
   return (
     <div className="card">
       {/* ナビは上部に配置 */}
       <div className="wizard-nav">
-        <button className="ghost" onClick={onBack}>戻る</button>
-        <button className="primary" onClick={onConfirm}>このオーダーで確定</button>
+        <button className="ghost" onClick={onBack}>{t('lw.back')}</button>
+        <button className="primary" onClick={onConfirm}>{t('lw.confirmLineup')}</button>
       </div>
-      <h2>守備位置を選択</h2>
+      <h2>{t('lw.positionTitle')}</h2>
       <p className="small dim" style={{ marginBottom: 8 }}>
-        ポジションをタップして守る選手を選びます。埋まっている位置をタップすると入れ替え・変更ができます。
+        {t('lw.positionHint')}
       </p>
 
       {/* フィールド */}
@@ -373,7 +387,7 @@ function PositionStep({ selected, nameOf, numberOf, onAssignPlayer, onClearPosit
                 style={{ left: spot.left, top: spot.top }}
                 onClick={() => setPickerPos(spot.value)}
               >
-                {spot.label}{count > 0 ? ` ${count}` : ''}
+                {spotDisplay(spot.value)}{count > 0 ? ` ${count}` : ''}
               </button>
             );
           }
@@ -386,24 +400,24 @@ function PositionStep({ selected, nameOf, numberOf, onAssignPlayer, onClearPosit
               style={{ left: spot.left, top: spot.top }}
               onClick={() => setPickerPos(spot.value)}
             >
-              {taken ? nameOf(selected[holder].playerId) : (spot.label || spot.value)}
+              {taken ? nameOf(selected[holder].playerId) : spotDisplay(spot.value)}
             </button>
           );
         })}
         {/* DH制: 投手は打順外。フィールド上に読み取り専用で表示 */}
         {useDH && (
           <div className="pos-spot pitcher-fixed" style={{ left: '50%', top: '66%' }}>
-            {pitcherId ? nameOf(pitcherId) : '投(未定)'}
+            {pitcherId ? nameOf(pitcherId) : t('lw.pitcherTbd')}
           </div>
         )}
       </div>
       {useDH && (
-        <p className="small dim mt8">DH制: 投手は打順に入りません{pitcherId ? `(先発: ${nameOf(pitcherId)})` : '(先発は後で選択可)'}。</p>
+        <p className="small dim mt8">{pitcherId ? t('lw.dhStarter', { name: nameOf(pitcherId) }) : t('lw.dhStarterLater')}</p>
       )}
 
       {/* ポジションタップ時のメンバー選択ポップアップ */}
       {pickerPos && (
-        <Sheet title={`「${spotLabel(pickerPos)}」を守る選手を選択`} onClose={() => setPickerPos(null)}>
+        <Sheet title={t('lw.pickerTitle', { pos: spotDisplay(pickerPos) })} onClose={() => setPickerPos(null)}>
           <div className="picker-list">
             {selected.map((s, i) => {
               const here = s.position === pickerPos;
@@ -417,7 +431,7 @@ function PositionStep({ selected, nameOf, numberOf, onAssignPlayer, onClearPosit
                   <span className="grow" style={{ textAlign: 'left' }}>
                     {nameOf(s.playerId)}{numberOf(s.playerId) && <span className="dim small"> #{numberOf(s.playerId)}</span>}
                   </span>
-                  <span className={`pos-chip${here ? ' on' : ''}`}>{here ? '守備中' : posLabel(s.position)}</span>
+                  <span className={`pos-chip${here ? ' on' : ''}`}>{here ? t('lw.onDefense') : posLabel(s.position)}</span>
                 </button>
               );
             })}
@@ -428,7 +442,7 @@ function PositionStep({ selected, nameOf, numberOf, onAssignPlayer, onClearPosit
               style={{ width: '100%' }}
               onClick={() => { onClearPosition(pickerPos); setPickerPos(null); }}
             >
-              この守備位置を空ける({nameOf(selected[holderOf(pickerPos)].playerId)} を守備なしに)
+              {t('lw.clearPosition', { name: nameOf(selected[holderOf(pickerPos)].playerId) })}
             </button>
           )}
         </Sheet>
