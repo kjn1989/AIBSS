@@ -1,14 +1,18 @@
 import React, { useState, useMemo } from 'react';
 import { aggregateBatting, battingMetrics } from '../lib/stats.js';
+import { useStore, useT } from '../state/store.jsx';
 
 // 成績推移グラフ: 試合を重ねるごとの通算打率/出塁率/OPSの推移をSVG折れ線で表示
 const METRICS = [
-  { key: 'ba', label: '打率', max: 1 },
-  { key: 'obp', label: '出塁率', max: 1 },
-  { key: 'ops', label: 'OPS', max: 2 },
+  { key: 'ba', label: '打率', en: 'AVG', max: 1 },
+  { key: 'obp', label: '出塁率', en: 'OBP', max: 1 },
+  { key: 'ops', label: 'OPS', en: 'OPS', max: 2 },
 ];
 
 export default function TrendChart({ games, playerId }) {
+  const { state } = useStore();
+  const t = useT();
+  const lang = state.settings.lang || 'ja';
   const [metricKey, setMetricKey] = useState('ba');
   const metric = METRICS.find((m) => m.key === metricKey);
 
@@ -38,16 +42,16 @@ export default function TrendChart({ games, playerId }) {
 
   return (
     <div className="card">
-      <h2>成績推移</h2>
+      <h2>{t('trend.title')}</h2>
       <div className="grid3" style={{ marginBottom: 10 }}>
         {METRICS.map((m) => (
           <button key={m.key} className={`small ${metricKey === m.key ? 'primary' : ''}`} onClick={() => setMetricKey(m.key)}>
-            {m.label}
+            {lang === 'en' ? m.en : m.label}
           </button>
         ))}
       </div>
       {points.length < 2 ? (
-        <div className="dim small">2試合以上の記録が貯まると推移が表示されます。</div>
+        <div className="dim small">{t('trend.needMore')}</div>
       ) : (
         <svg viewBox={`0 0 ${W} ${H}`} className="trend-chart">
           {/* 目盛り(横線) */}

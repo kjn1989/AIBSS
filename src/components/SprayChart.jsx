@@ -1,5 +1,6 @@
 import React from 'react';
 import { RESULTS } from '../lib/model.js';
+import { useT } from '../state/store.jsx';
 
 // 打球方向スプレーチャート: 記録済みの打球方向(atBat.direction)を
 // フィールド図に打点として描画する。単打=青 / 二塁打=緑 / 三塁打=紫 / 本塁打=金 / 凡打=赤 / その他(失策・犠打等)=琥珀。
@@ -27,14 +28,15 @@ function dotColor(ab) {
 }
 
 export default function SprayChart({ atBats, title }) {
+  const t = useT();
   const withDir = (atBats || []).filter((ab) => ab.direction && POS[ab.direction]);
   const hits = withDir.filter((ab) => RESULTS[ab.result]?.hit).length;
 
   return (
     <div className="card">
-      <h2>{title || 'スプレーチャート'} <span className="dim small">({withDir.length}打球 / 安打{hits})</span></h2>
+      <h2>{title || t('spray.title')} <span className="dim small">{t('spray.summary', { n: withDir.length, h: hits })}</span></h2>
       {withDir.length === 0 ? (
-        <div className="dim small">打球方向つきの記録がまだありません。</div>
+        <div className="dim small">{t('spray.empty')}</div>
       ) : (
         <>
           <svg viewBox="0 0 100 92" className="spray-chart">
@@ -65,12 +67,12 @@ export default function SprayChart({ atBats, title }) {
             })}
           </svg>
           <div className="spray-legend">
-            <span><i style={{ background: 'var(--accent)' }} />単打</span>
-            <span><i style={{ background: 'var(--green)' }} />二塁打</span>
-            <span><i style={{ background: 'var(--purple)' }} />三塁打</span>
-            <span><i style={{ background: 'var(--gold)' }} />本塁打</span>
-            <span><i style={{ background: 'var(--red)' }} />アウト</span>
-            <span><i style={{ background: 'var(--text-dim)' }} />失策・犠打等</span>
+            <span><i style={{ background: 'var(--accent)' }} />{t('spray.single')}</span>
+            <span><i style={{ background: 'var(--green)' }} />{t('spray.double')}</span>
+            <span><i style={{ background: 'var(--purple)' }} />{t('spray.triple')}</span>
+            <span><i style={{ background: 'var(--gold)' }} />{t('spray.hr')}</span>
+            <span><i style={{ background: 'var(--red)' }} />{t('spray.out')}</span>
+            <span><i style={{ background: 'var(--text-dim)' }} />{t('spray.other')}</span>
           </div>
         </>
       )}

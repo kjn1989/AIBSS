@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useStore } from '../state/store.jsx';
+import { useStore, useT } from '../state/store.jsx';
 import { connectCloud } from '../lib/cloud.js';
 import Scoreboard from './Scoreboard.jsx';
 import Diamond from './Diamond.jsx';
@@ -39,6 +39,7 @@ export function encodeInviteLink({ configText, teamCode }) {
 
 export default function WatchView() {
   const { dispatch } = useStore();
+  const t = useT();
   const [games, setGames] = useState([]);
   const [status, setStatus] = useState('connecting');
 
@@ -70,7 +71,7 @@ export default function WatchView() {
     return (
       <div className="watch-view">
         <p className="big-note">
-          観戦リンクを読み取れませんでした。共有された最新のリンクを確認してください。
+          {t('watch.linkError')}
         </p>
       </div>
     );
@@ -80,10 +81,10 @@ export default function WatchView() {
     return (
       <div className="watch-view">
         <header className="watch-header">
-          <h1>⚾ 試合速報</h1>
-          <span className="pill amber">{status === 'on' ? '待機中' : '接続中…'}</span>
+          <h1>{t('watch.title')}</h1>
+          <span className="pill amber">{status === 'on' ? t('watch.waiting') : t('watch.connecting')}</span>
         </header>
-        <p className="big-note">試合データを待っています…</p>
+        <p className="big-note">{t('watch.waitingData')}</p>
       </div>
     );
   }
@@ -91,24 +92,24 @@ export default function WatchView() {
   return (
     <div className="watch-view">
       <header className="watch-header">
-        <h1>⚾ {game.opponent ? `vs ${game.opponent}` : '試合速報'}</h1>
+        <h1>{game.opponent ? `${t('watch.titlePrefix')}vs ${game.opponent}` : t('watch.title')}</h1>
         <span className={`pill ${status === 'on' ? 'green' : 'amber'}`}>
-          {status === 'on' ? '🔴 ライブ' : '接続中…'}
+          {status === 'on' ? t('watch.live') : t('watch.connecting')}
         </span>
       </header>
       <Scoreboard game={game} />
       <Diamond game={game} onBaseTap={() => {}} />
       <div className="card">
-        <h2>プレイログ</h2>
+        <h2>{t('watch.playLog')}</h2>
         {[...game.playLogs].slice(-15).reverse().map((l) => (
           <div className="log-line" key={l.id}>
-            <b>{l.inning}回{l.isTop ? '表' : '裏'}</b> {l.text}
+            <b>{t('score.logInning', { inning: l.inning, half: t(l.isTop ? 'half.top' : 'half.bottom') })}</b> {l.text}
           </div>
         ))}
-        {game.playLogs.length === 0 && <div className="dim small">まだプレイがありません。</div>}
+        {game.playLogs.length === 0 && <div className="dim small">{t('score.noPlays')}</div>}
       </div>
       <p className="small dim" style={{ textAlign: 'center', marginTop: 12 }}>
-        観戦専用ページです(書き込みはできません)。自動で更新されます。
+        {t('watch.footer')}
       </p>
     </div>
   );
