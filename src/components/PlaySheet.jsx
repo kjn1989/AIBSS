@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import Sheet from './Sheet.jsx';
 import { useStore, useT, usePlayerName, isMyTeamBatting } from '../state/store.jsx';
 import { RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES, outTypeLabel } from '../lib/model.js';
-import { proposeMoves, batterDestOptions, runnerDestOptions, DEST_LABEL, judgeAdvance } from '../lib/plays.js';
+import { proposeMoves, batterDestOptions, runnerDestOptions, judgeAdvance } from '../lib/plays.js';
 import FieldPad from './FieldPad.jsx';
 
 const NEEDS_DIRECTION = ['single', 'double', 'triple', 'hr', 'out', 'error', 'sacBunt', 'sacFly'];
@@ -15,9 +15,15 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
   const nameOf = usePlayerName();
   const edition = state.settings.edition;
   // 凡打の種類ボタンの表示: 日本語モードはエディション別呼称(少年野球のゲッツー等)を維持し、
-  // 英語モードは辞書(outType.*)を使う。※確認文(summary)は打球方向(DIRECTIONS)が未翻訳のため
-  // 現時点では日本語のまま(方向・妨害系の英語化は次フェーズで対応)。
+  // 英語モードは辞書(outType.*)を使う。
   const outLabel = (k) => (lang === 'ja' ? outTypeLabel(k, edition) : t(`outType.${k}`));
+  // 走者の行き先ラベル(旧 plays.js DEST_LABEL を言語対応で内製)
+  const destLabel = (from) => (to) => {
+    if (to === 'out') return t('dest.out');
+    if (to === 4) return t('dest.score');
+    if (to === from) return t('dest.stay');
+    return t('dest.toBase', { base: t(`base.${to}`) });
+  };
   const result = initial.result;
   const def = RESULTS[result];
   const resultLabel = lang === 'ja' ? def.label : t(`result.${result}`);
@@ -104,10 +110,16 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
   }, [dests, batterTo]);
 
   const summary = () => {
-    const dir = direction ? DIRECTIONS[direction] : '';
-    const ot = result === 'out' && outType ? outTypeLabel(outType, edition) : '';
-    const label = result === 'so' ? SO_TYPES[soType] + (batterTo === 1 ? '(振り逃げ)' : '') : result === 'out' ? '' : def.label;
-    return `${dir}${ot}${label}${runs ? `・${runs}点` : ''}`;
+    const dir = direction ? (lang === 'ja' ? DIRECTIONS[direction] : t(`dir.${direction}`)) : '';
+    const ot = result === 'out' && outType ? outLabel(outType) : '';
+    const soLabel = lang === 'ja' ? SO_TYPES[soType] : t(`soType.${soType}`);
+    const label = result === 'so'
+      ? soLabel + (batterTo === 1 ? t('playsheet.dropThird') : '')
+      : result === 'out' ? '' : resultLabel;
+    const runsSuffix = runs ? t('playsheet.runsSuffix', { n: runs }) : '';
+    if (lang === 'ja') return `${dir}${ot}${label}${runsSuffix}`;
+    // 英語は語順が異なるため、空でない要素を半角スペースで連結
+    return `${[dir, ot, label].filter(Boolean).join(' ')}${runsSuffix}`;
   };
 
   // 守備時: 生還する走者のうち継投を跨いだ走者(前投手の責任走者)
@@ -142,7 +154,7 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
 
   const runnerName = (b) => {
     const r = game.runners[b];
-    return r?.playerId ? nameOf(r.playerId) : `${['', '一', '二', '三'][b]}塁走者`;
+    return r?.playerId ? nameOf(r.playerId) : t('runner.onBase', { base: t(`base.${b}`) });
   };
 
   return (
@@ -157,7 +169,7 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
             />
           ) : (
             <button type="button" className="dir-summary" onClick={() => setDirOpen(true)}>
-              <span className="dir-label">{DIRECTIONS[direction]}</span>
+              <span className="dir-label">{lang === 'ja' ? DIRECTIONS[direction] : t(`dir.${direction}`)}</span>
               <span className="change">{t('playsheet.change')}</span>
             </button>
           )}
@@ -196,14 +208,14 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
       )}
 
       {(hadRunners || def.onBase || batterDestOptions(result).length > 1) && (
-        <div className="section-title">走者の動き</div>
+        <div className="section-title">{t('playsheet.runnerMovement')}</div>
       )}
 
       {[3, 2, 1].map(
         (b) =>
           runnersOn[b] && (
             <div className="runner-move" key={b}>
-              <span className="who">{['', '一', '二', '三'][b]}塁: {runnerName(b)}</span>
+              <span className="who">{t(`base.${b}`)}: {runnerName(b)}</span>
               <div className="dests">
                 {runnerDestOptions(b).map((to) => (
                   <button
@@ -211,7 +223,7 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
                     className={dests[b] === to ? `sel${to === 'out' ? ' out' : ''}` : ''}
                     onClick={() => setDests({ ...dests, [b]: to })}
                   >
-                    {DEST_LABEL(b)(to)}
+                    {destLabel(b)(to)}
                   </button>
                 ))}
               </div>
@@ -221,7 +233,7 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
 
       {batterDestOptions(result).length > 0 && (
         <div className="runner-move">
-          <span className="who">打者{batterName ? `: ${batterName}` : ''}</span>
+          <span className="who">{t('playsheet.batter')}{batterName ? `: ${batterName}` : ''}</span>
           <div className="dests">
             {batterDestOptions(result).map((to) => (
               <button
@@ -229,9 +241,9 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
                 className={batterTo === to ? `sel${to === 'out' ? ' out' : ''}` : ''}
                 onClick={() => setBatterTo(to)}
               >
-                {to === 'out' ? 'アウト' : to === 4 ? '生還'
-                  : result === 'so' && to === 1 ? '振り逃げで一塁'
-                    : `${['', '一', '二', '三'][to]}塁へ`}
+                {to === 'out' ? t('dest.out') : to === 4 ? t('dest.score')
+                  : result === 'so' && to === 1 ? t('playsheet.soToFirst')
+                    : t('dest.toBase', { base: t(`base.${to}`) })}
               </button>
             ))}
           </div>
@@ -240,29 +252,29 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
 
       {myBatting && (
         <div className="flex mt12">
-          <span className="small dim">打点</span>
+          <span className="small dim">{t('playsheet.rbi')}</span>
           <div className="stepper">
             <button onClick={() => setRbiOverride(Math.max(0, rbi - 1))}>−</button>
             <span className="val">{rbi}</span>
             <button onClick={() => setRbiOverride(Math.min(4, rbi + 1))}>＋</button>
           </div>
-          {rbiOverride !== null && rbiOverride !== autoRbi && <span className="pill amber">手動</span>}
+          {rbiOverride !== null && rbiOverride !== autoRbi && <span className="pill amber">{t('playsheet.manual')}</span>}
         </div>
       )}
 
       {isAdvTarget && myBatting && (
         <div className="flex mt12">
-          <span className="small dim">進塁打</span>
+          <span className="small dim">{t('playsheet.advHit')}</span>
           <button className={`small ${advSuccess ? 'primary' : ''}`} onClick={() => setAdvOverride(!advSuccess)}>
-            {advSuccess ? '✓ 進塁打成功' : '進塁打ではない'}
+            {advSuccess ? t('playsheet.advYes') : t('playsheet.advNo')}
           </button>
-          {advOverride === null && <span className="pill">自動判定</span>}
+          {advOverride === null && <span className="pill">{t('playsheet.autoJudge')}</span>}
         </div>
       )}
 
       {!myBatting && scoringBases.length > 0 && (
         <>
-          <div className="section-title">失点の記録 (自責点の帰属)</div>
+          <div className="section-title">{t('playsheet.runsRecord')}</div>
           {scoringBases.map((b) => {
             const r = game.runners[b];
             const prevPid = r?.pitcherId;
@@ -271,8 +283,8 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
             return (
               <div key={b} className="card" style={{ padding: 10, marginBottom: 8 }}>
                 <div className="small" style={{ marginBottom: 6 }}>
-                  {['', '一', '二', '三'][b]}塁走者の生還
-                  {isInherited && <span className="pill amber" style={{ marginLeft: 6 }}>継投跨ぎ</span>}
+                  {t('playsheet.runnerScored', { base: t(`base.${b}`) })}
+                  {isInherited && <span className="pill amber" style={{ marginLeft: 6 }}>{t('playsheet.inherited')}</span>}
                 </div>
                 {isInherited && (
                   <div className="grid2" style={{ marginBottom: 6 }}>
@@ -280,13 +292,13 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
                       className={`small ${chosen === prevPid ? 'primary' : ''}`}
                       onClick={() => setErChoices({ ...erChoices, [b]: prevPid })}
                     >
-                      前投手: {nameOf(prevPid)}
+                      {t('playsheet.prevPitcher', { name: nameOf(prevPid) })}
                     </button>
                     <button
                       className={`small ${chosen === game.currentPitcherId ? 'primary' : ''}`}
                       onClick={() => setErChoices({ ...erChoices, [b]: game.currentPitcherId })}
                     >
-                      現投手: {nameOf(game.currentPitcherId)}
+                      {t('playsheet.currPitcher', { name: nameOf(game.currentPitcherId) })}
                     </button>
                   </div>
                 )}
@@ -294,7 +306,7 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
                   className={`small ${unearned[b] ? 'danger' : 'ghost'}`}
                   onClick={() => setUnearned({ ...unearned, [b]: !unearned[b] })}
                 >
-                  {unearned[b] ? '✓ 非自責(失策絡み)' : '自責点として記録'}
+                  {unearned[b] ? t('playsheet.unearnedYes') : t('playsheet.unearnedNo')}
                 </button>
               </div>
             );
@@ -302,12 +314,12 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
         </>
       )}
 
-      {collision && <div className="warn-box mt12">⚠️ 複数の走者が同じ塁に到達しています。行き先を修正してください。</div>}
-      {dpNoRunnerOut && <div className="warn-box mt12">⚠️ ダブルプレーには走者のアウトが必要です。走者の行き先を「アウト」にしてください。</div>}
+      {collision && <div className="warn-box mt12">{t('playsheet.collision')}</div>}
+      {dpNoRunnerOut && <div className="warn-box mt12">{t('playsheet.dpNoOut')}</div>}
 
       <div className="confirm-card mt16" style={{ marginBottom: 0, padding: 12 }}>
         <div className="q" style={{ fontSize: 16, marginBottom: 0 }}>
-          {summary()} でよろしいですか？
+          {t('playsheet.confirmQ', { summary: summary() })}
         </div>
       </div>
 

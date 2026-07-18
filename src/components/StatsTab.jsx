@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { useStore, usePlayerName } from '../state/store.jsx';
-import { aggregateBatting, aggregatePitching, pitchingMetrics, DETAIL_METRICS, detailRanking, battingMetrics, fmtAvg } from '../lib/stats.js';
+import { useStore, usePlayerName, useT } from '../state/store.jsx';
+import { aggregateBatting, aggregatePitching, pitchingMetrics, DETAIL_METRICS, detailRanking, battingMetrics, fmtAvg, mLabel } from '../lib/stats.js';
 import { formatIP } from '../lib/model.js';
 import GameScopeToggle, { scopedGames } from './GameScopeToggle.jsx';
 import PlayerView from './PlayerView.jsx';
@@ -10,6 +10,9 @@ import TitleCards from './TitleCards.jsx';
 // 成績・詳細ランキング(10大メトリクス) + 投手成績(旧「投手」タブを統合)
 export default function StatsTab() {
   const { state } = useStore();
+  const t = useT();
+  const lang = state.settings.lang || 'ja';
+  const statTr = (key) => t(`stat.${key}`);
   const nameOf = usePlayerName();
   const [scope, setScope] = useState({ scope: 'season', gameId: null });
   const [metricKey, setMetricKey] = useState('ba');
@@ -20,7 +23,7 @@ export default function StatsTab() {
   const pitching = useMemo(() => aggregatePitching(games), [games]);
 
   const metric = DETAIL_METRICS.find((m) => m.key === metricKey);
-  const rows = useMemo(() => detailRanking(metric, batting, pitching), [metric, batting, pitching]);
+  const rows = useMemo(() => detailRanking(metric, batting, pitching, statTr), [metric, batting, pitching, lang]);
 
   const batMetrics = DETAIL_METRICS.filter((m) => m.type === 'bat');
   const pitMetrics = DETAIL_METRICS.filter((m) => m.type === 'pit');
@@ -32,34 +35,34 @@ export default function StatsTab() {
       {/* タイトルホルダー(👑)。ホームから移設 */}
       <TitleCards games={games} />
 
-      <div className="section-title">打者メトリクス</div>
+      <div className="section-title">{t('stats.battingMetrics')}</div>
       <div className="grid3">
         {batMetrics.map((m) => (
           <button key={m.key} className={`small ${metricKey === m.key ? 'primary' : ''}`} onClick={() => setMetricKey(m.key)}>
-            {m.label.split(' ')[0]}
+            {mLabel(m, lang).split(' ')[0]}
           </button>
         ))}
       </div>
-      <div className="section-title">投手メトリクス</div>
+      <div className="section-title">{t('stats.pitchingMetrics')}</div>
       <div className="grid3">
         {pitMetrics.map((m) => (
           <button key={m.key} className={`small ${metricKey === m.key ? 'primary' : ''}`} onClick={() => setMetricKey(m.key)}>
-            {m.label.split(' ')[0]}
+            {mLabel(m, lang).split(' ')[0]}
           </button>
         ))}
       </div>
 
       <div className="card mt16">
-        <h2>{metric.label} ランキング {metric.higherBetter ? '' : '(小さいほど上位)'}</h2>
+        <h2>{t('stats.ranking', { label: mLabel(metric, lang) })} {metric.higherBetter ? '' : t('stats.lowerBetter')}</h2>
         {rows.length === 0 ? (
-          <div className="dim small">対象データがありません(分母0の選手は「-」扱いで除外)。</div>
+          <div className="dim small">{t('stats.noData')}</div>
         ) : (
           <table className="rank-table">
             <thead>
               <tr>
-                <th>順位</th>
-                <th>選手</th>
-                <th style={{ textAlign: 'right' }}>{metric.label.split(' ')[0]}</th>
+                <th>{t('stats.rank')}</th>
+                <th>{t('stats.player')}</th>
+                <th style={{ textAlign: 'right' }}>{mLabel(metric, lang).split(' ')[0]}</th>
               </tr>
             </thead>
             <tbody>
@@ -81,7 +84,7 @@ export default function StatsTab() {
       <BattingSummaryTable batting={batting} nameOf={nameOf} onOpenPlayer={setPlayerId} />
       <PitchingSummaryTable pitching={pitching} nameOf={nameOf} onOpenPlayer={setPlayerId} />
       <p className="small dim" style={{ textAlign: 'center', marginBottom: 12 }}>
-        選手名をタップすると個人ページ(スプレーチャート・成績推移・打席履歴)が開きます。
+        {t('stats.tapHint')}
       </p>
 
       <MemberSection />
@@ -93,19 +96,20 @@ export default function StatsTab() {
 
 // 全員の打撃基本成績一覧(参考テーブル)
 function BattingSummaryTable({ batting, nameOf, onOpenPlayer }) {
+  const t = useT();
   const rows = Object.values(batting)
     .filter((s) => s.pa > 0)
     .sort((a, b) => b.h - a.h);
   if (rows.length === 0) return null;
   return (
     <div className="card">
-      <h2>打撃成績一覧</h2>
+      <h2>{t('stats.battingTable')}</h2>
       <div style={{ overflowX: 'auto' }}>
         <table className="rank-table" style={{ minWidth: 480 }}>
           <thead>
             <tr>
-              <th>選手</th><th>打席</th><th>打数</th><th>安打</th><th>打率</th>
-              <th>本</th><th>点</th><th>四死</th><th>三振</th><th>盗</th>
+              <th>{t('stats.player')}</th><th>{t('stats.col.pa')}</th><th>{t('stats.col.ab')}</th><th>{t('stats.col.h')}</th><th>{t('stats.col.avg')}</th>
+              <th>{t('stats.col.hr')}</th><th>{t('stats.col.rbi')}</th><th>{t('stats.col.bbhbp')}</th><th>{t('stats.col.so')}</th><th>{t('stats.col.sb')}</th>
             </tr>
           </thead>
           <tbody>
@@ -135,17 +139,18 @@ function BattingSummaryTable({ batting, nameOf, onOpenPlayer }) {
 
 // 全員の投手基本成績一覧(参考テーブル。旧「投手」タブのサマリーを移設)
 function PitchingSummaryTable({ pitching, nameOf, onOpenPlayer }) {
+  const t = useT();
   const rows = Object.values(pitching).filter((s) => s.outsRecorded > 0 || s.games > 0);
   if (rows.length === 0) return null;
   return (
     <div className="card">
-      <h2>投手成績一覧</h2>
+      <h2>{t('stats.pitchingTable')}</h2>
       <div style={{ overflowX: 'auto' }}>
         <table className="rank-table" style={{ minWidth: 520 }}>
           <thead>
             <tr>
-              <th>投手</th><th>回</th><th>防御率</th><th>被打率</th><th>WHIP</th><th>奪三振</th>
-              <th>与四死</th><th>被安</th><th>自責</th><th>勝</th><th>S</th><th>H</th>
+              <th>{t('stats.col.pitcher')}</th><th>{t('stats.col.ip')}</th><th>{t('stats.col.era')}</th><th>{t('stats.col.oba')}</th><th>{t('stats.col.whip')}</th><th>{t('stats.col.k')}</th>
+              <th>{t('stats.col.bbhbpP')}</th><th>{t('stats.col.ha')}</th><th>{t('stats.col.er')}</th><th>{t('stats.col.w')}</th><th>{t('stats.col.s')}</th><th>{t('stats.col.hld')}</th>
             </tr>
           </thead>
           <tbody>

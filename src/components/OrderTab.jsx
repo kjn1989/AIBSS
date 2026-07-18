@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useStore, useT, useCurrentGame, usePlayerName } from '../state/store.jsx';
-import { POSITIONS } from '../lib/model.js';
+import { POSITIONS, positionLabel } from '../lib/model.js';
 import Sheet from './Sheet.jsx';
 import LineupWizard from './LineupWizard.jsx';
 import HeadCoachView from './HeadCoachView.jsx';
@@ -10,6 +10,7 @@ import HeadCoachView from './HeadCoachView.jsx';
 export function SubstituteSheet({ game, slot, onClose, initialKind = 'ph' }) {
   const { state, dispatch } = useStore();
   const t = useT();
+  const lang = state.settings.lang || 'ja';
   const nameOf = usePlayerName();
   const [kind, setKind] = useState(initialKind); // ph=代打 pr=代走 def=守備交代
   const [playerId, setPlayerId] = useState('');
@@ -18,44 +19,44 @@ export function SubstituteSheet({ game, slot, onClose, initialKind = 'ph' }) {
   const inLineup = new Set(game.lineup.map((l) => l.playerId));
   const candidates = state.players.filter((p) => !inLineup.has(p.id));
   const isRetired = playerId && game.retiredPlayerIds.includes(playerId);
-  const kindLabel = { ph: '代打', pr: '代走', def: '守備交代' }[kind];
+  const kindLabel = t(`order.sub.${kind}`);
 
   const runnerBase = [1, 2, 3].find((b) => game.runners[b]?.playerId === slot.playerId);
 
   return (
-    <Sheet title={`${slot.order}番 ${nameOf(slot.playerId)} の交代`} onClose={onClose}>
+    <Sheet title={t('order.sub.title', { order: slot.order, name: nameOf(slot.playerId) })} onClose={onClose}>
       <div className="grid3">
-        {[['ph', '代打'], ['pr', '代走'], ['def', '守備交代']].map(([k, label]) => (
+        {['ph', 'pr', 'def'].map((k) => (
           <button key={k} className={kind === k ? 'primary' : ''} onClick={() => setKind(k)}>
-            {label}
+            {t(`order.sub.${k}`)}
           </button>
         ))}
       </div>
 
       {kind === 'pr' && !runnerBase && (
-        <div className="warn-box mt8">この選手は現在塁上にいません。代走は塁上の走者に対して行います。</div>
+        <div className="warn-box mt8">{t('order.sub.prNoRunner')}</div>
       )}
 
-      <div className="section-title">出場する選手</div>
+      <div className="section-title">{t('order.sub.playerIn')}</div>
       <select value={playerId} onChange={(e) => setPlayerId(e.target.value)}>
-        <option value="">選手を選択...</option>
+        <option value="">{t('order.sub.selectPlayer')}</option>
         {candidates.map((p) => (
           <option key={p.id} value={p.id}>
-            {p.name}{game.retiredPlayerIds.includes(p.id) ? ' (⚠️出場済み)' : ''}
+            {p.name}{game.retiredPlayerIds.includes(p.id) ? t('order.sub.usedMark') : ''}
           </option>
         ))}
       </select>
 
       {isRetired && (
         <div className="warn-box">
-          ⚠️ {nameOf(playerId)} は一度退いた選手です。公式ルールでは再出場できません(記録は継続可能)。
+          {t('order.sub.retiredWarn', { name: nameOf(playerId) })}
         </div>
       )}
 
-      <div className="section-title">守備位置</div>
+      <div className="section-title">{t('order.sub.position')}</div>
       <select value={position} onChange={(e) => setPosition(e.target.value)}>
         {POSITIONS.map((pos) => (
-          <option key={pos} value={pos}>{pos}</option>
+          <option key={pos} value={pos}>{positionLabel(pos, lang)}</option>
         ))}
       </select>
 
@@ -72,12 +73,14 @@ export function SubstituteSheet({ game, slot, onClose, initialKind = 'ph' }) {
               playerId,
               position,
               asRunner: kind === 'pr',
-              label: `${kindLabel}: ${nameOf(playerId)} (${slot.order}番 ${nameOf(slot.playerId)}に代わり)`,
+              label: t('order.sub.log', {
+                kind: kindLabel, inName: nameOf(playerId), order: slot.order, outName: nameOf(slot.playerId),
+              }),
             });
             onClose();
           }}
         >
-          {kindLabel}で出場
+          {t('order.sub.enter', { kind: kindLabel })}
         </button>
       </div>
     </Sheet>
@@ -87,6 +90,8 @@ export function SubstituteSheet({ game, slot, onClose, initialKind = 'ph' }) {
 // ---- メイン ----
 export default function OrderTab() {
   const { state, dispatch } = useStore();
+  const t = useT();
+  const lang = state.settings.lang || 'ja';
   const game = useCurrentGame();
   const nameOf = usePlayerName();
   const [subSlot, setSubSlot] = useState(null);
@@ -96,18 +101,18 @@ export default function OrderTab() {
 
   // 公式クラウドの観戦(viewer)ロールは編集不可
   if (state.settings.officialTeamId && state.settings.officialRole === 'viewer') {
-    return <div className="big-note">👀 観戦モード(閲覧専用)のため、オーダーの編集はできません。</div>;
+    return <div className="big-note">{t('order.viewerOnly')}</div>;
   }
 
   if (!game || game.status === 'finished') {
-    return <div className="big-note">📋 スコア入力タブで試合を開始すると、オーダーを設定できます。</div>;
+    return <div className="big-note">{t('order.noGame')}</div>;
   }
 
   // 試合が始まっているか(打席が記録されている or プレイログがある)
   const gameStarted = game.atBats.length > 0 ||
     game.playLogs.some((l) => ['atbat', 'defense', 'run', 'sb'].includes(l.kind));
 
-  const coachBtn = aiCoachEnabled && <button className="small" onClick={() => setCoachOpen(true)}>🤖 AI提案</button>;
+  const coachBtn = aiCoachEnabled && <button className="small" onClick={() => setCoachOpen(true)}>{t('order.aiSuggest')}</button>;
   const coachView = aiCoachEnabled && coachOpen && (
     <HeadCoachView game={game} canApply={!gameStarted} onClose={() => setCoachOpen(false)} />
   );
@@ -118,7 +123,7 @@ export default function OrderTab() {
         {aiCoachEnabled && (
           <div className="card">
             <div className="flex">
-              <span className="grow small dim">打順に迷ったら、AIヘッドコーチが提案します。</span>
+              <span className="grow small dim">{t('order.aiHint')}</span>
               {coachBtn}
             </div>
           </div>
@@ -130,7 +135,7 @@ export default function OrderTab() {
   }
 
   const rebuildLineup = () => {
-    if (!window.confirm('オーダーを最初から組み直しますか？(現在の打順・守備位置はリセットされます)')) return;
+    if (!window.confirm(t('order.rebuildConfirm'))) return;
     dispatch({ type: 'SET_LINEUP', gameId: game.id, lineup: [] });
   };
 
@@ -138,17 +143,19 @@ export default function OrderTab() {
     <div>
       <div className="card">
         <div className="flex" style={{ marginBottom: 8 }}>
-          <h2 className="grow" style={{ marginBottom: 0 }}>オーダー ({game.inning}回{game.isTop ? '表' : '裏'})</h2>
+          <h2 className="grow" style={{ marginBottom: 0 }}>
+            {t('order.title', { inning: game.inning, half: t(game.isTop ? 'half.top' : 'half.bottom') })}
+          </h2>
           {coachBtn}
-          {!gameStarted && <button className="small" onClick={rebuildLineup}>↻ 組み直す</button>}
+          {!gameStarted && <button className="small" onClick={rebuildLineup}>{t('order.rebuild')}</button>}
         </div>
         {game.lineup.map((slot, i) => (
           <div className="row" key={slot.order}>
             <span className="rank-badge">{slot.order}</span>
             <div className="grow" onClick={() => setSubSlot(slot)} role="button">
               <b>{nameOf(slot.playerId)}</b>
-              {i === game.batterIndex && <span className="pill blue" style={{ marginLeft: 6 }}>次打者</span>}
-              {game.retiredPlayerIds.includes(slot.playerId) && <span className="pill amber" style={{ marginLeft: 6 }}>再出場</span>}
+              {i === game.batterIndex && <span className="pill blue" style={{ marginLeft: 6 }}>{t('order.nextBatter')}</span>}
+              {game.retiredPlayerIds.includes(slot.playerId) && <span className="pill amber" style={{ marginLeft: 6 }}>{t('order.reentry')}</span>}
             </div>
             <select
               className="small"
@@ -157,18 +164,18 @@ export default function OrderTab() {
               onChange={(e) => dispatch({ type: 'SET_POSITION', gameId: game.id, order: slot.order, position: e.target.value })}
             >
               {POSITIONS.map((pos) => (
-                <option key={pos} value={pos}>{pos}</option>
+                <option key={pos} value={pos}>{positionLabel(pos, lang)}</option>
               ))}
             </select>
-            <button className="small" onClick={() => setSubSlot(slot)}>交代</button>
+            <button className="small" onClick={() => setSubSlot(slot)}>{t('order.change')}</button>
           </div>
         ))}
-        <p className="small dim mt8">行をタップで代打・代走・守備交代。守備位置はその場で変更できます。</p>
+        <p className="small dim mt8">{t('order.rowHint')}</p>
       </div>
 
       {game.retiredPlayerIds.length > 0 && (
         <div className="card">
-          <h2>退いた選手</h2>
+          <h2>{t('order.retiredPlayers')}</h2>
           <div className="flex" style={{ flexWrap: 'wrap' }}>
             {game.retiredPlayerIds.map((id) => (
               <span key={id} className="pill">{nameOf(id)}</span>

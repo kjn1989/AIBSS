@@ -1,5 +1,6 @@
 import React from 'react';
 import { DIRECTIONS } from '../lib/model.js';
+import { useT } from '../state/store.jsx';
 
 // 打球方向の選択を「TV中継風」の野球フィールドで行うパッド
 // 市松模様の芝・白チョークのファウルライン・内野の土(ラインに沿う)・内野芝・
@@ -25,6 +26,7 @@ const BASE_MARKS = [
 ];
 
 export default function FieldPad({ value, onChange }) {
+  const t = useT();
   return (
     <div className="dir-pad field-pad bf">
       <div className="bf-dirtfan" />
@@ -35,14 +37,14 @@ export default function FieldPad({ value, onChange }) {
       {BASE_MARKS.map((s, i) => (
         <div key={i} className="bf-base" style={s} />
       ))}
-      {Object.entries(DIRECTIONS).map(([key, label]) => (
+      {Object.keys(DIRECTIONS).map((key) => (
         <button
           key={key}
           className={`field-pos${value === key ? ' sel' : ''}`}
           style={POSITIONS[key]}
           onClick={() => onChange(key)}
         >
-          {label}
+          {t(`dir.${key}`)}
         </button>
       ))}
     </div>

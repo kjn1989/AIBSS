@@ -152,24 +152,28 @@ export function aggregatePitching(games) {
 
 // ---- タイトル系ランキング(同数は同順位で全員返す) ----
 export const BATTING_TITLES = [
-  { key: 'h', label: '安打', crown: '安打王' },
-  { key: 'rbi', label: '打点', crown: '打点王' },
-  { key: 'runs', label: '得点', crown: '得点王' },
-  { key: 'hr', label: '本塁打', crown: '本塁打王' },
-  { key: 'double', label: '二塁打', crown: '二塁打王' },
-  { key: 'triple', label: '三塁打', crown: '三塁打王' },
-  { key: 'sb', label: '盗塁', crown: '盗塁王' },
-  { key: 'bbhbp', label: '四死球', crown: '選球眼王' },
-  { key: 'tb', label: '塁打', crown: '塁打王' },
+  { key: 'h', label: '安打', crown: '安打王', en: 'Hits', enCrown: 'Hits Leader' },
+  { key: 'rbi', label: '打点', crown: '打点王', en: 'RBI', enCrown: 'RBI Leader' },
+  { key: 'runs', label: '得点', crown: '得点王', en: 'Runs', enCrown: 'Runs Leader' },
+  { key: 'hr', label: '本塁打', crown: '本塁打王', en: 'HR', enCrown: 'HR Leader' },
+  { key: 'double', label: '二塁打', crown: '二塁打王', en: '2B', enCrown: '2B Leader' },
+  { key: 'triple', label: '三塁打', crown: '三塁打王', en: '3B', enCrown: '3B Leader' },
+  { key: 'sb', label: '盗塁', crown: '盗塁王', en: 'SB', enCrown: 'SB Leader' },
+  { key: 'bbhbp', label: '四死球', crown: '選球眼王', en: 'BB+HBP', enCrown: 'Best Eye' },
+  { key: 'tb', label: '塁打', crown: '塁打王', en: 'TB', enCrown: 'TB Leader' },
 ];
 
 export const PITCHING_TITLES = [
-  { key: 'wins', label: '勝利', crown: '最多勝' },
-  { key: 'strikeouts', label: '奪三振', crown: '奪三振王' },
-  { key: 'saves', label: 'セーブ', crown: 'セーブ王' },
-  { key: 'holds', label: 'ホールド', crown: 'ホールド王' },
-  { key: 'ip', label: '投球回', crown: 'イニング王' },
+  { key: 'wins', label: '勝利', crown: '最多勝', en: 'Wins', enCrown: 'Most Wins' },
+  { key: 'strikeouts', label: '奪三振', crown: '奪三振王', en: 'K', enCrown: 'K Leader' },
+  { key: 'saves', label: 'セーブ', crown: 'セーブ王', en: 'Saves', enCrown: 'Saves Leader' },
+  { key: 'holds', label: 'ホールド', crown: 'ホールド王', en: 'Holds', enCrown: 'Holds Leader' },
+  { key: 'ip', label: '投球回', crown: 'イニング王', en: 'IP', enCrown: 'Innings Leader' },
 ];
+
+// メトリクス/タイトルの表示ラベルを言語に応じて返す(保存値・比較キーはそのまま)。
+export const mLabel = (m, lang) => (lang === 'en' && m.en ? m.en : m.label);
+export const mCrown = (m, lang) => (lang === 'en' && m.enCrown ? m.enCrown : m.crown);
 
 // stats map からタイトルのトップ(同数同順位)を返す
 export function titleLeaders(statsMap, key) {
@@ -238,95 +242,104 @@ export function pitchingMetrics(s) {
 
 // ---- 詳細ランキングのメトリクス定義 ----
 // higherBetter=false のものは昇順で順位付け
+// 内訳(detail)で使う単位語のデフォルト(日本語)。表示側が tr を渡せば英語等に切替わる。
+const JA_UNITS = {
+  hits: '安打', ab: '打数', pa: '打席', pitches: '球', games: '登板', ipUnit: '回', er: '自責',
+  bbhbp: '四死球', ha: '被安打', bb: '与四球', k: '奪三振', abFaced: '被打数', success: '成功',
+  chances: '機会', obp: '出塁率', slg: '長打率', firstPitch: '(初球打ち)',
+  clutchDesc: '先制・同点・逆転・勝ち越し打の合計',
+};
+const jaTr = (key) => JA_UNITS[key];
+
 export const DETAIL_METRICS = [
   {
-    key: 'ba', label: '打率', type: 'bat', higherBetter: true,
+    key: 'ba', label: '打率', en: 'AVG', type: 'bat', higherBetter: true,
     value: (m) => m.ba, format: fmtAvg,
-    detail: (s) => `${s.h}安打/${s.ab}打数`,
+    detail: (s, m, tr = jaTr) => `${s.h}${tr('hits')}/${s.ab}${tr('ab')}`,
     qualify: (s) => s.ab > 0,
   },
   {
-    key: 'risp', label: '得点圏打率', type: 'bat', higherBetter: true,
+    key: 'risp', label: '得点圏打率', en: 'RISP AVG', type: 'bat', higherBetter: true,
     value: (m) => m.risp, format: fmtAvg,
-    detail: (s) => `${s.rispH}安打/${s.rispAB}打数`,
+    detail: (s, m, tr = jaTr) => `${s.rispH}${tr('hits')}/${s.rispAB}${tr('ab')}`,
     qualify: (s) => s.rispAB > 0,
   },
   {
-    key: 'obp', label: '出塁率', type: 'bat', higherBetter: true,
+    key: 'obp', label: '出塁率', en: 'OBP', type: 'bat', higherBetter: true,
     value: (m) => m.obp, format: fmtAvg,
-    detail: (s) => `安打${s.h}+四死球${s.bb + s.hbp}/${s.ab + s.bb + s.hbp + s.sacFly}`,
+    detail: (s, m, tr = jaTr) => `${tr('hits')}${s.h}+${tr('bbhbp')}${s.bb + s.hbp}/${s.ab + s.bb + s.hbp + s.sacFly}`,
     qualify: (s) => s.ab + s.bb + s.hbp + s.sacFly > 0,
   },
   {
-    key: 'ops', label: 'OPS', type: 'bat', higherBetter: true,
+    key: 'ops', label: 'OPS', en: 'OPS', type: 'bat', higherBetter: true,
     value: (m) => m.ops, format: (v, m) => (v === null ? '-' : v.toFixed(3)),
-    detail: (s, m) => `出塁率${fmtAvg(m.obp)} 長打率${fmtAvg(m.slg)}`,
+    detail: (s, m, tr = jaTr) => `${tr('obp')}${fmtAvg(m.obp)} ${tr('slg')}${fmtAvg(m.slg)}`,
     qualify: (s) => s.ab > 0,
   },
   {
-    key: 'adv', label: '進塁打成功率', type: 'bat', higherBetter: true,
+    key: 'adv', label: '進塁打成功率', en: 'ProdOut% (productive-out rate)', type: 'bat', higherBetter: true,
     value: (m) => m.adv, format: fmtPct,
-    detail: (s) => `${s.advSuccess}成功/${s.advChance}機会`,
+    detail: (s, m, tr = jaTr) => `${s.advSuccess}${tr('success')}/${s.advChance}${tr('chances')}`,
     qualify: (s) => s.advChance > 0,
   },
   {
-    key: 'ppa', label: 'PPA (球/打席)', type: 'bat', higherBetter: true,
+    key: 'ppa', label: 'PPA (球/打席)', en: 'PPA (P/AB)', type: 'bat', higherBetter: true,
     value: (m) => m.ppa, format: fmt2,
-    detail: (s) => `${s.totalPitches}球/${s.pa}打席`,
+    detail: (s, m, tr = jaTr) => `${s.totalPitches}${tr('pitches')}/${s.pa}${tr('pa')}`,
     qualify: (s) => s.pa > 0,
   },
   {
-    key: 'clutch', label: 'クラッチ打数', type: 'bat', higherBetter: true,
+    key: 'clutch', label: 'クラッチ打数', en: 'Clutch (clutch hits)', type: 'bat', higherBetter: true,
     value: (m) => m.clutch, format: (v) => (v === null ? '-' : String(v)),
-    detail: () => '先制・同点・逆転・勝ち越し打の合計',
+    detail: (s, m, tr = jaTr) => tr('clutchDesc'),
     qualify: (s) => s.pa > 0,
   },
   {
-    key: 'fhit', label: '初球安打率', type: 'bat', higherBetter: true,
+    key: 'fhit', label: '初球安打率', en: '1stHit% (first-pitch)', type: 'bat', higherBetter: true,
     value: (m) => m.fhit, format: fmtPct,
-    detail: (s) => `${s.firstPitchHits}安打/${s.firstPitchSwings}打席(初球打ち)`,
+    detail: (s, m, tr = jaTr) => `${s.firstPitchHits}${tr('hits')}/${s.firstPitchSwings}${tr('pa')}${tr('firstPitch')}`,
     qualify: (s) => s.firstPitchSwings > 0,
   },
   {
-    key: 'era7', label: '防御率 (7回換算)', type: 'pit', higherBetter: false,
+    key: 'era7', label: '防御率 (7回換算)', en: 'ERA (7-inn)', type: 'pit', higherBetter: false,
     value: (m) => m.era7, format: fmt2,
-    detail: (s) => `自責${s.earnedRuns}/${formatIP(s.outsRecorded)}回`,
+    detail: (s, m, tr = jaTr) => `${tr('er')}${s.earnedRuns}/${formatIP(s.outsRecorded)}${tr('ipUnit')}`,
     qualify: (s) => s.outsRecorded > 0,
   },
   {
-    key: 'whip', label: 'WHIP', type: 'pit', higherBetter: false,
+    key: 'whip', label: 'WHIP', en: 'WHIP', type: 'pit', higherBetter: false,
     value: (m) => m.whip, format: fmt2,
-    detail: (s) => `被安打${s.hitsAllowed}+四死球${s.walks + s.hitByPitch}/${formatIP(s.outsRecorded)}回`,
+    detail: (s, m, tr = jaTr) => `${tr('ha')}${s.hitsAllowed}+${tr('bbhbp')}${s.walks + s.hitByPitch}/${formatIP(s.outsRecorded)}${tr('ipUnit')}`,
     qualify: (s) => s.outsRecorded > 0,
   },
   {
-    key: 'kbb', label: 'K/BB', type: 'pit', higherBetter: true,
+    key: 'kbb', label: 'K/BB', en: 'K/BB', type: 'pit', higherBetter: true,
     value: (m) => m.kbbSort, format: (v, m) => m.kbbDisplay,
-    detail: (s) => `奪三振${s.strikeouts}/与四球${s.walks}`,
+    detail: (s, m, tr = jaTr) => `${tr('k')}${s.strikeouts}/${tr('bb')}${s.walks}`,
     qualify: (s) => s.outsRecorded > 0 && (s.strikeouts > 0 || s.walks > 0),
   },
   {
-    key: 'oba', label: '被打率', type: 'pit', higherBetter: false,
+    key: 'oba', label: '被打率', en: 'OBA', type: 'pit', higherBetter: false,
     value: (m) => m.oba, format: fmtAvg,
-    detail: (s) => `被安打${s.hitsAllowed}/被打数${s.abFaced}`,
+    detail: (s, m, tr = jaTr) => `${tr('ha')}${s.hitsAllowed}/${tr('abFaced')}${s.abFaced}`,
     qualify: (s) => s.abFaced > 0,
   },
   {
-    key: 'holds', label: 'ホールド', type: 'pit', higherBetter: true,
+    key: 'holds', label: 'ホールド', en: 'Holds', type: 'pit', higherBetter: true,
     value: (m, s) => s.holds, format: (v) => (v === null ? '-' : String(v)),
-    detail: (s) => `${s.games}登板`,
+    detail: (s, m, tr = jaTr) => `${s.games}${tr('games')}`,
     qualify: (s) => s.holds > 0,
   },
   {
-    key: 'saves', label: 'セーブ', type: 'pit', higherBetter: true,
+    key: 'saves', label: 'セーブ', en: 'Saves', type: 'pit', higherBetter: true,
     value: (m, s) => s.saves, format: (v) => (v === null ? '-' : String(v)),
-    detail: (s) => `${s.games}登板`,
+    detail: (s, m, tr = jaTr) => `${s.games}${tr('games')}`,
     qualify: (s) => s.saves > 0,
   },
 ];
 
-// 指定メトリクスのランキング行を作る
-export function detailRanking(metricDef, battingMap, pitchingMap) {
+// 指定メトリクスのランキング行を作る。tr(key) を渡すと内訳の単位語を翻訳する(未指定は日本語)。
+export function detailRanking(metricDef, battingMap, pitchingMap, tr) {
   const src = metricDef.type === 'bat' ? battingMap : pitchingMap;
   const rows = [];
   for (const s of Object.values(src)) {
@@ -338,7 +351,7 @@ export function detailRanking(metricDef, battingMap, pitchingMap) {
       playerId: s.playerId,
       sortValue: metricDef.higherBetter ? v : -v,
       display: metricDef.format(v, m),
-      detail: metricDef.detail(s, m),
+      detail: metricDef.detail(s, m, tr),
     });
   }
   return rankRows(rows);
