@@ -28,14 +28,11 @@ export default function PitchCounter({ game, onAutoEvent }) {
   };
 
   return (
-    <div className="card">
-      <div className="count-display">
-        <span className="bs b">B {dispB}</span>
-        <span className="bs s">S {dispS}</span>
-        <span className="pitches">
-          {t('pitch.count.thisAtBat', { n: pitches.length })}
-          {firstKey ? t('pitch.count.first', { label: t(firstKey) }) : ''}
-        </span>
+    <div className="card pc-card">
+      {/* B/S/Oはトップのスコアボードに集約。ここは打席の投球数だけ極小・左上にさりげなく。 */}
+      <div className="pc-cap">
+        {t('pitch.count.thisAtBat', { n: pitches.length })}
+        {firstKey ? t('pitch.count.first', { label: t(firstKey) }) : ''}
       </div>
       {(dispS === 2 || dispB === 3) && (
         <div className="center small dim" style={{ marginBottom: 8 }}>
