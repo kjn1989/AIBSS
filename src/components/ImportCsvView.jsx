@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { useStore } from '../state/store.jsx';
+import { useStore, useT } from '../state/store.jsx';
 import { buildTemplateCsv, parseGameCsv, mergeCompletion, ipToOuts } from '../lib/importCsv.js';
 import { completeBoxScore } from '../lib/gemini.js';
 import { downloadCSV } from '../lib/csv.js';
-import { POSITIONS, formatIP } from '../lib/model.js';
+import { POSITIONS, formatIP, positionLabel } from '../lib/model.js';
 import FullscreenView from './FullscreenView.jsx';
 import Sheet from './Sheet.jsx';
 
@@ -23,44 +23,44 @@ function newBlankPitcher() {
 
 // ---- 打者1人分の編集シート ----
 function BatterEditSheet({ batter, onSave, onDelete, onClose }) {
+  const t = useT();
+  const { state } = useStore();
+  const lang = state.settings.lang || 'ja';
   const [b, setB] = useState(batter);
   const set = (k) => (e) => setB({ ...b, [k]: e.target.value });
   const setNum = (k) => (e) => setB({ ...b, [k]: numOrUndef(e.target.value) });
-  const NUM_FIELDS = [
-    ['pa', '打席'], ['ab', '打数'], ['h', '安打'], ['double', '二塁打'], ['triple', '三塁打'], ['hr', '本塁打'],
-    ['rbi', '打点'], ['bb', '四球'], ['hbp', '死球'], ['so', '三振'], ['sacBunt', '犠打'], ['sb', '盗塁'], ['runs', '得点'],
-  ];
+  const NUM_FIELDS = ['pa', 'ab', 'h', 'double', 'triple', 'hr', 'rbi', 'bb', 'hbp', 'so', 'sacBunt', 'sb', 'runs'];
   return (
-    <Sheet title="打者を編集" onClose={onClose}>
-      <label className="small dim">名前</label>
-      <input value={b.name || ''} onChange={set('name')} placeholder="選手名" />
+    <Sheet title={t('ics.editBatter')} onClose={onClose}>
+      <label className="small dim">{t('ics.name')}</label>
+      <input value={b.name || ''} onChange={set('name')} placeholder={t('set.playerName')} />
       <div className="grid2 mt8">
         <div>
-          <label className="small dim">背番号</label>
+          <label className="small dim">{t('set.number')}</label>
           <input value={b.number || ''} onChange={set('number')} />
         </div>
         <div>
-          <label className="small dim">守備位置</label>
+          <label className="small dim">{t('order.sub.position')}</label>
           <select value={b.position || ''} onChange={set('position')}>
-            <option value="">(不明)</option>
-            {BAT_POSITIONS.map((p) => <option key={p} value={p}>{p}</option>)}
+            <option value="">{t('ics.unknown')}</option>
+            {BAT_POSITIONS.map((p) => <option key={p} value={p}>{positionLabel(p, lang)}</option>)}
           </select>
         </div>
       </div>
-      <div className="section-title small mt8">成績(空欄可)</div>
+      <div className="section-title small mt8">{t('ics.statsOptional')}</div>
       <div className="grid3">
-        {NUM_FIELDS.map(([k, label]) => (
+        {NUM_FIELDS.map((k) => (
           <div key={k}>
-            <label className="small dim">{label}</label>
+            <label className="small dim">{t(`ics.f.${k}`)}</label>
             <input type="number" inputMode="numeric" value={b[k] ?? ''} onChange={setNum(k)} />
           </div>
         ))}
       </div>
-      <label className="small dim mt8" style={{ display: 'block' }}>メモ</label>
+      <label className="small dim mt8" style={{ display: 'block' }}>{t('ics.memo')}</label>
       <textarea rows={3} value={b.memo || ''} onChange={set('memo')} />
       <div className="sheet-actions">
-        <button className="ghost danger" onClick={onDelete}>この行を削除</button>
-        <button className="primary" disabled={!b.name.trim()} onClick={() => onSave(b)}>保存</button>
+        <button className="ghost danger" onClick={onDelete}>{t('ics.deleteRow')}</button>
+        <button className="primary" disabled={!b.name.trim()} onClick={() => onSave(b)}>{t('action.save')}</button>
       </div>
     </Sheet>
   );
@@ -68,43 +68,41 @@ function BatterEditSheet({ batter, onSave, onDelete, onClose }) {
 
 // ---- 投手1人分の編集シート ----
 function PitcherEditSheet({ pitcher, onSave, onDelete, onClose }) {
+  const t = useT();
   const [p, setP] = useState({ ...pitcher, ipText: pitcher.outsRecorded != null ? formatIP(pitcher.outsRecorded) : '' });
   const set = (k) => (e) => setP({ ...p, [k]: e.target.value });
   const setNum = (k) => (e) => setP({ ...p, [k]: numOrUndef(e.target.value) });
   const toggle = (k) => () => setP({ ...p, [k]: !p[k] });
-  const NUM_FIELDS = [
-    ['runs', '失点'], ['earnedRuns', '自責点'], ['hitsAllowed', '被安打'], ['walks', '与四球'],
-    ['hitByPitch', '与死球'], ['strikeouts', '奪三振'], ['pitches', '投球数'], ['abFaced', '被打数'],
-  ];
+  const NUM_FIELDS = ['runs', 'earnedRuns', 'hitsAllowed', 'walks', 'hitByPitch', 'strikeouts', 'pitches', 'abFaced'];
   const save = () => {
     const { ipText, ...rest } = p;
     onSave({ ...rest, outsRecorded: ipToOuts(ipText) });
   };
   return (
-    <Sheet title="投手を編集" onClose={onClose}>
-      <label className="small dim">名前</label>
-      <input value={p.name || ''} onChange={set('name')} placeholder="選手名" />
-      <label className="small dim mt8" style={{ display: 'block' }}>投球回(例: 4.2 = 4回2/3)</label>
-      <input value={p.ipText || ''} onChange={set('ipText')} placeholder="例: 5.0" />
-      <div className="section-title small mt8">成績(空欄可)</div>
+    <Sheet title={t('ics.editPitcher')} onClose={onClose}>
+      <label className="small dim">{t('ics.name')}</label>
+      <input value={p.name || ''} onChange={set('name')} placeholder={t('set.playerName')} />
+      <label className="small dim mt8" style={{ display: 'block' }}>{t('ics.ipLabel')}</label>
+      <input value={p.ipText || ''} onChange={set('ipText')} placeholder={t('ics.ipPlaceholder')} />
+      <div className="section-title small mt8">{t('ics.statsOptional')}</div>
       <div className="grid3">
-        {NUM_FIELDS.map(([k, label]) => (
+        {NUM_FIELDS.map((k) => (
           <div key={k}>
-            <label className="small dim">{label}</label>
+            <label className="small dim">{t(`ics.pf.${k}`)}</label>
             <input type="number" inputMode="numeric" value={p[k] ?? ''} onChange={setNum(k)} />
           </div>
         ))}
       </div>
       <div className="grid3 mt8">
-        {[['win', '勝利'], ['save', 'セーブ'], ['hold', 'ホールド']].map(([k, label]) => (
-          <button key={k} className={p[k] ? 'primary' : ''} onClick={toggle(k)}>{label}</button>
+        {['win', 'save', 'hold'].map((k) => (
+          <button key={k} className={p[k] ? 'primary' : ''} onClick={toggle(k)}>{t(`ics.${k}`)}</button>
         ))}
       </div>
-      <label className="small dim mt8" style={{ display: 'block' }}>メモ</label>
+      <label className="small dim mt8" style={{ display: 'block' }}>{t('ics.memo')}</label>
       <textarea rows={3} value={p.memo || ''} onChange={set('memo')} />
       <div className="sheet-actions">
-        <button className="ghost danger" onClick={onDelete}>この行を削除</button>
-        <button className="primary" disabled={!p.name.trim()} onClick={save}>保存</button>
+        <button className="ghost danger" onClick={onDelete}>{t('ics.deleteRow')}</button>
+        <button className="primary" disabled={!p.name.trim()} onClick={save}>{t('action.save')}</button>
       </div>
     </Sheet>
   );
@@ -113,7 +111,8 @@ function PitcherEditSheet({ pitcher, onSave, onDelete, onClose }) {
 // 指定フォーマットCSVからボックススコア＋線スコアを取り込む
 export default function ImportCsvView({ onClose }) {
   const { state, dispatch } = useStore();
-  const myTeam = state.settings.teamName || 'マイチーム';
+  const t = useT();
+  const myTeam = state.settings.teamName || t('restab.teamFallback');
   const apiKey = state.settings.geminiApiKey;
   const [parsed, setParsed] = useState(null);
   const [error, setError] = useState('');
@@ -135,7 +134,7 @@ export default function ImportCsvView({ onClose }) {
       if (!r.ok) { setError(r.error); return; }
       setParsed(r);
     };
-    reader.onerror = () => setError('ファイルを読み込めませんでした。');
+    reader.onerror = () => setError(t('ics.readError'));
     reader.readAsText(file, 'utf-8');
   };
 
@@ -147,7 +146,7 @@ export default function ImportCsvView({ onClose }) {
     const r = await completeBoxScore({ apiKey, meta: parsed.meta, linescore: parsed.linescore, batters: parsed.batters, pitchers: parsed.pitchers });
     setCompleting(false);
     if (!r) {
-      setCompleteNote({ ok: false, error: 'Gemini APIキーが未設定か、オフラインです。' });
+      setCompleteNote({ ok: false, error: t('ics.completeOffline') });
       return;
     }
     if (r.error) {
@@ -209,27 +208,26 @@ export default function ImportCsvView({ onClose }) {
       pitchers: parsed.pitchers.map(({ aiFilled, aiFieldCount, ...p }) => p),
     };
     dispatch({ type: 'IMPORT_BOX_GAME', payload });
-    window.alert(`試合を取り込みました。\n${myTeam} ${myScore} - ${oppScore} ${parsed.meta.opponent || '相手'}\n(試合結果・成績タブに反映されます)`);
+    window.alert(t('ics.importDone', { team: myTeam, my: myScore, opp: oppScore, opponent: parsed.meta.opponent || t('ics.oppFallback') }));
     onClose();
   };
 
   return (
     <FullscreenView>
       <header className="fullscreen-header">
-        <button className="ghost small" onClick={onClose}>← 戻る</button>
-        <h2>CSVで試合を取り込む</h2>
+        <button className="ghost small" onClick={onClose}>{t('action.back')}</button>
+        <h2>{t('ics.title')}</h2>
         <span style={{ width: 60 }} />
       </header>
       <div className="fullscreen-body">
         <div className="card">
-          <h2>使い方</h2>
+          <h2>{t('ics.howto')}</h2>
           <p className="small dim" style={{ marginBottom: 10, lineHeight: 1.7 }}>
-            ① テンプレCSVをダウンロード → ② Excel/スプレッドシートで手書きスコアの内容を入力(各自のAI-OCRや手入力で)
-            → ③ ここでアップロード。空欄は「不明」として扱われるので、分かる範囲だけでも取り込めます。取り込み前に内容を確認・修正できます。
+            {t('ics.howtoDesc')}
           </p>
-          <button onClick={downloadTemplate} style={{ width: '100%', marginBottom: 8 }}>⬇ テンプレートCSVをダウンロード</button>
+          <button onClick={downloadTemplate} style={{ width: '100%', marginBottom: 8 }}>{t('ics.downloadTemplate')}</button>
           <label className="file-btn" style={{ display: 'block', textAlign: 'center' }}>
-            ⬆ 記入済みCSVを選択
+            {t('ics.uploadCsv')}
             <input
               type="file"
               accept=".csv,text/csv"
@@ -246,66 +244,66 @@ export default function ImportCsvView({ onClose }) {
 
         {parsed && (
           <div className="card">
-            <h2>取り込み内容の確認・修正</h2>
-            <p className="small dim" style={{ marginBottom: 10 }}>誤読みがあれば、この画面でそのまま修正してから取り込めます。</p>
+            <h2>{t('ics.reviewTitle')}</h2>
+            <p className="small dim" style={{ marginBottom: 10 }}>{t('ics.reviewHint')}</p>
 
             <div className="grid2">
               <div>
-                <label className="small dim">対戦相手</label>
+                <label className="small dim">{t('gamesetup.opponent')}</label>
                 <input value={parsed.meta.opponent || ''} onChange={(e) => updateMeta({ opponent: e.target.value })} />
               </div>
               <div>
-                <label className="small dim">日付</label>
+                <label className="small dim">{t('restab.date')}</label>
                 <input value={parsed.meta.date || ''} onChange={(e) => updateMeta({ date: e.target.value })} placeholder="YYYY-MM-DD" />
               </div>
             </div>
             <div className="grid2 mt8">
               <div>
-                <label className="small dim">先攻/後攻(自チーム)</label>
+                <label className="small dim">{t('ics.firstSecond')}</label>
                 <div className="toggle-row">
-                  <button className={!parsed.meta.isHome ? 'active' : ''} onClick={() => updateMeta({ isHome: false })}>先攻</button>
-                  <button className={parsed.meta.isHome ? 'active' : ''} onClick={() => updateMeta({ isHome: true })}>後攻</button>
+                  <button className={!parsed.meta.isHome ? 'active' : ''} onClick={() => updateMeta({ isHome: false })}>{t('gamesetup.first')}</button>
+                  <button className={parsed.meta.isHome ? 'active' : ''} onClick={() => updateMeta({ isHome: true })}>{t('gamesetup.second')}</button>
                 </div>
               </div>
               <div>
-                <label className="small dim">大会・シーズン</label>
+                <label className="small dim">{t('ics.season')}</label>
                 <input value={parsed.meta.season || ''} onChange={(e) => updateMeta({ season: e.target.value })} />
               </div>
             </div>
 
             <div className="hl-score" style={{ background: 'var(--bg-3)', borderRadius: 10, padding: 10, margin: '12px 0' }}>
-              <div className="hl-final" style={{ fontSize: 28 }}>{myTeam} {myScore} - {oppScore} {parsed.meta.opponent || '相手'}</div>
+              <div className="hl-final" style={{ fontSize: 28 }}>{myTeam} {myScore} - {oppScore} {parsed.meta.opponent || t('ics.oppFallback')}</div>
             </div>
 
             {parsed.meta.memo && (
               <div className="warn-box" style={{ marginBottom: 12, borderColor: 'var(--accent-2)', color: 'var(--text)' }}>
-                📝 試合メモ: {parsed.meta.memo}
+                {t('ics.gameMemo', { memo: parsed.meta.memo })}
               </div>
             )}
 
             {hasMemo && (
               <div className="mt8" style={{ marginBottom: 12 }}>
                 <button onClick={runCompletion} disabled={!apiKey || completing} style={{ width: '100%' }}>
-                  {completing ? '🤔 補完中...' : '🤖 AIで不足項目を補完する'}
+                  {completing ? t('ics.completing') : t('ics.completeBtn')}
                 </button>
-                {!apiKey && <p className="small dim mt8">※ Gemini APIキー未設定です。設定タブから追加すると使えます。</p>}
+                {!apiKey && <p className="small dim mt8">{t('ics.noApiKey')}</p>}
                 {completeNote?.ok && (
                   <p className="small mt8" style={{ color: 'var(--green)' }}>
-                    ✨ メモをもとに{completeNote.filledCount}項目を補完しました(🤖マークの選手)。内容を確認してから取り込んでください。
+                    {t('ics.completedNote', { n: completeNote.filledCount })}
                   </p>
                 )}
                 {completeNote && !completeNote.ok && (
-                  <p className="small mt8" style={{ color: 'var(--amber)' }}>⚠️ 補完に失敗しました({completeNote.error})</p>
+                  <p className="small mt8" style={{ color: 'var(--amber)' }}>{t('ics.completeFail', { error: completeNote.error })}</p>
                 )}
               </div>
             )}
 
             {lsKeys.length > 0 && (
               <>
-                <div className="section-title small">線スコア(タップして修正できます)</div>
+                <div className="section-title small">{t('ics.linescore')}</div>
                 <div style={{ overflowX: 'auto', marginBottom: 8 }}>
                   <table className="linescore-table">
-                    <thead><tr><th></th>{lsKeys.map((k) => <th key={k}>{k}</th>)}<th>計</th></tr></thead>
+                    <thead><tr><th></th>{lsKeys.map((k) => <th key={k}>{k}</th>)}<th>{t('gp.total')}</th></tr></thead>
                     <tbody>
                       <tr>
                         <td className="team">{myTeam}</td>
@@ -322,7 +320,7 @@ export default function ImportCsvView({ onClose }) {
                         <td className="num">{myScore}</td>
                       </tr>
                       <tr>
-                        <td className="team">{parsed.meta.opponent || '相手'}</td>
+                        <td className="team">{parsed.meta.opponent || t('ics.oppFallback')}</td>
                         {lsKeys.map((k) => (
                           <td key={k} className="num">
                             <input
@@ -341,17 +339,17 @@ export default function ImportCsvView({ onClose }) {
               </>
             )}
 
-            <div className="section-title small">打者 {parsed.batters.length}人(タップして修正)</div>
+            <div className="section-title small">{t('ics.battersN', { n: parsed.batters.length })}</div>
             {parsed.batters.length > 0 && (
               <div style={{ marginBottom: 8 }}>
                 {parsed.batters.map((b, i) => (
                   <div className="row" key={i} role="button" onClick={() => setEditBatterIdx(i)}>
                     <div className="grow">
                       <div>
-                        {b.aiFilled && '🤖 '}<b>{b.name || '(名前未入力)'}</b>
-                        {b.position && <span className="pill" style={{ marginLeft: 6 }}>{b.position}</span>}
+                        {b.aiFilled && '🤖 '}<b>{b.name || t('ics.noName')}</b>
+                        {b.position && <span className="pill" style={{ marginLeft: 6 }}>{positionLabel(b.position, state.settings.lang || 'ja')}</span>}
                         <span className="dim small" style={{ marginLeft: 8 }}>
-                          {b.h ?? 0}安打{b.hr ? ` ${b.hr}本` : ''}{b.rbi ? ` ${b.rbi}打点` : ''}
+                          {b.h ?? 0}{t('ics.hitsUnit')}{b.hr ? ` ${b.hr}${t('ics.hrUnit')}` : ''}{b.rbi ? ` ${b.rbi}${t('ics.rbiUnit')}` : ''}
                         </span>
                       </div>
                       {b.memo && <div className="dim small" style={{ marginTop: 2 }}>{b.memo}</div>}
@@ -361,19 +359,19 @@ export default function ImportCsvView({ onClose }) {
                 ))}
               </div>
             )}
-            <button className="small" onClick={() => setEditBatterIdx('new')}>＋ 打者を追加</button>
+            <button className="small" onClick={() => setEditBatterIdx('new')}>{t('ics.addBatter')}</button>
 
-            <div className="section-title small mt12">投手 {parsed.pitchers.length}人(タップして修正)</div>
+            <div className="section-title small mt12">{t('ics.pitchersN', { n: parsed.pitchers.length })}</div>
             {parsed.pitchers.length > 0 && (
               <div style={{ marginBottom: 8 }}>
                 {parsed.pitchers.map((p, i) => (
                   <div className="row" key={i} role="button" onClick={() => setEditPitcherIdx(i)}>
                     <div className="grow">
                       <div>
-                        {p.aiFilled && '🤖 '}<b>{p.name || '(名前未入力)'}</b>
+                        {p.aiFilled && '🤖 '}<b>{p.name || t('ics.noName')}</b>
                         <span className="dim small" style={{ marginLeft: 8 }}>
-                          {p.outsRecorded != null ? `${formatIP(p.outsRecorded)}回` : '回不明'}
-                          {p.earnedRuns != null ? ` 自責${p.earnedRuns}` : ''}
+                          {p.outsRecorded != null ? t('ics.ipSuffix', { ip: formatIP(p.outsRecorded) }) : t('ics.ipUnknown')}
+                          {p.earnedRuns != null ? t('ics.erSuffix', { er: p.earnedRuns }) : ''}
                         </span>
                       </div>
                       {p.memo && <div className="dim small" style={{ marginTop: 2 }}>{p.memo}</div>}
@@ -383,10 +381,10 @@ export default function ImportCsvView({ onClose }) {
                 ))}
               </div>
             )}
-            <button className="small" onClick={() => setEditPitcherIdx('new')}>＋ 投手を追加</button>
+            <button className="small" onClick={() => setEditPitcherIdx('new')}>{t('ics.addPitcher')}</button>
 
-            <p className="small dim mt12">名前が既存の選手と一致すればその選手に、なければ新規登録されます。空欄の項目は0として集計されます。</p>
-            <button className="primary mt12" style={{ width: '100%' }} onClick={doImport}>この内容で取り込む</button>
+            <p className="small dim mt12">{t('ics.mergeNote')}</p>
+            <button className="primary mt12" style={{ width: '100%' }} onClick={doImport}>{t('ics.importBtn')}</button>
           </div>
         )}
       </div>
