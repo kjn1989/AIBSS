@@ -90,8 +90,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .app { display: flex; flex-direction: column; height: 100%; height: 100dvh; }
 .app-header {
   display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
-  padding: 8px 12px 8px;
-  padding-top: max(8px, env(safe-area-inset-top));
+  padding: 6px 12px 6px;
+  padding-top: max(6px, env(safe-area-inset-top));
   background: var(--bg-2);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
@@ -373,6 +373,32 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .sit-main .pos { font-size: 9.5px; font-weight: 800; color: var(--gold); border: 1px solid rgba(227, 179, 65, .4); border-radius: 6px; padding: 2px 6px; line-height: 1; flex: none; }
 .sit-exp { flex: none; width: 30px; height: 30px; border-radius: 50%; background: var(--bg-3); border: 1px solid var(--border); color: var(--accent); font-size: 14px; font-weight: 800; display: grid; place-items: center; }
 .sit-changebtn { flex: none; }
+/* 投手選択を状況カードに同居させるスリム行 */
+.sit-pitcher { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+.sit-pitcher select { flex: 1; min-width: 0; }
+/* 展開フィールドを閉じる明示ボタン */
+.collapse-field { width: 100%; margin-top: 8px; color: var(--accent); }
+
+/* ---- スコア入力タブの高密度化(打撃結果パッドまで1画面に収める) ---- */
+.scoretab .card,
+.scoretab .led-scoreboard { margin-bottom: 5px; }
+.scoretab .sit-card,
+.scoretab .pc-card { padding: 8px 12px; }
+.scoretab .card > h2 { margin-bottom: 6px; }
+.scoretab .count-btns button { min-height: 42px; font-size: 16px; }
+.scoretab .count-btns.pitch3 .swing,
+.scoretab .count-btns.pitch3 .look { min-height: 37px; font-size: 15px; }
+.scoretab .result-pad button { min-height: 40px; }
+.scoretab .result-pad.result-pad-intf { margin-top: 5px; }
+.scoretab .sit-pitcher { margin-top: 6px; padding-top: 6px; }
+.scoretab .atbat-history { margin-top: 5px; }
+.scoretab .hand-inline { margin: 0; }
+/* LEDボードの詰め */
+.scoretab .led-board { padding: 5px 9px; }
+.scoretab .led-pcpair { margin-top: 5px; padding-top: 5px; }
+.scoretab .led-inn { margin: 1px 2px 5px; }
+/* 小型ダイヤをもう一回り小さく */
+.scoretab .field-diamond-crop.mini { width: 78px; }
 
 /* ---- 投球カウンター ---- */
 .pc-cap { font-size: 10px; color: var(--text-dim); letter-spacing: .02em; margin: 0 0 7px 2px; }

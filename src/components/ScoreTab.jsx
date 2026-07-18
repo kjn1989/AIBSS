@@ -626,7 +626,7 @@ export default function ScoreTab() {
   };
 
   return (
-    <div>
+    <div className="scoretab">
       <Scoreboard game={game} />
       <RuleBanners
         game={game}
@@ -635,8 +635,15 @@ export default function ScoreTab() {
           setSheet({ kind: 'highlight' });
         }}
       />
-      {/* 展開時は全体フィールドを上に。通常は小型3塁ダイヤを打者行に横並び。 */}
-      {diamondBig && <Diamond game={game} onBaseTap={(b) => setSheet({ kind: 'runner', base: b })} />}
+      {/* 展開時は全体フィールド + 明示的な「小さく戻す」ボタン。通常は小型3塁ダイヤを打者行に横並び。 */}
+      {diamondBig && (
+        <div className="card sit-card">
+          <Diamond game={game} onBaseTap={(b) => setSheet({ kind: 'runner', base: b })} />
+          <button className="ghost small collapse-field" onClick={() => setDiamondBig(false)}>
+            {t('score.collapseBases')}
+          </button>
+        </div>
+      )}
 
       {myBatting ? (
         noLineup ? (
@@ -648,88 +655,80 @@ export default function ScoreTab() {
             {state.players.length === 0 && <p className="small dim mt8">{t('score.registerFirst')}</p>}
           </div>
         ) : (
-          <>
-            <div className="card sit-card">
-              <div className="sit-row">
-                {!diamondBig && <Diamond game={game} mini onBaseTap={(b) => setSheet({ kind: 'runner', base: b })} />}
-                <span className="rank-badge">{batter.order}</span>
-                <div className="sit-batter">
-                  <div className="sit-main">
-                    <span className="nm">{nameOf(batter.playerId)}</span>
-                    <span className="pos">{positionLabel(batter.position, lang)}</span>
-                  </div>
-                </div>
-                <button className="pill blue sit-changebtn" onClick={() => setSheet({ kind: 'batter' })}>{t('score.changeBatter')}</button>
-                <button className="sit-exp" onClick={() => setDiamondBig((v) => !v)} title={t('score.enlarge')}>{diamondBig ? '▴' : '⤢'}</button>
-              </div>
-              <AtBatHistory items={game.atBats.filter((ab) => ab.playerId === batter.playerId)} edition={state.settings.edition} lang={lang} />
-            </div>
-            <div className="card">
-              <div className="flex">
-                <span className="small dim">{t('score.oppPitcher')}</span>
-                <select
-                  className="grow"
-                  value={game.oppPitcherLetter || ''}
-                  onChange={(e) => e.target.value && dispatch({
-                    type: 'OPP_SET_PITCHER', gameId: game.id, letter: e.target.value,
-                    label: `相手投手交代: ${e.target.value}`,
-                  })}
-                >
-                  <option value="">{t('score.selectPitcher')}</option>
-                  {OPP_LETTERS.map((l) => (
-                    <option key={l} value={l}>{l}</option>
-                  ))}
-                </select>
-                {game.oppPitcherLetter && <OppHandToggle game={game} which="pitcher" letter={game.oppPitcherLetter} />}
-              </div>
-            </div>
-          </>
-        )
-      ) : (
-        <>
           <div className="card sit-card">
             <div className="sit-row">
               {!diamondBig && <Diamond game={game} mini onBaseTap={(b) => setSheet({ kind: 'runner', base: b })} />}
-              {oppBatter ? <span className="rank-badge">{oppBatter.order}</span> : null}
+              <span className="rank-badge">{batter.order}</span>
               <div className="sit-batter">
-                {oppBatter
-                  ? <div className="sit-main"><span className="nm">{oppBatter.letter}</span></div>
-                  : <div className="sit-eye">{t('score.oppBatterMeta', { order: '-' })}</div>}
-              </div>
-              {oppBatter && <button className="pill blue sit-changebtn" onClick={() => setSheet({ kind: 'oppBatter' })}>{t('score.oppChange')}</button>}
-              <button className="sit-exp" onClick={() => setDiamondBig((v) => !v)} title={t('score.enlarge')}>{diamondBig ? '▴' : '⤢'}</button>
-            </div>
-            {oppBatter && (
-              <>
-                <div className="flex" style={{ justifyContent: 'flex-end' }}>
-                  <OppHandToggle game={game} which="batter" letter={oppBatter.letter} allowSwitch />
+                <div className="sit-main">
+                  <span className="nm">{nameOf(batter.playerId)}</span>
+                  <span className="pos">{positionLabel(batter.position, lang)}</span>
                 </div>
-                <AtBatHistory
-                  items={game.playLogs
-                    .filter((l) => l.kind === 'defense' && l.payload.letter === oppBatter.letter)
-                    .map((l) => ({ id: l.id, ...l.payload }))}
-                  edition={state.settings.edition}
-                  lang={lang}
-                />
-              </>
-            )}
-          </div>
-          <div className="card">
-            <div className="flex">
-              <span className="small dim">{t('score.pitcher')}</span>
+              </div>
+              <button className="pill blue sit-changebtn" onClick={() => setSheet({ kind: 'batter' })}>{t('score.changeBatter')}</button>
+              {!diamondBig && <button className="sit-exp" onClick={() => setDiamondBig(true)} title={t('score.enlarge')}>⤢</button>}
+            </div>
+            <AtBatHistory items={game.atBats.filter((ab) => ab.playerId === batter.playerId)} edition={state.settings.edition} lang={lang} />
+            <div className="sit-pitcher">
+              <span className="small dim">{t('score.oppPitcher')}</span>
               <select
                 className="grow"
-                value={game.currentPitcherId || ''}
-                onChange={(e) => e.target.value && dispatch({ type: 'SET_PITCHER', gameId: game.id, playerId: e.target.value })}
+                value={game.oppPitcherLetter || ''}
+                onChange={(e) => e.target.value && dispatch({
+                  type: 'OPP_SET_PITCHER', gameId: game.id, letter: e.target.value,
+                  label: `相手投手交代: ${e.target.value}`,
+                })}
               >
                 <option value="">{t('score.selectPitcher')}</option>
-                {state.players.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
+                {OPP_LETTERS.map((l) => (
+                  <option key={l} value={l}>{l}</option>
                 ))}
               </select>
+              {game.oppPitcherLetter && <OppHandToggle game={game} which="pitcher" letter={game.oppPitcherLetter} />}
             </div>
           </div>
-        </>
+        )
+      ) : (
+        <div className="card sit-card">
+          <div className="sit-row">
+            {!diamondBig && <Diamond game={game} mini onBaseTap={(b) => setSheet({ kind: 'runner', base: b })} />}
+            {oppBatter ? <span className="rank-badge">{oppBatter.order}</span> : null}
+            <div className="sit-batter">
+              {oppBatter
+                ? <div className="sit-main"><span className="nm">{oppBatter.letter}</span></div>
+                : <div className="sit-eye">{t('score.oppBatterMeta', { order: '-' })}</div>}
+            </div>
+            {oppBatter && <button className="pill blue sit-changebtn" onClick={() => setSheet({ kind: 'oppBatter' })}>{t('score.oppChange')}</button>}
+            {!diamondBig && <button className="sit-exp" onClick={() => setDiamondBig(true)} title={t('score.enlarge')}>⤢</button>}
+          </div>
+          {oppBatter && (
+            <>
+              <div className="flex" style={{ justifyContent: 'flex-end' }}>
+                <OppHandToggle game={game} which="batter" letter={oppBatter.letter} allowSwitch />
+              </div>
+              <AtBatHistory
+                items={game.playLogs
+                  .filter((l) => l.kind === 'defense' && l.payload.letter === oppBatter.letter)
+                  .map((l) => ({ id: l.id, ...l.payload }))}
+                edition={state.settings.edition}
+                lang={lang}
+              />
+            </>
+          )}
+          <div className="sit-pitcher">
+            <span className="small dim">{t('score.pitcher')}</span>
+            <select
+              className="grow"
+              value={game.currentPitcherId || ''}
+              onChange={(e) => e.target.value && dispatch({ type: 'SET_PITCHER', gameId: game.id, playerId: e.target.value })}
+            >
+              <option value="">{t('score.selectPitcher')}</option>
+              {state.players.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
       )}
 
       <PitchCounter
