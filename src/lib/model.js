@@ -130,6 +130,12 @@ export function normalizeEdition(edition) {
 // ---- 参加メンバー(マネージャー/応援/スタッフ等。試合には出ないが参加回数を記録する) ----
 export const MEMBER_ROLES = ['マネージャー', 'コーチ', '応援', 'スタッフ', 'その他'];
 
+// メンバー役割の英語表記(保存値は日本語のまま、表示だけ切替)。
+const MEMBER_ROLE_EN = { マネージャー: 'Manager', コーチ: 'Coach', 応援: 'Support', スタッフ: 'Staff', その他: 'Other' };
+export function memberRoleLabel(role, lang) {
+  return lang === 'en' ? (MEMBER_ROLE_EN[role] || role) : role;
+}
+
 export function newMember(name, role = 'マネージャー') {
   return {
     id: uid(), name, role, participation: 0, createdAt: Date.now(),
