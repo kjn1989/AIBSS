@@ -74,6 +74,15 @@ export const DIRECTIONS = {
 // '打' = 全員打ちの打撃のみ(守備につかない打者)、'控' = ベンチ
 export const POSITIONS = ['投', '捕', '一', '二', '三', '遊', '左', '中', '右', 'DH', '打', '控'];
 
+// 守備位置マークの英語表記(保存値は日本語のまま、表示だけ切り替える)。
+const POSITION_EN = {
+  投: 'P', 捕: 'C', 一: '1B', 二: '2B', 三: '3B', 遊: 'SS', 左: 'LF', 中: 'CF', 右: 'RF',
+  DH: 'DH', 打: 'BAT', 控: 'BN',
+};
+export function positionLabel(pos, lang) {
+  return lang === 'en' ? (POSITION_EN[pos] || pos) : pos;
+}
+
 // ---- 相手チームの選手記号(実名は入力せず A〜T の20人で管理) ----
 export const OPP_LETTERS = Array.from({ length: 20 }, (_, i) => String.fromCharCode(65 + i));
 

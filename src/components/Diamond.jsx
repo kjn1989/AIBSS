@@ -1,17 +1,18 @@
 import React from 'react';
-import { usePlayerName } from '../state/store.jsx';
+import { usePlayerName, useT } from '../state/store.jsx';
 
 // 走者ダイヤモンド: TV中継風フィールドの上に塁を配置。
 // 塁タップで走者イベントシートを開く。クラス名(.base.b1等)はE2E互換のため維持。
 export default function Diamond({ game, onBaseTap }) {
   const nameOf = usePlayerName();
+  const t = useT();
 
   const label = (base) => {
     const r = game.runners[base];
-    if (!r) return base === 1 ? '一塁' : base === 2 ? '二塁' : '三塁';
+    if (!r) return t(`base.${base}`);
     if (r.playerId) return nameOf(r.playerId);
     if (r.letter) return r.letter;
-    return '走者';
+    return t('runner.fallback');
   };
 
   return (
@@ -33,7 +34,7 @@ export default function Diamond({ game, onBaseTap }) {
           </div>
         ))}
         <div className="base home">
-          <span>本塁</span>
+          <span>{t('diamond.home')}</span>
         </div>
       </div>
     </div>
