@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useStore, usePlayerName } from '../state/store.jsx';
+import { useStore, usePlayerName, useT } from '../state/store.jsx';
 import { RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES, resultCategory, multiOutLabel, outTypeLabel } from '../lib/model.js';
 import { playLabel } from '../lib/voiceParser.js';
 import { computeBoxScore } from '../lib/boxscore.js';
@@ -32,13 +32,13 @@ function CountDots({ balls, strikes, outsBefore }) {
 }
 
 // 打席系プレイ(kind: atbat/defense)の1件カード
-function PlayCard({ log, nameOf, numberOf, onEdit, edition }) {
+function PlayCard({ log, nameOf, numberOf, onEdit, edition, lang, t }) {
   const p = log.payload || {};
   const isDefense = log.kind === 'defense';
   const name = isDefense ? p.letter : nameOf(p.playerId);
   const number = isDefense ? null : numberOf(p.playerId);
   const category = resultCategory(p.result);
-  const label = playLabel(p.result, p.direction, p.outType, p.soType, edition);
+  const label = playLabel(p.result, p.direction, p.outType, p.soType, edition, lang);
   const multiOut = multiOutLabel(p.outsOnPlay || 0);
 
   return (
@@ -50,11 +50,11 @@ function PlayCard({ log, nameOf, numberOf, onEdit, edition }) {
         <span className={`pill pc-pill ${category}`}>{label}</span>
         {p.runs > 0 && (
           <span className="pill amber pc-score">
-            {p.scoreAfter ? `${p.scoreAfter.my}-${p.scoreAfter.opp}` : `${p.runs}点`}
+            {p.scoreAfter ? `${p.scoreAfter.my}-${p.scoreAfter.opp}` : t('gp.runsShort', { n: p.runs })}
           </span>
         )}
         {onEdit && (
-          <button className="pc-edit-btn" onClick={() => onEdit(log)} aria-label="このプレイを修正">✎</button>
+          <button className="pc-edit-btn" onClick={() => onEdit(log)} aria-label={t('gp.editAria')}>✎</button>
         )}
       </div>
       <div className="pc-body">
@@ -74,6 +74,8 @@ function PlayCard({ log, nameOf, numberOf, onEdit, edition }) {
 // スコア・走者・投手成績はここでは変えず、必要なら手動修正機能を案内する。
 function EditPlaySheet({ game, log, onClose }) {
   const { state, dispatch } = useStore();
+  const t = useT();
+  const lang = state.settings.lang || 'ja';
   const p = log.payload || {};
   const [result, setResult] = useState(p.result);
   const [direction, setDirection] = useState(p.direction || null);
@@ -93,47 +95,47 @@ function EditPlaySheet({ game, log, onClose }) {
   };
 
   const remove = () => {
-    if (!window.confirm('このプレイを記録から削除しますか？(成績から除外されます)')) return;
+    if (!window.confirm(t('gp.deleteConfirm'))) return;
     dispatch({ type: 'DELETE_PLAY_LOG', gameId: game.id, logId: log.id });
     onClose();
   };
 
   return (
-    <Sheet title={`プレイの修正 (${log.inning}回${log.isTop ? '表' : '裏'})`} onClose={onClose}>
-      <div className="section-title" style={{ marginTop: 0 }}>結果</div>
+    <Sheet title={t('gp.editTitle', { inning: log.inning, half: t(log.isTop ? 'half.top' : 'half.bottom') })} onClose={onClose}>
+      <div className="section-title" style={{ marginTop: 0 }}>{t('gp.result')}</div>
       <div className="grid3">
         {Object.entries(RESULTS).map(([k, def]) => (
           <button key={k} className={`small ${result === k ? 'primary' : ''}`} onClick={() => setResult(k)}>
-            {def.label}
+            {lang === 'ja' ? def.label : t(`result.${k}`)}
           </button>
         ))}
       </div>
 
-      <div className="section-title">方向</div>
+      <div className="section-title">{t('gp.direction')}</div>
       <div className="grid3">
-        {Object.entries(DIRECTIONS).map(([k, v]) => (
+        {Object.keys(DIRECTIONS).map((k) => (
           <button key={k} className={`small ${direction === k ? 'primary' : ''}`} onClick={() => setDirection(direction === k ? null : k)}>
-            {v}
+            {lang === 'ja' ? DIRECTIONS[k] : t(`dir.${k}`)}
           </button>
         ))}
       </div>
 
       {result === 'out' && (
         <>
-          <div className="section-title">凡打の種類</div>
+          <div className="section-title">{t('playsheet.outType')}</div>
           <div className="grid2">
             {Object.keys(OUT_TYPES).map((k) => (
-              <button key={k} className={`small ${outType === k ? 'primary' : ''}`} onClick={() => setOutType(k)}>{outTypeLabel(k, state.settings.edition)}</button>
+              <button key={k} className={`small ${outType === k ? 'primary' : ''}`} onClick={() => setOutType(k)}>{lang === 'ja' ? outTypeLabel(k, state.settings.edition) : t(`outType.${k}`)}</button>
             ))}
           </div>
         </>
       )}
       {result === 'so' && (
         <>
-          <div className="section-title">三振の種類</div>
+          <div className="section-title">{t('playsheet.soType')}</div>
           <div className="grid2">
-            {Object.entries(SO_TYPES).map(([k, v]) => (
-              <button key={k} className={`small ${soType === k ? 'primary' : ''}`} onClick={() => setSoType(k)}>{v}</button>
+            {Object.keys(SO_TYPES).map((k) => (
+              <button key={k} className={`small ${soType === k ? 'primary' : ''}`} onClick={() => setSoType(k)}>{lang === 'ja' ? SO_TYPES[k] : t(`soType.${k}`)}</button>
             ))}
           </div>
         </>
@@ -141,7 +143,7 @@ function EditPlaySheet({ game, log, onClose }) {
 
       {isAtBat && (
         <div className="flex mt12">
-          <span className="small dim grow">打点</span>
+          <span className="small dim grow">{t('playsheet.rbi')}</span>
           <div className="stepper">
             <button onClick={() => setRbi(Math.max(0, (rbi ?? p.rbi ?? 0) - 1))}>−</button>
             <span className="val">{rbi ?? p.rbi ?? 0}</span>
@@ -151,14 +153,13 @@ function EditPlaySheet({ game, log, onClose }) {
       )}
 
       <div className="warn-box mt12">
-        修正しても当時のスコア・走者・投手成績は自動では変わりません。
-        必要なら「スコア修正」(スコア入力タブ)や投手の詳細調整(試合結果タブ)で合わせてください。
+        {t('gp.editWarn')}
       </div>
 
-      <button className="ghost danger mt8" style={{ width: '100%' }} onClick={remove}>🗑 このプレイを削除</button>
+      <button className="ghost danger mt8" style={{ width: '100%' }} onClick={remove}>{t('gp.deletePlay')}</button>
       <div className="sheet-actions">
-        <button className="ghost" onClick={onClose}>キャンセル</button>
-        <button className="primary" onClick={save}>保存</button>
+        <button className="ghost" onClick={onClose}>{t('action.cancel')}</button>
+        <button className="primary" onClick={save}>{t('action.save')}</button>
       </div>
     </Sheet>
   );
@@ -208,14 +209,16 @@ function groupByHalfInning(playLogs) {
 // 試合結果タブにも埋め込めるよう、線分スコア+回別プレイを描画する中身部分
 export function GameProgressContent({ game, editable = false }) {
   const { state } = useStore();
+  const t = useT();
+  const lang = state.settings.lang || 'ja';
   const nameOf = usePlayerName();
   const numberOf = (id) => state.players.find((p) => p.id === id)?.number || '';
   const [editLog, setEditLog] = useState(null);
   const box = computeBoxScore(game);
   // 'run'ログは各プレイカード内のmoveLinesに既に含まれるため二重表示を避ける
   const groups = groupByHalfInning(game.playLogs.filter((l) => l.kind !== 'run'));
-  const myTeamName = state.settings.teamName || 'マイチーム';
-  const oppTeamName = game.opponent || '対戦相手';
+  const myTeamName = state.settings.teamName || t('restab.teamFallback');
+  const oppTeamName = game.opponent || t('restab.opponentFallback');
 
   return (
     <div>
@@ -225,7 +228,7 @@ export function GameProgressContent({ game, editable = false }) {
             <tr>
               <th></th>
               {box.innings.map((i) => <th key={i.inning}>{i.inning}</th>)}
-              <th>計</th><th>H</th><th>E</th>
+              <th>{t('gp.total')}</th><th>{t('gp.h')}</th><th>{t('gp.e')}</th>
             </tr>
           </thead>
           <tbody>
@@ -251,14 +254,14 @@ export function GameProgressContent({ game, editable = false }) {
         </table>
       </div>
 
-      {groups.length === 0 && <div className="dim small" style={{ padding: '0 4px' }}>まだプレイがありません。</div>}
+      {groups.length === 0 && <div className="dim small" style={{ padding: '0 4px' }}>{t('score.noPlays')}</div>}
 
       {groups.map((grp) => {
         const battingTeam = (grp.isTop !== game.isHome) ? myTeamName : oppTeamName;
         return (
           <div key={grp.key} className="inning-group">
             <div className="inning-header">
-              <b>{grp.inning}回{grp.isTop ? '表' : '裏'}</b>
+              <b>{t('score.logInning', { inning: grp.inning, half: t(grp.isTop ? 'half.top' : 'half.bottom') })}</b>
               <span className="dim">{battingTeam}</span>
             </div>
             {toDisplayRows([...grp.logs].reverse()).map((row) =>
@@ -270,6 +273,8 @@ export function GameProgressContent({ game, editable = false }) {
                     nameOf={nameOf}
                     numberOf={numberOf}
                     edition={state.settings.edition}
+                    lang={lang}
+                    t={t}
                     onEdit={editable ? setEditLog : null}
                   />
                 )
@@ -286,11 +291,12 @@ export function GameProgressContent({ game, editable = false }) {
 
 // 独立した全画面ビュー(「試合経過」への遷移用)
 export default function GameProgressView({ game, onClose }) {
+  const t = useT();
   return (
     <FullscreenView>
       <header className="fullscreen-header">
-        <button className="ghost small" onClick={onClose}>← 戻る</button>
-        <h2>試合経過</h2>
+        <button className="ghost small" onClick={onClose}>{t('action.back')}</button>
+        <h2>{t('restab.progress')}</h2>
         <span style={{ width: 60 }} />
       </header>
       <div className="fullscreen-body">
