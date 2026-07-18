@@ -50,114 +50,6 @@ function OppHandToggle({ game, which, letter, allowSwitch = false }) {
   );
 }
 
-// ---- 投手の累積球数メーター(スコア入力中に常時表示) ----
-// 打席ごとのB/Sカウンター(PitchCounter)とは別に、この試合の投手の総球数を大きく見せる。
-// 球数制限がある場合は「XX / 上限」+バー+色(緑→琥珀→赤)で疲労・交代の目安を示す。
-// 自軍投手・相手投手のどちらも同じ見た目で表示できるよう、データを受け取る純表示コンポーネント。
-function PitchLoadMeter({ label, pitches, byInningMap, limit, warnAt, currentInning }) {
-  const t = useT();
-  const wa = limit ? (warnAt ?? Math.max(1, limit - 10)) : null;
-  const level = !limit ? '' : pitches >= limit ? 'over' : pitches >= wa ? 'warn' : '';
-  const pct = limit ? Math.min(100, Math.round((pitches / limit) * 100)) : 0;
-  // イニング別投球数(ペース把握用)。回順にチップ表示、現在の回を強調。
-  const byInning = Object.entries(byInningMap || {})
-    .map(([inn, n]) => [Number(inn), n])
-    .filter(([, n]) => n > 0)
-    .sort((a, b) => a[0] - b[0]);
-
-  return (
-    <>
-      <div className={`pitch-meter ${level}`}>
-        <div className="pm-body">
-          <div className="pm-label">{label}{limit ? t('score.pitchLimitParen', { n: limit }) : ''}</div>
-          {limit && (
-            <div className="pm-bar"><div className="pm-fill" style={{ width: `${pct}%` }} /></div>
-          )}
-        </div>
-        <div className="pm-count">
-          <b>{pitches}</b>
-          <span className="pm-unit">{limit ? t('score.perLimit', { n: limit }) : t('score.pitchesUnit')}</span>
-        </div>
-      </div>
-      {byInning.length > 0 && (
-        <div className="pitch-innings">
-          <span className="pi-title">{t('score.byInning')}</span>
-          {byInning.map(([inn, n]) => (
-            <span className={`pi-chip ${inn === currentInning ? 'now' : ''}`} key={inn}>
-              {t('score.inningN', { n: inn })}<b>{n}</b>
-            </span>
-          ))}
-        </div>
-      )}
-    </>
-  );
-}
-
-// 控え投手の1行サマリー(帯)。タップで大メーターに入れ替える。
-function PitchMiniStrip({ data, limit, onClick }) {
-  const t = useT();
-  const inn = Object.entries(data.byInning || {})
-    .map(([k, n]) => [Number(k), n]).filter(([, n]) => n > 0).sort((a, b) => a[0] - b[0]);
-  return (
-    <button className="pitch-mini" onClick={onClick}>
-      <span className="pm-mini-name">{data.shortLabel}</span>
-      <span className="pm-mini-count"><b>{data.pitches}</b>{limit ? `/${limit}` : ''}{t('score.pitchesUnit')}</span>
-      {inn.length > 0 && <span className="pm-mini-inn">{t('score.byInning')} {inn.map(([, n]) => n).join('/')}</span>}
-      <span className="pm-mini-swap">{t('score.enlarge')}</span>
-    </button>
-  );
-}
-
-// 両投手の球数を表示する。アクティブ投手(守備=自軍/攻撃=相手)を大メーター、
-// もう一方(控え)を下に1行の帯で常時表示。帯タップで主役を入れ替える。
-// ハーフが変わると別カードとして再マウントされるため、入れ替え状態は自動リセットされる。
-function PitchLoadPair({ game }) {
-  const nameOf = usePlayerName();
-  const t = useT();
-  const [swapped, setSwapped] = useState(false);
-  const limit = game.rules?.pitchLimit?.perGame || null;
-  const warnAt = game.rules?.pitchLimit?.warnAt;
-
-  const myPid = game.currentPitcherId;
-  const myPr = myPid ? (game.pitchingRecords || []).find((r) => r.playerId === myPid) : null;
-  const mine = myPid ? {
-    key: 'mine',
-    label: t('score.myPitchCount', { name: nameOf(myPid) }),
-    shortLabel: t('score.myShort', { name: nameOf(myPid) }),
-    pitches: myPr?.pitches || 0,
-    byInning: myPr?.pitchesByInning,
-  } : null;
-
-  const oppLetter = game.oppPitcherLetter;
-  const oppRec = oppLetter ? game.oppPitchers?.[oppLetter] : null;
-  const opp = oppLetter ? {
-    key: 'opp',
-    label: t('score.oppPitchCount', { letter: oppLetter }),
-    shortLabel: t('score.oppShort', { letter: oppLetter }),
-    pitches: oppRec?.pitches || 0,
-    byInning: oppRec?.pitchesByInning,
-  } : null;
-
-  if (!mine && !opp) return null;
-
-  // 既定の主役はアクティブ投手(守備=自軍, 攻撃=相手)。swappedで入れ替え。
-  const activeIsMine = !isMyTeamBatting(game);
-  let primary = activeIsMine ? mine : opp;
-  let secondary = activeIsMine ? opp : mine;
-  if (swapped) { const t = primary; primary = secondary; secondary = t; }
-  if (!primary) { primary = secondary; secondary = null; } // 片方未設定なら在る方を主役に
-
-  return (
-    <>
-      <PitchLoadMeter
-        label={primary.label} pitches={primary.pitches} byInningMap={primary.byInning}
-        limit={limit} warnAt={warnAt} currentInning={game.inning}
-      />
-      {secondary && <PitchMiniStrip data={secondary} limit={limit} onClick={() => setSwapped((s) => !s)} />}
-    </>
-  );
-}
-
 // ---- ルール選択の共有ロジック(試合作成/進行中の変更で共用) ----
 const EMPTY_CUSTOM = { innings: '7', mercyAfter: '', mercyDiff: '', pitchPerGame: '', timeLimitMin: '' };
 
@@ -689,6 +581,7 @@ export default function ScoreTab() {
   const nameOf = usePlayerName();
   const [sheet, setSheet] = useState(null); // {kind:'play',result} | {kind:'runner',base} | {kind:'batter'}
   const [showProgress, setShowProgress] = useState(false);
+  const [diamondBig, setDiamondBig] = useState(false); // 既定は小型ダイヤ。⤢で全体フィールドに展開
   const logInning = (l) => t('score.logInning', { inning: l.inning, half: t(l.isTop ? 'half.top' : 'half.bottom') });
 
   // 公式クラウドの観戦(viewer)ロール: 入力UIを出さず閲覧専用にする(書き込みはRLSでも拒否される)
@@ -742,7 +635,8 @@ export default function ScoreTab() {
           setSheet({ kind: 'highlight' });
         }}
       />
-      <Diamond game={game} onBaseTap={(b) => setSheet({ kind: 'runner', base: b })} />
+      {/* 展開時は全体フィールドを上に。通常は小型3塁ダイヤを打者行に横並び。 */}
+      {diamondBig && <Diamond game={game} onBaseTap={(b) => setSheet({ kind: 'runner', base: b })} />}
 
       {myBatting ? (
         noLineup ? (
@@ -755,14 +649,18 @@ export default function ScoreTab() {
           </div>
         ) : (
           <>
-            <div className="card" onClick={() => setSheet({ kind: 'batter' })} role="button">
-              <div className="flex">
+            <div className="card sit-card">
+              <div className="sit-row">
+                {!diamondBig && <Diamond game={game} mini onBaseTap={(b) => setSheet({ kind: 'runner', base: b })} />}
                 <span className="rank-badge">{batter.order}</span>
-                <div className="grow">
-                  <b style={{ fontSize: 18 }}>{nameOf(batter.playerId)}</b>
-                  <span className="dim small">{t('score.batterMeta', { order: batter.order, pos: positionLabel(batter.position, lang) })}</span>
+                <div className="sit-batter">
+                  <div className="sit-main">
+                    <span className="nm">{nameOf(batter.playerId)}</span>
+                    <span className="pos">{positionLabel(batter.position, lang)}</span>
+                  </div>
                 </div>
-                <span className="pill blue">{t('score.changeBatter')}</span>
+                <button className="pill blue sit-changebtn" onClick={() => setSheet({ kind: 'batter' })}>{t('score.changeBatter')}</button>
+                <button className="sit-exp" onClick={() => setDiamondBig((v) => !v)} title={t('score.enlarge')}>{diamondBig ? '▴' : '⤢'}</button>
               </div>
               <AtBatHistory items={game.atBats.filter((ab) => ab.playerId === batter.playerId)} edition={state.settings.edition} lang={lang} />
             </div>
@@ -784,50 +682,54 @@ export default function ScoreTab() {
                 </select>
                 {game.oppPitcherLetter && <OppHandToggle game={game} which="pitcher" letter={game.oppPitcherLetter} />}
               </div>
-              <PitchLoadPair game={game} />
             </div>
           </>
         )
       ) : (
-        <div className="card" onClick={() => setSheet({ kind: 'oppBatter' })} role="button">
-          <div className="flex">
-            <span className="small dim">{t('score.pitcher')}</span>
-            <select
-              className="grow"
-              value={game.currentPitcherId || ''}
-              onClick={(e) => e.stopPropagation()}
-              onChange={(e) => e.target.value && dispatch({ type: 'SET_PITCHER', gameId: game.id, playerId: e.target.value })}
-            >
-              <option value="">{t('score.selectPitcher')}</option>
-              {state.players.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-          </div>
-          <PitchLoadPair game={game} />
-          {oppBatter && (
-            <>
-              <div className="flex mt12">
-                <span className="rank-badge">{oppBatter.order}</span>
-                <div className="grow">
-                  <b style={{ fontSize: 18 }}>{oppBatter.letter}</b>
-                  <span className="dim small">{t('score.oppBatterMeta', { order: oppBatter.order })}</span>
+        <>
+          <div className="card sit-card">
+            <div className="sit-row">
+              {!diamondBig && <Diamond game={game} mini onBaseTap={(b) => setSheet({ kind: 'runner', base: b })} />}
+              {oppBatter ? <span className="rank-badge">{oppBatter.order}</span> : null}
+              <div className="sit-batter">
+                {oppBatter
+                  ? <div className="sit-main"><span className="nm">{oppBatter.letter}</span></div>
+                  : <div className="sit-eye">{t('score.oppBatterMeta', { order: '-' })}</div>}
+              </div>
+              {oppBatter && <button className="pill blue sit-changebtn" onClick={() => setSheet({ kind: 'oppBatter' })}>{t('score.oppChange')}</button>}
+              <button className="sit-exp" onClick={() => setDiamondBig((v) => !v)} title={t('score.enlarge')}>{diamondBig ? '▴' : '⤢'}</button>
+            </div>
+            {oppBatter && (
+              <>
+                <div className="flex" style={{ justifyContent: 'flex-end' }}>
+                  <OppHandToggle game={game} which="batter" letter={oppBatter.letter} allowSwitch />
                 </div>
-                <span className="pill blue">{t('score.oppChange')}</span>
-              </div>
-              <div className="flex" onClick={(e) => e.stopPropagation()} style={{ justifyContent: 'flex-end' }}>
-                <OppHandToggle game={game} which="batter" letter={oppBatter.letter} allowSwitch />
-              </div>
-              <AtBatHistory
-                items={game.playLogs
-                  .filter((l) => l.kind === 'defense' && l.payload.letter === oppBatter.letter)
-                  .map((l) => ({ id: l.id, ...l.payload }))}
-                edition={state.settings.edition}
-                lang={lang}
-              />
-            </>
-          )}
-        </div>
+                <AtBatHistory
+                  items={game.playLogs
+                    .filter((l) => l.kind === 'defense' && l.payload.letter === oppBatter.letter)
+                    .map((l) => ({ id: l.id, ...l.payload }))}
+                  edition={state.settings.edition}
+                  lang={lang}
+                />
+              </>
+            )}
+          </div>
+          <div className="card">
+            <div className="flex">
+              <span className="small dim">{t('score.pitcher')}</span>
+              <select
+                className="grow"
+                value={game.currentPitcherId || ''}
+                onChange={(e) => e.target.value && dispatch({ type: 'SET_PITCHER', gameId: game.id, playerId: e.target.value })}
+              >
+                <option value="">{t('score.selectPitcher')}</option>
+                {state.players.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </>
       )}
 
       <PitchCounter
