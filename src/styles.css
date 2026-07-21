@@ -371,7 +371,12 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .sit-main .nm { overflow: hidden; text-overflow: ellipsis; }
 .sit-main .nm { font-size: 19px; font-weight: 800; letter-spacing: .01em; line-height: 1; }
 .sit-main .pos { font-size: 9.5px; font-weight: 800; color: var(--gold); border: 1px solid rgba(227, 179, 65, .4); border-radius: 6px; padding: 2px 6px; line-height: 1; flex: none; }
-.sit-exp { flex: none; width: 30px; height: 30px; border-radius: 50%; background: var(--bg-3); border: 1px solid var(--border); color: var(--accent); font-size: 14px; font-weight: 800; display: grid; place-items: center; }
+/* 塁を拡大する導線: ダイヤ全体タップで拡大(塁タップは走者イベントで別処理)。
+   チップは視覚ヒントのみで pointer-events:none にし、塁のタップを一切妨げない。 */
+.mini-wrap { position: relative; flex: none; line-height: 0; cursor: pointer; }
+.mini-exp { position: absolute; left: 50%; bottom: -7px; transform: translateX(-50%); white-space: nowrap; pointer-events: none;
+  padding: 2px 8px; border-radius: 12px; background: var(--accent); color: #06121f; font-size: 9.5px; font-weight: 800;
+  border: 1px solid var(--bg-2); box-shadow: 0 2px 6px rgba(0, 0, 0, .45); font-family: inherit; z-index: 3; }
 .sit-changebtn { flex: none; }
 /* 投手選択を状況カードに同居させるスリム行 */
 .sit-pitcher { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
@@ -381,27 +386,34 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 
 /* ---- スコア入力タブの高密度化(打撃結果パッドまで1画面に収める) ---- */
 .scoretab .card,
-.scoretab .led-scoreboard { margin-bottom: 5px; }
+.scoretab .led-scoreboard { margin-bottom: 4px; }
 .scoretab .sit-card,
-.scoretab .pc-card { padding: 8px 12px; }
-.scoretab .card > h2 { margin-bottom: 6px; }
-.scoretab .count-btns button { min-height: 42px; font-size: 16px; }
-.scoretab .count-btns.pitch3 .swing,
-.scoretab .count-btns.pitch3 .look { min-height: 37px; font-size: 15px; }
-.scoretab .result-pad button { min-height: 40px; }
+.scoretab .pc-card { padding: 7px 12px; }
+.scoretab .card > h2 { margin-bottom: 5px; }
+.scoretab .count-btns.pitch-row4 button { min-height: 44px; font-size: 15px; }
+.scoretab .result-pad button { min-height: 38px; font-size: 12px; }
+.scoretab .result-pad { gap: 6px; }
 .scoretab .result-pad.result-pad-intf { margin-top: 5px; }
 .scoretab .sit-pitcher { margin-top: 6px; padding-top: 6px; }
 .scoretab .atbat-history { margin-top: 5px; }
-.scoretab .hand-inline { margin: 0; }
+/* 相手打者の左右トグルは極小インライン(見るだけ寄り) */
+.scoretab .hand-inline { margin: 0; gap: 4px; }
+.scoretab .hand-inline .hl-btn { min-height: 26px; padding: 2px 8px; font-size: 12px; }
 /* LEDボードの詰め */
-.scoretab .led-board { padding: 5px 9px; }
-.scoretab .led-pcpair { margin-top: 5px; padding-top: 5px; }
-.scoretab .led-inn { margin: 1px 2px 5px; }
+.scoretab .led-board { padding: 4px 9px; }
+.scoretab .led-pcpair { margin-top: 4px; padding-top: 4px; gap: 2px; }
+.scoretab .led-inn { margin: 1px 2px 4px; }
 /* 小型ダイヤをもう一回り小さく */
-.scoretab .field-diamond-crop.mini { width: 78px; }
+.scoretab .field-diamond-crop.mini { width: 74px; }
 
 /* ---- 投球カウンター ---- */
-.pc-cap { font-size: 10px; color: var(--text-dim); letter-spacing: .02em; margin: 0 0 7px 2px; }
+.pc-caprow { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.pc-cap { font-size: 10px; color: var(--text-dim); letter-spacing: .02em; margin: 0 0 0 2px; }
+.pc-hint { margin-left: auto; display: flex; gap: 6px; }
+.pc-undo { margin-left: auto; flex: none; font-size: 11px; color: var(--text-dim); background: transparent; border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px; }
+.pc-hint + .pc-undo { margin-left: 0; }
+.count-btns.pitch-row4 { grid-template-columns: repeat(4, 1fr); }
+.count-btns.pitch-row4 button { min-height: 46px; font-size: 15px; }
 .count-display { display: flex; gap: 14px; justify-content: center; align-items: center; margin: 4px 0 10px; }
 .count-display .bs { font-size: 24px; font-weight: 900; font-variant-numeric: tabular-nums; }
 .count-display .bs.b { color: var(--green); }

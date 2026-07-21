@@ -657,7 +657,12 @@ export default function ScoreTab() {
         ) : (
           <div className="card sit-card">
             <div className="sit-row">
-              {!diamondBig && <Diamond game={game} mini onBaseTap={(b) => setSheet({ kind: 'runner', base: b })} />}
+              {!diamondBig && (
+                <div className="mini-wrap" onClick={() => setDiamondBig(true)} role="button" aria-label={t('score.enlarge')}>
+                  <Diamond game={game} mini onBaseTap={(b) => setSheet({ kind: 'runner', base: b })} />
+                  <span className="mini-exp">⤢ {t('score.enlarge')}</span>
+                </div>
+              )}
               <span className="rank-badge">{batter.order}</span>
               <div className="sit-batter">
                 <div className="sit-main">
@@ -666,7 +671,6 @@ export default function ScoreTab() {
                 </div>
               </div>
               <button className="pill blue sit-changebtn" onClick={() => setSheet({ kind: 'batter' })}>{t('score.changeBatter')}</button>
-              {!diamondBig && <button className="sit-exp" onClick={() => setDiamondBig(true)} title={t('score.enlarge')}>⤢</button>}
             </div>
             <AtBatHistory items={game.atBats.filter((ab) => ab.playerId === batter.playerId)} edition={state.settings.edition} lang={lang} />
             <div className="sit-pitcher">
@@ -691,7 +695,12 @@ export default function ScoreTab() {
       ) : (
         <div className="card sit-card">
           <div className="sit-row">
-            {!diamondBig && <Diamond game={game} mini onBaseTap={(b) => setSheet({ kind: 'runner', base: b })} />}
+            {!diamondBig && (
+              <div className="mini-wrap" onClick={() => setDiamondBig(true)} role="button" aria-label={t('score.enlarge')}>
+                <Diamond game={game} mini onBaseTap={(b) => setSheet({ kind: 'runner', base: b })} />
+                <span className="mini-exp">⤢ {t('score.enlarge')}</span>
+              </div>
+            )}
             {oppBatter ? <span className="rank-badge">{oppBatter.order}</span> : null}
             <div className="sit-batter">
               {oppBatter
@@ -699,7 +708,6 @@ export default function ScoreTab() {
                 : <div className="sit-eye">{t('score.oppBatterMeta', { order: '-' })}</div>}
             </div>
             {oppBatter && <button className="pill blue sit-changebtn" onClick={() => setSheet({ kind: 'oppBatter' })}>{t('score.oppChange')}</button>}
-            {!diamondBig && <button className="sit-exp" onClick={() => setDiamondBig(true)} title={t('score.enlarge')}>⤢</button>}
           </div>
           {oppBatter && (
             <>
