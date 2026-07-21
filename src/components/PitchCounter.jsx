@@ -29,29 +29,31 @@ export default function PitchCounter({ game, onAutoEvent }) {
 
   return (
     <div className="card pc-card">
-      {/* B/S/Oはトップのスコアボードに集約。ここは打席の投球数だけ極小・左上にさりげなく。 */}
-      <div className="pc-cap">
-        {t('pitch.count.thisAtBat', { n: pitches.length })}
-        {firstKey ? t('pitch.count.first', { label: t(firstKey) }) : ''}
+      {/* B/S/Oはトップのスコアボードに集約。投球数キャプションと取消を1行に極小配置。 */}
+      <div className="pc-caprow">
+        <span className="pc-cap">
+          {t('pitch.count.thisAtBat', { n: pitches.length })}
+          {firstKey ? t('pitch.count.first', { label: t(firstKey) }) : ''}
+        </span>
+        {(dispS === 2 || dispB === 3) && (
+          <span className="pc-hint">
+            {dispS === 2 && <span className="pill amber">{t('pitch.nextStrikeSo')}</span>}
+            {dispB === 3 && <span className="pill green">{t('pitch.nextBallBb')}</span>}
+          </span>
+        )}
+        {pitches.length > 0 && (
+          <button className="pc-undo" onClick={() => dispatch({ type: 'REMOVE_LAST_PITCH', gameId: game.id })}>
+            {t('pitch.undo')}
+          </button>
+        )}
       </div>
-      {(dispS === 2 || dispB === 3) && (
-        <div className="center small dim" style={{ marginBottom: 8 }}>
-          {dispS === 2 && <span className="pill amber" style={{ marginRight: 6 }}>{t('pitch.nextStrikeSo')}</span>}
-          {dispB === 3 && <span className="pill green">{t('pitch.nextBallBb')}</span>}
-        </div>
-      )}
-      {/* 左=ボール(縦長) / 中央=二段(上:空振り 下:見逃し) / 右=ファウル(縦長) */}
-      <div className="count-btns pitch3">
+      {/* 球種4種を1行に圧縮(ボール/空振り/見逃し/ファウル) */}
+      <div className="count-btns pitch-row4">
         <button className="ball" onClick={() => add('ball')}>{t('pitch.ball')}</button>
         <button className="strike swing" onClick={() => add('strike', 'swinging')}>{t('pitch.swinging')}</button>
         <button className="strike look" onClick={() => add('strike', 'looking')}>{t('pitch.looking')}</button>
         <button className="foul" onClick={() => add('foul')}>{t('pitch.foul')}</button>
       </div>
-      {pitches.length > 0 && (
-        <button className="ghost small mt8" onClick={() => dispatch({ type: 'REMOVE_LAST_PITCH', gameId: game.id })}>
-          {t('pitch.undo')}
-        </button>
-      )}
     </div>
   );
 }
