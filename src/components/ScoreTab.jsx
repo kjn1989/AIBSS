@@ -581,7 +581,6 @@ export default function ScoreTab() {
   const nameOf = usePlayerName();
   const [sheet, setSheet] = useState(null); // {kind:'play',result} | {kind:'runner',base} | {kind:'batter'}
   const [showProgress, setShowProgress] = useState(false);
-  const [diamondBig, setDiamondBig] = useState(false); // 既定は小型ダイヤ。⤢で全体フィールドに展開
   const logInning = (l) => t('score.logInning', { inning: l.inning, half: t(l.isTop ? 'half.top' : 'half.bottom') });
 
   // 公式クラウドの観戦(viewer)ロール: 入力UIを出さず閲覧専用にする(書き込みはRLSでも拒否される)
@@ -635,16 +634,7 @@ export default function ScoreTab() {
           setSheet({ kind: 'highlight' });
         }}
       />
-      {/* 展開時は全体フィールド + 明示的な「小さく戻す」ボタン。通常は小型3塁ダイヤを打者行に横並び。 */}
-      {diamondBig && (
-        <div className="card sit-card">
-          <Diamond game={game} onBaseTap={(b) => setSheet({ kind: 'runner', base: b })} />
-          <button className="ghost small collapse-field" onClick={() => setDiamondBig(false)}>
-            {t('score.collapseBases')}
-          </button>
-        </div>
-      )}
-
+      {/* 走者は小型3塁ダイヤを打者行に横並び(本塁は操作しないため省略・拡大表示は廃止)。 */}
       {myBatting ? (
         noLineup ? (
           <div className="card">
@@ -657,12 +647,7 @@ export default function ScoreTab() {
         ) : (
           <div className="card sit-card">
             <div className="sit-row">
-              {!diamondBig && (
-                <div className="mini-wrap" onClick={() => setDiamondBig(true)} role="button" aria-label={t('score.enlarge')}>
-                  <Diamond game={game} mini onBaseTap={(b) => setSheet({ kind: 'runner', base: b })} />
-                  <span className="mini-exp">⤢ {t('score.enlarge')}</span>
-                </div>
-              )}
+              <Diamond game={game} mini onBaseTap={(b) => setSheet({ kind: 'runner', base: b })} />
               <span className="rank-badge">{batter.order}</span>
               <div className="sit-batter">
                 <div className="sit-main">
@@ -695,12 +680,7 @@ export default function ScoreTab() {
       ) : (
         <div className="card sit-card">
           <div className="sit-row">
-            {!diamondBig && (
-              <div className="mini-wrap" onClick={() => setDiamondBig(true)} role="button" aria-label={t('score.enlarge')}>
-                <Diamond game={game} mini onBaseTap={(b) => setSheet({ kind: 'runner', base: b })} />
-                <span className="mini-exp">⤢ {t('score.enlarge')}</span>
-              </div>
-            )}
+            <Diamond game={game} mini onBaseTap={(b) => setSheet({ kind: 'runner', base: b })} />
             {oppBatter ? <span className="rank-badge">{oppBatter.order}</span> : null}
             <div className="sit-batter">
               {oppBatter

@@ -371,18 +371,10 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .sit-main .nm { overflow: hidden; text-overflow: ellipsis; }
 .sit-main .nm { font-size: 19px; font-weight: 800; letter-spacing: .01em; line-height: 1; }
 .sit-main .pos { font-size: 9.5px; font-weight: 800; color: var(--gold); border: 1px solid rgba(227, 179, 65, .4); border-radius: 6px; padding: 2px 6px; line-height: 1; flex: none; }
-/* 塁を拡大する導線: ダイヤ全体タップで拡大(塁タップは走者イベントで別処理)。
-   チップは視覚ヒントのみで pointer-events:none にし、塁のタップを一切妨げない。 */
-.mini-wrap { position: relative; flex: none; line-height: 0; cursor: pointer; }
-.mini-exp { position: absolute; left: 50%; bottom: -7px; transform: translateX(-50%); white-space: nowrap; pointer-events: none;
-  padding: 2px 8px; border-radius: 12px; background: var(--accent); color: #06121f; font-size: 9.5px; font-weight: 800;
-  border: 1px solid var(--bg-2); box-shadow: 0 2px 6px rgba(0, 0, 0, .45); font-family: inherit; z-index: 3; }
 .sit-changebtn { flex: none; }
 /* 投手選択を状況カードに同居させるスリム行 */
 .sit-pitcher { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
 .sit-pitcher select { flex: 1; min-width: 0; }
-/* 展開フィールドを閉じる明示ボタン */
-.collapse-field { width: 100%; margin-top: 8px; color: var(--accent); }
 
 /* ---- スコア入力タブの高密度化(打撃結果パッドまで1画面に収める) ---- */
 .scoretab .card,
@@ -644,11 +636,13 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 }
 
 /* ---- 音声ボタン ---- */
+/* 音声FAB・常時ボタンはヘッダー直下の右上に固定(初期画面で操作パネルと被らない。
+   スクロール時はコンテンツが下に流れて重なることを許容)。 */
 .voice-fab {
-  position: fixed; right: 16px; bottom: calc(var(--tab-h) + var(--safe-bottom) + 16px);
-  width: 62px; height: 62px; border-radius: 50%;
-  background: var(--accent-2); border: none; font-size: 26px; z-index: 90;
-  box-shadow: 0 4px 20px rgba(31, 111, 235, 0.45);
+  position: fixed; right: 12px; top: calc(env(safe-area-inset-top) + 46px);
+  width: 48px; height: 48px; border-radius: 50%;
+  background: var(--accent-2); border: none; font-size: 21px; z-index: 95;
+  box-shadow: 0 4px 16px rgba(31, 111, 235, 0.45);
   display: flex; align-items: center; justify-content: center;
 }
 .voice-fab.listening { background: var(--red); animation: pulse 1.2s infinite; }
@@ -666,14 +660,14 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 
 /* ---- 常時リスニングモード ---- */
 .cont-mode-toggle {
-  position: fixed; right: 16px; bottom: calc(var(--tab-h) + var(--safe-bottom) + 86px);
-  z-index: 90; background: var(--bg-2); border: 1px solid var(--accent-2); color: var(--accent);
-  border-radius: 999px; font-size: 12px; font-weight: 700; padding: 8px 14px;
+  position: fixed; right: 68px; top: calc(env(safe-area-inset-top) + 52px);
+  z-index: 95; background: var(--bg-2); border: 1px solid var(--accent-2); color: var(--accent);
+  border-radius: 999px; font-size: 12px; font-weight: 700; padding: 7px 12px;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
 }
 .cont-status-pill {
-  position: fixed; right: 16px; bottom: calc(var(--tab-h) + var(--safe-bottom) + 16px);
-  z-index: 90; border-radius: 999px; font-size: 14px; font-weight: 800; padding: 14px 18px;
+  position: fixed; right: 12px; top: calc(env(safe-area-inset-top) + 46px);
+  z-index: 95; border-radius: 999px; font-size: 13px; font-weight: 800; padding: 11px 14px;
   border: none; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45); color: #fff;
 }
 .cont-status-pill.live { background: var(--green); animation: pulse-green 1.6s infinite; }
@@ -681,8 +675,8 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 .cont-status-pill.connecting { background: var(--amber); }
 @keyframes pulse-green { 0% { box-shadow: 0 0 0 0 rgba(63, 185, 80, 0.5); } 70% { box-shadow: 0 0 0 16px rgba(63, 185, 80, 0); } 100% { box-shadow: 0 0 0 0 rgba(63, 185, 80, 0); } }
 .cont-exit-btn {
-  position: fixed; right: 16px; bottom: calc(var(--tab-h) + var(--safe-bottom) + 78px);
-  z-index: 90; background: var(--bg-2); border: 1px solid var(--border); color: var(--text-dim);
+  position: fixed; right: 12px; top: calc(env(safe-area-inset-top) + 92px);
+  z-index: 95; background: var(--bg-2); border: 1px solid var(--border); color: var(--text-dim);
   border-radius: 999px; font-size: 11px; padding: 6px 12px;
 }
 .cont-undo-btn {
