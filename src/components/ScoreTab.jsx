@@ -496,27 +496,13 @@ function StrikeoutSheet({ game, batterName, initialSoType, onClose, onFurinige }
   );
 }
 
-// ---- Undoバー(履歴スタック方式: 直前のプレイ入力を1タップ取り消し) ----
-// ラベルは score.undo.<action> で翻訳(未知のラベルはそのまま表示)。
+// ---- Undo(履歴スタック方式: 直前のプレイ入力を1タップ取り消し) ----
+// 旧・左下フローティングバーは廃止し、「試合操作」カード内のボタンへ集約(投球カードの
+// 「1球取り消し」との二重表示・パッドとの重なりを解消)。ラベルは score.undo.<action> で翻訳。
 const UNDO_ACTIONS = new Set([
   'CONFIRM_PLAY', 'ADD_PITCH', 'RUNNER_EVENT', 'SUBSTITUTE', 'SET_PITCHER',
   'FORCE_CHANGE_HALF', 'SET_RUNNER', 'OPP_SUBSTITUTE', 'OPP_SET_PITCHER',
 ]);
-
-function UndoBar({ game }) {
-  const { state, dispatch } = useStore();
-  const t = useT();
-  const last = state.history[state.history.length - 1];
-  if (!last || last.gameId !== game.id) return null;
-  const label = UNDO_ACTIONS.has(last.label) ? t(`score.undo.${last.label}`) : last.label;
-  return (
-    <div className="undo-bar">
-      <button onClick={() => dispatch({ type: 'UNDO' })} style={{ flex: 1 }}>
-        {t('score.undoPrefix', { label })}
-      </button>
-    </div>
-  );
-}
 
 // ---- ルールエンジンの提案バナー(試合終了条件・時間制限・球数警告) ----
 // 判定はlib/rules.jsの純関数。成立しても強制終了はせず、提案として表示するだけ。
@@ -613,6 +599,11 @@ export default function ScoreTab() {
   const batter = currentBatter(game);
   const oppBatter = currentOppBatter(game);
   const noLineup = game.lineup.length === 0;
+
+  // 直前操作の取り消し(旧・左下フローティングバーは廃止し「試合操作」カードへ集約)
+  const lastAction = state.history[state.history.length - 1];
+  const canUndo = !!lastAction && lastAction.gameId === game.id;
+  const undoLabel = canUndo ? (UNDO_ACTIONS.has(lastAction.label) ? t(`score.undo.${lastAction.label}`) : lastAction.label) : '';
 
   const quickLineup = () => {
     const nine = state.players.filter((p) => !p.id.startsWith('demo-')).slice(0, 9);
@@ -736,6 +727,12 @@ export default function ScoreTab() {
       <div className="card">
         <h2>{t('score.gameOps')}</h2>
         <div className="grid2">
+          {/* 投球は投球カードの「1球取り消し」が担うため、ここでは投球以外(打撃結果・走者・交代等)のみ表示 */}
+          {canUndo && lastAction.label !== 'ADD_PITCH' && (
+            <button className="undo-op" style={{ gridColumn: '1 / -1' }} onClick={() => dispatch({ type: 'UNDO' })}>
+              {t('score.undoPrefix', { label: undoLabel })}
+            </button>
+          )}
           <button onClick={() => window.confirm(t('score.changeConfirm')) && dispatch({ type: 'FORCE_CHANGE_HALF', gameId: game.id })}>
             {t('score.manualChange')}
           </button>
@@ -770,7 +767,6 @@ export default function ScoreTab() {
         {game.playLogs.length === 0 && <div className="dim small">{t('score.noPlays')}</div>}
       </div>
 
-      <UndoBar game={game} />
       <VoiceControl game={game} />
       {showProgress && <GameProgressView game={game} onClose={() => setShowProgress(false)} />}
 
