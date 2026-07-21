@@ -20,7 +20,8 @@ function hitsByInning(entries, inningOf) {
   return map;
 }
 
-// ---- 両投手の球数(見るだけ・極小)。上=その回の投手 / 下=相対の投手 ----
+// ---- 両投手の球数(見るだけ・極小)。1行を左右に二分し、左=自軍投手 / 右=相手投手。
+// 両チームを常に表示し、今投げている側(守備側)を強調・もう一方は薄く。未設定は「—」。
 function PitchLines({ game }) {
   const { state } = useStore();
   const t = useT();
@@ -33,41 +34,29 @@ function PitchLines({ game }) {
   const myPr = game.currentPitcherId
     ? (game.pitchingRecords || []).find((r) => r.playerId === game.currentPitcherId)
     : null;
-  const mine = game.currentPitcherId
-    ? { ini: myInitial, who: nameOf(game.currentPitcherId), pitches: myPr?.pitches || 0 }
-    : null;
+  const oppRec = game.oppPitcherLetter ? game.oppPitchers?.[game.oppPitcherLetter] : null;
+  const mine = { ini: myInitial, who: game.currentPitcherId ? nameOf(game.currentPitcherId) : '', pitches: myPr?.pitches || 0, set: !!game.currentPitcherId };
+  const opp = { ini: oppInitial, who: game.oppPitcherLetter || '', pitches: oppRec?.pitches || 0, set: !!game.oppPitcherLetter };
 
-  const oppLetter = game.oppPitcherLetter;
-  const oppRec = oppLetter ? game.oppPitchers?.[oppLetter] : null;
-  const opp = oppLetter
-    ? { ini: oppInitial, who: oppLetter, pitches: oppRec?.pitches || 0 }
-    : null;
+  // 今投げているのは守備側(自軍打撃なら相手、守備なら自軍)
+  const oppActive = isMyTeamBatting(game);
 
-  if (!mine && !opp) return null;
-
-  // その回の投手 = 守備側(自軍打撃なら相手、守備なら自軍)。上に置く。
-  const currentIsOpp = isMyTeamBatting(game);
-  let primary = currentIsOpp ? opp : mine;
-  let secondary = currentIsOpp ? mine : opp;
-  if (!primary) { primary = secondary; secondary = null; }
-
-  const line = (d, isPrimary) => {
-    if (!d) return null;
-    const pct = limit ? Math.min(100, Math.round((d.pitches / limit) * 100)) : 0;
-    const level = !limit ? '' : d.pitches >= limit ? 'over' : d.pitches >= warnAt ? 'warn' : '';
+  const col = (d, active) => {
+    const pct = d.set ? (limit ? Math.min(100, Math.round((d.pitches / limit) * 100)) : 100) : 0;
+    const level = !limit || !d.set ? '' : d.pitches >= limit ? 'over' : d.pitches >= warnAt ? 'warn' : '';
     return (
-      <div className={`led-pcline${isPrimary ? '' : ' dim'} ${level}`}>
-        <span className="who"><span className="ini">{d.ini}</span>{d.who}</span>
-        <span className="bar"><span className="fill" style={{ width: `${limit ? pct : 100}%` }} /></span>
-        <span className="num"><b>{d.pitches}</b>{limit ? `/${limit}` : ''}{t('score.pitchesUnit')}</span>
+      <div className={`led-pccol${active ? ' active' : ''} ${level}`}>
+        <span className="who"><span className="ini">{d.ini}</span>{d.set ? d.who : ''}</span>
+        <span className="bar"><span className="fill" style={{ width: `${pct}%` }} /></span>
+        <span className="num">{d.set ? <><b>{d.pitches}</b>{limit ? `/${limit}` : ''}{t('score.pitchesUnit')}</> : '—'}</span>
       </div>
     );
   };
 
   return (
     <div className="led-pcpair">
-      {line(primary, true)}
-      {line(secondary, false)}
+      {col(mine, !oppActive)}
+      {col(opp, oppActive)}
     </div>
   );
 }

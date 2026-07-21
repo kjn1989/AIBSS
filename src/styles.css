@@ -292,22 +292,23 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .led-bso .s .d.on { background: #f2c14e; border-color: #f2c14e; box-shadow: 0 0 6px rgba(242, 193, 78, .55); }
 .led-bso .o .d.on { background: #e0503f; border-color: #e0503f; box-shadow: 0 0 6px rgba(224, 80, 63, .55); }
 
-/* 両投手の球数(上=その回の投手/下=相対、見るだけ・極小・薄く) */
-.led-pcpair { display: flex; flex-direction: column; gap: 3px; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); }
-.led-pcline { display: flex; align-items: center; gap: 7px; }
-.led-pcline.dim { opacity: .5; }
-.led-pcline .who { font-size: 9px; color: var(--text-dim); white-space: nowrap; min-width: 58px; overflow: hidden; text-overflow: ellipsis; }
-.led-pcline .who .ini { font-weight: 900; color: var(--gold); margin-right: 3px; font-size: 10px; }
-.led-pcline.dim .who .ini { color: var(--text-dim); }
-.led-pcline .bar { flex: 1; height: 3px; border-radius: 3px; background: var(--bg-3); overflow: hidden; }
-.led-pcline .fill { display: block; height: 100%; background: linear-gradient(90deg, var(--green), var(--gold)); }
-.led-pcline.dim .fill { background: var(--text-dim); }
-.led-pcline.warn .fill { background: var(--amber); }
-.led-pcline.over .fill { background: var(--red); }
-.led-pcline .num { font-size: 9px; color: var(--text-dim); white-space: nowrap; font-variant-numeric: tabular-nums; min-width: 44px; text-align: right; }
-.led-pcline .num b { color: var(--gold); font-size: 10.5px; font-weight: 800; }
-.led-pcline.dim .num b { color: var(--text-dim); }
-.led-pcline.over .num b { color: var(--red); }
+/* 両投手の球数: 1行を左右に二分(左=自軍/右=相手)。今投げている側を強調、他は薄く。 */
+.led-pcpair { display: flex; gap: 10px; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); }
+.led-pccol { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; }
+.led-pccol + .led-pccol { border-left: 1px solid var(--border); padding-left: 10px; }
+.led-pccol .who { font-size: 9px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: none; max-width: 92px; }
+.led-pccol .who .ini { font-weight: 900; color: var(--gold); margin-right: 3px; font-size: 10px; }
+.led-pccol .bar { flex: 1; height: 3px; border-radius: 3px; background: var(--bg-3); overflow: hidden; min-width: 14px; }
+.led-pccol .fill { display: block; height: 100%; background: linear-gradient(90deg, var(--green), var(--gold)); }
+.led-pccol .num { font-size: 9px; color: var(--text-dim); white-space: nowrap; font-variant-numeric: tabular-nums; flex: none; }
+.led-pccol .num b { color: var(--gold); font-size: 10.5px; font-weight: 800; }
+.led-pccol:not(.active) { opacity: .5; }
+.led-pccol:not(.active) .who .ini, .led-pccol:not(.active) .num b { color: var(--text-dim); }
+.led-pccol:not(.active) .fill { background: var(--text-dim); }
+.led-pccol.warn .fill { background: var(--amber); }
+.led-pccol.warn .num b { color: var(--amber); }
+.led-pccol.over .fill { background: var(--red); }
+.led-pccol.over .num b { color: var(--red); }
 .out-dot { }
 .out-dot.on { }
 
@@ -393,7 +394,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .scoretab .hand-inline .hl-btn { min-height: 26px; padding: 2px 8px; font-size: 12px; }
 /* LEDボードの詰め */
 .scoretab .led-board { padding: 4px 9px; }
-.scoretab .led-pcpair { margin-top: 4px; padding-top: 4px; gap: 2px; }
+.scoretab .led-pcpair { margin-top: 4px; padding-top: 4px; }
 .scoretab .led-inn { margin: 1px 2px 4px; }
 /* 小型ダイヤをもう一回り小さく */
 .scoretab .field-diamond-crop.mini { width: 74px; }
