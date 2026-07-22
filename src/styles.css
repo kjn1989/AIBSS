@@ -275,7 +275,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .led-ls tr.atbat td.rv { text-shadow: 0 0 10px rgba(240, 220, 168, .45); }
 .led-ls .inn { width: 15px; vertical-align: middle; }
 .led-ls .inn .rn { display: block; font-size: 12px; line-height: 1.05; font-weight: 700; }
-.led-ls .inn .ih { display: block; font-size: 6.5px; line-height: 1; color: #6b7079; font-weight: 700; letter-spacing: -.03em; }
+.led-ls .inn .ih { display: block; min-height: 7px; font-size: 6.5px; line-height: 1; color: #6b7079; font-weight: 700; letter-spacing: -.03em; }
 .led-ls .sep { border-left: 1px solid rgba(255, 255, 255, .12); }
 .led-ls .rc { width: 16px; }
 .led-ls td.rv { font-weight: 900; font-size: 13px; color: #f0dca8; }

@@ -128,9 +128,10 @@ export default function Scoreboard({ game }) {
         <td className="ini">{ini}{on && <span className="bat">◂</span>}</td>
         {innings.map((i) => (
           <td key={i} className={`inn${i === cur ? ' now' : ''}`}>
-            {side === 'away' && hits[i] ? <span className="ih">{hits[i]}</span> : null}
+            {/* 安打数の枠は常に確保し、有無で得点の位置・大きさがブレないよう統一(無い回は不可視の空白) */}
+            {side === 'away' && <span className="ih">{hits[i] || ' '}</span>}
             <span className="rn">{runOf(side, i)}</span>
-            {side === 'home' && hits[i] ? <span className="ih">{hits[i]}</span> : null}
+            {side === 'home' && <span className="ih">{hits[i] || ' '}</span>}
           </td>
         ))}
         <td className="rc rv sep">{totals.r}</td>
