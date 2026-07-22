@@ -135,19 +135,9 @@ export default function VoiceControl({ game }) {
       setMode('idle');
       return;
     }
-    // 長打(二塁打/三塁打/本塁打)で方向が聞き取れていない場合は、
-    // 方向確認のためプレイシート(修正フロー)を開く
-    if (cand.kind === 'play' && ['double', 'triple', 'hr'].includes(cand.result) && !cand.direction) {
-      setEditCand(cand);
-      setMode('editing');
-      return;
-    }
-    // 犠打・犠飛はタップ入力と同様に走者の動きを必ず確認してから確定
-    if (cand.kind === 'play' && ['sacBunt', 'sacFly'].includes(cand.result)) {
-      setEditCand(cand);
-      setMode('editing');
-      return;
-    }
+    // 音声フローは「話す→はいで完了」を優先し、複雑なプレイ(方向不明の長打・
+    // 犠打・犠飛)も既定の進塁提案で即確定する。細かく直したい場合は確認カードの
+    // 「✎ 走者・方向を修正して確定」から手動シート(editing)を開ける。
     // play: デフォルトの進塁提案で即確定
     const runnersOn = { 1: !!game.runners[1], 2: !!game.runners[2], 3: !!game.runners[3] };
     const proposal = proposeMoves(cand.result, runnersOn);
@@ -206,13 +196,20 @@ export default function VoiceControl({ game }) {
     interpret(raw);
   };
 
+  // 確認カード表示中は音声回答を聞き続ける(単発モード)。無音で認識が切れても
+  // 確認カードが出ている間は自動で再開し、タップなしで「はい」等を言えるようにする。
+  const confirmingRef = useRef(false);
+  const rearmAnswer = () => {
+    setAnswerListening(false);
+    if (confirmingRef.current) setTimeout(() => { if (confirmingRef.current) startAnswerListening(); }, 300);
+  };
   const startAnswerListening = () => {
     answerRecRef.current?.abort?.();
     const rec = createRecognizer({
       onInterim: () => {},
       onResult: handleAnswer,
-      onError: () => setAnswerListening(false),
-      onEnd: () => setAnswerListening(false),
+      onError: rearmAnswer,
+      onEnd: rearmAnswer,
     });
     if (!rec) return;
     answerRecRef.current = rec;
@@ -458,19 +455,16 @@ export default function VoiceControl({ game }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contMode]);
 
-  // 三振の種別選択が必要なときは自動で音声回答の受付を開始(一発リスニングモードのみ。
-  // 常時リスニングモードでは既存の継続認識がそのまま回答も拾う)
-  const soPendingTop =
-    mode === 'confirming' && candidates[0]?.kind === 'play' && candidates[0]?.result === 'so' && !candidates[0]?.soExplicit;
+  // 単発モードで確認カードが出たら、自動で音声回答の受付を開始する。
+  // これにより「音声で回答する」をタップせずに「はい/空振り/見逃し/やり直し」と
+  // 話すだけで確定でき、音声のみで最後まで完結できる(常時モードは既存の継続認識が拾う)。
+  const showingConfirm = mode === 'confirming' && !contMode && candidates.length > 0;
   useEffect(() => {
-    if (soPendingTop && speechAvailable() && !contMode) startAnswerListening();
-    return () => answerRecRef.current?.abort?.();
+    confirmingRef.current = showingConfirm;
+    if (showingConfirm && speechAvailable()) startAnswerListening();
+    return () => { confirmingRef.current = false; answerRecRef.current?.abort?.(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [soPendingTop, contMode]);
-
-  useEffect(() => {
-    if (mode !== 'confirming') answerRecRef.current?.abort?.();
-  }, [mode]);
+  }, [showingConfirm]);
 
   if (!speechAvailable() && mode === 'idle') {
     // 音声非対応ブラウザでもテキスト実況入力は使えるようにFABは出す
@@ -648,15 +642,16 @@ export default function VoiceControl({ game }) {
                   </p>
                 ) : (
                   <>
-                    <button
-                      className={`mt8 ${answerListening ? 'danger' : ''}`}
-                      style={{ width: '100%' }}
-                      onClick={startAnswerListening}
-                    >
-                      {answerListening ? '🎙 音声回答を聞いています…' : '🎙 音声で回答する'}
-                    </button>
+                    <div className={`answer-listen-status mt8 ${answerListening ? 'live' : ''}`}>
+                      {answerListening
+                        ? '🎙 音声を聞いています… そのまま話してください'
+                        : '🎙 マイクが停止中 — タップで音声回答を再開'}
+                      {!answerListening && (
+                        <button className="small" style={{ marginLeft: 8 }} onClick={startAnswerListening}>再開</button>
+                      )}
+                    </div>
                     <p className="small dim mt8" style={{ textAlign: 'center' }}>
-                      「はい」「空振り」「見逃し」「やり直し」などと話せます
+                      「はい」「空振り」「見逃し」「やり直し」などと話すだけで確定します
                     </p>
                   </>
                 )}
