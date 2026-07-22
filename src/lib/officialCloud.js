@@ -29,8 +29,24 @@ function toUser(u) {
   return { uid: u.id, email: u.email || '', displayName: u.user_metadata?.name || u.email || '名無し' };
 }
 
+// fetch自体が失敗(サーバー未到達)かどうか。WebKitは"Load failed"、Chromeは"Failed to fetch"を投げる。
+// supabase-jsはネットワーク失敗を AuthRetryableFetchError(status:0) として返すことが多い。
+function isNetworkError(error) {
+  const m = error?.message || String(error || '');
+  return (
+    error?.name === 'AuthRetryableFetchError'
+    || error?.status === 0
+    || /load failed|failed to fetch|networkerror|network request failed|fetch failed|typeerror/i.test(m)
+  );
+}
+
 function jpAuthError(error) {
   const m = error?.message || String(error);
+  // 通信不達は認証エラーより先に判定(生の"Load failed"を出さない)
+  if (isNetworkError(error)) {
+    return 'クラウドに接続できませんでした。通信環境をご確認のうえ、少し待って再度お試しください。'
+      + '(サーバーが一時休止中の場合、初回アクセスから復帰まで数十秒かかることがあります)';
+  }
   if (/Invalid login credentials/i.test(m)) return 'メールアドレスまたはパスワードが違います';
   if (/Password should be at least/i.test(m)) return 'パスワードは6文字以上にしてください';
   if (/rate limit/i.test(m)) return '試行回数が多すぎます。しばらく待ってから再度お試しください';
