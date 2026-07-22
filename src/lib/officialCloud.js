@@ -80,6 +80,10 @@ export async function loginWithPassword(email, password) {
     const { data, error: e2 } = await sb.auth.signUp({ email, password });
     if (e2) throw new Error(jpAuthError(e2));
     if (!data.session) {
+      // 確認メール設定がONでも、DB側でauto-confirm(トリガ)している場合は即ログインできる。
+      // 一度だけsign inを試し、成功すればメール確認なしで完了。失敗時のみメール案内を出す。
+      const { error: e3 } = await sb.auth.signInWithPassword({ email, password });
+      if (!e3) return;
       throw new Error('確認メールを送信しました。メール内のリンクを開いてから、もう一度ログインしてください。');
     }
     return; // 新規登録+即ログイン成功
