@@ -358,6 +358,9 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 
 /* 小型3塁ダイヤ(打者行に横並び) */
 .field-diamond-crop.mini { width: 92px; flex: none; margin: 0; aspect-ratio: 10 / 7; border: none; border-radius: 8px; }
+/* 小型(走者表示)はシンプルに: ファウルラインは出さず、二塁→一塁・二塁→三塁の
+   上辺2本(.bf-basepath の border-top/left)だけを見せる。 */
+.field-diamond-crop.mini .bf-line { display: none; }
 /* 塁位置は基準(ベースパス頂点=白線の角)を継承し、ラインにピッタリ重ねる。
    小型では重なりを避けるためサイズだけ小さくする。 */
 .field-diamond-crop.mini .base { width: 19px; height: 19px; border-width: 1.5px; box-shadow: 0 2px 6px rgba(0, 0, 0, .3); }
@@ -524,15 +527,18 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
   background: radial-gradient(circle, #85694a 0%, #75593d 55%, #64492f 85%, #573f28 100%);
   box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.35);
 }
-/* ベースパスの白線: 本塁→一塁→二塁→三塁→本塁 を結ぶひし形の輪郭 */
+/* ベースパスの白線: 上側2辺のみ描く(二塁→一塁・二塁→三塁)。
+   下側2辺(本塁→一塁・本塁→三塁)はファウルライン(.bf-line)が単線で担うため描かず、
+   線の二重表示を防ぐ。 */
 .bf .bf-basepath {
   position: absolute; left: 50%; top: 72%;
   aspect-ratio: 1;
   transform: translate(-50%, -50%) rotate(45deg);
-  border: 3px solid #f2ede4;
-  border-radius: 3%;
+  border: none;
+  border-top: 3px solid #f2ede4;
+  border-left: 3px solid #f2ede4;
+  border-radius: 0;
   background: transparent;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
   pointer-events: none;
 }
 .bf .bf-mound {
