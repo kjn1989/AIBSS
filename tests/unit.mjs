@@ -6,7 +6,22 @@ import { proposeMoves, judgeAdvance, batterDestOptions } from '../src/lib/plays.
 import { gameEndCheck, initialPresetIdFor, describeRules } from '../src/lib/rules.js';
 import { aggregateBatting, battingMetrics, pitchingMetrics, titleLeaders } from '../src/lib/stats.js';
 import { translate } from '../src/lib/i18n.js';
-import { parseUtterance, prettifyTranscript } from '../src/lib/voiceParser.js';
+import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm } from '../src/lib/voiceParser.js';
+
+test('needsRunnerConfirm: 走者ありの安打・凡打は確認、四球/本塁打/走者なしは不要', () => {
+  assert.equal(needsRunnerConfirm('single', { 1: true, 2: true }), true);
+  assert.equal(needsRunnerConfirm('out', { 3: true }), true);
+  assert.equal(needsRunnerConfirm('single', {}), false);
+  assert.equal(needsRunnerConfirm('hr', { 1: true }), false);
+  assert.equal(needsRunnerConfirm('bb', { 1: true }), false);
+});
+test('parseRunnerAdjust: 走者進塁の音声修正を解釈', () => {
+  assert.deepEqual(parseRunnerAdjust('二塁ランナーは三塁'), { base: 2, to: 3 });
+  assert.deepEqual(parseRunnerAdjust('一塁走者は得点'), { base: 1, to: 4 });
+  assert.deepEqual(parseRunnerAdjust('セカンドランナーそのまま'), { base: 2, to: 'stay' });
+  assert.deepEqual(parseRunnerAdjust('三塁ランナーアウト'), { base: 3, to: 'out' });
+  assert.equal(parseRunnerAdjust('はい'), null);
+});
 
 test('parseUtterance: 「センターマイヒット」(前ヒットの誤認識)も中堅ヒット・高信頼度', () => {
   const a = parseUtterance('センター前ヒット')[0];
