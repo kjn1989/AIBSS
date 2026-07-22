@@ -3,12 +3,12 @@ import { createPortal } from 'react-dom';
 import Sheet from './Sheet.jsx';
 import PlaySheet from './PlaySheet.jsx';
 import { useStore, usePlayerName, isMyTeamBatting, currentBatter } from '../state/store.jsx';
-import { parseUtterance, playLabel, normalize, stripWakeWord, parseCommand, needsComplexConfirm, parseOperation, matchPlayer, prettifyTranscript } from '../lib/voiceParser.js';
+import { parseUtterance, playLabel, normalize, stripWakeWord, parseCommand, needsComplexConfirm, needsRunnerConfirm, parseRunnerAdjust, parseOperation, matchPlayer, prettifyTranscript } from '../lib/voiceParser.js';
 import { interpretUtterance, maskNames } from '../lib/gemini.js';
 import { speechAvailable, createRecognizer } from '../lib/speech.js';
 import { createContinuousRecognizer } from '../lib/continuousSpeech.js';
 import { speak, beep, beepForPitch } from '../lib/tts.js';
-import { proposeMoves } from '../lib/plays.js';
+import { proposeMoves, runnerDestOptions } from '../lib/plays.js';
 
 const LLM_THRESHOLD = 0.5; // これ未満の信頼度ならLLMに問い合わせ(設定時のみ)
 const PENDING_MS = 2500; // 常時リスニングモード: オプトアウト自動確定までの待機時間
@@ -31,6 +31,34 @@ export default function VoiceControl({ game }) {
   const batterName = myBatting && batter ? nameOf(batter.playerId) : null;
 
   useEffect(() => () => recRef.current?.abort?.(), []);
+
+  // 走者進塁の確認(タップ入力と同等): 走者ありの安打・凡打等で各走者の到達塁を
+  // 確認/音声修正してから確定する。confirmDests = { [base]: 到達塁(1|2|3|4|'out') }。
+  const [confirmDests, setConfirmDests] = useState(null);
+  const baseLabel = { 1: '一塁', 2: '二塁', 3: '三塁' };
+  const runnersOnNow = () => ({ 1: !!game.runners[1], 2: !!game.runners[2], 3: !!game.runners[3] });
+
+  // 候補(play)が走者確認を要するなら、既定の進塁提案でdestsを初期化して返す(不要ならnull)
+  const initConfirmDests = (cand) => {
+    if (!cand || cand.kind !== 'play') return null;
+    const on = runnersOnNow();
+    if (!needsRunnerConfirm(cand.result, on)) return null;
+    const proposal = proposeMoves(cand.result, on);
+    const dests = {};
+    for (const b of [1, 2, 3]) {
+      if (on[b]) { const mv = proposal.moves.find((m) => m.from === b); dests[b] = mv ? mv.to : b; }
+    }
+    return dests;
+  };
+  const destsToMoves = (dests) => {
+    const on = runnersOnNow();
+    return [1, 2, 3].filter((b) => on[b] && dests[b] !== b).map((b) => ({ from: b, to: dests[b] }));
+  };
+  const destWord = (from, to) => (to === 4 ? '得点' : to === 'out' ? 'アウト' : to === from ? 'そのまま' : `${baseLabel[to]}へ`);
+  const describeDests = (dests) => {
+    const on = runnersOnNow();
+    return [3, 2, 1].filter((b) => on[b]).map((b) => `${baseLabel[b]}走者${destWord(b, dests[b])}`).join('、');
+  };
 
   const interpret = async (text) => {
     let cands = parseUtterance(text);
@@ -62,7 +90,10 @@ export default function VoiceControl({ game }) {
       }
     }
     setCandidates(cands);
+    const dests = initConfirmDests(cands[0]);
+    setConfirmDests(dests);
     setMode('confirming');
+    if (dests) speak(`${cands[0].label}。${describeDests(dests)}`);
   };
 
   const [micError, setMicError] = useState(false);
@@ -117,7 +148,8 @@ export default function VoiceControl({ game }) {
   };
 
   // ---- 候補の適用 ----
-  const apply = (cand) => {
+  // movesOverride: 走者確認で調整済みの moves 配列。未指定なら既定の進塁提案。
+  const apply = (cand, movesOverride) => {
     if (cand.kind === 'pitch') {
       // タップUI(PitchCounter)と同じ自動判定を音声にも適用:
       // 2ストライク後のストライク=三振 / 3ボール後のボール=四球。
@@ -161,7 +193,7 @@ export default function VoiceControl({ game }) {
     // 音声フローは「話す→はいで完了」を優先し、複雑なプレイ(方向不明の長打・
     // 犠打・犠飛)も既定の進塁提案で即確定する。細かく直したい場合は確認カードの
     // 「✎ 走者・方向を修正して確定」から手動シート(editing)を開ける。
-    // play: デフォルトの進塁提案で即確定
+    // play: 走者確認で調整済みなら movesOverride を、無ければ既定の進塁提案で確定
     const runnersOn = { 1: !!game.runners[1], 2: !!game.runners[2], 3: !!game.runners[3] };
     const proposal = proposeMoves(cand.result, runnersOn);
     dispatch({
@@ -173,10 +205,11 @@ export default function VoiceControl({ game }) {
         outType: cand.outType,
         soType: cand.soType,
         direction: cand.direction,
-        moves: proposal.moves,
+        moves: movesOverride || proposal.moves,
         batterTo: proposal.batterTo,
       },
     });
+    setConfirmDests(null);
     setMode('idle');
   };
 
@@ -196,6 +229,16 @@ export default function VoiceControl({ game }) {
     const soPending = top.kind === 'play' && top.result === 'so' && !top.soExplicit;
     if (soPending && (t.includes('からぶ') || t.includes('空振'))) return apply({ ...top, soType: 'swinging' });
     if (soPending && (t.includes('みのが') || t.includes('見逃'))) return apply({ ...top, soType: 'looking' });
+    // 走者の進塁を音声で修正(「二塁ランナーは三塁」「一塁走者はそのまま」等)
+    if (confirmDests) {
+      const adj = parseRunnerAdjust(raw);
+      if (adj && runnersOnNow()[adj.base]) {
+        const next = { ...confirmDests, [adj.base]: adj.to === 'stay' ? adj.base : adj.to };
+        setConfirmDests(next);
+        speak(describeDests(next));
+        return;
+      }
+    }
     if (/いいえ|ちがう|違う|やりなお|きゃんせる|だめ/.test(t)) {
       // 常時リスニングモードでは専用の継続認識が既に走っているため、
       // 単発セッションは起動せず確認状態を解いて待機に戻すだけでよい
@@ -207,7 +250,7 @@ export default function VoiceControl({ game }) {
     }
     if (/^(はい|うん|おっけ|ok|かくてい|確定|よし|それ)/.test(t)) {
       if (soPending) return; // 三振は種別(空振り/見逃し)の発話が必要
-      return apply(top);
+      return apply(top, confirmDests ? destsToMoves(confirmDests) : undefined);
     }
     // 他候補のラベルとの一致を確認
     for (const c of candidates) {
@@ -243,6 +286,11 @@ export default function VoiceControl({ game }) {
       setAnswerListening(false);
     }
   };
+
+  // 確認カードを抜けたら走者確認の一時状態を破棄(stale適用を防ぐ)
+  useEffect(() => {
+    if (mode !== 'confirming') setConfirmDests(null);
+  }, [mode]);
 
   // ============================================================
   // 常時リスニングモード
@@ -440,14 +488,18 @@ export default function VoiceControl({ game }) {
       beepForPitch(top.pitchType);
       return;
     }
-    if (needsComplexConfirm(top)) {
+    // 走者確認が必要なプレイ(走者あり安打・凡打等)、または複雑なプレイは確認カードへ。
+    // 走者の進塁を読み上げ、「はい」または「◯塁ランナーは△塁」等で音声修正・確定できる。
+    const runnerDests = initConfirmDests(top);
+    if (runnerDests || needsComplexConfirm(top)) {
       setTranscript(rest);
       setCandidates(cands);
+      setConfirmDests(runnerDests);
       setMode('confirming');
-      speak(`${top.label}でよろしいですか`);
+      speak(runnerDests ? `${top.label}。${describeDests(runnerDests)}。よろしいですか` : `${top.label}でよろしいですか`);
       return;
     }
-    // sb/cs、または単純なプレイ: オプトアウト自動確定
+    // sb/cs、または走者のいない単純なプレイ: オプトアウト自動確定
     setTranscript(rest);
     startPendingCommit(top);
     speak(top.label);
@@ -632,6 +684,28 @@ export default function VoiceControl({ game }) {
                     <span className="dim small" style={{ display: 'block', fontSize: 13 }}>空振り/見逃しを選んで確定</span>
                   )}
                 </div>
+                {/* 走者ありのプレイ: 各走者の到達塁を確認/修正(タップ or 音声「◯塁ランナーは△塁」) */}
+                {confirmDests && (
+                  <div className="voice-runners mt8">
+                    <div className="section-title" style={{ marginTop: 0 }}>走者の動き(タップ/音声で修正)</div>
+                    {[3, 2, 1].filter((b) => runnersOnNow()[b]).map((b) => (
+                      <div className="runner-move" key={b}>
+                        <span className="who">{baseLabel[b]}走者</span>
+                        <div className="dests">
+                          {runnerDestOptions(b).map((to) => (
+                            <button
+                              key={String(to)}
+                              className={confirmDests[b] === to ? `sel${to === 'out' ? ' out' : ''}` : ''}
+                              onClick={() => setConfirmDests({ ...confirmDests, [b]: to })}
+                            >
+                              {to === 'out' ? 'アウト' : to === 4 ? '得点' : to === b ? 'そのまま' : `${baseLabel[to]}へ`}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div className="cand">
                   {candidates[0].kind === 'play' && candidates[0].result === 'so' && !candidates[0].soExplicit ? (
                     <div className="grid2">
@@ -643,7 +717,7 @@ export default function VoiceControl({ game }) {
                       </button>
                     </div>
                   ) : (
-                    <button className="top" onClick={() => apply(candidates[0])}>
+                    <button className="top" onClick={() => apply(candidates[0], confirmDests ? destsToMoves(confirmDests) : undefined)}>
                       ✔ はい、{candidates[0].label}
                       <span className="dim small"> (信頼度{Math.round(candidates[0].confidence * 100)}%)</span>
                     </button>
@@ -661,7 +735,9 @@ export default function VoiceControl({ game }) {
                 </div>
                 {contMode ? (
                   <p className="small dim mt8" style={{ textAlign: 'center' }}>
-                    🎙️ 常時リスニング中: 「ログ、はい」「ログ、空振り」「ログ、キャンセル」等と話せます
+                    🎙️ 常時リスニング中: 「ログ、はい」で確定
+                    {confirmDests && <>・「ログ、二塁ランナーは三塁」等で走者修正</>}
+                    ・「ログ、キャンセル」
                   </p>
                 ) : (
                   <>
@@ -674,7 +750,9 @@ export default function VoiceControl({ game }) {
                       )}
                     </div>
                     <p className="small dim mt8" style={{ textAlign: 'center' }}>
-                      「はい」「空振り」「見逃し」「やり直し」などと話すだけで確定します
+                      {confirmDests
+                        ? '「はい」で確定。「二塁ランナーは三塁」「一塁ランナーはそのまま」等で走者を修正できます'
+                        : '「はい」「空振り」「見逃し」「やり直し」などと話すだけで確定します'}
                     </p>
                   </>
                 )}

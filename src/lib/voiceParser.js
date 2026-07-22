@@ -336,6 +336,53 @@ export function needsComplexConfirm(cand) {
   return false;
 }
 
+// 走者の進塁が判断で割れうる結果(タップ入力同様、各走者の到達塁を確認したい)。
+// 塁上に走者が居るときのみ確認を挟む。四球・死球は押し出しのみ(強制)なので対象外、
+// 本塁打は全員生還で自明なので対象外。
+const RUNNER_ADVANCE_RESULTS = ['single', 'double', 'triple', 'error', 'out', 'sacBunt', 'sacFly', 'obstruction'];
+export function needsRunnerConfirm(result, runnersOn) {
+  const anyRunner = !!(runnersOn && (runnersOn[1] || runnersOn[2] || runnersOn[3]));
+  return anyRunner && RUNNER_ADVANCE_RESULTS.includes(result);
+}
+
+// 走者進塁の音声修正: 「二塁ランナーは三塁」「一塁走者は得点」「セカンドランナーそのまま」等。
+// 戻り値 { base: 1|2|3, to: 1|2|3|4|'out'|'stay' } | null
+const RUNNER_BASE_WORDS = [
+  { base: 1, re: /(一塁|1塁|いちるい|ふぁーすと)/g },
+  { base: 2, re: /(二塁|2塁|にるい|せかんど)/g },
+  { base: 3, re: /(三塁|3塁|さんるい|さーど)/g },
+];
+export function parseRunnerAdjust(rawText) {
+  const t = normalize(rawText);
+  if (!t) return null;
+  const runMatch = t.match(/(らんなー|走者|そうしゃ)/);
+  if (!runMatch) return null;
+  const cut = runMatch.index + runMatch[0].length;
+  const before = t.slice(0, cut);
+  const after = t.slice(cut);
+  // 主語(走者)の塁: 「ランナー」の直前に最も近い塁ワード
+  let base = null;
+  let bestIdx = -1;
+  for (const bw of RUNNER_BASE_WORDS) {
+    bw.re.lastIndex = 0;
+    let m;
+    while ((m = bw.re.exec(before)) !== null) {
+      if (m.index > bestIdx) { bestIdx = m.index; base = bw.base; }
+    }
+  }
+  if (!base) return null;
+  // 行き先: ランナー以降の語から判定
+  let to = null;
+  if (/得点|とくてん|ほーむ|生還|せいかん|かえ|返|帰/.test(after)) to = 4;
+  else if (/そのまま|すとっぷ|とま|止ま|据|すてい|自重|じちょう/.test(after)) to = 'stay';
+  else if (/あうと|たっち|刺|封殺|ふうさつ/.test(after)) to = 'out';
+  else {
+    for (const bw of RUNNER_BASE_WORDS) { bw.re.lastIndex = 0; if (bw.re.test(after)) to = bw.base; }
+  }
+  if (to == null) return null;
+  return { base, to };
+}
+
 // ---- 操作(選手交代・チェンジ)コマンド辞書 ----
 // 例:「代打、田中」「投手交代、鈴木」「チェンジ」
 const OPERATION_DICT = {
