@@ -192,6 +192,7 @@ export async function generateNewspaperImage({ article, game, teamName, photo })
 
   const caption = `▲ ${teamName} vs ${game.opponent || '対戦相手'}（${game.date}）`;
   const topY = y;
+  const rlabel = game.myScore > game.oppScore ? '勝利' : game.myScore < game.oppScore ? '敗北' : '引き分け';
 
   const drawHeadAndLead = (x, startY) => {
     let ly = startY;
@@ -206,16 +207,32 @@ export async function generateNewspaperImage({ article, game, teamName, photo })
     return ly;
   };
 
+  // ボックススコア表＋結果ラベルを描いて、次のyを返す(赤字リードの直下に配置)
+  const drawBoxAndResult = (sy) => {
+    drawBoxScore(ctx, measure, M, sy, CW, rowH, box, game, teamName);
+    const ny = sy + tableH + 8;
+    ctx.textAlign = 'center';
+    ctx.font = HEAD_FONT(18);
+    ctx.fillStyle = '#141414';
+    ctx.fillText(`${teamName} ${game.myScore}-${game.oppScore} ${game.opponent || '対戦相手'}　—　${rlabel}`, W / 2, ny + 18);
+    ctx.textAlign = 'left';
+    return ny + 22 + 20;
+  };
+
   if (wide) {
+    // 見出し+リード → スコア表(赤字直下) → 全幅トップ写真
     let ly = drawHeadAndLead(M, topY);
     ly += 12;
+    ly = drawBoxAndResult(ly);
     ctx.drawImage(photo, M, ly, CW, bannerH);
     ly += bannerH + 6;
     ctx.fillStyle = '#555';
     ctx.font = BODY_FONT(15);
     ctx.fillText(caption, M, ly + 14);
     ctx.fillStyle = '#141414';
+    y = ly + captionH + 12;
   } else if (lshape) {
+    // 左: 見出し+リード / 右: 縦写真 → その下にスコア表
     drawHeadAndLead(M, topY);
     const px = M + leftW + gap;
     ctx.drawImage(photo, px, topY, pcolW, pcolH);
@@ -223,10 +240,13 @@ export async function generateNewspaperImage({ article, game, teamName, photo })
     ctx.font = BODY_FONT(13);
     ctx.fillText(`▲ ${teamName} vs ${game.opponent || '対戦相手'}`, px, topY + pcolH + 14);
     ctx.fillStyle = '#141414';
+    y = drawBoxAndResult(topY + topBlockH + 12);
   } else {
-    drawHeadAndLead(M, topY);
+    // 写真なし: 見出し+リード → スコア表(赤字直下)
+    let ly = drawHeadAndLead(M, topY);
+    ly += 12;
+    y = drawBoxAndResult(ly);
   }
-  y = topY + topBlockH + 12;
 
   // ---- 本文 ----
   ctx.font = BODY_FONT(22);
@@ -236,18 +256,6 @@ export async function generateNewspaperImage({ article, game, teamName, photo })
     y += 34;
   }
   y += 12;
-
-  // ---- ボックススコア表(イニング別 R/H/E) ----
-  drawBoxScore(ctx, measure, M, y, CW, rowH, box, game, teamName);
-  y += tableH + 8;
-  // 結果ラベル(中央)
-  const rlabel = game.myScore > game.oppScore ? '勝利' : game.myScore < game.oppScore ? '敗北' : '引き分け';
-  ctx.textAlign = 'center';
-  ctx.font = HEAD_FONT(18);
-  ctx.fillStyle = '#141414';
-  ctx.fillText(`${teamName} ${game.myScore}-${game.oppScore} ${game.opponent || '対戦相手'}　—　${rlabel}`, W / 2, y + 18);
-  ctx.textAlign = 'left';
-  y += 22 + 20;
 
   // ---- 記者の目(講評) ----
   if (commentLines.length) {
