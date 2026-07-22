@@ -1,10 +1,16 @@
 # ============================================================
 # Supabase自動休止(auto-pause)防止の定期ping
 # 無料プランは約7日間APIアクセスが無いとプロジェクトが休止し、
-# 休止中はDNSごと消えるためアプリ全体が「Load failed」になる。
+# 休止中はDNSごと消えるためアプリ全体が「Load失敗」になる。
 # 毎日1回、REST API経由で軽量クエリを投げて「活動あり」を維持する。
 # 使うキーは公開可能なpublishableキー(権限はRLSが強制。リポジトリの
 # src/lib/officialConfig.js に既に公開されているものと同一)。
+#
+# 二重化(concern①): アプリ側にも keepAlivePing() があり、誰かがアプリを
+# 開けば同様に休止を防ぐ(src/lib/officialCloud.js)。
+# さらに下の keep-schedule ステップで、GitHubが「60日リポジトリ無活動で
+# スケジュールを自動無効化」する仕様に対し、定期的に小さなコミットを打って
+# スケジュール自体が止まらないようにしている(外部サービス不要・無料)。
 # ============================================================
 name: Supabase keep-alive
 
@@ -12,6 +18,9 @@ on:
   schedule:
     - cron: '23 21 * * *' # 毎日 21:23 UTC (JST 6:23)。休止条件の7日に対し十分な頻度
   workflow_dispatch: {} # 手動実行も可能に
+
+permissions:
+  contents: write # keep-schedule の自己コミットに必要
 
 jobs:
   ping:
@@ -30,3 +39,20 @@ jobs:
           curl -sS -f -m 30 "$URL/auth/v1/health" \
             -H "apikey: $KEY" \
             -o /dev/null -w "auth status=%{http_code}\n"
+
+      # GitHubは「60日間リポジトリ活動が無いと schedule を自動停止」する。
+      # 毎月1日と15日だけ、タイムスタンプを更新する小さなコミットを打って
+      # スケジュールが止まらないようにする(=最大でも約16日間隔で活動を作る)。
+      - name: Keep schedule alive (periodic self-commit)
+        run: |
+          DAY=$(date -u +%d)
+          if [ "$DAY" != "01" ] && [ "$DAY" != "15" ]; then
+            echo "skip self-commit (day=$DAY)"; exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mkdir -p .github
+          date -u +"%Y-%m-%dT%H:%M:%SZ" > .github/keepalive-stamp
+          git add .github/keepalive-stamp
+          git commit -m "chore: keepalive stamp [skip ci]" || { echo "nothing to commit"; exit 0; }
+          git push

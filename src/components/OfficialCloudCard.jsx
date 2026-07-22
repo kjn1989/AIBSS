@@ -114,6 +114,10 @@ export default function OfficialCloudCard() {
           >
             {busy ? t('occ.busy') : t('occ.loginBtn')}
           </button>
+          <details className="forgot-help mt8">
+            <summary>{t('occ.forgotSummary')}</summary>
+            <p className="small dim" style={{ whiteSpace: 'pre-line', marginTop: 6 }}>{t('occ.forgotBody')}</p>
+          </details>
         </>
       )}
 
