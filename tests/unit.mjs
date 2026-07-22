@@ -6,7 +6,15 @@ import { proposeMoves, judgeAdvance, batterDestOptions } from '../src/lib/plays.
 import { gameEndCheck, initialPresetIdFor, describeRules } from '../src/lib/rules.js';
 import { aggregateBatting, battingMetrics, pitchingMetrics, titleLeaders } from '../src/lib/stats.js';
 import { translate } from '../src/lib/i18n.js';
-import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm } from '../src/lib/voiceParser.js';
+import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, parseDirectionOnly } from '../src/lib/voiceParser.js';
+
+test('parseDirectionOnly: 方向のみの発話は方向、結果語を含めばnull(言い直し扱い)', () => {
+  assert.equal(parseDirectionOnly('ライト'), 'RF');
+  assert.equal(parseDirectionOnly('方向はセンター'), 'CF');
+  assert.equal(parseDirectionOnly('レフトへ'), 'LF');
+  assert.equal(parseDirectionOnly('センター前ヒット'), null);
+  assert.equal(parseDirectionOnly('三塁打'), null);
+});
 
 test('needsRunnerConfirm: 走者ありの安打・凡打は確認、四球/本塁打/走者なしは不要', () => {
   assert.equal(needsRunnerConfirm('single', { 1: true, 2: true }), true);
