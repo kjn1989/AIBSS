@@ -677,13 +677,27 @@ export default function VoiceControl({ game }) {
       {mode === 'confirming' && (
         <Sheet onClose={() => setMode('idle')}>
           <div className="confirm-card" style={{ marginBottom: 0 }}>
-            {/* 確認中も話している内容をリアルタイム表示(安心感)。常時は継続認識、単発は回答認識の途中経過 */}
-            {(contMode ? (!muted && contStatus === 'listening') : answerListening) && (
-              <div className="confirm-live">
-                <span className="cont-live-dot" />
-                <span className="confirm-live-text">{(contMode ? contInterim : answerInterim) || '聞き取り中…'}</span>
-              </div>
-            )}
+            {/* 音声入力バー: 確認中は常に上部に表示。話している内容をリアルタイム表示し、
+                無音時は「聞き取り中…」、単発でマイクが止まったらタップで再開できる。 */}
+            {(() => {
+              const listening = contMode ? (!muted && contStatus === 'listening') : answerListening;
+              const liveText = contMode ? contInterim : answerInterim;
+              const canResume = !contMode && !listening;
+              return (
+                <div
+                  className={`confirm-live ${listening ? 'live' : 'off'}`}
+                  role={canResume ? 'button' : undefined}
+                  onClick={canResume ? startAnswerListening : undefined}
+                >
+                  <span className="cont-live-dot" />
+                  <span className="confirm-live-text">
+                    {liveText
+                      || (listening ? '聞き取り中… そのまま話してください'
+                        : contMode ? '一時停止中' : '🎙 タップして音声入力を再開')}
+                  </span>
+                </div>
+              );
+            })()}
             <div className="small dim">「{prettifyTranscript(transcript)}」{llmUsed && <span className="pill blue" style={{ marginLeft: 6 }}>AI解釈</span>}</div>
             {candidates.length === 0 ? (
               <>
@@ -758,14 +772,6 @@ export default function VoiceControl({ game }) {
                   </p>
                 ) : (
                   <>
-                    <div className={`answer-listen-status mt8 ${answerListening ? 'live' : ''}`}>
-                      {answerListening
-                        ? '🎙 音声を聞いています… そのまま話してください'
-                        : '🎙 マイクが停止中 — タップで音声回答を再開'}
-                      {!answerListening && (
-                        <button className="small" style={{ marginLeft: 8 }} onClick={startAnswerListening}>再開</button>
-                      )}
-                    </div>
                     <p className="small dim mt8" style={{ textAlign: 'center' }}>
                       {confirmDests
                         ? '「はい」で確定。「二塁ランナーは三塁」「一塁ランナーはそのまま」等で走者を修正できます'
