@@ -741,8 +741,14 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
   z-index: 90; background: rgba(13, 17, 23, 0.92); border: 1px solid var(--border);
   border-radius: 12px; padding: 10px 14px; color: var(--text); font-size: 15px; font-weight: 600;
   display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px); pointer-events: none; /* 下のボタンのタップを妨げない */
 }
+/* 待機中(無音)は控えめに、発話中(active)は緑枠で強調 */
+.cont-live-caption.idle { opacity: 0.82; font-size: 13px; font-weight: 600; color: var(--text-dim); }
+.cont-live-caption.active { border-color: var(--green); }
+.cont-live-caption.muted { opacity: 0.85; }
+.cont-live-caption.muted .cont-live-dot { background: var(--text-dim); animation: none; }
+.cont-live-text { overflow-wrap: anywhere; }
 .cont-live-dot {
   flex-shrink: 0; width: 9px; height: 9px; border-radius: 50%; background: var(--green);
   animation: pulse-green 1.2s infinite;

@@ -595,11 +595,19 @@ export default function VoiceControl({ game }) {
         ? createPortal(<div className="voice-inline">{triggers}</div>, slot)
         : <div className="voice-fixed">{triggers}</div>}
 
-      {/* ライブ字幕・保留トースト・音声Undoはオーバーレイのまま(投手行には入れない)。
-          確認カード表示中はカード内のライブ字幕に集約するため、この固定字幕は出さない。 */}
-      {contMode && !muted && contInterim && mode !== 'confirming' && (
-        <div className="cont-live-caption" aria-live="polite">
-          <span className="cont-live-dot" />{contInterim}
+      {/* 常時モード中は音声入力インジケータを常に表示(無音時はプレースホルダ)。
+          発話中は認識テキスト、待機中は案内。確認カード表示中はカード内字幕に集約。 */}
+      {contMode && mode !== 'confirming' && (
+        <div
+          className={`cont-live-caption ${muted ? 'muted' : contInterim ? 'active' : 'idle'}`}
+          aria-live="polite"
+        >
+          <span className="cont-live-dot" />
+          <span className="cont-live-text">
+            {muted
+              ? '🔇 ミュート中 —「ログ、ミュート解除」で再開'
+              : contInterim || '常時リスニング中 —「ログ、〜」と話すと記録します'}
+          </span>
         </div>
       )}
       {contMode && canUndo && (
