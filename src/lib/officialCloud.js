@@ -54,6 +54,25 @@ function jpAuthError(error) {
   return m;
 }
 
+// ---------------- 休止防止(keep-alive) ----------------
+// GitHub Actionsの定期ping(.github/workflows/supabase-keepalive.yml)の二重化。
+// アプリが開かれるたびに軽量クエリを1本投げ「API活動」を作る。GitHub側が万一
+// 止まっても、誰かがアプリを開いていれば7日休止条件は成立しない。
+// localStorageで20時間に1回までに間引き、通常利用の負荷はほぼゼロ。
+export async function keepAlivePing() {
+  const sb = ensureClient();
+  if (!sb) return;
+  try {
+    const KEY = 'bbscorer.lastKeepAlive';
+    const last = Number(localStorage.getItem(KEY) || 0);
+    if (Date.now() - last < 20 * 3600 * 1000) return; // 20時間に1回まで
+    localStorage.setItem(KEY, String(Date.now()));
+    await sb.from('teams').select('id').limit(1); // RLSで空でも「活動」としてカウント
+  } catch {
+    /* 失敗しても致命的でないため無視 */
+  }
+}
+
 // ---------------- 認証 ----------------
 export function watchAuth(cb) {
   const sb = ensureClient();
