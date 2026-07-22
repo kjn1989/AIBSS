@@ -358,8 +358,12 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 
 /* 小型3塁ダイヤ(打者行に横並び) */
 .field-diamond-crop.mini { width: 92px; flex: none; margin: 0; aspect-ratio: 10 / 7; border: none; border-radius: 8px; }
-.field-diamond-crop.mini .base { width: 26px; height: 26px; border-width: 1.5px; box-shadow: 0 2px 6px rgba(0, 0, 0, .3); }
-.field-diamond-crop.mini .base span { font-size: 8px; width: 40px; line-height: 1; }
+.field-diamond-crop.mini .base { width: 22px; height: 22px; border-width: 1.5px; box-shadow: 0 2px 6px rgba(0, 0, 0, .3); }
+.field-diamond-crop.mini .base span { font-size: 8px; width: 36px; line-height: 1; }
+/* 塁が重ならないよう小型時は位置を広げ、二塁は上・一三塁は下へ離す */
+.field-diamond-crop.mini .base.b2 { left: 50%; top: 27%; }
+.field-diamond-crop.mini .base.b3 { left: 20%; top: 76%; }
+.field-diamond-crop.mini .base.b1 { left: 80%; top: 76%; }
 .field-diamond-crop.mini .base.occupied { box-shadow: 0 0 0 3px rgba(227, 179, 65, .26), 0 3px 8px rgba(0, 0, 0, .35); }
 
 /* 状況カード: 小型ダイヤ + 打者 + 展開トグルを横並び */
@@ -395,8 +399,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .scoretab .sit-card,
 .scoretab .pc-card { padding: 6px 12px; }
 .scoretab .card > h2 { margin-bottom: 4px; }
-.scoretab .count-btns.pitch-row4 button { min-height: 43px; font-size: 15px; }
-.scoretab .result-pad button { min-height: 36px; font-size: 12px; }
+.scoretab .count-btns.pitch-row4 button { min-height: 40px; font-size: 14px; white-space: nowrap; padding-left: 2px; padding-right: 2px; letter-spacing: -.02em; }
+.scoretab .result-pad button { min-height: 35px; font-size: 12px; }
 .scoretab .result-pad { gap: 5px; }
 .scoretab .result-pad.result-pad-intf { margin-top: 5px; }
 .scoretab .sit-pitcher { margin-top: 5px; padding-top: 5px; }
