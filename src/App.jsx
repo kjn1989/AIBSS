@@ -7,6 +7,7 @@ import StatsTab from './components/StatsTab.jsx';
 import ResultTab from './components/ResultTab.jsx';
 import SettingsTab from './components/SettingsTab.jsx';
 import CloudSync from './components/CloudSync.jsx';
+import UndoSnackbar from './components/UndoSnackbar.jsx';
 import { decodeConfig } from './components/WatchView.jsx';
 import { officialAvailable, currentUserAsync, loginWithPassword, joinByInvite } from './lib/officialCloud.js';
 import { addProfile, switchActiveProfile } from './lib/profiles.js';
@@ -196,6 +197,8 @@ export default function App() {
           </button>
         ))}
       </nav>
+
+      <UndoSnackbar />
     </div>
   );
 }

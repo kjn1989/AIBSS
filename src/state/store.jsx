@@ -53,6 +53,7 @@ export const initialState = {
   // ---- 以下は永続化しないセッション状態 ----
   history: [], // Undo用: { gameId, game(deep copy), label }
   cloudStatus: 'off', // 'off' | 'connecting' | 'on' | 'error'
+  lastDeleted: null, // 誤削除の復元用: { kind:'player'|'game'|'member', label, item, idx? }。数秒だけ保持
 };
 
 const PERSIST_KEYS = ['players', 'members', 'games', 'currentGameId', 'settings', 'demoLoaded', 'pendingDeletes'];
@@ -61,6 +62,11 @@ const PERSIST_KEYS = ['players', 'members', 'games', 'currentGameId', 'settings'
 function addTomb(pd, bucket, ids) {
   const cur = pd?.[bucket] || [];
   return { ...(pd || { games: [], players: [], crew: [] }), [bucket]: [...new Set([...cur, ...ids])] };
+}
+// トゥームストーンからidを外す(復元時: 削除待ちを取り消す)
+function removeTomb(pd, bucket, id) {
+  const cur = pd?.[bucket] || [];
+  return { ...(pd || { games: [], players: [], crew: [] }), [bucket]: cur.filter((x) => x !== id) };
 }
 
 function loadPersisted() {
@@ -294,6 +300,37 @@ export function reducer(state, action) {
       const rm = new Set(action.ids || []);
       return { ...state, pendingDeletes: { ...pd, [action.bucket]: (pd[action.bucket] || []).filter((id) => !rm.has(id)) } };
     }
+    // 誤削除の復元: 直前に削除した項目を元の位置に戻し、削除待ちも取り消す。
+    // クラウド接続時は、pendingDeletesから外れ、項目が復活することで
+    // CloudSyncのpushが再アップロードして整合する。
+    case 'RESTORE_DELETED': {
+      const d = state.lastDeleted;
+      if (!d) return state;
+      if (d.kind === 'player') {
+        const players = [...state.players];
+        const at = Math.min(Math.max(d.idx ?? players.length, 0), players.length);
+        players.splice(at, 0, d.item);
+        return { ...state, players, pendingDeletes: removeTomb(state.pendingDeletes, 'players', d.item.id), lastDeleted: null };
+      }
+      if (d.kind === 'member') {
+        const members = [...(state.members || [])];
+        const at = Math.min(Math.max(d.idx ?? members.length, 0), members.length);
+        members.splice(at, 0, d.item);
+        return { ...state, members, pendingDeletes: removeTomb(state.pendingDeletes, 'crew', d.item.id), lastDeleted: null };
+      }
+      if (d.kind === 'game') {
+        return {
+          ...state,
+          games: { ...state.games, [d.item.id]: d.item },
+          currentGameId: d.prevCurrentGameId ?? state.currentGameId,
+          pendingDeletes: removeTomb(state.pendingDeletes, 'games', d.item.id),
+          lastDeleted: null,
+        };
+      }
+      return { ...state, lastDeleted: null };
+    }
+    case 'DISMISS_DELETED':
+      return { ...state, lastDeleted: null };
     case 'UPDATE_SETTINGS':
       return { ...state, settings: { ...state.settings, ...action.patch } };
 
@@ -322,12 +359,17 @@ export function reducer(state, action) {
       const players = state.players.map((p) => (p.id === action.id ? { ...p, ...action.patch } : p));
       return { ...state, players };
     }
-    case 'DELETE_PLAYER':
+    case 'DELETE_PLAYER': {
+      const idx = state.players.findIndex((p) => p.id === action.id);
+      const item = state.players[idx];
+      if (!item) return state;
       return {
         ...state,
         players: state.players.filter((p) => p.id !== action.id),
         pendingDeletes: action.id.startsWith('demo-') ? state.pendingDeletes : addTomb(state.pendingDeletes, 'players', [action.id]),
+        lastDeleted: { kind: 'player', label: item.name, item, idx },
       };
+    }
 
     // その他(記述式メモ): 判断に迷う不明なプレイを、とりあえず自由記述で残す。
     // 後からAIが正式なスコア記録へ変換・提案する材料にする(payload.memoに原文を保持)。
@@ -378,12 +420,18 @@ export function reducer(state, action) {
       const members = (state.members || []).map((m) => (m.id === action.id ? { ...m, ...action.patch } : m));
       return { ...state, members };
     }
-    case 'DELETE_MEMBER':
+    case 'DELETE_MEMBER': {
+      const members = state.members || [];
+      const idx = members.findIndex((m) => m.id === action.id);
+      const item = members[idx];
+      if (!item) return state;
       return {
         ...state,
-        members: (state.members || []).filter((m) => m.id !== action.id),
+        members: members.filter((m) => m.id !== action.id),
         pendingDeletes: addTomb(state.pendingDeletes, 'crew', [action.id]),
+        lastDeleted: { kind: 'member', label: item.name, item, idx },
       };
+    }
 
     // ===== 試合 =====
     case 'CREATE_GAME': {
@@ -421,11 +469,15 @@ export function reducer(state, action) {
       return { ...state, players, games: { ...state.games, [g.id]: g } };
     }
     case 'DELETE_GAME': {
+      const removed = state.games[action.id];
       const games = { ...state.games };
       delete games[action.id];
       const currentGameId = state.currentGameId === action.id ? null : state.currentGameId;
       const pendingDeletes = action.id.startsWith('demo-') ? state.pendingDeletes : addTomb(state.pendingDeletes, 'games', [action.id]);
-      return { ...state, games, currentGameId, pendingDeletes, history: state.history.filter((h) => h.gameId !== action.id) };
+      const lastDeleted = removed
+        ? { kind: 'game', label: `${removed.date || ''} vs ${removed.opponent || ''}`.trim(), item: removed, prevCurrentGameId: state.currentGameId }
+        : state.lastDeleted;
+      return { ...state, games, currentGameId, pendingDeletes, lastDeleted, history: state.history.filter((h) => h.gameId !== action.id) };
     }
     case 'DELETE_ALL_GAMES': {
       // 全試合を削除(登録選手・チーム設定は保持)。
