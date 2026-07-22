@@ -197,9 +197,15 @@ export function parseUtterance(rawText) {
     // 「フォアボール」の「ボール」誤検出を抑制
     if (pitchType === 'ball' && (resScores.bb || 0) > 0) continue;
     if (pitchType === 'strike' && (resScores.so || 0) > score) continue;
+    // ストライクの種別(見逃し/空振り)。3ストライク目の自動三振で種別に引き継ぐ
+    const sub = pitchType === 'strike'
+      ? (text.includes('見逃') || text.includes('みのが') ? 'looking'
+        : (text.includes('空振') || text.includes('からぶ') ? 'swinging' : null))
+      : null;
     candidates.push({
       kind: 'pitch',
       pitchType,
+      sub,
       label: { ball: 'ボール', strike: 'ストライク', foul: 'ファウル' }[pitchType],
       confidence: norm(score) * (text.length <= 6 ? 1 : 0.5), // 短い発話ほど投球単独の可能性大
     });
