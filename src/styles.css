@@ -358,13 +358,11 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 
 /* 小型3塁ダイヤ(打者行に横並び) */
 .field-diamond-crop.mini { width: 92px; flex: none; margin: 0; aspect-ratio: 10 / 7; border: none; border-radius: 8px; }
-.field-diamond-crop.mini .base { width: 22px; height: 22px; border-width: 1.5px; box-shadow: 0 2px 6px rgba(0, 0, 0, .3); }
-.field-diamond-crop.mini .base span { font-size: 8px; width: 36px; line-height: 1; }
-/* 塁が重ならないよう小型時は位置を広げ、二塁は上・一三塁は下へ離す */
-.field-diamond-crop.mini .base.b2 { left: 50%; top: 27%; }
-.field-diamond-crop.mini .base.b3 { left: 20%; top: 76%; }
-.field-diamond-crop.mini .base.b1 { left: 80%; top: 76%; }
-.field-diamond-crop.mini .base.occupied { box-shadow: 0 0 0 3px rgba(227, 179, 65, .26), 0 3px 8px rgba(0, 0, 0, .35); }
+/* 塁位置は基準(ベースパス頂点=白線の角)を継承し、ラインにピッタリ重ねる。
+   小型では重なりを避けるためサイズだけ小さくする。 */
+.field-diamond-crop.mini .base { width: 19px; height: 19px; border-width: 1.5px; box-shadow: 0 2px 6px rgba(0, 0, 0, .3); }
+.field-diamond-crop.mini .base span { font-size: 7px; width: 34px; line-height: 1; }
+.field-diamond-crop.mini .base.occupied { box-shadow: 0 0 0 2px rgba(227, 179, 65, .26), 0 2px 6px rgba(0, 0, 0, .35); }
 
 /* 状況カード: 小型ダイヤ + 打者 + 展開トグルを横並び */
 .sit-card { padding: 10px 12px; }
