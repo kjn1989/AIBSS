@@ -1,0 +1,32 @@
+# ============================================================
+# Supabase自動休止(auto-pause)防止の定期ping
+# 無料プランは約7日間APIアクセスが無いとプロジェクトが休止し、
+# 休止中はDNSごと消えるためアプリ全体が「Load failed」になる。
+# 毎日1回、REST API経由で軽量クエリを投げて「活動あり」を維持する。
+# 使うキーは公開可能なpublishableキー(権限はRLSが強制。リポジトリの
+# src/lib/officialConfig.js に既に公開されているものと同一)。
+# ============================================================
+name: Supabase keep-alive
+
+on:
+  schedule:
+    - cron: '23 21 * * *' # 毎日 21:23 UTC (JST 6:23)。休止条件の7日に対し十分な頻度
+  workflow_dispatch: {} # 手動実行も可能に
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase REST + Auth
+        run: |
+          URL="https://kkajcckyplzuujhsrwxa.supabase.co"
+          KEY="sb_publishable_mm1-s8BRfpvGeJYDelgUUg_EN19k365"
+          # REST(PostgREST)への実クエリ = 確実に「API活動」としてカウントされる。
+          # 匿名アクセスはRLSにより空配列が返るだけで安全。
+          curl -sS -f -m 30 "$URL/rest/v1/teams?select=id&limit=1" \
+            -H "apikey: $KEY" -H "Authorization: Bearer $KEY" \
+            -o /dev/null -w "rest status=%{http_code}\n"
+          # Authのヘルスチェック(補助)
+          curl -sS -f -m 30 "$URL/auth/v1/health" \
+            -H "apikey: $KEY" \
+            -o /dev/null -w "auth status=%{http_code}\n"
