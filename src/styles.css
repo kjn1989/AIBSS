@@ -393,11 +393,11 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 /* ---- スコア入力タブの高密度化(打撃結果パッドまで1画面に収める) ---- */
 /* ヘッダー直下の上部余白を詰める(スコア入力タブのみ) */
 .scoretab { margin-top: -11px; }
-.scoretab .pc-caprow { margin-bottom: 4px; }
+.scoretab .pc-caprow { margin-bottom: 3px; }
 .scoretab .card,
 .scoretab .led-scoreboard { margin-bottom: 4px; }
-.scoretab .sit-card,
-.scoretab .pc-card { padding: 6px 12px; }
+.scoretab .sit-card { padding: 6px 12px; }
+.scoretab .pc-card { padding: 5px 12px 6px; }
 .scoretab .card > h2 { margin-bottom: 4px; }
 .scoretab .count-btns.pitch-row4 button { min-height: 40px; font-size: 14px; white-space: nowrap; padding-left: 2px; padding-right: 2px; letter-spacing: -.02em; }
 .scoretab .result-pad button { min-height: 35px; font-size: 12px; }
@@ -418,9 +418,11 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 
 /* ---- 投球カウンター ---- */
 .pc-caprow { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-.pc-cap { font-size: 10px; color: var(--text-dim); letter-spacing: .02em; margin: 0 0 0 2px; }
+.pc-cap { font-size: 12px; font-weight: 600; color: var(--text-dim); letter-spacing: .02em; margin: 0 0 0 2px; }
 .pc-hint { margin-left: auto; display: flex; gap: 6px; }
-.pc-undo { margin-left: auto; flex: none; font-size: 11px; color: var(--text-dim); background: transparent; border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px; }
+/* 1球取り消しは1行内に収めつつ操作しやすいサイズ(高すぎないよう min-height を抑える) */
+.pc-undo { margin-left: auto; flex: none; font-size: 12.5px; min-height: 34px; color: var(--text); background: var(--bg-3);
+  border: 1px solid var(--border); border-radius: 9px; padding: 5px 14px; }
 .pc-hint + .pc-undo { margin-left: 0; }
 .count-btns.pitch-row4 { grid-template-columns: repeat(4, 1fr); }
 .count-btns.pitch-row4 button { min-height: 46px; font-size: 15px; }
