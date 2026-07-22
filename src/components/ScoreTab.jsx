@@ -727,7 +727,7 @@ export default function ScoreTab() {
       />
 
       {(!myBatting || !noLineup) && (
-        <div className="card">
+        <div className="card rp-card">
           <h2>{myBatting ? t('score.battingResult') : t('score.oppResult')}</h2>
           <ResultPad onSelect={(result) => setSheet({ kind: 'play', result })} />
         </div>
