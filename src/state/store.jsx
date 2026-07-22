@@ -46,12 +46,22 @@ export const initialState = {
     officialRole: null, // 公式クラウドでの自分のロール(owner/scorer/viewer)。CloudSyncが接続時に更新
   },
   demoLoaded: false,
+  // 削除のトゥームストーン: ローカルで削除した項目のidを保持し、CloudSyncが
+  // クラウドからも削除するまで記録。クラウド削除が済むまでMERGE_REMOTEでの復活も防ぐ。
+  // (これが無いと、削除がクラウドに伝わらず、リロード時の全取得で戻ってしまう)
+  pendingDeletes: { games: [], players: [], crew: [] },
   // ---- 以下は永続化しないセッション状態 ----
   history: [], // Undo用: { gameId, game(deep copy), label }
   cloudStatus: 'off', // 'off' | 'connecting' | 'on' | 'error'
 };
 
-const PERSIST_KEYS = ['players', 'members', 'games', 'currentGameId', 'settings', 'demoLoaded'];
+const PERSIST_KEYS = ['players', 'members', 'games', 'currentGameId', 'settings', 'demoLoaded', 'pendingDeletes'];
+
+// トゥームストーンにidを追加(重複排除)
+function addTomb(pd, bucket, ids) {
+  const cur = pd?.[bucket] || [];
+  return { ...(pd || { games: [], players: [], crew: [] }), [bucket]: [...new Set([...cur, ...ids])] };
+}
 
 function loadPersisted() {
   try {
@@ -245,6 +255,9 @@ export function reducer(state, action) {
         currentGameId: b.currentGameId && games[b.currentGameId] ? b.currentGameId : null,
         settings,
         demoLoaded: !!b.demoLoaded,
+        pendingDeletes: b.pendingDeletes && typeof b.pendingDeletes === 'object'
+          ? { games: b.pendingDeletes.games || [], players: b.pendingDeletes.players || [], crew: b.pendingDeletes.crew || [] }
+          : { games: [], players: [], crew: [] },
         history: [], // 別データ由来のUndo履歴は破棄
       };
     }
@@ -252,22 +265,34 @@ export function reducer(state, action) {
       return { ...state, cloudStatus: action.status };
     case 'MERGE_REMOTE': {
       // Firestoreからの差分反映: 試合は updatedAt が新しい方を採用(Last-Write-Wins)
+      // 削除待ち(pendingDeletes)のidはクラウド削除が済むまで復活させない
+      const pd = state.pendingDeletes || { games: [], players: [], crew: [] };
+      const delG = new Set(pd.games || []);
+      const delP = new Set(pd.players || []);
+      const delC = new Set(pd.crew || []);
       const games = { ...state.games };
       for (const g of action.games || []) {
+        if (delG.has(g.id)) continue; // 削除待ちは無視
         const local = games[g.id];
         if (!local || (g.updatedAt || 0) >= (local.updatedAt || 0)) games[g.id] = ensureOppFields(g);
       }
       const pmap = new Map(state.players.map((p) => [p.id, p]));
-      for (const p of action.players || []) pmap.set(p.id, p);
+      for (const p of action.players || []) { if (!delP.has(p.id)) pmap.set(p.id, p); }
       const players = [...pmap.values()].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
       // 参加メンバー(公式クラウドではcrewコレクション)も同様にidマージ
       let members = state.members || [];
       if (action.crew) {
         const mmap = new Map(members.map((m) => [m.id, m]));
-        for (const m of action.crew) mmap.set(m.id, m);
+        for (const m of action.crew) { if (!delC.has(m.id)) mmap.set(m.id, m); }
         members = [...mmap.values()].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
       }
       return { ...state, games, players, members };
+    }
+    // CloudSyncがクラウド削除に成功したらトゥームストーンから外す
+    case 'CLEAR_PENDING_DELETE': {
+      const pd = state.pendingDeletes || { games: [], players: [], crew: [] };
+      const rm = new Set(action.ids || []);
+      return { ...state, pendingDeletes: { ...pd, [action.bucket]: (pd[action.bucket] || []).filter((id) => !rm.has(id)) } };
     }
     case 'UPDATE_SETTINGS':
       return { ...state, settings: { ...state.settings, ...action.patch } };
@@ -298,7 +323,11 @@ export function reducer(state, action) {
       return { ...state, players };
     }
     case 'DELETE_PLAYER':
-      return { ...state, players: state.players.filter((p) => p.id !== action.id) };
+      return {
+        ...state,
+        players: state.players.filter((p) => p.id !== action.id),
+        pendingDeletes: action.id.startsWith('demo-') ? state.pendingDeletes : addTomb(state.pendingDeletes, 'players', [action.id]),
+      };
 
     // その他(記述式メモ): 判断に迷う不明なプレイを、とりあえず自由記述で残す。
     // 後からAIが正式なスコア記録へ変換・提案する材料にする(payload.memoに原文を保持)。
@@ -350,7 +379,11 @@ export function reducer(state, action) {
       return { ...state, members };
     }
     case 'DELETE_MEMBER':
-      return { ...state, members: (state.members || []).filter((m) => m.id !== action.id) };
+      return {
+        ...state,
+        members: (state.members || []).filter((m) => m.id !== action.id),
+        pendingDeletes: addTomb(state.pendingDeletes, 'crew', [action.id]),
+      };
 
     // ===== 試合 =====
     case 'CREATE_GAME': {
@@ -391,16 +424,25 @@ export function reducer(state, action) {
       const games = { ...state.games };
       delete games[action.id];
       const currentGameId = state.currentGameId === action.id ? null : state.currentGameId;
-      return { ...state, games, currentGameId, history: state.history.filter((h) => h.gameId !== action.id) };
+      const pendingDeletes = action.id.startsWith('demo-') ? state.pendingDeletes : addTomb(state.pendingDeletes, 'games', [action.id]);
+      return { ...state, games, currentGameId, pendingDeletes, history: state.history.filter((h) => h.gameId !== action.id) };
     }
     case 'DELETE_ALL_GAMES': {
       // 全試合を削除(登録選手・チーム設定は保持)。
       // デモ由来の試合・選手(id が 'demo-' で始まる)も一緒に片付ける
       const players = state.players.filter((p) => !p.id.startsWith('demo-'));
-      return { ...state, games: {}, players, currentGameId: null, demoLoaded: false, history: [] };
+      const gameIds = Object.keys(state.games).filter((id) => !id.startsWith('demo-'));
+      const delPlayerIds = state.players.filter((p) => p.id.startsWith('demo-')).map((p) => p.id);
+      let pd = addTomb(state.pendingDeletes, 'games', gameIds);
+      if (delPlayerIds.length) pd = addTomb(pd, 'players', delPlayerIds);
+      return { ...state, games: {}, players, currentGameId: null, demoLoaded: false, pendingDeletes: pd, history: [] };
     }
     case 'RESET_ALL': {
       // 完全初期化: 選手・メンバー・試合をすべて消す。チーム名など設定は保持する
+      // クラウド接続時も反映されるよう、消した全idをトゥームストーンに記録
+      let pd = addTomb(state.pendingDeletes, 'games', Object.keys(state.games).filter((id) => !id.startsWith('demo-')));
+      pd = addTomb(pd, 'players', state.players.map((p) => p.id).filter((id) => !id.startsWith('demo-')));
+      pd = addTomb(pd, 'crew', (state.members || []).map((m) => m.id));
       return {
         ...state,
         players: [],
@@ -408,6 +450,7 @@ export function reducer(state, action) {
         games: {},
         currentGameId: null,
         demoLoaded: false,
+        pendingDeletes: pd,
         history: [],
       };
     }

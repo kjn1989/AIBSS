@@ -264,11 +264,18 @@ export function connectOfficial({ teamId, onGames, onPlayers, onCrew, onStatus }
     });
     if (error) throw error;
   };
+  const del = (table) => async (id) => {
+    const { error } = await sb.from(table).delete().eq('team_id', teamId).eq('id', id);
+    if (error) throw error;
+  };
   return {
     teamId,
     pushGame: push('team_games'),
     pushPlayer: push('team_players'),
     pushCrew: push('team_crew'),
+    deleteGame: del('team_games'),
+    deletePlayer: del('team_players'),
+    deleteCrew: del('team_crew'),
     teardown() {
       sb.removeChannel(channel);
     },
