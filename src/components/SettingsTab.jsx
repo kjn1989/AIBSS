@@ -97,7 +97,15 @@ export default function SettingsTab() {
         <div className="mt12">
           {state.players.map((p) => (
             <div className="row" key={p.id}>
-              <span className="pill">{p.number || '-'}</span>
+              <input
+                className="num-edit"
+                value={p.number || ''}
+                onChange={(e) => dispatch({ type: 'UPDATE_PLAYER', id: p.id, patch: { number: e.target.value } })}
+                placeholder="-"
+                inputMode="numeric"
+                maxLength={3}
+                aria-label={t('set.number')}
+              />
               <span className="grow">{p.name}</span>
               <label className="small dim">{t('set.throwShort')}</label>
               <select className="hand-select" value={p.throws || ''} onChange={(e) => dispatch({ type: 'UPDATE_PLAYER', id: p.id, patch: { throws: e.target.value } })}>
