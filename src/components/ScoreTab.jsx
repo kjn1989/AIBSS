@@ -662,6 +662,7 @@ export default function ScoreTab() {
               <span className="small dim">{t('score.oppPitcher')}</span>
               <select
                 className="pitcher-select"
+                style={{ width: 88 }}
                 value={game.oppPitcherLetter || ''}
                 onChange={(e) => e.target.value && dispatch({
                   type: 'OPP_SET_PITCHER', gameId: game.id, letter: e.target.value,

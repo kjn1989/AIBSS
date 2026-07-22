@@ -383,29 +383,32 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .voice-inline .cont-mode-toggle,
 .voice-inline .cont-status-pill,
 .voice-inline .cont-exit-btn { position: static; top: auto; right: auto; }
-.voice-inline .cont-mode-toggle { font-size: 11px; padding: 6px 10px; }
+.voice-inline .cont-mode-toggle { font-size: 11px; padding: 6px 10px; white-space: nowrap; }
 .voice-inline .cont-status-pill { padding: 8px 11px; font-size: 12px; }
 
 /* ---- スコア入力タブの高密度化(打撃結果パッドまで1画面に収める) ---- */
+/* ヘッダー直下の上部余白を詰める(スコア入力タブのみ) */
+.scoretab { margin-top: -11px; }
+.scoretab .pc-caprow { margin-bottom: 4px; }
 .scoretab .card,
 .scoretab .led-scoreboard { margin-bottom: 4px; }
 .scoretab .sit-card,
-.scoretab .pc-card { padding: 7px 12px; }
-.scoretab .card > h2 { margin-bottom: 5px; }
-.scoretab .count-btns.pitch-row4 button { min-height: 44px; font-size: 15px; }
-.scoretab .result-pad button { min-height: 38px; font-size: 12px; }
-.scoretab .result-pad { gap: 6px; }
+.scoretab .pc-card { padding: 6px 12px; }
+.scoretab .card > h2 { margin-bottom: 4px; }
+.scoretab .count-btns.pitch-row4 button { min-height: 43px; font-size: 15px; }
+.scoretab .result-pad button { min-height: 36px; font-size: 12px; }
+.scoretab .result-pad { gap: 5px; }
 .scoretab .result-pad.result-pad-intf { margin-top: 5px; }
-.scoretab .sit-pitcher { margin-top: 6px; padding-top: 6px; }
+.scoretab .sit-pitcher { margin-top: 5px; padding-top: 5px; }
 .scoretab .atbat-history { margin-top: 5px; }
 /* 相手打者の左右トグルは極小インライン(打者行に同居しても文字が潰れない幅に圧縮) */
 .scoretab .hand-inline { margin: 0; gap: 3px; flex: none; }
 .scoretab .hand-inline .small { font-size: 9.5px; }
 .scoretab .hand-inline .hl-btn { min-height: 24px; padding: 2px 5px; font-size: 11px; }
 /* LEDボードの詰め */
-.scoretab .led-board { padding: 4px 9px; }
-.scoretab .led-pcpair { margin-top: 4px; padding-top: 4px; }
-.scoretab .led-inn { margin: 1px 2px 4px; }
+.scoretab .led-board { padding: 3px 9px; }
+.scoretab .led-pcpair { margin-top: 3px; padding-top: 3px; }
+.scoretab .led-inn { margin: 0 2px 3px; }
 /* 小型ダイヤをもう一回り小さく */
 .scoretab .field-diamond-crop.mini { width: 74px; }
 
