@@ -219,6 +219,7 @@ export default function VoiceControl({ game }) {
   // 「空振り」「見逃し」「はい」「やり直し」等を音声で受け付ける。
   // それ以外の発話は新しい実況として再解釈する。
   const [answerListening, setAnswerListening] = useState(false);
+  const [answerInterim, setAnswerInterim] = useState(''); // 単発モードの回答中ライブ文字起こし
   const answerRecRef = useRef(null);
 
   const handleAnswer = (raw) => {
@@ -272,10 +273,10 @@ export default function VoiceControl({ game }) {
   const startAnswerListening = () => {
     answerRecRef.current?.abort?.();
     const rec = createRecognizer({
-      onInterim: () => {},
-      onResult: handleAnswer,
-      onError: rearmAnswer,
-      onEnd: rearmAnswer,
+      onInterim: (txt) => setAnswerInterim(txt), // 確認カード上部のライブ文字起こし用
+      onResult: (txt) => { setAnswerInterim(''); handleAnswer(txt); },
+      onError: () => { setAnswerInterim(''); rearmAnswer(); },
+      onEnd: () => { setAnswerInterim(''); rearmAnswer(); },
     });
     if (!rec) return;
     answerRecRef.current = rec;
@@ -594,8 +595,9 @@ export default function VoiceControl({ game }) {
         ? createPortal(<div className="voice-inline">{triggers}</div>, slot)
         : <div className="voice-fixed">{triggers}</div>}
 
-      {/* ライブ字幕・保留トースト・音声Undoはオーバーレイのまま(投手行には入れない) */}
-      {contMode && !muted && contInterim && (
+      {/* ライブ字幕・保留トースト・音声Undoはオーバーレイのまま(投手行には入れない)。
+          確認カード表示中はカード内のライブ字幕に集約するため、この固定字幕は出さない。 */}
+      {contMode && !muted && contInterim && mode !== 'confirming' && (
         <div className="cont-live-caption" aria-live="polite">
           <span className="cont-live-dot" />{contInterim}
         </div>
@@ -667,6 +669,13 @@ export default function VoiceControl({ game }) {
       {mode === 'confirming' && (
         <Sheet onClose={() => setMode('idle')}>
           <div className="confirm-card" style={{ marginBottom: 0 }}>
+            {/* 確認中も話している内容をリアルタイム表示(安心感)。常時は継続認識、単発は回答認識の途中経過 */}
+            {(contMode ? (!muted && contStatus === 'listening') : answerListening) && (
+              <div className="confirm-live">
+                <span className="cont-live-dot" />
+                <span className="confirm-live-text">{(contMode ? contInterim : answerInterim) || '聞き取り中…'}</span>
+              </div>
+            )}
             <div className="small dim">「{prettifyTranscript(transcript)}」{llmUsed && <span className="pill blue" style={{ marginLeft: 6 }}>AI解釈</span>}</div>
             {candidates.length === 0 ? (
               <>

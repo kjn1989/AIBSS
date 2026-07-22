@@ -747,6 +747,13 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
   flex-shrink: 0; width: 9px; height: 9px; border-radius: 50%; background: var(--green);
   animation: pulse-green 1.2s infinite;
 }
+/* 確認カード上部のライブ文字起こし(話している内容をリアルタイム表示) */
+.confirm-live {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+  padding: 8px 12px; border-radius: 10px;
+  background: rgba(63, 185, 80, 0.10); border: 1px solid var(--green);
+}
+.confirm-live .confirm-live-text { font-size: 14px; font-weight: 700; color: var(--text); overflow-wrap: anywhere; }
 .pending-toast {
   position: fixed; left: 12px; right: 12px; bottom: calc(var(--tab-h) + var(--safe-bottom) + 84px);
   z-index: 91; background: var(--bg-2); border: 2px solid var(--gold); border-radius: 14px;
