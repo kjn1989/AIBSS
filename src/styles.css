@@ -365,7 +365,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 /* 状況カード: 小型ダイヤ + 打者 + 展開トグルを横並び */
 .sit-card { padding: 10px 12px; }
 .sit-row { display: flex; align-items: center; gap: 12px; }
-.sit-batter { flex: 1; min-width: 0; }
+.sit-batter { flex: 1; min-width: 26px; }
 .sit-eye { font-size: 9px; font-weight: 800; letter-spacing: .12em; color: var(--text-dim); margin: 0 0 3px 1px; }
 .sit-eye b { color: var(--gold); font-weight: 900; }
 .sit-main { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; overflow: visible; min-width: 0; }
@@ -373,9 +373,18 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .sit-main .nm { font-size: 19px; font-weight: 800; letter-spacing: .01em; line-height: 1; }
 .sit-main .pos { font-size: 9.5px; font-weight: 800; color: var(--gold); border: 1px solid rgba(227, 179, 65, .4); border-radius: 6px; padding: 2px 6px; line-height: 1; flex: none; }
 .sit-changebtn { flex: none; }
-/* 投手選択を状況カードに同居させるスリム行 */
+/* 投手選択を状況カードに同居させるスリム行。投手名は最大6文字幅、右の空きにマイクを配置。 */
 .sit-pitcher { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
-.sit-pitcher select { flex: 1; min-width: 0; }
+.sit-pitcher select.pitcher-select { flex: none; width: 122px; min-width: 0; }
+/* 投手行の右側スロット: マイク・常時ボタンを右寄せで常時配置 */
+.sit-voice-slot { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.voice-inline { display: flex; align-items: center; gap: 7px; }
+.voice-inline .voice-fab { position: static; top: auto; right: auto; width: 37px; height: 37px; font-size: 17px; box-shadow: 0 2px 10px rgba(31, 111, 235, 0.4); }
+.voice-inline .cont-mode-toggle,
+.voice-inline .cont-status-pill,
+.voice-inline .cont-exit-btn { position: static; top: auto; right: auto; }
+.voice-inline .cont-mode-toggle { font-size: 11px; padding: 6px 10px; }
+.voice-inline .cont-status-pill { padding: 8px 11px; font-size: 12px; }
 
 /* ---- スコア入力タブの高密度化(打撃結果パッドまで1画面に収める) ---- */
 .scoretab .card,
@@ -389,9 +398,10 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .scoretab .result-pad.result-pad-intf { margin-top: 5px; }
 .scoretab .sit-pitcher { margin-top: 6px; padding-top: 6px; }
 .scoretab .atbat-history { margin-top: 5px; }
-/* 相手打者の左右トグルは極小インライン(見るだけ寄り) */
-.scoretab .hand-inline { margin: 0; gap: 4px; }
-.scoretab .hand-inline .hl-btn { min-height: 26px; padding: 2px 8px; font-size: 12px; }
+/* 相手打者の左右トグルは極小インライン(打者行に同居しても文字が潰れない幅に圧縮) */
+.scoretab .hand-inline { margin: 0; gap: 3px; flex: none; }
+.scoretab .hand-inline .small { font-size: 9.5px; }
+.scoretab .hand-inline .hl-btn { min-height: 24px; padding: 2px 5px; font-size: 11px; }
 /* LEDボードの詰め */
 .scoretab .led-board { padding: 4px 9px; }
 .scoretab .led-pcpair { margin-top: 4px; padding-top: 4px; }

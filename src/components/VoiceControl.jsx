@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import Sheet from './Sheet.jsx';
 import PlaySheet from './PlaySheet.jsx';
 import { useStore, usePlayerName, isMyTeamBatting, currentBatter } from '../state/store.jsx';
@@ -477,70 +478,82 @@ export default function VoiceControl({ game }) {
 
   const canUndo = state.history.length > 0 && state.history[state.history.length - 1].gameId === game.id;
 
+  // マイク/常時ボタンは投手行の右側スロット(#scoretab-voice-slot)へポータルで描画。
+  // スロットが無い場面(打順未設定など)は従来どおり画面右上に固定表示する。
+  const [slot, setSlot] = useState(null);
+  // スロットは打順設定やハーフ交代でDOMごと出入りするため毎レンダー後に取り直す
+  // (同一要素なら setSlot がバイパスされ再描画は起きない)。
+  useEffect(() => {
+    const el = document.getElementById('scoretab-voice-slot');
+    setSlot((prev) => (prev === el ? prev : el));
+  });
+
+  const triggers = !contMode ? (
+    <>
+      <button
+        className="cont-mode-toggle"
+        onClick={() => speechAvailable() && setContMode(true)}
+        disabled={!speechAvailable()}
+        title={speechAvailable() ? '常時リスニングモードを開始' : '音声認識が利用できません'}
+      >
+        🎙️常時
+      </button>
+      <button
+        className={`voice-fab${mode === 'listening' ? ' listening' : ''}`}
+        onClick={() => (mode === 'listening' ? stopListening() : startListening())}
+        aria-label="音声実況"
+      >
+        {mode === 'listening' ? '⏹' : '🎙'}
+      </button>
+    </>
+  ) : (
+    <>
+      <button
+        className={`cont-status-pill ${muted ? 'muted' : contStatus === 'listening' ? 'live' : 'connecting'}`}
+        onClick={() => setMuted((m) => !m)}
+        aria-label="ミュート切り替え"
+      >
+        {muted ? '🔇 ミュート' : contStatus === 'listening' ? '🎙️ LIVE' : '🤔 接続中'}
+      </button>
+      <button className="cont-exit-btn" onClick={() => setContMode(false)}>常時モード終了</button>
+    </>
+  );
+
   return (
     <>
-      {!contMode && (
+      {slot
+        ? createPortal(<div className="voice-inline">{triggers}</div>, slot)
+        : <div className="voice-fixed">{triggers}</div>}
+
+      {/* ライブ字幕・保留トースト・音声Undoはオーバーレイのまま(投手行には入れない) */}
+      {contMode && !muted && contInterim && (
+        <div className="cont-live-caption" aria-live="polite">
+          <span className="cont-live-dot" />{contInterim}
+        </div>
+      )}
+      {contMode && canUndo && (
         <button
-          className="cont-mode-toggle"
-          onClick={() => speechAvailable() && setContMode(true)}
-          disabled={!speechAvailable()}
-          title={speechAvailable() ? '常時リスニングモードを開始' : '音声認識が利用できません'}
+          className="cont-undo-btn"
+          onClick={() => {
+            cancelPendingCommit();
+            dispatch({ type: 'UNDO' });
+          }}
         >
-          🎙️常時
+          ↩ 1つ前に戻す
         </button>
       )}
-
-      {!contMode && (
-        <button
-          className={`voice-fab${mode === 'listening' ? ' listening' : ''}`}
-          onClick={() => (mode === 'listening' ? stopListening() : startListening())}
-          aria-label="音声実況"
-        >
-          {mode === 'listening' ? '⏹' : '🎙'}
-        </button>
-      )}
-
-      {contMode && (
-        <>
-          <button
-            className={`cont-status-pill ${muted ? 'muted' : contStatus === 'listening' ? 'live' : 'connecting'}`}
-            onClick={() => setMuted((m) => !m)}
-            aria-label="ミュート切り替え"
-          >
-            {muted ? '🔇 ミュート' : contStatus === 'listening' ? '🎙️ LIVE' : '🤔 接続中'}
-          </button>
-          <button className="cont-exit-btn" onClick={() => setContMode(false)}>常時モード終了</button>
-          {/* ライブ字幕: 今マイクが聞き取っている途中経過を表示し、手放しでも認識状況が分かるようにする */}
-          {!muted && contInterim && (
-            <div className="cont-live-caption" aria-live="polite">
-              <span className="cont-live-dot" />{contInterim}
-            </div>
-          )}
-          {canUndo && (
-            <button
-              className="cont-undo-btn"
-              onClick={() => {
-                cancelPendingCommit();
-                dispatch({ type: 'UNDO' });
-              }}
-            >
-              ↩ 1つ前に戻す
-            </button>
-          )}
-          {pendingCommit && (
-            <div className="pending-toast">
-              <div className="pending-label">{pendingCommit.cand.label}</div>
-              <div className="pending-bar-track">
-                <div
-                  key={pendingCommit.startedAt}
-                  className="pending-bar"
-                  style={{ '--pending-ms': `${PENDING_MS}ms` }}
-                />
-              </div>
-              <button className="ghost small" onClick={cancelPendingCommit}>キャンセル</button>
-            </div>
-          )}
-        </>
+      {contMode && pendingCommit && (
+        <div className="pending-toast">
+          <div className="pending-label">{pendingCommit.cand.label}</div>
+          <div className="pending-bar-track">
+            <div
+              key={pendingCommit.startedAt}
+              className="pending-bar"
+              style={{ '--pending-ms': `${PENDING_MS}ms` }}
+            />
+          </div>
+          <button className="ghost small" onClick={cancelPendingCommit}>キャンセル</button>
+        </div>
       )}
 
       {mode === 'listening' && (
