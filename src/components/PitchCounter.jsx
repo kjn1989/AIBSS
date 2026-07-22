@@ -14,10 +14,9 @@ export default function PitchCounter({ game, onAutoEvent }) {
   const strikes = pitches.filter((p) => p.type === 'strike').length;
   const fouls = pitches.filter((p) => p.type === 'foul').length;
 
-  // カウント表示: ボールは3、ストライクはファウル込みで2を上限に表示
+  // カウント表示: ボールは3、ストライクはファウル込みで2を上限に表示(自動判定に使用)
   const dispB = Math.min(balls, 3);
   const dispS = Math.min(strikes + fouls, 2);
-  const firstKey = { ball: 'pitch.ball', strike: 'pitch.strike', foul: 'pitch.foul' }[pitches[0]?.type];
 
   const add = (pitchType, sub = null) => {
     dispatch({ type: 'ADD_PITCH', gameId: game.id, pitchType, sub });
@@ -29,18 +28,9 @@ export default function PitchCounter({ game, onAutoEvent }) {
 
   return (
     <div className="card pc-card">
-      {/* B/S/Oはトップのスコアボードに集約。投球数キャプションと取消を1行に極小配置。 */}
+      {/* B/S/Oはトップのスコアボードに集約。投球数だけを極小で表示(初球・次球ヒントは省略)。 */}
       <div className="pc-caprow">
-        <span className="pc-cap">
-          {t('pitch.count.thisAtBat', { n: pitches.length })}
-          {firstKey ? t('pitch.count.first', { label: t(firstKey) }) : ''}
-        </span>
-        {(dispS === 2 || dispB === 3) && (
-          <span className="pc-hint">
-            {dispS === 2 && <span className="pill amber">{t('pitch.nextStrikeSo')}</span>}
-            {dispB === 3 && <span className="pill green">{t('pitch.nextBallBb')}</span>}
-          </span>
-        )}
+        <span className="pc-cap">{t('pitch.count.thisAtBat', { n: pitches.length })}</span>
         {pitches.length > 0 && (
           <button className="pc-undo" onClick={() => dispatch({ type: 'REMOVE_LAST_PITCH', gameId: game.id })}>
             {t('pitch.undo')}

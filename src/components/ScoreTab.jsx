@@ -16,6 +16,15 @@ import { playLabel } from '../lib/voiceParser.js';
 import { convertMemoToPlay, guessPlayFromMemo, maskNames } from '../lib/gemini.js';
 import { RULE_PRESETS, presetById, presetLabel, describeRules, initialPresetIdFor, gameEndCheck, pitchLimitCheck, timeLimitCheck } from '../lib/rules.js';
 
+// 投手名は6文字までを基準サイズで、長い名前(カタカナ等)はフォントを縮めて枠内に収める
+function pitcherFont(name) {
+  const len = [...(name || '')].length;
+  if (len <= 6) return 16;
+  if (len <= 8) return 13.5;
+  if (len <= 10) return 12;
+  return 10.5;
+}
+
 // ---- 直近の打席結果を「1. 左翼単打 2. 見逃し三振」のように並べる小さな履歴表示 ----
 function AtBatHistory({ items, edition, lang }) {
   if (!items || items.length === 0) return null;
@@ -652,7 +661,7 @@ export default function ScoreTab() {
             <div className="sit-pitcher">
               <span className="small dim">{t('score.oppPitcher')}</span>
               <select
-                className="grow"
+                className="pitcher-select"
                 value={game.oppPitcherLetter || ''}
                 onChange={(e) => e.target.value && dispatch({
                   type: 'OPP_SET_PITCHER', gameId: game.id, letter: e.target.value,
@@ -665,6 +674,7 @@ export default function ScoreTab() {
                 ))}
               </select>
               {game.oppPitcherLetter && <OppHandToggle game={game} which="pitcher" letter={game.oppPitcherLetter} />}
+              <span className="sit-voice-slot" id="scoretab-voice-slot" />
             </div>
           </div>
         )
@@ -678,26 +688,23 @@ export default function ScoreTab() {
                 ? <div className="sit-main"><span className="nm">{oppBatter.letter}</span></div>
                 : <div className="sit-eye">{t('score.oppBatterMeta', { order: '-' })}</div>}
             </div>
+            {oppBatter && <OppHandToggle game={game} which="batter" letter={oppBatter.letter} allowSwitch />}
             {oppBatter && <button className="pill blue sit-changebtn" onClick={() => setSheet({ kind: 'oppBatter' })}>{t('score.oppChange')}</button>}
           </div>
           {oppBatter && (
-            <>
-              <div className="flex" style={{ justifyContent: 'flex-end' }}>
-                <OppHandToggle game={game} which="batter" letter={oppBatter.letter} allowSwitch />
-              </div>
-              <AtBatHistory
-                items={game.playLogs
-                  .filter((l) => l.kind === 'defense' && l.payload.letter === oppBatter.letter)
-                  .map((l) => ({ id: l.id, ...l.payload }))}
-                edition={state.settings.edition}
-                lang={lang}
-              />
-            </>
+            <AtBatHistory
+              items={game.playLogs
+                .filter((l) => l.kind === 'defense' && l.payload.letter === oppBatter.letter)
+                .map((l) => ({ id: l.id, ...l.payload }))}
+              edition={state.settings.edition}
+              lang={lang}
+            />
           )}
           <div className="sit-pitcher">
             <span className="small dim">{t('score.pitcher')}</span>
             <select
-              className="grow"
+              className="pitcher-select"
+              style={{ fontSize: pitcherFont(game.currentPitcherId ? nameOf(game.currentPitcherId) : '') }}
               value={game.currentPitcherId || ''}
               onChange={(e) => e.target.value && dispatch({ type: 'SET_PITCHER', gameId: game.id, playerId: e.target.value })}
             >
@@ -706,6 +713,7 @@ export default function ScoreTab() {
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
             </select>
+            <span className="sit-voice-slot" id="scoretab-voice-slot" />
           </div>
         </div>
       )}
