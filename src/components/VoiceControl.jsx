@@ -54,6 +54,10 @@ export default function VoiceControl({ game }) {
     const on = runnersOnNow();
     return [1, 2, 3].filter((b) => on[b] && dests[b] !== b).map((b) => ({ from: b, to: dests[b] }));
   };
+  // 「いいえ、〇〇」等の先頭の否定語+区切りを除いて、言い直し部分だけを取り出す
+  const stripNegation = (raw) => (raw || '')
+    .replace(/^[\s]*(いいえ|いえ|いやいや|いや|ちがくて|ちがう|違くて|違う|ちゃう|のー|ノー|no)[\s、,。.・:：\-ー]*/i, '')
+    .trim();
   const destWord = (from, to) => (to === 4 ? '得点' : to === 'out' ? 'アウト' : to === from ? 'そのまま' : `${baseLabel[to]}へ`);
   const describeDests = (dests) => {
     const on = runnersOnNow();
@@ -240,13 +244,18 @@ export default function VoiceControl({ game }) {
         return;
       }
     }
-    if (/いいえ|ちがう|違う|やりなお|きゃんせる|だめ/.test(t)) {
-      // 常時リスニングモードでは専用の継続認識が既に走っているため、
-      // 単発セッションは起動せず確認状態を解いて待機に戻すだけでよい
-      if (contMode) {
-        setMode('idle');
-        return;
-      }
+    // 明示的な「やり直し/キャンセル/取り消し」→ 再入力待ちに戻す(内容の言い直しではない)
+    if (/やりなお|きゃんせる|だめ|とりけ/.test(t)) {
+      if (contMode) { setMode('idle'); return; }
+      return startListening();
+    }
+    // 「いいえ、〇〇」= 認識ミスの言い直し。否定語の後に内容があれば、その内容を
+    // そのまま新しい実況として再解釈する(後ろの発話を捨てない)。
+    if (/^(いいえ|いえ|いや|ちがう|ちがくて|違う|違くて|ちゃう|のー|no)/.test(t)) {
+      const rest = stripNegation(raw);
+      if (rest) { setTranscript(rest); interpret(rest); return; }
+      // 純粋な否定(内容なし)→ 再入力待ち
+      if (contMode) { setMode('idle'); return; }
       return startListening();
     }
     if (/^(はい|うん|おっけ|ok|かくてい|確定|よし|それ)/.test(t)) {
@@ -766,16 +775,15 @@ export default function VoiceControl({ game }) {
                 </div>
                 {contMode ? (
                   <p className="small dim mt8" style={{ textAlign: 'center' }}>
-                    🎙️ 常時リスニング中: 「ログ、はい」で確定
-                    {confirmDests && <>・「ログ、二塁ランナーは三塁」等で走者修正</>}
-                    ・「ログ、キャンセル」
+                    🎙️ 常時リスニング中: 「ログ、はい」で確定・「ログ、いいえ ◯◯」で言い直し
+                    {confirmDests && <>・「ログ、二塁ランナーは三塁」で走者修正</>}
                   </p>
                 ) : (
                   <>
                     <p className="small dim mt8" style={{ textAlign: 'center' }}>
                       {confirmDests
-                        ? '「はい」で確定。「二塁ランナーは三塁」「一塁ランナーはそのまま」等で走者を修正できます'
-                        : '「はい」「空振り」「見逃し」「やり直し」などと話すだけで確定します'}
+                        ? '「はい」で確定。走者は「二塁ランナーは三塁」等、間違いは「いいえ ◯◯」で言い直せます'
+                        : '「はい」で確定。間違っていたら「いいえ、センター前ヒット」のように言い直せます'}
                     </p>
                   </>
                 )}
