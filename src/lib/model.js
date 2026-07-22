@@ -177,7 +177,7 @@ export function newGame({ opponent = '', isHome = false, date = null, season = '
     oppUsedLetters: OPP_LETTERS.slice(0, 9), // 出場済み記号
     oppRetiredLetters: [], // 一度退いた記号(再出場警告用)
     oppBatterIndex: 0, // 次の相手打者のoppLineup index
-    oppPitcherLetter: null, // 相手投手(記号ラベルで管理)
+    oppPitcherLetter: 'A', // 相手投手(記号ラベル)。先発は既定でA=初回から球数を確実にカウント
     // 相手投手の球数(記号ごと)。成績は追わないが球数だけはペース把握のため記録する。
     // { [letter]: { pitches, pitchesByInning: { "1": n, ... } } }
     oppPitchers: {},

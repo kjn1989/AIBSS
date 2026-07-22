@@ -678,6 +678,9 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 
 /* ---- Undo(試合操作カード内のボタン) ---- */
 .undo-op { border-color: var(--accent-2); color: var(--accent); font-weight: 700; }
+/* 投手未設定の警告と入力ロック(球数の記録漏れ防止) */
+.warn-box.needs-pitcher { border-color: var(--amber); color: var(--amber); font-weight: 700; }
+.input-locked { opacity: .4; pointer-events: none; filter: grayscale(0.3); }
 
 /* ---- 常時リスニングモード ---- */
 .cont-mode-toggle {

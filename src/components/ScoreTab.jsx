@@ -614,6 +614,10 @@ export default function ScoreTab() {
   const canUndo = !!lastAction && lastAction.gameId === game.id;
   const undoLabel = canUndo ? (UNDO_ACTIONS.has(lastAction.label) ? t(`score.undo.${lastAction.label}`) : lastAction.label) : '';
 
+  // 守備側(攻撃中は相手投手/守備中は自軍投手)が未設定だと球数が記録されない。
+  // 選ぶまで投球・結果入力をロックして、球数の記録漏れを防ぐ。
+  const needsPitcher = !noLineup && ((myBatting && !game.oppPitcherLetter) || (!myBatting && !game.currentPitcherId));
+
   const quickLineup = () => {
     const nine = state.players.filter((p) => !p.id.startsWith('demo-')).slice(0, 9);
     const source = nine.length >= 1 ? nine : state.players.slice(0, 9);
@@ -719,19 +723,23 @@ export default function ScoreTab() {
         </div>
       )}
 
-      <PitchCounter
-        game={game}
-        onAutoEvent={(kind, soType) =>
-          setSheet(kind === 'so' ? { kind: 'strikeout', soType } : { kind: 'play', result: 'bb' })
-        }
-      />
+      {needsPitcher && <div className="warn-box needs-pitcher">{t('score.needPitcher')}</div>}
 
-      {(!myBatting || !noLineup) && (
-        <div className="card rp-card">
-          <h2>{myBatting ? t('score.battingResult') : t('score.oppResult')}</h2>
-          <ResultPad onSelect={(result) => setSheet({ kind: 'play', result })} />
-        </div>
-      )}
+      <div className={needsPitcher ? 'input-locked' : ''} aria-disabled={needsPitcher}>
+        <PitchCounter
+          game={game}
+          onAutoEvent={(kind, soType) =>
+            setSheet(kind === 'so' ? { kind: 'strikeout', soType } : { kind: 'play', result: 'bb' })
+          }
+        />
+
+        {(!myBatting || !noLineup) && (
+          <div className="card rp-card">
+            <h2>{myBatting ? t('score.battingResult') : t('score.oppResult')}</h2>
+            <ResultPad onSelect={(result) => setSheet({ kind: 'play', result })} />
+          </div>
+        )}
+      </div>
 
       <div className="card">
         <h2>{t('score.gameOps')}</h2>
