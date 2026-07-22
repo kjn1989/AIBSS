@@ -6,6 +6,24 @@ import { proposeMoves, judgeAdvance, batterDestOptions } from '../src/lib/plays.
 import { gameEndCheck, initialPresetIdFor, describeRules } from '../src/lib/rules.js';
 import { aggregateBatting, battingMetrics, pitchingMetrics, titleLeaders } from '../src/lib/stats.js';
 import { translate } from '../src/lib/i18n.js';
+import { parseUtterance } from '../src/lib/voiceParser.js';
+
+// ---- voiceParser.js: 投球コール ----
+test('parseUtterance: 「空振り」単独は1ストライク(pitch)', () => {
+  const top = parseUtterance('空振り')[0];
+  assert.equal(top.kind, 'pitch');
+  assert.equal(top.pitchType, 'strike');
+});
+test('parseUtterance: 「見逃し」単独も1ストライク(pitch)', () => {
+  const top = parseUtterance('見逃し')[0];
+  assert.equal(top.kind, 'pitch');
+  assert.equal(top.pitchType, 'strike');
+});
+test('parseUtterance: 「空振り三振」は三振(so)で投球にならない', () => {
+  const top = parseUtterance('空振り三振')[0];
+  assert.equal(top.kind, 'play');
+  assert.equal(top.result, 'so');
+});
 
 // ---- plays.js ----
 test('proposeMoves: 単打は三塁・二塁走者が生還し一塁走者は二塁へ', () => {
