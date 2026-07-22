@@ -90,6 +90,38 @@ export default function CloudSync() {
     return teardown;
   }, [useOfficial, officialUser, officialTeamId, cloudEnabled, firebaseConfigText, teamCode]);
 
+  // 削除のクラウド伝播: ローカルで削除した項目(pendingDeletes)をクラウドからも消す。
+  // 成功したらトゥームストーンを外す。これが無いと全取得で削除項目が復活する。
+  useEffect(() => {
+    if (!connRef.current) return;
+    if (useOfficial && state.settings.officialRole === 'viewer') return;
+    const pd = state.pendingDeletes || { games: [], players: [], crew: [] };
+    if (!(pd.games?.length || pd.players?.length || pd.crew?.length)) return;
+    const conn = connRef.current;
+    const jobs = [
+      { bucket: 'games', ids: pd.games || [], fn: conn.deleteGame, cache: remoteVersions.current },
+      { bucket: 'players', ids: pd.players || [], fn: conn.deletePlayer, cache: playerCache.current },
+      { bucket: 'crew', ids: pd.crew || [], fn: conn.deleteCrew, cache: crewCache.current },
+    ];
+    (async () => {
+      for (const job of jobs) {
+        if (!job.ids.length) continue;
+        if (!job.fn) { dispatch({ type: 'CLEAR_PENDING_DELETE', bucket: job.bucket, ids: job.ids }); continue; }
+        const done = [];
+        for (const id of job.ids) {
+          try {
+            await job.fn(id);
+            delete job.cache[id]; // 再送キャッシュからも除去
+            done.push(id);
+          } catch {
+            /* 失敗したidは残し、次回の接続/変更時に再試行 */
+          }
+        }
+        if (done.length) dispatch({ type: 'CLEAR_PENDING_DELETE', bucket: job.bucket, ids: done });
+      }
+    })();
+  }, [useOfficial, officialUser, state.pendingDeletes, connRef.current]);
+
   // ローカル変更のプッシュ(デバウンス)
   useEffect(() => {
     if (!connRef.current) return;
