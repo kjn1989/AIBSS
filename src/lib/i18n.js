@@ -30,6 +30,8 @@ export const MESSAGES = {
     'action.delete': '削除',
     'action.save': '保存',
     'action.back': '← 戻る',
+    'undo.deleted': '「{label}」を削除しました',
+    'undo.restore': '元に戻す',
     // 設定: 言語
     'settings.language': '言語',
     'settings.language.hint': 'アプリ全体の表示言語を切り替えます(記録済みのログはそのままの言語で残ります)。',
@@ -734,6 +736,8 @@ export const MESSAGES = {
     'action.delete': 'Delete',
     'action.save': 'Save',
     'action.back': '← Back',
+    'undo.deleted': 'Deleted “{label}”',
+    'undo.restore': 'Undo',
     'settings.language': 'Language',
     'settings.language.hint': 'Switch the display language of the whole app. Already-recorded logs stay in their original language.',
 
