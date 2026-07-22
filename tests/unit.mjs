@@ -52,6 +52,11 @@ test('parseUtterance: 「空振り三振」は三振(so)で投球にならない
   assert.equal(top.kind, 'play');
   assert.equal(top.result, 'so');
 });
+test('parseUtterance: 「スクイズ」は犠打(sacBunt)として認識', () => {
+  const top = parseUtterance('スクイズ')[0];
+  assert.equal(top.kind, 'play');
+  assert.equal(top.result, 'sacBunt');
+});
 
 // ---- plays.js ----
 test('proposeMoves: 単打は三塁・二塁走者が生還し一塁走者は二塁へ', () => {
