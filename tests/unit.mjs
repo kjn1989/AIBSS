@@ -6,7 +6,18 @@ import { proposeMoves, judgeAdvance, batterDestOptions } from '../src/lib/plays.
 import { gameEndCheck, initialPresetIdFor, describeRules } from '../src/lib/rules.js';
 import { aggregateBatting, battingMetrics, pitchingMetrics, titleLeaders } from '../src/lib/stats.js';
 import { translate } from '../src/lib/i18n.js';
-import { parseUtterance } from '../src/lib/voiceParser.js';
+import { parseUtterance, prettifyTranscript } from '../src/lib/voiceParser.js';
+
+test('parseUtterance: 「センターマイヒット」(前ヒットの誤認識)も中堅ヒット・高信頼度', () => {
+  const a = parseUtterance('センター前ヒット')[0];
+  const b = parseUtterance('センターマイヒット')[0];
+  assert.equal(b.result, 'single');
+  assert.equal(b.direction, 'CF');
+  assert.equal(b.confidence, a.confidence); // 誤認識でも正しく聞けた時と同じ信頼度
+});
+test('prettifyTranscript: 表示用に「マイヒット」を「前ヒット」へ整形', () => {
+  assert.equal(prettifyTranscript('センターマイヒット'), 'センター前ヒット');
+});
 
 // ---- voiceParser.js: 投球コール ----
 test('parseUtterance: 「空振り」単独は1ストライク(pitch)・種別swinging', () => {
