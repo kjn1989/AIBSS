@@ -124,7 +124,7 @@ export const MESSAGES = {
     'runner.pickoff': '牽制死',
     'runner.pickoffSafe': '牽制(セーフ)',
     'runner.advance': 'この走者が進塁',
-    'runner.score': 'この走者が生還',
+    'runner.score': 'この走者が得点',
     'runner.remove': '走者を消す(修正)',
     'runner.fallback': '走者',
     'runner.onBase': '{base}走者',
@@ -134,7 +134,7 @@ export const MESSAGES = {
     'dir.SS': '遊撃', 'dir.LF': '左翼', 'dir.CF': '中堅', 'dir.RF': '右翼',
 
     // 走者/打者の行き先(プレイ確定シート)
-    'dest.out': 'アウト', 'dest.score': '生還', 'dest.stay': 'そのまま', 'dest.toBase': '{base}へ',
+    'dest.out': 'アウト', 'dest.score': '得点', 'dest.stay': 'そのまま', 'dest.toBase': '{base}へ',
 
     // ダイヤモンド図
     'diamond.home': '本塁',
@@ -151,7 +151,7 @@ export const MESSAGES = {
     'playsheet.advNo': '進塁打ではない',
     'playsheet.autoJudge': '自動判定',
     'playsheet.runsRecord': '失点の記録 (自責点の帰属)',
-    'playsheet.runnerScored': '{base}走者の生還',
+    'playsheet.runnerScored': '{base}走者の得点',
     'playsheet.inherited': '継投跨ぎ',
     'playsheet.prevPitcher': '前投手: {name}',
     'playsheet.currPitcher': '現投手: {name}',
@@ -540,7 +540,7 @@ export const MESSAGES = {
     'pt.relieve': '継投',
     'pt.startPitch': '先発登板',
     'pt.currentPitcher': '現在の投手: ',
-    'pt.inheritedWarn': '走者を残して継投した場合、その走者の生還時に自責点の帰属(前投手/現投手)を確認するダイアログが表示されます。',
+    'pt.inheritedWarn': '走者を残して継投した場合、その走者の得点時に自責点の帰属(前投手/現投手)を確認するダイアログが表示されます。',
     'pt.noRecordsA': 'まだ登板記録がありません。',
     'pt.noRecordsB': '守備開始時に投手を選択してください。',
 

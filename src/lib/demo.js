@@ -80,19 +80,19 @@ export function generateDemoData() {
               runners[b] = false;
               if (nb >= 4) {
                 runs++;
-                g.playLogs.push(newPlayLog({ gameId: g.id, inning, isTop: !g.isHome, kind: 'run', text: '生還', payload: { playerId: players[(batterIdx + b) % 9].id } }));
+                g.playLogs.push(newPlayLog({ gameId: g.id, inning, isTop: !g.isHome, kind: 'run', text: '得点', payload: { playerId: players[(batterIdx + b) % 9].id } }));
               } else runners[nb] = true;
             }
           }
           if (bases >= 4) {
             runs++;
-            g.playLogs.push(newPlayLog({ gameId: g.id, inning, isTop: !g.isHome, kind: 'run', text: '本塁打で生還', payload: { playerId: p.id } }));
+            g.playLogs.push(newPlayLog({ gameId: g.id, inning, isTop: !g.isHome, kind: 'run', text: '本塁打で得点', payload: { playerId: p.id } }));
           } else runners[Math.min(bases, 3)] = true;
         } else if (result === 'sacFly' && runners[3]) {
           runners[3] = false;
           runs++;
           outs++;
-          g.playLogs.push(newPlayLog({ gameId: g.id, inning, isTop: !g.isHome, kind: 'run', text: '犠飛で生還', payload: { playerId: players[(batterIdx + 3) % 9].id } }));
+          g.playLogs.push(newPlayLog({ gameId: g.id, inning, isTop: !g.isHome, kind: 'run', text: '犠飛で得点', payload: { playerId: players[(batterIdx + 3) % 9].id } }));
         } else if (result === 'sacBunt') {
           for (let b = 3; b >= 1; b--) {
             if (runners[b] && b < 3) { runners[b + 1] = true; runners[b] = false; }
