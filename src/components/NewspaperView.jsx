@@ -134,10 +134,33 @@ export default function NewspaperView({ game, onClose }) {
           {source === 'fallback' && <p className="small dim mt8">※ Gemini APIキー未設定のためテンプレート記事です。設定タブでキーを追加すると臨場感が増します。</p>}
         </div>
 
+        {article && (
+          <div className="card">
+            <div className="section-title" style={{ marginTop: 0 }}>✍️ 内容を確認・修正</div>
+            <p className="small dim" style={{ marginBottom: 10 }}>
+              AIの記事は誤りを含むことがあります。下を直すとプレビューに即反映されます。
+            </p>
+            <label className="small dim">見出し</label>
+            <input value={article.headline || ''} onChange={(e) => setArticle({ ...article, headline: e.target.value })} />
+            <label className="small dim mt8" style={{ display: 'block', marginTop: 8 }}>小見出し（リード）</label>
+            <input value={article.subhead || ''} onChange={(e) => setArticle({ ...article, subhead: e.target.value })} />
+            <label className="small dim mt8" style={{ display: 'block', marginTop: 8 }}>本文</label>
+            <textarea
+              rows={7}
+              value={article.body || ''}
+              onChange={(e) => setArticle({ ...article, body: e.target.value })}
+              style={{ width: '100%', resize: 'vertical' }}
+            />
+            <label className="small dim mt8" style={{ display: 'block', marginTop: 8 }}>記者の目（任意）</label>
+            <input value={article.comment || ''} onChange={(e) => setArticle({ ...article, comment: e.target.value })} />
+          </div>
+        )}
+
         {previewUrl && (
           <div className="card">
+            <div className="section-title" style={{ marginTop: 0 }}>プレビュー</div>
             <img src={previewUrl} alt="AIスポーツ新聞" className="newspaper-preview" />
-            <button className="primary mt12" style={{ width: '100%' }} onClick={share}>📤 画像を保存・共有</button>
+            <button className="primary mt12" style={{ width: '100%' }} onClick={share}>📤 この内容で保存・共有</button>
           </div>
         )}
       </div>
