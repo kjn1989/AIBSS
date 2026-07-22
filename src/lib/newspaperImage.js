@@ -3,20 +3,26 @@
 // Canvasで「スポーツ新聞の一面」風レイアウトに合成しPNGを生成する。
 // ※ Geminiは画像を生成しない(テキストのみ)。レイアウト・配色はすべて自作。
 //
+// 構成: マスト(チーム名速報！+右上ロゴ) → 見出し → 赤リード →
+//       イニング別ボックススコア → 写真 → 本文 → 記者の目 → フッター
 // 写真は枠(レターボックス)を出さず実比率で配置:
 //  - 横長写真 → 全幅の大きなトップ写真(バナー)
-//  - 縦・スクエア写真 → L字回り込み(右に写真・左に見出し+リード)
-// マストヘッド右上にブランドロゴ、本文下にイニング別ボックススコアを配置。
+//  - 縦・スクエア写真 → 右に配置し、本文を左に回り込ませて余白を埋める
 // ============================================================
 import { computeBoxScore } from './boxscore.js';
 
 const W = 840;
 const M = 48; // 余白
 const CW = W - M * 2; // 本文幅 = 744
+const GAP = 22; // 写真と本文の間隔
 
 const SANS = (px, weight = 900) => `${weight} ${px}px 'Hiragino Sans', sans-serif`;
 const HEAD_FONT = (px) => `bold ${px}px 'Hiragino Mincho ProN', 'Yu Mincho', serif`;
 const BODY_FONT = (px) => `${px}px 'Hiragino Mincho ProN', 'Yu Mincho', serif`;
+
+const CAPTION_H = 20;
+const BODY_FS = 22;
+const BODY_LH = 34;
 
 // 日本語(スペース区切りなし)を幅で折り返す
 function wrap(ctx, text, maxW) {
@@ -36,13 +42,37 @@ function wrap(ctx, text, maxW) {
   return out;
 }
 
+// 本文をレイアウト(0基準のy)。floatPhoto={leftColW, photoH}指定時は、写真の高さぶんだけ
+// 左カラム幅(leftColW)で折り返し、写真より下は全幅に戻す(縦写真の回り込み)。
+function layoutBody(measure, text, floatPhoto) {
+  measure.font = BODY_FONT(BODY_FS);
+  const narrowUntil = floatPhoto ? floatPhoto.photoH : 0;
+  const narrowW = floatPhoto ? floatPhoto.leftColW : CW;
+  const lines = [];
+  const chars = [...String(text ?? '')];
+  let y = 0, i = 0;
+  while (i < chars.length) {
+    const maxW = y < narrowUntil ? narrowW : CW;
+    let line = '';
+    while (i < chars.length) {
+      const ch = chars[i];
+      if (ch === '\n') { i++; break; }
+      if (measure.measureText(line + ch).width > maxW && line) break;
+      line += ch; i++;
+    }
+    lines.push({ text: line, y });
+    y += BODY_LH;
+  }
+  const bodyEnd = y;
+  const regionH = floatPhoto ? Math.max(bodyEnd, floatPhoto.photoH + CAPTION_H) : bodyEnd;
+  return { lines, regionH };
+}
+
 // ブランドロゴ(点線オービット+ダイヤ+塁ノード)を中心(cx,cy)にsize pxで描く。
-// 新聞紙面向けに、ダイヤは黒インク・塁ノードはティール・本塁は金・オービットは淡いオレンジ。
 function drawLogo(ctx, cx, cy, size) {
   const s = size / 128;
   const P = (px, py) => [cx + (px - 64) * s, cy + (py - 64) * s];
   ctx.save();
-  // オービット(点線円)
   ctx.strokeStyle = 'rgba(242,161,95,0.6)';
   ctx.lineWidth = 1.4 * s;
   ctx.setLineDash([2 * s, 7 * s]);
@@ -50,7 +80,6 @@ function drawLogo(ctx, cx, cy, size) {
   ctx.arc(cx, cy, 54 * s, 0, Math.PI * 2);
   ctx.stroke();
   ctx.setLineDash([]);
-  // ダイヤ枠(黒インク)
   ctx.strokeStyle = '#141414';
   ctx.lineWidth = 5 * s;
   ctx.lineJoin = 'round';
@@ -60,7 +89,6 @@ function drawLogo(ctx, cx, cy, size) {
   for (let i = 1; i < d.length; i++) ctx.lineTo(d[i][0], d[i][1]);
   ctx.closePath();
   ctx.stroke();
-  // 塁ノード(ティール)
   ctx.fillStyle = '#2DD4BF';
   for (const [x, y] of [[64, 20], [108, 64], [64, 108], [20, 64]]) {
     const [px, py] = P(x, y);
@@ -68,7 +96,6 @@ function drawLogo(ctx, cx, cy, size) {
     ctx.arc(px, py, 7 * s, 0, Math.PI * 2);
     ctx.fill();
   }
-  // 本塁ノード(金)
   ctx.fillStyle = '#E8B44C';
   const [hx, hy] = P(64, 64);
   ctx.beginPath();
@@ -77,8 +104,7 @@ function drawLogo(ctx, cx, cy, size) {
   ctx.restore();
 }
 
-// 幅に収まるフォントサイズを返す(serif/sans兼用: fontOf(px)でフォント文字列を作る)
-function fitFont(measure, text, maxW, startPx, fontOf, minPx = 12) {
+function fitFont(measure, text, maxW, startPx, fontOf, minPx = 11) {
   let px = startPx;
   measure.font = fontOf(px);
   while (px > minPx && measure.measureText(text).width > maxW) {
@@ -94,69 +120,57 @@ export async function generateNewspaperImage({ article, game, teamName, photo })
   // ---- 写真の向き判定 ----
   const hasPhoto = !!photo;
   const wide = hasPhoto && photo.width >= photo.height * 1.15; // 横長→全幅バナー
-  const lshape = hasPhoto && !wide; // 縦・スクエア→L字回り込み
+  const portrait = hasPhoto && !wide; // 縦・スクエア→右配置+本文回り込み
 
   // ---- マストヘッド「(チーム名) 速報！」を幅に合わせて自動縮小(右上ロゴぶんを避ける) ----
   const logoSize = 54;
   const mastMaxW = CW - 2 * (logoSize + 18);
   const mastText = `${teamName} 速報！`;
-  let mastFs = 58;
-  measure.font = SANS(mastFs);
-  while (mastFs > 28 && measure.measureText(mastText).width > mastMaxW) {
-    mastFs -= 2;
-    measure.font = SANS(mastFs);
-  }
+  const mastFs = fitFont(measure, mastText, mastMaxW, 58, (px) => SANS(px), 28);
   const mastH = mastFs + 12;
 
-  // ---- L字の寸法(縦写真のとき) ----
-  const gap = 22;
-  let pcolW = 0, pcolH = 0;
-  let leftW = CW;
-  if (lshape) {
-    pcolW = Math.round(CW * 0.46);
-    pcolH = Math.round(pcolW * photo.height / photo.width);
-    leftW = CW - pcolW - gap;
+  // ---- 見出し・リード(常に全幅) ----
+  measure.font = HEAD_FONT(40);
+  const headlineLines = wrap(measure, article.headline, CW);
+  measure.font = HEAD_FONT(22);
+  const subheadLines = wrap(measure, article.subhead, CW);
+  const headBlock = headlineLines.length * 50;
+  const leadBlock = subheadLines.length * 30;
+
+  // ---- ボックススコア(プレイした回だけ=空白マス無し) ----
+  const box = computeBoxScore(game);
+  const playedInnings = box.innings.filter((v) => v.played);
+  const innings = playedInnings.length ? playedInnings : box.innings;
+  const rowH = 34;
+  const tableH = rowH * 3;
+
+  // ---- 写真+本文 ----
+  let bannerH = 0, photoW = 0, photoH = 0, leftColW = 0;
+  let bodyLayout, mediaH;
+  if (wide) {
+    bannerH = Math.round(CW * photo.height / photo.width);
+    bodyLayout = layoutBody(measure, article.body, null);
+    mediaH = bannerH + 6 + CAPTION_H + 12 + bodyLayout.regionH;
+  } else if (portrait) {
+    photoW = Math.round(CW * 0.44);
+    photoH = Math.round(photoW * photo.height / photo.width);
+    leftColW = CW - photoW - GAP;
+    bodyLayout = layoutBody(measure, article.body, { leftColW, photoH });
+    mediaH = bodyLayout.regionH;
+  } else {
+    bodyLayout = layoutBody(measure, article.body, null);
+    mediaH = bodyLayout.regionH;
   }
 
-  // ---- テキスト折返し ----
-  const headFs = lshape ? 34 : 40;
-  const headLh = lshape ? 44 : 50;
-  measure.font = HEAD_FONT(headFs);
-  const headlineLines = wrap(measure, article.headline, leftW);
-  measure.font = HEAD_FONT(22);
-  const subheadLines = wrap(measure, article.subhead, leftW);
-  measure.font = BODY_FONT(22);
-  const bodyLines = wrap(measure, article.body, CW);
   measure.font = BODY_FONT(20);
   const commentLines = article.comment ? wrap(measure, article.comment, CW - 20) : [];
 
-  const headBlock = headlineLines.length * headLh;
-  const subBlock = subheadLines.length * 30;
-  const leftTextH = headBlock + 6 + subBlock;
-  const captionH = 20;
-
-  let bannerH = 0;
-  let topBlockH;
-  if (wide) {
-    bannerH = Math.round(CW * photo.height / photo.width);
-    topBlockH = leftTextH + 12 + bannerH + 6 + captionH;
-  } else if (lshape) {
-    topBlockH = Math.max(pcolH + 6 + captionH, leftTextH);
-  } else {
-    topBlockH = leftTextH;
-  }
-
-  // ---- ボックススコア表の寸法 ----
-  const box = computeBoxScore(game);
-  const rowH = 34;
-  const tableH = rowH * 3; // ヘッダ + 2チーム
-
-  // ---- 総高さ算出(描画のy加算と一致させる) ----
+  // ---- 総高さ ----
   let H = M + 10;
   H += mastH + 8 + 24 + 20; // マスト + 罫 + 日付行 + 罫
-  H += topBlockH + 12;
-  H += bodyLines.length * 34 + 12;
-  H += tableH + 8 + 22 + 20; // 線スコア表 + 結果ラベル
+  H += headBlock + 6 + leadBlock + 12; // 見出し + リード
+  H += tableH + 8 + 22 + 20; // スコア表 + 結果ラベル
+  H += mediaH + 12; // 写真 + 本文
   if (commentLines.length) H += 28 + commentLines.length * 28 + 12;
   H += 8 + 28; // フッター
   H += M;
@@ -174,7 +188,7 @@ export async function generateNewspaperImage({ article, game, teamName, photo })
 
   let y = M + 10;
 
-  // ---- マストヘッド: (チーム名) 速報！ + 右上ロゴ ----
+  // ---- マストヘッド + 右上ロゴ ----
   ctx.textAlign = 'center';
   ctx.font = SANS(mastFs);
   ctx.fillText(mastText, W / 2, y + mastFs * 0.82);
@@ -190,72 +204,58 @@ export async function generateNewspaperImage({ article, game, teamName, photo })
   y += 20;
   ctx.textAlign = 'left';
 
-  const caption = `▲ ${teamName} vs ${game.opponent || '対戦相手'}（${game.date}）`;
-  const topY = y;
+  // ---- 見出し ----
+  ctx.font = HEAD_FONT(40);
+  ctx.fillStyle = '#141414';
+  for (const line of headlineLines) { ctx.fillText(line, M, y + 40); y += 50; }
+  y += 6;
+  // ---- 赤リード ----
+  ctx.font = HEAD_FONT(22);
+  ctx.fillStyle = '#b3402f';
+  for (const line of subheadLines) { ctx.fillText(line, M, y + 22); y += 30; }
+  ctx.fillStyle = '#141414';
+  y += 12;
+
+  // ---- スコア表 + 結果ラベル ----
+  drawBoxScore(ctx, measure, M, y, CW, rowH, innings, box, game, teamName);
+  y += tableH + 8;
   const rlabel = game.myScore > game.oppScore ? '勝利' : game.myScore < game.oppScore ? '敗北' : '引き分け';
+  ctx.textAlign = 'center';
+  ctx.font = HEAD_FONT(18);
+  ctx.fillStyle = '#141414';
+  ctx.fillText(`${teamName} ${game.myScore}-${game.oppScore} ${game.opponent || '対戦相手'}　—　${rlabel}`, W / 2, y + 18);
+  ctx.textAlign = 'left';
+  y += 22 + 20;
 
-  const drawHeadAndLead = (x, startY) => {
-    let ly = startY;
-    ctx.font = HEAD_FONT(headFs);
+  // ---- 写真 + 本文 ----
+  const drawBody = (startY) => {
+    ctx.font = BODY_FONT(BODY_FS);
     ctx.fillStyle = '#141414';
-    for (const line of headlineLines) { ctx.fillText(line, x, ly + headFs); ly += headLh; }
-    ly += 6;
-    ctx.font = HEAD_FONT(22);
-    ctx.fillStyle = '#b3402f';
-    for (const line of subheadLines) { ctx.fillText(line, x, ly + 22); ly += 30; }
-    ctx.fillStyle = '#141414';
-    return ly;
+    for (const ln of bodyLayout.lines) ctx.fillText(ln.text, M, startY + ln.y + BODY_FS);
   };
-
-  // ボックススコア表＋結果ラベルを描いて、次のyを返す(赤字リードの直下に配置)
-  const drawBoxAndResult = (sy) => {
-    drawBoxScore(ctx, measure, M, sy, CW, rowH, box, game, teamName);
-    const ny = sy + tableH + 8;
-    ctx.textAlign = 'center';
-    ctx.font = HEAD_FONT(18);
-    ctx.fillStyle = '#141414';
-    ctx.fillText(`${teamName} ${game.myScore}-${game.oppScore} ${game.opponent || '対戦相手'}　—　${rlabel}`, W / 2, ny + 18);
-    ctx.textAlign = 'left';
-    return ny + 22 + 20;
-  };
-
   if (wide) {
-    // 見出し+リード → スコア表(赤字直下) → 全幅トップ写真
-    let ly = drawHeadAndLead(M, topY);
-    ly += 12;
-    ly = drawBoxAndResult(ly);
-    ctx.drawImage(photo, M, ly, CW, bannerH);
-    ly += bannerH + 6;
+    ctx.drawImage(photo, M, y, CW, bannerH);
+    let cy = y + bannerH + 6;
     ctx.fillStyle = '#555';
     ctx.font = BODY_FONT(15);
-    ctx.fillText(caption, M, ly + 14);
+    ctx.fillText(`▲ ${teamName} vs ${game.opponent || '対戦相手'}（${game.date}）`, M, cy + 14);
     ctx.fillStyle = '#141414';
-    y = ly + captionH + 12;
-  } else if (lshape) {
-    // 左: 見出し+リード / 右: 縦写真 → その下にスコア表
-    drawHeadAndLead(M, topY);
-    const px = M + leftW + gap;
-    ctx.drawImage(photo, px, topY, pcolW, pcolH);
+    cy += CAPTION_H + 12;
+    drawBody(cy);
+    y = cy + bodyLayout.regionH + 12;
+  } else if (portrait) {
+    const px = M + leftColW + GAP;
+    ctx.drawImage(photo, px, y, photoW, photoH);
     ctx.fillStyle = '#555';
     ctx.font = BODY_FONT(13);
-    ctx.fillText(`▲ ${teamName} vs ${game.opponent || '対戦相手'}`, px, topY + pcolH + 14);
+    ctx.fillText(`▲ ${teamName} vs ${game.opponent || '対戦相手'}`, px, y + photoH + 14);
     ctx.fillStyle = '#141414';
-    y = drawBoxAndResult(topY + topBlockH + 12);
+    drawBody(y); // 本文は写真の左に回り込み、写真より下は全幅
+    y += mediaH + 12;
   } else {
-    // 写真なし: 見出し+リード → スコア表(赤字直下)
-    let ly = drawHeadAndLead(M, topY);
-    ly += 12;
-    y = drawBoxAndResult(ly);
+    drawBody(y);
+    y += mediaH + 12;
   }
-
-  // ---- 本文 ----
-  ctx.font = BODY_FONT(22);
-  ctx.fillStyle = '#141414';
-  for (const line of bodyLines) {
-    ctx.fillText(line, M, y + 22);
-    y += 34;
-  }
-  y += 12;
 
   // ---- 記者の目(講評) ----
   if (commentLines.length) {
@@ -281,28 +281,25 @@ export async function generateNewspaperImage({ article, game, teamName, photo })
   return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
 }
 
-// イニング別ボックススコア表を描く(先攻=上段。R/H/Eは右端で強調)
-function drawBoxScore(ctx, measure, x, y, w, rowH, box, game, teamName) {
+// イニング別ボックススコア表(先攻=上段。R/H/Eは右端で強調)。innings=表示する回(空白マス無し)
+function drawBoxScore(ctx, measure, x, y, w, rowH, innings, box, game, teamName) {
   const oppName = game.opponent || '対戦相手';
-  const innN = box.innings.length;
+  const innN = innings.length;
   const cols = innN + 3; // + R H E
   const teamColW = 150;
   const cellW = (w - teamColW) / cols;
   const tableH = rowH * 3;
   const rheX = x + teamColW + innN * cellW;
 
-  const myRow = { name: teamName, inn: box.innings.map((v) => v.my), r: box.my.r, h: box.my.h, e: box.my.e };
-  const oppRow = { name: oppName, inn: box.innings.map((v) => v.opp), r: box.opp.r, h: box.opp.h, e: box.opp.e };
-  const played = box.innings.map((v) => v.played);
+  const myRow = { name: teamName, inn: innings.map((v) => v.my), r: box.my.r, h: box.my.h, e: box.my.e };
+  const oppRow = { name: oppName, inn: innings.map((v) => v.opp), r: box.opp.r, h: box.opp.h, e: box.opp.e };
   const topRow = game.isHome ? oppRow : myRow; // 先攻(ビジター)を上段に
   const botRow = game.isHome ? myRow : oppRow;
 
-  // 薄い縦罫(イニング間・RHE間)
   ctx.strokeStyle = 'rgba(20,20,20,0.22)';
   ctx.lineWidth = 1;
   for (let i = 1; i < innN; i++) { const vx = x + teamColW + i * cellW; line(ctx, vx, y, vx, y + tableH); }
   for (let i = 1; i < 3; i++) { const vx = rheX + i * cellW; line(ctx, vx, y, vx, y + tableH); }
-  // 太罫(外枠・チーム列・RHE区切り・行区切り)
   ctx.strokeStyle = '#141414';
   ctx.lineWidth = 1.5;
   ctx.strokeRect(x, y, w, tableH);
@@ -315,29 +312,24 @@ function drawBoxScore(ctx, measure, x, y, w, rowH, box, game, teamName) {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
-  // ヘッダ行: イニング番号 + R H E
   ctx.font = SANS(14, 700);
   ctx.fillStyle = '#141414';
-  for (let i = 0; i < innN; i++) ctx.fillText(String(box.innings[i].inning), cx(i), y + rowH / 2);
+  for (let i = 0; i < innN; i++) ctx.fillText(String(innings[i].inning), cx(i), y + rowH / 2);
   ctx.fillText('R', cx(innN), y + rowH / 2);
   ctx.fillText('H', cx(innN + 1), y + rowH / 2);
   ctx.fillText('E', cx(innN + 2), y + rowH / 2);
 
-  // チーム2行
   const rows = [topRow, botRow];
   for (let r = 0; r < 2; r++) {
     const row = rows[r];
     const ry = y + rowH * (r + 1) + rowH / 2;
-    // チーム名(左寄せ・幅に合わせて縮小)
     ctx.textAlign = 'left';
     const nameFs = fitFont(measure, row.name, teamColW - 16, 17, HEAD_FONT, 11);
     ctx.font = HEAD_FONT(nameFs);
     ctx.fillText(row.name, x + 10, ry);
     ctx.textAlign = 'center';
-    // イニング得点(未到達は空欄)
     ctx.font = SANS(16, 600);
-    for (let i = 0; i < innN; i++) ctx.fillText(played[i] ? String(row.inn[i]) : '', cx(i), ry);
-    // R(強調) H E
+    for (let i = 0; i < innN; i++) ctx.fillText(String(row.inn[i]), cx(i), ry);
     ctx.font = SANS(18, 800);
     ctx.fillText(String(row.r), cx(innN), ry);
     ctx.font = SANS(16, 600);
