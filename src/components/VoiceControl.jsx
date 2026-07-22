@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import Sheet from './Sheet.jsx';
 import PlaySheet from './PlaySheet.jsx';
 import { useStore, usePlayerName, isMyTeamBatting, currentBatter } from '../state/store.jsx';
-import { parseUtterance, playLabel, normalize, stripWakeWord, parseCommand, needsComplexConfirm, parseOperation, matchPlayer } from '../lib/voiceParser.js';
+import { parseUtterance, playLabel, normalize, stripWakeWord, parseCommand, needsComplexConfirm, parseOperation, matchPlayer, prettifyTranscript } from '../lib/voiceParser.js';
 import { interpretUtterance, maskNames } from '../lib/gemini.js';
 import { speechAvailable, createRecognizer } from '../lib/speech.js';
 import { createContinuousRecognizer } from '../lib/continuousSpeech.js';
@@ -615,7 +615,7 @@ export default function VoiceControl({ game }) {
       {mode === 'confirming' && (
         <Sheet onClose={() => setMode('idle')}>
           <div className="confirm-card" style={{ marginBottom: 0 }}>
-            <div className="small dim">「{transcript}」{llmUsed && <span className="pill blue" style={{ marginLeft: 6 }}>AI解釈</span>}</div>
+            <div className="small dim">「{prettifyTranscript(transcript)}」{llmUsed && <span className="pill blue" style={{ marginLeft: 6 }}>AI解釈</span>}</div>
             {candidates.length === 0 ? (
               <>
                 <div className="q mt8">解釈できませんでした 🙏</div>
