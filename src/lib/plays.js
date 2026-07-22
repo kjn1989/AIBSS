@@ -43,7 +43,8 @@ export function proposeMoves(result, runners) {
       // 三塁走者はスクイズ時のみ生還だが、デフォルトは進塁させ手動調整可
       return { moves: moves.map((m) => (m.from === 3 ? { from: 3, to: 4 } : m)), batterTo: 'out' };
     case 'sacFly':
-      push(3, 4);
+      // 犠飛は各走者が1つ進むのを既定に(3塁→得点/2塁→三塁/1塁→二塁)。手動調整可
+      push(3, 4); push(2, 3); push(1, 2);
       return { moves, batterTo: 'out' };
     case 'so':
       return { moves: [], batterTo: 'out' };
