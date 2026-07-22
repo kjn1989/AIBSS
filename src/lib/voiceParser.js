@@ -262,8 +262,20 @@ function topKey(scores) {
 
 const norm = (s) => Math.min(1, s / 5);
 
-function needsDirection(result) {
+export function needsDirection(result) {
   return ['single', 'double', 'triple', 'hr', 'out', 'error', 'sacBunt', 'sacFly'].includes(result);
+}
+
+// 打球方向だけの発話(「ライト」「方向はセンター」等)を方向キーに変換。
+// 結果語(ヒット・ゴロ等)を含む場合は「言い直し」なので null を返す(方向だけ修正しない)。
+export function parseDirectionOnly(rawText) {
+  const t = normalize(rawText);
+  if (!t) return null;
+  const dirScores = scoreDict(t, DIRECTION_DICT);
+  if (!Object.keys(dirScores).length) return null;
+  const resScores = scoreDict(t, RESULT_DICT);
+  if (Object.keys(resScores).length) return null; // 結果語を含む=方向のみの修正ではない
+  return topKey(dirScores);
 }
 
 // プレイの表示ラベル。lang='en' で英語表記に切替(既定'ja'は従来どおり)。

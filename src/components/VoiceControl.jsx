@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import Sheet from './Sheet.jsx';
 import PlaySheet from './PlaySheet.jsx';
 import { useStore, usePlayerName, isMyTeamBatting, currentBatter } from '../state/store.jsx';
-import { parseUtterance, playLabel, normalize, stripWakeWord, parseCommand, needsComplexConfirm, needsRunnerConfirm, parseRunnerAdjust, parseOperation, matchPlayer, prettifyTranscript } from '../lib/voiceParser.js';
+import { parseUtterance, playLabel, normalize, stripWakeWord, parseCommand, needsComplexConfirm, needsRunnerConfirm, needsDirection, parseRunnerAdjust, parseDirectionOnly, parseOperation, matchPlayer, prettifyTranscript } from '../lib/voiceParser.js';
 import { interpretUtterance, maskNames } from '../lib/gemini.js';
 import { speechAvailable, createRecognizer } from '../lib/speech.js';
 import { createContinuousRecognizer } from '../lib/continuousSpeech.js';
@@ -241,6 +241,16 @@ export default function VoiceControl({ game }) {
         const next = { ...confirmDests, [adj.base]: adj.to === 'stay' ? adj.base : adj.to };
         setConfirmDests(next);
         speak(describeDests(next));
+        return;
+      }
+    }
+    // 打球方向を音声で修正(「ライト」「方向はセンター」等)。結果はそのままに方向だけ差し替え
+    if (top.kind === 'play' && needsDirection(top.result)) {
+      const dir = parseDirectionOnly(raw);
+      if (dir) {
+        const updated = { ...top, direction: dir, label: playLabel(top.result, dir, top.outType, top.soType) };
+        setCandidates([updated, ...candidates.slice(1)]);
+        speak(updated.label);
         return;
       }
     }
@@ -775,15 +785,16 @@ export default function VoiceControl({ game }) {
                 </div>
                 {contMode ? (
                   <p className="small dim mt8" style={{ textAlign: 'center' }}>
-                    🎙️ 常時リスニング中: 「ログ、はい」で確定・「ログ、いいえ ◯◯」で言い直し
+                    🎙️ 「ログ、はい」で確定・「ログ、ライト」で方向修正
                     {confirmDests && <>・「ログ、二塁ランナーは三塁」で走者修正</>}
+                    ・「ログ、いいえ ◯◯」で言い直し
                   </p>
                 ) : (
                   <>
                     <p className="small dim mt8" style={{ textAlign: 'center' }}>
-                      {confirmDests
-                        ? '「はい」で確定。走者は「二塁ランナーは三塁」等、間違いは「いいえ ◯◯」で言い直せます'
-                        : '「はい」で確定。間違っていたら「いいえ、センター前ヒット」のように言い直せます'}
+                      「はい」で確定。方向は「ライト」、
+                      {confirmDests && '走者は「二塁ランナーは三塁」、'}
+                      間違いは「いいえ ◯◯」で音声修正できます
                     </p>
                   </>
                 )}
