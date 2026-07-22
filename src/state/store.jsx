@@ -126,7 +126,7 @@ function describeRunnerMoves(state, game, moves) {
     const r = game.runners[mv.from];
     const who = r?.playerId ? playerNameOf(state, r.playerId) : r?.letter || '走者';
     if (mv.to === 'out') return `${baseName[mv.from]}塁走者 ${who}、アウト`;
-    if (mv.to === 4) return `${baseName[mv.from]}塁走者 ${who}、生還`;
+    if (mv.to === 4) return `${baseName[mv.from]}塁走者 ${who}、得点`;
     return `${baseName[mv.from]}塁走者 ${who}、${baseName[mv.to]}塁へ進塁`;
   });
 }
@@ -732,7 +732,7 @@ export function reducer(state, action) {
         if (batterScored) {
           g.playLogs.push(newPlayLog({
             gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'run',
-            text: '生還', payload: { playerId: batter.playerId },
+            text: '得点', payload: { playerId: batter.playerId },
           }));
         }
         g.batterIndex = (g.batterIndex + 1) % Math.max(1, g.lineup.length);
@@ -915,7 +915,7 @@ function applyRunnerMoves(game, moves, { eventKind, erChoices = {}, unearnedRuns
       if (runner.playerId) {
         game.playLogs.push(newPlayLog({
           gameId: game.id, inning: game.inning, isTop: game.isTop, kind: 'run',
-          text: '生還', payload: { playerId: runner.playerId },
+          text: '得点', payload: { playerId: runner.playerId },
         }));
       }
       advanced = true;

@@ -165,6 +165,7 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
           {dirOpen ? (
             <FieldPad
               value={direction}
+              outfieldOnly={result === 'hr'}
               onChange={(key) => { setDirection(key); setDirOpen(false); }}
             />
           ) : (

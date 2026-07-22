@@ -25,8 +25,12 @@ const BASE_MARKS = [
   { left: '76.7%', top: '72%' }, // 一塁
 ];
 
-export default function FieldPad({ value, onChange }) {
+// 外野の3方向(本塁打は外野のみ選択可)
+const OUTFIELD = ['LF', 'CF', 'RF'];
+
+export default function FieldPad({ value, onChange, outfieldOnly = false }) {
   const t = useT();
+  const keys = outfieldOnly ? Object.keys(DIRECTIONS).filter((k) => OUTFIELD.includes(k)) : Object.keys(DIRECTIONS);
   return (
     <div className="dir-pad field-pad bf">
       <div className="bf-dirtfan" />
@@ -37,7 +41,7 @@ export default function FieldPad({ value, onChange }) {
       {BASE_MARKS.map((s, i) => (
         <div key={i} className="bf-base" style={s} />
       ))}
-      {Object.keys(DIRECTIONS).map((key) => (
+      {keys.map((key) => (
         <button
           key={key}
           className={`field-pos${value === key ? ' sel' : ''}`}

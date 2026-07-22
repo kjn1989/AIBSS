@@ -93,7 +93,7 @@ ${memo}
 - 「振り逃げ」→ result:"so", batterTo:1
 - 「ゲッツー/併殺/ダブルプレー」→ result:"out", outType:"dp"
 - 守備位置番号: 1投 2捕 3一 4二 5三 6遊 7左 8中 9右。方向はP/C/1B/2B/3B/SS/LF/CF/RF
-- batterTo は打者の到達塁(1/2/3、4=生還、"out"=アウト)
+- batterTo は打者の到達塁(1/2/3、4=得点、"out"=アウト)
 - 曖昧なら candidates を最大3件、confidence降順で
 - 出力は次のJSONのみ(前置き禁止):
 {"candidates":[{"result":"single|double|triple|hr|out|bb|hbp|so|error|sacBunt|sacFly|fieldInterference|obstruction","outType":"ground|fly|liner|dp|null","direction":"P|C|1B|2B|3B|SS|LF|CF|RF|null","batterTo":"1|2|3|4|out","why":"理由","confidence":0.0}]}`;

@@ -85,7 +85,7 @@ export function runnerDestOptions(from) {
 
 export const DEST_LABEL = (from) => (to) => {
   if (to === 'out') return 'アウト';
-  if (to === 4) return '生還';
+  if (to === 4) return '得点';
   if (to === from) return 'そのまま';
   return `${['', '一', '二', '三'][to]}塁へ`;
 };
