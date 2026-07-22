@@ -119,7 +119,30 @@ export default function VoiceControl({ game }) {
   // ---- 候補の適用 ----
   const apply = (cand) => {
     if (cand.kind === 'pitch') {
-      dispatch({ type: 'ADD_PITCH', gameId: game.id, pitchType: cand.pitchType });
+      // タップUI(PitchCounter)と同じ自動判定を音声にも適用:
+      // 2ストライク後のストライク=三振 / 3ボール後のボール=四球。
+      const pitches = game.pending?.pitches || [];
+      const strikes = pitches.filter((p) => p.type === 'strike').length;
+      const fouls = pitches.filter((p) => p.type === 'foul').length;
+      const balls = pitches.filter((p) => p.type === 'ball').length;
+      const dispS = Math.min(strikes + fouls, 2);
+      const dispB = Math.min(balls, 3);
+      dispatch({ type: 'ADD_PITCH', gameId: game.id, pitchType: cand.pitchType, sub: cand.sub || null });
+      if (cand.pitchType === 'strike' && dispS >= 2) {
+        dispatch({
+          type: 'CONFIRM_PLAY', gameId: game.id, batterName: batterName || '',
+          payload: { result: 'so', soType: cand.sub === 'looking' ? 'looking' : 'swinging', direction: null, moves: [], batterTo: 'out' },
+        });
+        speak('三振');
+      } else if (cand.pitchType === 'ball' && dispB >= 3) {
+        const runnersOn = { 1: !!game.runners[1], 2: !!game.runners[2], 3: !!game.runners[3] };
+        const proposal = proposeMoves('bb', runnersOn);
+        dispatch({
+          type: 'CONFIRM_PLAY', gameId: game.id, batterName: batterName || '',
+          payload: { result: 'bb', direction: null, moves: proposal.moves, batterTo: proposal.batterTo },
+        });
+        speak('フォアボール');
+      }
       setMode('idle');
       return;
     }

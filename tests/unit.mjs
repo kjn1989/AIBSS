@@ -9,15 +9,17 @@ import { translate } from '../src/lib/i18n.js';
 import { parseUtterance } from '../src/lib/voiceParser.js';
 
 // ---- voiceParser.js: 投球コール ----
-test('parseUtterance: 「空振り」単独は1ストライク(pitch)', () => {
+test('parseUtterance: 「空振り」単独は1ストライク(pitch)・種別swinging', () => {
   const top = parseUtterance('空振り')[0];
   assert.equal(top.kind, 'pitch');
   assert.equal(top.pitchType, 'strike');
+  assert.equal(top.sub, 'swinging');
 });
-test('parseUtterance: 「見逃し」単独も1ストライク(pitch)', () => {
+test('parseUtterance: 「見逃し」単独も1ストライク(pitch)・種別looking', () => {
   const top = parseUtterance('見逃し')[0];
   assert.equal(top.kind, 'pitch');
   assert.equal(top.pitchType, 'strike');
+  assert.equal(top.sub, 'looking');
 });
 test('parseUtterance: 「空振り三振」は三振(so)で投球にならない', () => {
   const top = parseUtterance('空振り三振')[0];
