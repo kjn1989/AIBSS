@@ -8,7 +8,7 @@
  *  - Firestore 等の外部APIリクエストはキャッシュ対象外(SDK側が
  *    オフラインキューを持つため素通しする)。
  */
-const CACHE = 'aibss-v3'; // リブランド時にキャッシュ名を更新(旧キャッシュはactivateで削除される)
+const CACHE = 'aibss-v4'; // 更新時にキャッシュ名を上げる(旧キャッシュはactivateで削除される)
 const APP_SHELL = ['./', './index.html', './manifest.webmanifest', './favicon.svg', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', (e) => {
@@ -32,7 +32,8 @@ self.addEventListener('fetch', (e) => {
   const isHTML = e.request.mode === 'navigate' || url.pathname.endsWith('/') || url.pathname.endsWith('.html');
   if (isHTML) {
     e.respondWith(
-      fetch(e.request)
+      // no-store: Safari等のHTTPキャッシュを迂回し、必ず最新のHTML(→最新のJSハッシュ)を取得
+      fetch(e.request, { cache: 'no-store' })
         .then((res) => {
           if (res && res.status === 200) {
             const clone = res.clone();

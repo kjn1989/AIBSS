@@ -43,8 +43,23 @@ recoverIfNeeded(LEGACY_DATA_KEY)
   });
 
 // PWA: Service Worker 登録(本番ビルドのみ)
+// 新しいSWが有効化されたら自動で1回リロードして最新版へ切り替える
+// (これまで「直したのに反映されない=古いキャッシュ表示」が頻発していた対策)。
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (reloaded || !hadController) return; // 初回インストール時は再読込しない
+    reloaded = true;
+    window.location.reload();
+  });
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
+    navigator.serviceWorker.register('./sw.js').then((reg) => reg.update?.()).catch(() => {});
+  });
+  // 復帰時にも更新チェック(バックグラウンド滞在後に最新へ)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      navigator.serviceWorker.getRegistration().then((reg) => reg?.update?.()).catch(() => {});
+    }
   });
 }
