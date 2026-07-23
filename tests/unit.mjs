@@ -65,6 +65,15 @@ test('parseUtterance: 「スクイズ」は犠打(sacBunt)として認識', () =
   assert.equal(top.kind, 'play');
   assert.equal(top.result, 'sacBunt');
 });
+test('parseUtterance: 「金振り/かなぶり」(空振りの誤認識)も空振りストライク', () => {
+  for (const s of ['金振り', 'かなぶり', 'カナブリ']) {
+    const top = parseUtterance(s)[0];
+    assert.equal(top.kind, 'pitch', s);
+    assert.equal(top.pitchType, 'strike', s);
+    assert.equal(top.sub, 'swinging', s);
+  }
+  assert.equal(parseUtterance('金振り三振')[0].result, 'so');
+});
 
 // ---- plays.js ----
 test('proposeMoves: 単打は三塁・二塁走者が生還し一塁走者は二塁へ', () => {
