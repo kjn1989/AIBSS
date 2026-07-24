@@ -117,7 +117,9 @@ create policy teams_insert on public.teams for insert
   with check (owner_uid = auth.uid());
 create policy teams_update on public.teams for update
   using (public.member_role(id) = 'owner');
--- delete: 無し(誤削除防止)
+-- 削除は owner のみ(関連する試合/選手/メンバー/招待はFKのON DELETE CASCADEで一緒に消える)
+create policy teams_delete on public.teams for delete
+  using (public.member_role(id) = 'owner');
 
 -- ---- ポリシー: team_members ----
 create policy members_select on public.team_members for select
