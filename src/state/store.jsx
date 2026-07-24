@@ -1073,6 +1073,7 @@ export function StoreProvider({ children }) {
           teamName: meta.name,
           edition: meta.edition,
           officialTeamId: meta.officialTeamId || null,
+          officialRole: meta.officialRole || null, // 招待参加/接続時に決まったロールを初期反映(観戦URLの権限を即時有効化)
         },
       };
     }

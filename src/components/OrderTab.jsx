@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useStore, useT, useCurrentGame, usePlayerName } from '../state/store.jsx';
 import { POSITIONS, positionLabel } from '../lib/model.js';
+import { canWriteCloud } from '../lib/officialCloud.js';
 import Sheet from './Sheet.jsx';
 import LineupWizard from './LineupWizard.jsx';
 import HeadCoachView from './HeadCoachView.jsx';
@@ -99,9 +100,9 @@ export default function OrderTab() {
   // AIスタメン提案は「草野球」エディション限定の機能
   const aiCoachEnabled = state.settings.edition === '草野球';
 
-  // 公式クラウドの観戦(viewer)ロールは編集不可
-  if (state.settings.officialTeamId && state.settings.officialRole === 'viewer') {
-    return <div className="big-note">{t('order.viewerOnly')}</div>;
+  // 公式クラウド接続中で書き込み権限が無い場合は編集不可(観戦、ロール未取得も安全側に閲覧専用)
+  if (state.settings.officialTeamId && !canWriteCloud(state.settings)) {
+    return <div className="big-note">{state.settings.officialRole === 'viewer' ? t('order.viewerOnly') : t('occ.permChecking')}</div>;
   }
 
   if (!game || game.status === 'finished') {

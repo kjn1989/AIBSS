@@ -14,6 +14,7 @@ import GameProgressView from './GameProgressView.jsx';
 import { POSITIONS, OPP_LETTERS, resultCategory, multiOutLabel, positionLabel } from '../lib/model.js';
 import { playLabel } from '../lib/voiceParser.js';
 import { convertMemoToPlay, guessPlayFromMemo, maskNames } from '../lib/gemini.js';
+import { canWriteCloud } from '../lib/officialCloud.js';
 import { RULE_PRESETS, presetById, presetLabel, describeRules, initialPresetIdFor, gameEndCheck, pitchLimitCheck, timeLimitCheck } from '../lib/rules.js';
 
 // 投手名は6文字までを基準サイズで、長い名前(カタカナ等)はフォントを縮めて枠内に収める
@@ -578,13 +579,14 @@ export default function ScoreTab() {
   const [showProgress, setShowProgress] = useState(false);
   const logInning = (l) => t('score.logInning', { inning: l.inning, half: t(l.isTop ? 'half.top' : 'half.bottom') });
 
-  // 公式クラウドの観戦(viewer)ロール: 入力UIを出さず閲覧専用にする(書き込みはRLSでも拒否される)
-  if (state.settings.officialTeamId && state.settings.officialRole === 'viewer') {
+  // 公式クラウド接続中で書き込み権限が無い場合は入力UIを出さず閲覧専用にする。
+  // フェイルセーフ: owner/scorer と確定するまで(観戦URL参加直後やロール未取得の間も)閲覧専用。
+  if (state.settings.officialTeamId && !canWriteCloud(state.settings)) {
     return (
       <div>
         {game && <Scoreboard game={game} />}
         <div className="big-note">
-          {t('score.viewerNote')}
+          {state.settings.officialRole === 'viewer' ? t('score.viewerNote') : t('occ.permChecking')}
         </div>
         {game && (
           <div className="card">

@@ -46,7 +46,7 @@ export default function OfficialCloudCard() {
   //   1) そのチームに紐付いた既存プロフィールがあれば、それへ切り替える
   //   2) 現プロフィールが空(未接続・選手/試合ゼロ)なら、その場で紐付ける
   //   3) それ以外は、そのチーム専用の新規プロフィールを作って切り替える(空から同期)
-  const connectTeam = (tid, teamName) => () => {
+  const connectTeam = (tid, teamName, role) => () => {
     const activeId = getActiveProfileId();
     const existing = findProfileByOfficialTeamId(tid);
     if (existing) {
@@ -60,13 +60,14 @@ export default function OfficialCloudCard() {
       && (state.players?.length || 0) === 0
       && Object.keys(state.games || {}).length === 0;
     if (currentEmpty) {
-      // まっさらな現プロフィールをこのチーム専用にする(ヘッダー名もチーム名へ)
-      dispatch({ type: 'UPDATE_SETTINGS', patch: { officialTeamId: tid, teamName: teamName || state.settings.teamName } });
+      // まっさらな現プロフィールをこのチーム専用にする(ヘッダー名もチーム名へ)。
+      // ロールも即時に反映し、権限が確定するまでの閲覧専用フラッシュを避ける。
+      dispatch({ type: 'UPDATE_SETTINGS', patch: { officialTeamId: tid, teamName: teamName || state.settings.teamName, officialRole: role || null } });
       return;
     }
     // 専用の新規プロフィールを作成して切り替え。空データから当該チームのみを同期する
     persist(state);
-    const p = addProfile(teamName || t('app.teamFallback'), state.settings.edition || '草野球', { officialTeamId: tid });
+    const p = addProfile(teamName || t('app.teamFallback'), state.settings.edition || '草野球', { officialTeamId: tid, officialRole: role || null });
     switchActiveProfile(p.id);
     window.location.reload();
   };
@@ -109,8 +110,9 @@ export default function OfficialCloudCard() {
 
   const registerTeam = run(async () => {
     const id = await createCloudTeam({ name: state.settings.teamName || t('app.teamFallback'), edition: state.settings.edition || '草野球' });
-    // officialTeamIdを設定するとCloudSyncが接続し、既存の選手・試合・参加メンバーを自動アップロードする
-    dispatch({ type: 'UPDATE_SETTINGS', patch: { officialTeamId: id } });
+    // officialTeamIdを設定するとCloudSyncが接続し、既存の選手・試合・参加メンバーを自動アップロードする。
+    // 登録者はowner。ロールも即時に設定して入力を許可する(取得待ちの閲覧専用フラッシュを避ける)。
+    dispatch({ type: 'UPDATE_SETTINGS', patch: { officialTeamId: id, officialRole: 'owner' } });
   });
 
   const makeInvite = (role) => run(async () => {
@@ -188,7 +190,7 @@ export default function OfficialCloudCard() {
                   <div className="grow">
                     <b>{tm.teamName}</b> <span className="pill">{roleLabel(tm.role)}</span>
                   </div>
-                  <button className="primary small" disabled={busy} onClick={connectTeam(tm.teamId, tm.teamName)}>
+                  <button className="primary small" disabled={busy} onClick={connectTeam(tm.teamId, tm.teamName, tm.role)}>
                     {t('occ.connectTeam')}
                   </button>
                   {tm.role === 'owner' && (
@@ -295,7 +297,7 @@ export default function OfficialCloudCard() {
               {myTeams.filter((tm) => tm.teamId !== teamId).map((tm) => (
                 <div className="row" key={tm.teamId}>
                   <div className="grow"><b>{tm.teamName}</b> <span className="pill">{roleLabel(tm.role)}</span></div>
-                  <button className="primary small" disabled={busy} onClick={connectTeam(tm.teamId, tm.teamName)}>{t('occ.connectTeam')}</button>
+                  <button className="primary small" disabled={busy} onClick={connectTeam(tm.teamId, tm.teamName, tm.role)}>{t('occ.connectTeam')}</button>
                   {tm.role === 'owner' && (
                     <button className="small ghost" style={{ color: 'var(--red)' }} disabled={busy} onClick={deleteTeam(tm.teamId, tm.teamName)}>
                       {t('occ.deleteTeamShort')}

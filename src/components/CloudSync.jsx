@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../state/store.jsx';
 import { connectCloud } from '../lib/cloud.js';
-import { connectOfficial, watchAuth, officialAvailable, listMyTeams } from '../lib/officialCloud.js';
+import { connectOfficial, watchAuth, officialAvailable, listMyTeams, canWriteCloud } from '../lib/officialCloud.js';
 
 // ヘッドレス同期コンポーネント: 設定に応じて Firestore と双方向同期する。
 // 接続先は2系統(公式クラウドを優先):
@@ -98,7 +98,7 @@ export default function CloudSync() {
   // 成功したらトゥームストーンを外す。これが無いと全取得で削除項目が復活する。
   useEffect(() => {
     if (!connRef.current) return;
-    if (useOfficial && state.settings.officialRole === 'viewer') return;
+    if (useOfficial && !canWriteCloud(state.settings)) return; // 書き込み権限が無い(観戦/ロール未確定)ならクラウドを変更しない
     const pd = state.pendingDeletes || { games: [], players: [], crew: [] };
     if (!(pd.games?.length || pd.players?.length || pd.crew?.length)) return;
     const conn = connRef.current;
@@ -129,8 +129,8 @@ export default function CloudSync() {
   // ローカル変更のプッシュ(デバウンス)
   useEffect(() => {
     if (!connRef.current) return;
-    // 観戦(viewer)ロールは書き込み権限が無い(RLSで拒否される)のでpushしない
-    if (useOfficial && state.settings.officialRole === 'viewer') return;
+    // 書き込み権限が無い(観戦、またはロール未確定)場合はpushしない。owner/scorer確定時のみ送信。
+    if (useOfficial && !canWriteCloud(state.settings)) return;
     const t = setTimeout(async () => {
       const conn = connRef.current;
       if (!conn) return;
