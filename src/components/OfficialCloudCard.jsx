@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { useStore, useT } from '../state/store.jsx';
+import { useStore, useT, persist } from '../state/store.jsx';
 import {
   officialAvailable, watchAuth, loginWithPassword, logout,
   createCloudTeam, createInvite, inviteUrl, listMyTeams, listMembers, setMemberRole, removeMember, deleteCloudTeam,
 } from '../lib/officialCloud.js';
+import { getActiveProfileId, findProfileByOfficialTeamId, addProfile, switchActiveProfile } from '../lib/profiles.js';
 import QRCode from './QRCode.jsx';
 
 const ROLE_KEYS = ['owner', 'scorer', 'viewer'];
@@ -38,10 +39,37 @@ export default function OfficialCloudCard() {
     listMyTeams().then(setMyTeams).catch(() => setMyTeams([]));
   }, [user, teamId]);
 
-  const connectTeam = (tid) => run(async () => {
-    // 既存のクラウドのチームに接続。CloudSyncが選手・試合・メンバーをこの端末へ同期する
-    dispatch({ type: 'UPDATE_SETTINGS', patch: { officialTeamId: tid } });
-  });
+  // クラウドのチームへ接続する。重要: クラウドのチームは「ローカルのチーム(プロフィール)」と
+  // 1対1で対応させる。1つのプロフィールに複数のクラウドチームを付け替えると、各チームの
+  // 選手・試合が同じプロフィールに流れ込んで混ざり(ヘッダー名も変わらない)、さらに送信側が
+  // 混ざった選手を各チームへ書き戻してクラウドまで汚染される。これを防ぐため:
+  //   1) そのチームに紐付いた既存プロフィールがあれば、それへ切り替える
+  //   2) 現プロフィールが空(未接続・選手/試合ゼロ)なら、その場で紐付ける
+  //   3) それ以外は、そのチーム専用の新規プロフィールを作って切り替える(空から同期)
+  const connectTeam = (tid, teamName) => () => {
+    const activeId = getActiveProfileId();
+    const existing = findProfileByOfficialTeamId(tid);
+    if (existing) {
+      if (existing.id === activeId) return; // すでにこのチームに接続中
+      persist(state); // 切り替え前に現在のチームの最新データを保存
+      switchActiveProfile(existing.id);
+      window.location.reload();
+      return;
+    }
+    const currentEmpty = !state.settings.officialTeamId
+      && (state.players?.length || 0) === 0
+      && Object.keys(state.games || {}).length === 0;
+    if (currentEmpty) {
+      // まっさらな現プロフィールをこのチーム専用にする(ヘッダー名もチーム名へ)
+      dispatch({ type: 'UPDATE_SETTINGS', patch: { officialTeamId: tid, teamName: teamName || state.settings.teamName } });
+      return;
+    }
+    // 専用の新規プロフィールを作成して切り替え。空データから当該チームのみを同期する
+    persist(state);
+    const p = addProfile(teamName || t('app.teamFallback'), state.settings.edition || '草野球', { officialTeamId: tid });
+    switchActiveProfile(p.id);
+    window.location.reload();
+  };
 
   // クラウドからチームを完全削除(owner専用)。ローカルデータは残す。
   const deleteTeam = (tid, name) => () => {
@@ -160,7 +188,7 @@ export default function OfficialCloudCard() {
                   <div className="grow">
                     <b>{tm.teamName}</b> <span className="pill">{roleLabel(tm.role)}</span>
                   </div>
-                  <button className="primary small" disabled={busy} onClick={connectTeam(tm.teamId)}>
+                  <button className="primary small" disabled={busy} onClick={connectTeam(tm.teamId, tm.teamName)}>
                     {t('occ.connectTeam')}
                   </button>
                   {tm.role === 'owner' && (
@@ -267,7 +295,7 @@ export default function OfficialCloudCard() {
               {myTeams.filter((tm) => tm.teamId !== teamId).map((tm) => (
                 <div className="row" key={tm.teamId}>
                   <div className="grow"><b>{tm.teamName}</b> <span className="pill">{roleLabel(tm.role)}</span></div>
-                  <button className="primary small" disabled={busy} onClick={connectTeam(tm.teamId)}>{t('occ.connectTeam')}</button>
+                  <button className="primary small" disabled={busy} onClick={connectTeam(tm.teamId, tm.teamName)}>{t('occ.connectTeam')}</button>
                   {tm.role === 'owner' && (
                     <button className="small ghost" style={{ color: 'var(--red)' }} disabled={busy} onClick={deleteTeam(tm.teamId, tm.teamName)}>
                       {t('occ.deleteTeamShort')}
