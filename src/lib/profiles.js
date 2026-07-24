@@ -72,6 +72,14 @@ export function getActiveProfileId() {
   return loadRegistry()?.activeId || null;
 }
 
+// 指定した公式クラウドのチームIDに紐付いた既存プロフィールを返す(無ければnull)。
+// クラウドのチームごとにローカルのプロフィールを1対1で対応させ、選手・試合データの
+// 混在を防ぐために使う(同じチームに二重接続しないよう既存プロフィールを再利用する)。
+export function findProfileByOfficialTeamId(tid) {
+  if (!tid) return null;
+  return listProfiles().find((p) => p.officialTeamId === tid) || null;
+}
+
 export function addProfile(name, edition, extra = {}) {
   const reg = loadRegistry() || { profiles: [], activeId: null };
   const p = {

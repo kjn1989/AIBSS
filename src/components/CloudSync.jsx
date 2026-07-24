@@ -41,12 +41,16 @@ export default function CloudSync() {
         dispatch({ type: 'SET_CLOUD_STATUS', status: 'off' });
         return;
       }
-      // 自分のロール(owner/scorer/viewer)を取得してUI制御用に保存(観戦ロールは入力UIを隠す)
+      // 自分のロール(owner/scorer/viewer)とチーム名を取得。
+      // クラウド接続中のプロフィールでは、クラウド側のチーム名が正(オーナーが設定した名前)。
+      // ヘッダー表示が「マイチーム」等のままにならないよう、接続先チーム名へ同期する。
       listMyTeams().then((teams) => {
-        const role = teams.find((t) => t.teamId === officialTeamId)?.role || null;
-        if (role !== state.settings.officialRole) {
-          dispatch({ type: 'UPDATE_SETTINGS', patch: { officialRole: role } });
-        }
+        const mine = teams.find((t) => t.teamId === officialTeamId);
+        const role = mine?.role || null;
+        const patch = {};
+        if (role !== state.settings.officialRole) patch.officialRole = role;
+        if (mine?.teamName && mine.teamName !== state.settings.teamName) patch.teamName = mine.teamName;
+        if (Object.keys(patch).length) dispatch({ type: 'UPDATE_SETTINGS', patch });
       }).catch(() => {});
       const conn = connectOfficial({
         teamId: officialTeamId,
