@@ -82,9 +82,10 @@ function useOfficialJoin(state) {
         await loginWithPassword(email.trim(), password);
       }
       const meta = await joinByInvite(token);
-      // 参加したクラウドチーム専用のローカルプロフィールを作って切り替える
+      // 参加したクラウドチーム専用のローカルプロフィールを作って切り替える。
+      // 招待のロール(観戦/記録係)も即時に保存し、観戦URL参加直後から正しく権限が効くようにする。
       persist(state); // 現在のチームを保存してから
-      const p = addProfile(meta.name, meta.edition, { officialTeamId: meta.teamId });
+      const p = addProfile(meta.name, meta.edition, { officialTeamId: meta.teamId, officialRole: meta.role || null });
       switchActiveProfile(p.id);
       window.location.reload();
     } catch (e) {

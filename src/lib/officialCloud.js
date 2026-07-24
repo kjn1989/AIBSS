@@ -13,6 +13,16 @@ import { uid as newId } from './model.js';
 
 export { officialAvailable };
 
+// 公式クラウドに接続中、書き込み(スコア入力・オーダー編集・同期push)を許可してよいか。
+// フェイルセーフ: owner/scorer と「確定」している場合のみ許可。ロール取得前(null)や
+// 観戦(viewer)は不可。これにより観戦URLで参加した直後(ロール未取得の一瞬)や、
+// ロール取得に失敗したときでも、閲覧専用として安全側に倒れる。
+// 非接続(officialTeamId無し=ローカル運用)は常に書き込み可。
+export function canWriteCloud(settings) {
+  if (!settings || !settings.officialTeamId) return true;
+  return settings.officialRole === 'owner' || settings.officialRole === 'scorer';
+}
+
 let client = null;
 
 function ensureClient() {
