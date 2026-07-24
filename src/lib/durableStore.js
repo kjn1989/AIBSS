@@ -51,6 +51,23 @@ export async function idbSave(key, snapshotString) {
   }
 }
 
+// kvストア内の全キーを取得(削除済みチームの復元に使う)。失敗時は空配列。
+export async function idbAllKeys() {
+  try {
+    const db = await openDB();
+    const keys = await new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readonly');
+      const r = tx.objectStore(STORE).getAllKeys();
+      r.onsuccess = () => resolve(r.result || []);
+      r.onerror = () => reject(r.error);
+    });
+    db.close();
+    return keys;
+  } catch {
+    return [];
+  }
+}
+
 export async function idbLoad(key) {
   try {
     const db = await openDB();

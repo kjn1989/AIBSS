@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useStore, usePlayerName, persist, useT } from '../state/store.jsx';
 import { parseFirebaseConfig } from '../lib/cloud.js';
 import { encodeWatchLink, encodeInviteLink } from './WatchView.jsx';
@@ -6,7 +6,7 @@ import QRCode from './QRCode.jsx';
 import { battingCSV, pitchingCSV, playLogCSV, atBatCSV, downloadCSV, shareCSV } from '../lib/csv.js';
 import { EDITIONS, HAND_LABEL, editionLabel } from '../lib/model.js';
 import EditionText from './EditionText.jsx';
-import { listProfiles, getActiveProfileId, addProfile, switchActiveProfile, deleteProfile } from '../lib/profiles.js';
+import { listProfiles, getActiveProfileId, addProfile, switchActiveProfile, deleteProfile, listOrphanedProfiles, restoreProfile } from '../lib/profiles.js';
 import OfficialCloudCard from './OfficialCloudCard.jsx';
 import Sheet from './Sheet.jsx';
 
@@ -243,6 +243,18 @@ function TeamSwitcherCard() {
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState('');
   const [newEdition, setNewEdition] = useState(EDITIONS[0]);
+  const [orphans, setOrphans] = useState([]); // 削除済みだがIDBに残っている復元候補
+
+  useEffect(() => {
+    listOrphanedProfiles().then(setOrphans).catch(() => setOrphans([]));
+  }, [profiles.length]);
+
+  const restore = (id) => {
+    restoreProfile(id).then(() => {
+      switchActiveProfile(id);
+      window.location.reload();
+    }).catch((e) => window.alert(e?.message || '復元に失敗しました'));
+  };
 
   const switchTo = (id) => {
     if (id === activeId) return;
@@ -287,6 +299,23 @@ function TeamSwitcherCard() {
           )}
         </div>
       ))}
+
+      {orphans.length > 0 && (
+        <div className="mt12" style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+          <div className="section-title" style={{ marginTop: 0 }}>{t('set.restoreTitle')}</div>
+          <p className="small dim" style={{ marginBottom: 8 }}>{t('set.restoreDesc')}</p>
+          {orphans.map((o) => (
+            <div className="row" key={o.id}>
+              <div className="grow">
+                <b>{o.name}</b> <span className="pill">{lang === 'en' ? t(`edition.${o.edition}`) : editionLabel(o.edition)}</span>
+                <div className="dim small">{t('set.restoreCount', { players: o.players, games: o.games })}</div>
+              </div>
+              <button className="small primary" onClick={() => restore(o.id)}>{t('set.restore')}</button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {adding ? (
         <div className="mt12">
           <label className="small dim">{t('set.teamName')}</label>
