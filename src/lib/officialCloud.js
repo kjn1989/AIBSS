@@ -221,6 +221,19 @@ export async function removeMember(teamId, uid) {
   if (error) throw new Error(error.message);
 }
 
+// チームをクラウドから完全に削除(owner専用)。関連する試合/選手/メンバー/招待は
+// FKのON DELETE CASCADEで一緒に削除される。teamsのDELETEはRLSポリシーで許可が必要。
+export async function deleteCloudTeam(teamId) {
+  const sb = ensureClient();
+  if (!sb) throw new Error('公式クラウドは未設定です');
+  const { data, error } = await sb.from('teams').delete().eq('id', teamId).select();
+  if (error) throw new Error(error.message);
+  // RLSのDELETEポリシー未設定だと0行(エラー無し)で消えないため明示的に検知
+  if (!data || data.length === 0) {
+    throw new Error('削除できませんでした。SupabaseでチームのDELETE許可(RLSポリシー)を追加してください。');
+  }
+}
+
 // ---------------- 同期接続(lib/cloud.jsのconnectCloudと同じ呼び出し形) ----------------
 // undefinedはjsonbに入らないため除去(JSON往復でスキーマ同一性も担保)
 function sanitize(obj) {

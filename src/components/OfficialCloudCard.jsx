@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useStore, useT } from '../state/store.jsx';
 import {
   officialAvailable, watchAuth, loginWithPassword, logout,
-  createCloudTeam, createInvite, inviteUrl, listMyTeams, listMembers, setMemberRole, removeMember,
+  createCloudTeam, createInvite, inviteUrl, listMyTeams, listMembers, setMemberRole, removeMember, deleteCloudTeam,
 } from '../lib/officialCloud.js';
 import QRCode from './QRCode.jsx';
 
@@ -42,6 +42,16 @@ export default function OfficialCloudCard() {
     // 既存のクラウドのチームに接続。CloudSyncが選手・試合・メンバーをこの端末へ同期する
     dispatch({ type: 'UPDATE_SETTINGS', patch: { officialTeamId: tid } });
   });
+
+  // クラウドからチームを完全削除(owner専用)。ローカルデータは残す。
+  const deleteTeam = (tid, name) => () => {
+    if (!window.confirm(t('occ.deleteTeamConfirm', { name }))) return;
+    run(async () => {
+      await deleteCloudTeam(tid);
+      if (teamId === tid) dispatch({ type: 'UPDATE_SETTINGS', patch: { officialTeamId: null } });
+      setMyTeams((prev) => (prev || []).filter((x) => x.teamId !== tid));
+    })();
+  };
 
   // 接続中チームの自分のロールとメンバー一覧を取得
   useEffect(() => {
@@ -153,6 +163,11 @@ export default function OfficialCloudCard() {
                   <button className="primary small" disabled={busy} onClick={connectTeam(tm.teamId)}>
                     {t('occ.connectTeam')}
                   </button>
+                  {tm.role === 'owner' && (
+                    <button className="small ghost" style={{ color: 'var(--red)' }} disabled={busy} onClick={deleteTeam(tm.teamId, tm.teamName)}>
+                      {t('occ.deleteTeamShort')}
+                    </button>
+                  )}
                 </div>
               ))}
               <div className="section-title">{t('occ.orRegisterTitle')}</div>
@@ -253,21 +268,37 @@ export default function OfficialCloudCard() {
                 <div className="row" key={tm.teamId}>
                   <div className="grow"><b>{tm.teamName}</b> <span className="pill">{roleLabel(tm.role)}</span></div>
                   <button className="primary small" disabled={busy} onClick={connectTeam(tm.teamId)}>{t('occ.connectTeam')}</button>
+                  {tm.role === 'owner' && (
+                    <button className="small ghost" style={{ color: 'var(--red)' }} disabled={busy} onClick={deleteTeam(tm.teamId, tm.teamName)}>
+                      {t('occ.deleteTeamShort')}
+                    </button>
+                  )}
                 </div>
               ))}
             </>
           )}
 
-          <button
-            className="ghost small mt12"
-            style={{ color: 'var(--red)' }}
-            onClick={() => {
-              if (!window.confirm(t('occ.disconnectConfirm'))) return;
-              dispatch({ type: 'UPDATE_SETTINGS', patch: { officialTeamId: null } });
-            }}
-          >
-            {t('occ.disconnect')}
-          </button>
+          <div className="flex mt12" style={{ gap: 8 }}>
+            <button
+              className="ghost small grow"
+              onClick={() => {
+                if (!window.confirm(t('occ.disconnectConfirm'))) return;
+                dispatch({ type: 'UPDATE_SETTINGS', patch: { officialTeamId: null } });
+              }}
+            >
+              {t('occ.disconnect')}
+            </button>
+            {myRole === 'owner' && (
+              <button
+                className="ghost small grow"
+                style={{ color: 'var(--red)', borderColor: 'var(--red)' }}
+                disabled={busy}
+                onClick={deleteTeam(teamId, myTeams?.find((tm) => tm.teamId === teamId)?.teamName || state.settings.teamName)}
+              >
+                {t('occ.deleteTeamCurrent')}
+              </button>
+            )}
+          </div>
         </>
       )}
 
