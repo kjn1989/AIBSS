@@ -23,6 +23,7 @@ export default function OfficialCloudCard() {
   const [showQr, setShowQr] = useState(false);
   const [members, setMembers] = useState(null);
   const [myRole, setMyRole] = useState('');
+  const [myTeams, setMyTeams] = useState(null); // このアカウントが参加済みのクラウドのチーム
   const teamId = state.settings.officialTeamId;
   const available = officialAvailable();
 
@@ -30,6 +31,17 @@ export default function OfficialCloudCard() {
     if (!available) return undefined;
     return watchAuth((u) => setUser(u));
   }, [available]);
+
+  // ログイン中は、このアカウントが参加済みのチーム一覧を取得(別端末での再接続・切替に使う)
+  useEffect(() => {
+    if (!user) { setMyTeams(null); return; }
+    listMyTeams().then(setMyTeams).catch(() => setMyTeams([]));
+  }, [user, teamId]);
+
+  const connectTeam = (tid) => run(async () => {
+    // 既存のクラウドのチームに接続。CloudSyncが選手・試合・メンバーをこの端末へ同期する
+    dispatch({ type: 'UPDATE_SETTINGS', patch: { officialTeamId: tid } });
+  });
 
   // 接続中チームの自分のロールとメンバー一覧を取得
   useEffect(() => {
@@ -127,10 +139,35 @@ export default function OfficialCloudCard() {
             {t('occ.loggedInAs')}<b>{user.email}</b>
             <button className="small ghost" style={{ marginLeft: 8 }} onClick={run(logout)}>{t('occ.logout')}</button>
           </p>
+
+          {myTeams === null && <p className="small dim">{t('occ.checkingTeams')}</p>}
+          {myTeams && myTeams.length > 0 && (
+            <>
+              <div className="section-title" style={{ marginTop: 0 }}>{t('occ.yourTeamsTitle')}</div>
+              <p className="small dim" style={{ marginBottom: 8 }}>{t('occ.connectDesc')}</p>
+              {myTeams.map((tm) => (
+                <div className="row" key={tm.teamId}>
+                  <div className="grow">
+                    <b>{tm.teamName}</b> <span className="pill">{roleLabel(tm.role)}</span>
+                  </div>
+                  <button className="primary small" disabled={busy} onClick={connectTeam(tm.teamId)}>
+                    {t('occ.connectTeam')}
+                  </button>
+                </div>
+              ))}
+              <div className="section-title">{t('occ.orRegisterTitle')}</div>
+            </>
+          )}
+
           <p className="small dim" style={{ marginBottom: 10 }}>
             {t('occ.registerDesc')}
           </p>
-          <button className="primary" style={{ width: '100%' }} disabled={busy} onClick={registerTeam}>
+          <button
+            className={myTeams && myTeams.length ? 'ghost' : 'primary'}
+            style={{ width: '100%' }}
+            disabled={busy}
+            onClick={registerTeam}
+          >
             {t('occ.registerBtn')}
           </button>
           <p className="small dim mt8">{t('occ.joinHint')}</p>
@@ -204,6 +241,18 @@ export default function OfficialCloudCard() {
                   ) : (
                     <span className="pill">{roleLabel(m.role)}</span>
                   )}
+                </div>
+              ))}
+            </>
+          )}
+
+          {myTeams && myTeams.filter((tm) => tm.teamId !== teamId).length > 0 && (
+            <>
+              <div className="section-title">{t('occ.switchTeamTitle')}</div>
+              {myTeams.filter((tm) => tm.teamId !== teamId).map((tm) => (
+                <div className="row" key={tm.teamId}>
+                  <div className="grow"><b>{tm.teamName}</b> <span className="pill">{roleLabel(tm.role)}</span></div>
+                  <button className="primary small" disabled={busy} onClick={connectTeam(tm.teamId)}>{t('occ.connectTeam')}</button>
                 </div>
               ))}
             </>
