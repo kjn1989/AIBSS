@@ -6,6 +6,7 @@
 // クラウド共有設定(teamCode等)もチームごとに独立するため、別々のクラウドチームへ接続できる。
 // ============================================================
 import { uid, normalizeEdition } from './model.js';
+import { idbAllKeys, idbLoad } from './durableStore.js';
 
 export const REGISTRY_KEY = 'bbscorer.profiles.v1';
 export const LEGACY_DATA_KEY = 'bbscorer.v1'; // 複数チーム対応前(単一チーム時代)のデータキー
@@ -115,4 +116,52 @@ export function switchActiveProfile(id) {
   if (!reg) return;
   reg.activeId = id;
   saveRegistry(reg);
+}
+
+// 削除済みチームの復元候補を探す。deleteProfileはlocalStorageのみ削除しIndexedDBの
+// ミラーは残るため、レジストリ外(=削除済み)のプロフィールデータがIDBに残っていれば拾える。
+// 戻り値: [{ id, name, edition, games, players }]
+export async function listOrphanedProfiles() {
+  const reg = loadRegistry();
+  const known = new Set((reg?.profiles || []).map((p) => p.id));
+  const prefix = 'bbscorer.v1.profile.';
+  const keys = await idbAllKeys();
+  const out = [];
+  for (const k of keys) {
+    if (typeof k !== 'string' || !k.startsWith(prefix)) continue;
+    const id = k.slice(prefix.length);
+    if (known.has(id)) continue; // レジストリに在る=現役なので対象外
+    if (localStorage.getItem(k)) continue; // localStorageに在る=削除されていない
+    const snap = await idbLoad(k);
+    if (!snap) continue;
+    try {
+      const b = JSON.parse(snap);
+      out.push({
+        id,
+        name: b.settings?.teamName || 'チーム',
+        edition: normalizeEdition(b.settings?.edition) || '草野球',
+        games: Object.keys(b.games || {}).length,
+        players: (b.players || []).length,
+      });
+    } catch {
+      /* 壊れたスナップショットは無視 */
+    }
+  }
+  return out;
+}
+
+// 削除済みチームをIDBミラーから復元(localStorage復元+レジストリ再登録)
+export async function restoreProfile(id) {
+  const key = profileStorageKey(id);
+  const snap = await idbLoad(key);
+  if (!snap) throw new Error('復元データが見つかりません');
+  localStorage.setItem(key, snap);
+  const reg = loadRegistry() || { profiles: [], activeId: null };
+  if (!reg.profiles.some((p) => p.id === id)) {
+    let name = 'チーム', edition = '草野球';
+    try { const b = JSON.parse(snap); name = b.settings?.teamName || name; edition = normalizeEdition(b.settings?.edition) || edition; } catch { /* noop */ }
+    reg.profiles.push({ id, name, edition });
+    saveRegistry(reg);
+  }
+  return id;
 }
