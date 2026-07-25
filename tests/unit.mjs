@@ -157,8 +157,9 @@ test('buildLineupRows: 先発スナップショット無し(過去試合)は交�
   assert.equal(slot4.players.length, 2); // 河合と山城の2行(重複しない)
   assert.equal(slot4.players[0].playerId, 'kawai');
   assert.equal(slot4.players[0].isStarter, true);
+  assert.equal(slot4.players[0].notation, '(捕)'); // 先発は最終守備位置から推定し括弧つき正規表示
   assert.equal(slot4.players[1].playerId, 'yamashiro');
-  assert.equal(slot4.players[1].notation, '捕'); // 現lineupの位置を最終出場者へ補完
+  assert.equal(slot4.players[1].notation, '捕'); // 交代選手は括弧なし
 });
 
 // ---- plays.js ----

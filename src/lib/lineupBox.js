@@ -63,7 +63,9 @@ function resolveStarters(game) {
   for (const order of orders) {
     const cur = (game.lineup || []).find((l) => l.order === order);
     if (firstOut.has(order)) {
-      out.push({ order, playerId: firstOut.get(order), position: null }); // 先発の位置は交代で上書き済み=不明
+      // 先発の元ポジションは交代で上書き済み。過去データではその打順の現守備位置から推定し、
+      // 先発を必ず括弧つきの正規表示にする(単純な守備交代・代打→守備なら概ね一致)。
+      out.push({ order, playerId: firstOut.get(order), position: cur?.position || null });
     } else if (cur && cur.playerId != null) {
       out.push({ order, playerId: cur.playerId, position: cur.position || null });
     }
