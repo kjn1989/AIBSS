@@ -233,9 +233,16 @@ function NLCorrectionCard({ game }) {
   const [text, setText] = useState('');
   const [msg, setMsg] = useState(null); // { kind:'ok'|'err', text }
 
+  // 選手の打順スロットを特定する。既に交代で退いた選手(現lineupに居ない)でも、
+  // スタメン・交代ログ・打席のどこかから拾えるようにする。
   const orderOf = (pid) => {
-    const slot = (game.lineup || []).find((l) => l.playerId === pid);
-    if (slot) return slot.order;
+    const cur = (game.lineup || []).find((l) => l.playerId === pid);
+    if (cur) return cur.order;
+    const st = (game.startingLineup || []).find((l) => l.playerId === pid);
+    if (st) return st.order;
+    for (const l of game.playLogs || []) {
+      if (l.kind === 'sub' && (l.payload?.out === pid || l.payload?.in === pid)) return l.payload.order;
+    }
     const ab = (game.atBats || []).find((a) => a.playerId === pid);
     return ab ? ab.order : null;
   };
