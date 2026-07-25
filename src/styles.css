@@ -984,23 +984,29 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 .linescore-table td.team { text-align: left; font-weight: 700; min-width: 70px; }
 .linescore-table td.num { font-weight: 800; }
 
-/* ---- 出場選手ボックススコア(登場順・伝統的な位置表記) ---- */
-.box-table { border-collapse: collapse; width: 100%; min-width: 420px; font-size: 13px; }
-.box-table th, .box-table td {
-  padding: 7px 8px; border-bottom: 1px solid var(--border);
-  text-align: center; font-variant-numeric: tabular-nums; white-space: nowrap;
+/* ---- 出場選手ボックススコア(打順ツリー・引き算のデザイン) ---- */
+.bx-tree { display: flex; flex-direction: column; gap: 12px; }
+.bx-slot { display: grid; grid-template-columns: 24px 1fr; gap: 8px; align-items: start; }
+.bx-ord { font-weight: 800; color: var(--text-dim); text-align: center; padding-top: 11px; font-size: 15px; font-variant-numeric: tabular-nums; }
+.bx-players { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.bx-card { background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; padding: 9px 12px; }
+/* 交代選手: L字コネクタで打順に紐づけ、先発と区別 */
+.bx-card.sub { position: relative; margin-left: 16px; background: var(--bg-3); }
+.bx-card.sub::before {
+  content: ""; position: absolute; left: -13px; top: -8px; width: 11px; height: calc(50% + 8px);
+  border-left: 2px solid var(--border); border-bottom: 2px solid var(--border); border-bottom-left-radius: 7px;
 }
-.box-table th { color: var(--text-dim); font-weight: 600; }
-.box-table th.left, .box-table td.left { text-align: left; }
-.box-table td.ord { color: var(--text-dim); font-weight: 700; width: 34px; }
-.box-table td.notation {
-  font-weight: 700; color: var(--accent); letter-spacing: .02em; min-width: 44px;
-}
-.box-table td.pname { font-weight: 700; min-width: 96px; }
-.box-table td.num { font-weight: 700; }
-/* 交代で入った選手の行は先発と区別してひとまとまりに見せる */
-.box-table tr.sub-row td { border-bottom-color: var(--border); background: color-mix(in srgb, var(--accent) 5%, transparent); }
-.box-table tr.sub-row td.ord { background: transparent; }
+.bx-top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.bx-inn { font-size: 11px; font-weight: 800; background: var(--bg); color: var(--text-dim); border: 1px solid var(--border); border-radius: 6px; padding: 1px 7px; font-variant-numeric: tabular-nums; }
+.bx-role { font-size: 11px; font-weight: 800; border-radius: 6px; padding: 1px 8px; }
+.bx-role.ph { background: var(--amber); color: #201608; }
+.bx-role.pr { background: var(--purple); color: #fff; }
+.bx-role.def { background: var(--blue); color: #fff; }
+.bx-role.relief { background: var(--gold); color: #201608; }
+.bx-pos { font-size: 12.5px; font-weight: 700; color: var(--accent); }
+.bx-name { font-weight: 800; font-size: 15px; }
+.bx-num { color: var(--text-dim); font-weight: 600; font-size: .82em; margin-left: 3px; }
+.bx-bottom { text-align: right; margin-top: 3px; color: var(--text-dim); font-size: 12.5px; font-variant-numeric: tabular-nums; }
 
 /* ---- 回ごとのグループ + プレイカード ---- */
 .inning-group { margin: 16px 0 4px; }

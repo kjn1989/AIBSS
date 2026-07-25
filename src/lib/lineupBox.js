@@ -13,6 +13,14 @@
 //       できる範囲で復元する。DH は表示上「指」に読み替える。
 // ============================================================
 
+// 守備位置コード→フル表記(カード表示用)。例: 投→投手 / 遊→遊撃 / DH→指名打者。
+const POS_FULL_JA = { 投: '投手', 捕: '捕手', 一: '一塁', 二: '二塁', 三: '三塁', 遊: '遊撃', 左: '左翼', 中: '中堅', 右: '右翼', DH: '指名打者' };
+const POS_FULL_EN = { 投: 'P', 捕: 'C', 一: '1B', 二: '2B', 三: '3B', 遊: 'SS', 左: 'LF', 中: 'CF', 右: 'RF', DH: 'DH' };
+export function posFull(code, lang = 'ja') {
+  if (!code) return '';
+  return (lang === 'en' ? POS_FULL_EN[code] : POS_FULL_JA[code]) || code;
+}
+
 // 守備位置コード→表示1文字。守備につかない擬似位置(打/控)は空を返す。
 export function posChar(pos) {
   if (!pos) return '';
@@ -84,7 +92,7 @@ export function buildLineupRows(game) {
 
   for (const s of resolveStarters(game)) {
     if (s.playerId == null) continue;
-    ensure(s.order).push({ playerId: s.playerId, marks: [{ kind: 'start', position: s.position }] });
+    ensure(s.order).push({ playerId: s.playerId, marks: [{ kind: 'start', position: s.position }], inning: null });
   }
 
   for (const log of game.playLogs || []) {
@@ -93,7 +101,7 @@ export function buildLineupRows(game) {
       if (p.in == null) continue;
       const chain = ensure(p.order);
       if (chain[chain.length - 1]?.playerId === p.in) continue; // 同一選手の二重追加を防ぐ(保険)
-      chain.push({ playerId: p.in, marks: [{ kind: p.kind || 'def', position: p.position || null }] });
+      chain.push({ playerId: p.in, marks: [{ kind: p.kind || 'def', position: p.position || null }], inning: log.inning || null });
     } else if (log.kind === 'position') {
       const p = log.payload || {};
       const chain = byOrder.get(p.order);
@@ -113,10 +121,28 @@ export function buildLineupRows(game) {
 
   return [...byOrder.keys()].sort((a, b) => a - b).map((order) => ({
     order,
-    players: byOrder.get(order).map((e, i) => ({
-      playerId: e.playerId,
-      notation: composeNotation(e.marks),
-      isStarter: i === 0 && e.marks[0]?.kind === 'start',
-    })),
+    players: byOrder.get(order).map((e, i) => {
+      const kind = e.marks[0]?.kind || 'def';
+      const isStarter = i === 0 && kind === 'start';
+      // 表示用の守備位置コード(その選手が最後に就いた守備位置)
+      const posCode = [...e.marks].reverse().map((m) => m.position).find((p) => posChar(p)) || null;
+      return {
+        playerId: e.playerId,
+        notation: composeNotation(e.marks), // 伝統表記(スコアシート用)
+        isStarter,
+        role: isStarter ? 'start' : kind,   // start / ph(代打) / pr(代走) / def(守備)
+        inning: e.inning ?? null,           // 交代で入った回(先発はnull)
+        posCode,                            // 守備位置コード(投捕一二三遊左中右/DH) or null
+      };
+    }),
   }));
+}
+
+// カード/ツリー表示用の“役割ラベル種別”を返す。守備交代で投手に就く=救援。
+export function roleTag(p) {
+  if (p.isStarter || p.role === 'start') return null; // 先発はバッジ無し(引き算のデザイン)
+  if (p.role === 'ph') return 'ph';
+  if (p.role === 'pr') return 'pr';
+  if (p.role === 'def' && p.posCode === '投') return 'relief';
+  return 'def';
 }

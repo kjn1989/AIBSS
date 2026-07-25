@@ -8,7 +8,7 @@ import { aggregateBatting, battingMetrics, pitchingMetrics, titleLeaders } from 
 import { translate } from '../src/lib/i18n.js';
 import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, parseDirectionOnly } from '../src/lib/voiceParser.js';
 import { parseBatterCorrection, findTargetAtBat } from '../src/lib/correctionParser.js';
-import { buildLineupRows, posChar } from '../src/lib/lineupBox.js';
+import { buildLineupRows, posChar, roleTag } from '../src/lib/lineupBox.js';
 
 test('parseDirectionOnly: 方向のみの発話は方向、結果語を含めばnull(言い直し扱い)', () => {
   assert.equal(parseDirectionOnly('ライト'), 'RF');
@@ -160,6 +160,18 @@ test('buildLineupRows: 先発スナップショット無し(過去試合)は交�
   assert.equal(slot4.players[0].notation, '(捕)'); // 先発は最終守備位置から推定し括弧つき正規表示
   assert.equal(slot4.players[1].playerId, 'yamashiro');
   assert.equal(slot4.players[1].notation, '捕'); // 交代選手は括弧なし
+});
+test('buildLineupRows/roleTag: 先発はバッジ無し・交代は回と役割つき、投手交代は救援', () => {
+  const game = {
+    startingLineup: [{ order: 6, playerId: 'takashima', position: '投' }],
+    playLogs: [{ kind: 'sub', inning: 3, payload: { order: 6, in: 'udagawa', out: 'takashima', kind: 'def', position: '投' } }],
+  };
+  const slot6 = buildLineupRows(game).find((r) => r.order === 6);
+  assert.equal(roleTag(slot6.players[0]), null); // 先発はバッジ無し
+  assert.equal(slot6.players[0].inning, null);
+  assert.equal(slot6.players[1].inning, 3); // 交代で入った回
+  assert.equal(roleTag(slot6.players[1]), 'relief'); // 投手への守備交代=救援
+  assert.equal(slot6.players[1].posCode, '投');
 });
 
 // ---- plays.js ----
