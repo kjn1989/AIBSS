@@ -7,6 +7,7 @@ import { gameEndCheck, initialPresetIdFor, describeRules } from '../src/lib/rule
 import { aggregateBatting, battingMetrics, pitchingMetrics, titleLeaders } from '../src/lib/stats.js';
 import { translate } from '../src/lib/i18n.js';
 import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, parseDirectionOnly } from '../src/lib/voiceParser.js';
+import { parseBatterCorrection, findTargetAtBat } from '../src/lib/correctionParser.js';
 
 test('parseDirectionOnly: 方向のみの発話は方向、結果語を含めばnull(言い直し扱い)', () => {
   assert.equal(parseDirectionOnly('ライト'), 'RF');
@@ -73,6 +74,42 @@ test('parseUtterance: 「金振り/かなぶり」(空振りの誤認識)も空�
     assert.equal(top.sub, 'swinging', s);
   }
   assert.equal(parseUtterance('金振り三振')[0].result, 'so');
+});
+
+// ---- 文章での打者修正パーサ ----
+const CORR_PLAYERS = [
+  { id: 'kawai', name: '河合' }, { id: 'yamashiro', name: '山城' },
+  { id: 'irimajiri', name: '入交' }, { id: 'takashima', name: '髙島' },
+];
+test('parseBatterCorrection: 「◯回の◯◯でなく△△」= 対象と付け替え先を抽出', () => {
+  const r = parseBatterCorrection('4回の第2打席は河合でなく山城です', CORR_PLAYERS);
+  assert.equal(r.ok, true);
+  assert.equal(r.inning, 4);
+  assert.equal(r.ordinal, 2);
+  assert.equal(r.targetPlayerId, 'kawai');
+  assert.equal(r.newPlayerId, 'yamashiro');
+});
+test('parseBatterCorrection: 「◯回の◯◯の打席は△△」= 名前で対象特定', () => {
+  const r = parseBatterCorrection('3回の入交の打席は髙島でした', CORR_PLAYERS);
+  assert.equal(r.ok, true);
+  assert.equal(r.inning, 3);
+  assert.equal(r.targetPlayerId, 'irimajiri');
+  assert.equal(r.newPlayerId, 'takashima');
+});
+test('parseBatterCorrection: 回が無い/付け替え先が無いはエラー', () => {
+  assert.equal(parseBatterCorrection('河合でなく山城', CORR_PLAYERS).ok, false);
+  assert.equal(parseBatterCorrection('4回の打席', CORR_PLAYERS).ok, false);
+});
+test('findTargetAtBat: その回の対象打者の打席を1件特定', () => {
+  const game = { playLogs: [
+    { id: 'a', kind: 'atbat', inning: 3, payload: { playerId: 'irimajiri', result: 'single' } },
+    { id: 'b', kind: 'atbat', inning: 3, payload: { playerId: 'kawai', result: 'out' } },
+    { id: 'c', kind: 'defense', inning: 3, payload: {} },
+  ] };
+  const parsed = parseBatterCorrection('3回の入交の打席は髙島', CORR_PLAYERS);
+  const found = findTargetAtBat(game, parsed);
+  assert.equal(found.ok, true);
+  assert.equal(found.log.id, 'a');
 });
 
 // ---- plays.js ----
