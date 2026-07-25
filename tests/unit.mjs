@@ -7,7 +7,7 @@ import { gameEndCheck, initialPresetIdFor, describeRules } from '../src/lib/rule
 import { aggregateBatting, battingMetrics, pitchingMetrics, titleLeaders } from '../src/lib/stats.js';
 import { translate } from '../src/lib/i18n.js';
 import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, parseDirectionOnly } from '../src/lib/voiceParser.js';
-import { parseBatterCorrection, findTargetAtBat } from '../src/lib/correctionParser.js';
+import { parseBatterCorrection, findTargetAtBat, parseSubstitution } from '../src/lib/correctionParser.js';
 import { buildLineupRows, posChar, roleTag } from '../src/lib/lineupBox.js';
 
 test('parseDirectionOnly: 方向のみの発話は方向、結果語を含めばnull(言い直し扱い)', () => {
@@ -100,6 +100,20 @@ test('parseBatterCorrection: 「◯回の◯◯の打席は△△」= 名前で�
 test('parseBatterCorrection: 回が無い/付け替え先が無いはエラー', () => {
   assert.equal(parseBatterCorrection('河合でなく山城', CORR_PLAYERS).ok, false);
   assert.equal(parseBatterCorrection('4回の打席', CORR_PLAYERS).ok, false);
+});
+test('parseSubstitution: 「2回にキャッチャー河合が負傷、山城と交代」= 守備交代を解釈', () => {
+  const r = parseSubstitution('2回にキャッチャー河合が負傷、山城と交代', CORR_PLAYERS);
+  assert.equal(r.ok, true);
+  assert.equal(r.inning, 2);
+  assert.equal(r.outId, 'kawai'); // 先に出る名前=退く側
+  assert.equal(r.inId, 'yamashiro');
+  assert.equal(r.position, '捕');
+  assert.equal(r.subKind, 'def');
+});
+test('parseSubstitution: 代打/代走の種別と、交代文でない文の切り分け', () => {
+  assert.equal(parseSubstitution('4回、河合に代わって山城が代打', CORR_PLAYERS).subKind, 'ph');
+  // 交代の語も守備位置も無い(打者付け替え)文は notSub を返す→呼び出し側で打者付け替えへ
+  assert.equal(parseSubstitution('3回の入交の打席は髙島', CORR_PLAYERS).ok, false);
 });
 test('findTargetAtBat: その回の対象打者の打席を1件特定', () => {
   const game = { playLogs: [

@@ -985,6 +985,43 @@ export function reducer(state, action) {
       return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
     }
 
+    // ===== 文章での交代記録(あとから守備交代・代打・リエントリーを差し込む) =====
+    // 指定した回に out→in の交代ログを挿入し、その回より後の当該打順の打席を in へ付け替える。
+    // 出場選手ツリー・スコアシートは 'sub' ログから系譜を再構成するため、これで反映される。
+    case 'RETRO_SUBSTITUTE': {
+      const g = deep(state.games[action.gameId]);
+      const { order, inId, outId, position, subKind, inning } = action;
+      if (order == null || !inId) return state;
+      const subLog = newPlayLog({
+        gameId: g.id, inning, isTop: g.isTop, kind: 'sub',
+        text: action.label || '選手交代',
+        payload: { order, in: inId, out: outId, kind: subKind || 'def', position: position || null },
+      });
+      // 時系列(回)の正しい位置へ挿入。ツリーの系譜順を崩さないため。
+      const at = g.playLogs.findIndex((l) => (l.inning || 0) > inning);
+      if (at < 0) g.playLogs.push(subLog); else g.playLogs.splice(at, 0, subLog);
+      // 交代した回より後の、その打順の out選手の打席を in選手へ付け替える(以降は交代選手の打席)
+      for (const ab of g.atBats) {
+        if (ab.order === order && ab.playerId === outId && (ab.snapshot?.inning || 0) > inning) ab.playerId = inId;
+      }
+      for (const l of g.playLogs) {
+        if (l.kind === 'atbat' && l.payload?.order === order && l.payload?.playerId === outId && (l.inning || 0) > inning) {
+          const nm = playerNameOf(state, inId);
+          const lbl = (l.payload.result === 'so' && SO_TYPES[l.payload.soType]) || RESULTS[l.payload.result]?.label || l.payload.result;
+          const dir = DIRECTIONS[l.payload.direction] || '';
+          l.payload = { ...l.payload, playerId: inId };
+          l.text = `${nm} ${dir}${lbl}` + (l.payload.runs ? ` (${l.payload.runs}点)` : '');
+        }
+      }
+      // 現lineupの該当枠がまだout選手なら差し替え(退場登録)
+      const slot = g.lineup.find((l) => l.order === order);
+      if (slot && slot.playerId === outId) { slot.playerId = inId; if (position) slot.position = position; }
+      if (outId && !g.retiredPlayerIds.includes(outId)) g.retiredPlayerIds.push(outId);
+      if (!g.usedPlayerIds.includes(inId)) g.usedPlayerIds.push(inId);
+      g.updatedAt = Date.now();
+      return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
+    }
+
     // ===== スコアの手動修正(回を指定して±) =====
     case 'ADJUST_SCORE': {
       const g = deep(state.games[action.gameId]);
