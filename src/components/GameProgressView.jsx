@@ -277,9 +277,12 @@ function NLCorrectionCard({ game }) {
           label: `${kindLabel}: ${nameOf(s.inId)} (${s.order}番 ${nameOf(s.outId)}に代わり)`,
         });
       }
-      setMsg({ kind: 'ok', text: unresolved.length
+      // 投手交代が含まれる場合は、投手成績を交代タイムラインで再集計する
+      const hasPitcherChange = toApply.some((s) => s.position === '投');
+      if (hasPitcherChange) dispatch({ type: 'RECOMPUTE_PITCHING', gameId: game.id });
+      setMsg({ kind: 'ok', text: (unresolved.length
         ? t('gp.nlSubDonePartial', { n: toApply.length, names: unresolved.join('、') })
-        : t('gp.nlSubDoneMulti', { n: toApply.length }) });
+        : t('gp.nlSubDoneMulti', { n: toApply.length })) + (hasPitcherChange ? t('gp.nlPitchRecalc') : '') });
       setText('');
       return;
     }
