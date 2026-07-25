@@ -9,10 +9,11 @@ import { playLabel } from './voiceParser.js';
 const inningLabel = (ab) => `${ab.snapshot?.inning ?? '?'}回${ab.snapshot?.isTop ? '表' : '裏'}`;
 
 // 決勝点・勝ち越し打: 試合中に起きた goahead/comeback/first のうち最後のもの
-function findClutchHit(game) {
+function findClutchHit(game, nameOf) {
   const ab = [...game.atBats].reverse().find((a) => ['goahead', 'comeback', 'first'].includes(a.clutch));
   if (!ab) return null;
-  return { atBat: ab, label: `${inningLabel(ab)} ${playLabel(ab.result, ab.direction, ab.outType, ab.soType)}(${ab.rbi}打点)` };
+  const who = nameOf ? nameOf(ab.playerId) : '';
+  return { atBat: ab, name: who, label: `${inningLabel(ab)} ${who ? `${who} ` : ''}${playLabel(ab.result, ab.direction, ab.outType, ab.soType)}(${ab.rbi}打点)` };
 }
 
 // MVP的活躍: 安打3・本塁打5・打点2・得点1の簡易加重で最高得点の打者
@@ -57,7 +58,7 @@ export function computeHighlights(game, nameOf) {
 
   return {
     resultLabel,
-    clutch: findClutchHit(game),
+    clutch: findClutchHit(game, nameOf),
     topBatter: findTopBatter(batting, nameOf),
     topPitcher: findTopPitcher(pitching, nameOf),
     extraBaseHits: findExtraBaseHits(game, nameOf),
