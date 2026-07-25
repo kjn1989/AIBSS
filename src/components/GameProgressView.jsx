@@ -3,7 +3,7 @@ import { useStore, usePlayerName, useT } from '../state/store.jsx';
 import { RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES, resultCategory, multiOutLabel, outTypeLabel } from '../lib/model.js';
 import { playLabel } from '../lib/voiceParser.js';
 import { computeBoxScore } from '../lib/boxscore.js';
-import { parseBatterCorrection, findTargetAtBat, parseSubstitutions } from '../lib/correctionParser.js';
+import { parseBatterCorrection, findTargetAtBat, parseSubstitutions, parseBatterReassignments, parseResultCorrections } from '../lib/correctionParser.js';
 import { posFull } from '../lib/lineupBox.js';
 import Sheet from './Sheet.jsx';
 import FullscreenView from './FullscreenView.jsx';
@@ -249,65 +249,88 @@ function NLCorrectionCard({ game }) {
 
   const apply = () => {
     setMsg(null);
-    // 1) まず「交代(守備交代・代打・代走・リエントリー)」の意図を判定(複数件まとめて)
+    // 1文章に混在しうる「交代」「複数回の打者付け替え」「結果修正」をすべて解釈してまとめて適用する。
     const subs = parseSubstitutions(text, state.players);
-    if (subs.length) {
-      // 打順の解決。交代連鎖(A→B→C)では、入った選手が退いた選手の打順を引き継ぐ。
-      const orderCache = new Map();
-      const resolve = (pid) => (orderCache.has(pid) ? orderCache.get(pid) : orderOf(pid));
-      const toApply = [];
-      const unresolved = [];
-      for (const s of subs) {
-        const order = resolve(s.outId);
-        if (order == null) { unresolved.push(s.outName); continue; }
-        orderCache.set(s.outId, order);
-        orderCache.set(s.inId, order); // 次の交代で in選手が退く側になっても打順を引ける
-        toApply.push({ ...s, order });
-      }
-      if (!toApply.length) { setMsg({ kind: 'err', text: t('gp.nlSubNoOrder', { name: unresolved.join('、') }) }); return; }
-      const listStr = toApply.map((s) => t('gp.nlSubItem', {
-        inning: s.inning, out: s.outName, in: s.inName, pos: s.position ? posFull(s.position, lang) : t('gp.nlSubNoPos'),
-      })).join('\n');
-      if (!window.confirm(t('gp.nlSubConfirmMulti', { list: listStr }))) return;
-      for (const s of toApply) {
-        const kindLabel = { ph: t('box.rolePh'), pr: t('box.rolePr'), def: t('gp.subDef') }[s.subKind] || t('gp.subDef');
-        dispatch({
-          type: 'RETRO_SUBSTITUTE', gameId: game.id, order: s.order,
-          outId: s.outId, inId: s.inId, position: s.position, subKind: s.subKind, inning: s.inning,
-          label: `${kindLabel}: ${nameOf(s.inId)} (${s.order}番 ${nameOf(s.outId)}に代わり)`,
-        });
-      }
-      // 投手交代が含まれる場合は、投手成績を交代タイムラインで再集計する
-      const hasPitcherChange = toApply.some((s) => s.position === '投');
-      if (hasPitcherChange) dispatch({ type: 'RECOMPUTE_PITCHING', gameId: game.id });
-      setMsg({ kind: 'ok', text: (unresolved.length
-        ? t('gp.nlSubDonePartial', { n: toApply.length, names: unresolved.join('、') })
-        : t('gp.nlSubDoneMulti', { n: toApply.length })) + (hasPitcherChange ? t('gp.nlPitchRecalc') : '') });
-      setText('');
-      return;
+    const reassigns = parseBatterReassignments(text, state.players);
+    const resultCorrs = parseResultCorrections(text);
+
+    // 明示的な交代(守備/投手/代打…)。連鎖(A→B→C)は入った選手が打順を引き継ぐ。
+    const orderCache = new Map();
+    const resolveOrder = (pid) => (orderCache.has(pid) ? orderCache.get(pid) : orderOf(pid));
+    const subAppl = [];
+    const subUnresolved = [];
+    for (const s of subs) {
+      const order = resolveOrder(s.outId);
+      if (order == null) { subUnresolved.push(s.outName); continue; }
+      orderCache.set(s.outId, order); orderCache.set(s.inId, order);
+      subAppl.push({ ...s, order });
     }
-    // 2) 打者の付け替え(ある打席の“打者”を別選手へ)
-    const parsed = parseBatterCorrection(text, state.players);
-    if (!parsed.ok) {
-      const key = {
-        empty: 'gp.nlErrInning', noInning: 'gp.nlErrInning', noTarget: 'gp.nlErrTarget',
-        noNewName: 'gp.nlErrNewName',
-      }[parsed.reason] || 'gp.nlErrInning';
+
+    // 複数回の打者付け替えを、対象の打席ログへ解決
+    const reAppl = [];
+    const inningToLog = new Map();
+    const reUnresolved = [];
+    for (const r of reassigns) {
+      const found = findTargetAtBat(game, { inning: r.inning, ordinal: r.ordinal, targetPlayerId: r.targetId });
+      if (found.ok) { reAppl.push({ ...r, logId: found.log.id }); inningToLog.set(r.inning, found.log.id); }
+      else reUnresolved.push(`${r.inning}回`);
+    }
+    // 付け替えから「代打/代走」の交代も合成し、出場選手ツリーに反映(以降の回も自動付け替え)
+    const synthSubs = [];
+    const seenPair = new Set();
+    for (const r of reAppl) {
+      if (!r.targetId) continue;
+      const key = `${r.targetId}>${r.newId}`;
+      if (seenPair.has(key)) continue;
+      seenPair.add(key);
+      const order = resolveOrder(r.targetId);
+      if (order == null) continue;
+      const innings = reAppl.filter((x) => x.targetId === r.targetId && x.newId === r.newId).map((x) => x.inning);
+      synthSubs.push({ outId: r.targetId, outName: r.targetName, inId: r.newId, inName: r.newName, inning: Math.min(...innings), subKind: /代走/.test(text) ? 'pr' : 'ph', position: null, order });
+    }
+
+    // 結果修正を対象の打席ログへ解決(その回の付け替え対象、無ければ回内で1件のみのとき)
+    const resAppl = [];
+    for (const rc of resultCorrs) {
+      let logId = inningToLog.get(rc.inning);
+      if (!logId) { const logs = (game.playLogs || []).filter((l) => l.kind === 'atbat' && l.inning === rc.inning); if (logs.length === 1) logId = logs[0].id; }
+      if (logId) resAppl.push({ ...rc, logId });
+    }
+
+    const totalOps = subAppl.length + synthSubs.length + reAppl.length + resAppl.length;
+    if (!totalOps) {
+      const single = parseBatterCorrection(text, state.players);
+      const key = !single.ok
+        ? ({ noInning: 'gp.nlErrInning', empty: 'gp.nlErrInning', noTarget: 'gp.nlErrTarget', noNewName: 'gp.nlErrNewName' }[single.reason] || 'gp.nlErrInning')
+        : 'gp.nlErrNotFound';
       setMsg({ kind: 'err', text: t(key) });
       return;
     }
-    const found = findTargetAtBat(game, parsed);
-    if (!found.ok) {
-      const key = found.reason === 'ambiguous' ? 'gp.nlErrAmbiguous' : 'gp.nlErrNotFound';
-      setMsg({ kind: 'err', text: t(key) });
-      return;
-    }
-    const log = found.log;
-    const p = log.payload || {};
-    const playText = `${nameOf(p.playerId)} ${playLabel(p.result, p.direction, p.outType, p.soType, state.settings.edition, lang)}`;
-    if (!window.confirm(t('gp.nlConfirm', { inning: parsed.inning, play: playText, name: parsed.newName }))) return;
-    dispatch({ type: 'REASSIGN_ATBAT', gameId: game.id, logId: log.id, newPlayerId: parsed.newPlayerId });
-    setMsg({ kind: 'ok', text: t('gp.nlDone') });
+
+    const subLabel = (s) => t('gp.nlSubItem', { inning: s.inning, out: s.outName, in: s.inName, pos: s.position ? posFull(s.position, lang) : t('gp.nlSubNoPos') });
+    const lines = [
+      ...subAppl.map(subLabel),
+      ...synthSubs.map(subLabel),
+      ...reAppl.map((r) => t('gp.nlReItem', { inning: r.inning, name: r.newName })),
+      ...resAppl.map((rc) => t('gp.nlResItem', { inning: rc.inning, label: playLabel(rc.patch.result, rc.patch.direction, rc.patch.outType, rc.patch.soType, state.settings.edition, lang) })),
+    ];
+    if (!window.confirm(t('gp.nlConfirmOps', { list: lines.join('\n') }))) return;
+
+    const doSub = (s) => {
+      const kindLabel = { ph: t('box.rolePh'), pr: t('box.rolePr'), def: t('gp.subDef') }[s.subKind] || t('gp.subDef');
+      dispatch({ type: 'RETRO_SUBSTITUTE', gameId: game.id, order: s.order, outId: s.outId, inId: s.inId, position: s.position, subKind: s.subKind, inning: s.inning, label: `${kindLabel}: ${nameOf(s.inId)} (${s.order}番 ${nameOf(s.outId)}に代わり)` });
+    };
+    synthSubs.forEach(doSub);
+    subAppl.forEach(doSub);
+    reAppl.forEach((r) => dispatch({ type: 'REASSIGN_ATBAT', gameId: game.id, logId: r.logId, newPlayerId: r.newId }));
+    resAppl.forEach((rc) => dispatch({ type: 'EDIT_PLAY_LOG', gameId: game.id, logId: rc.logId, patch: rc.patch }));
+    const hasPitcherChange = subAppl.some((s) => s.position === '投');
+    if (hasPitcherChange) dispatch({ type: 'RECOMPUTE_PITCHING', gameId: game.id });
+
+    const notes = [];
+    if (subUnresolved.length) notes.push(t('gp.nlSubNoOrderShort', { names: subUnresolved.join('、') }));
+    if (reUnresolved.length) notes.push(t('gp.nlReNotFoundShort', { innings: reUnresolved.join('、') }));
+    setMsg({ kind: 'ok', text: t('gp.nlDoneOps', { n: totalOps }) + (hasPitcherChange ? t('gp.nlPitchRecalc') : '') + notes.join('') });
     setText('');
   };
 
