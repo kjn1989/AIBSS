@@ -77,6 +77,25 @@ export function parseSubstitution(rawText, players = []) {
   return { ok: true, inning, outId: outHit.id, outName: outHit.name, inId: inHit.id, inName: inHit.name, position, subKind };
 }
 
+// 1つの文章から「複数の交代」をまとめて解釈する。
+// 文(。．！？改行)ごとに分割して各文を parseSubstitution にかけ、成立したものを順に返す。
+// 回が省略された文は直前に成立した回を引き継ぐ。1文に複数交代を入れると取りこぼすため、
+// 各交代は句点や改行で区切るのが確実(呼び出し側UIで案内)。
+export function parseSubstitutions(rawText, players = []) {
+  const text = toHalf(rawText || '');
+  const segments = text.split(/[。．.!！?？\n]+/).map((s) => s.trim()).filter(Boolean);
+  const out = [];
+  let lastInning = null;
+  for (const seg of segments) {
+    let r = parseSubstitution(seg, players);
+    if (!r.ok && r.reason === 'noInning' && lastInning != null) {
+      r = parseSubstitution(`${lastInning}回 ${seg}`, players); // 回の省略を直前の回で補完
+    }
+    if (r.ok) { out.push(r); lastInning = r.inning; }
+  }
+  return out;
+}
+
 // 文章を解釈する。players: [{ id, name }]
 // 戻り値: { ok:true, inning, ordinal, targetName, newName, targetPlayerId, newPlayerId }
 //       | { ok:false, reason }

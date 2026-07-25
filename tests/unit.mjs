@@ -7,7 +7,7 @@ import { gameEndCheck, initialPresetIdFor, describeRules } from '../src/lib/rule
 import { aggregateBatting, battingMetrics, pitchingMetrics, titleLeaders } from '../src/lib/stats.js';
 import { translate } from '../src/lib/i18n.js';
 import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, parseDirectionOnly } from '../src/lib/voiceParser.js';
-import { parseBatterCorrection, findTargetAtBat, parseSubstitution } from '../src/lib/correctionParser.js';
+import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions } from '../src/lib/correctionParser.js';
 import { buildLineupRows, posChar, roleTag } from '../src/lib/lineupBox.js';
 
 test('parseDirectionOnly: 方向のみの発話は方向、結果語を含めばnull(言い直し扱い)', () => {
@@ -114,6 +114,17 @@ test('parseSubstitution: 代打/代走の種別と、交代文でない文の切
   assert.equal(parseSubstitution('4回、河合に代わって山城が代打', CORR_PLAYERS).subKind, 'ph');
   // 交代の語も守備位置も無い(打者付け替え)文は notSub を返す→呼び出し側で打者付け替えへ
   assert.equal(parseSubstitution('3回の入交の打席は髙島', CORR_PLAYERS).ok, false);
+});
+test('parseSubstitutions: 1文章から複数の投手交代をすべて抽出', () => {
+  const PS = [{ id: 't', name: '髙島' }, { id: 'u', name: '宇田川' }, { id: 'm', name: '茂木' }];
+  const txt = 'JICA TWINS側の投手が実は交代していました。3回裏からは髙島に代わり、宇田川が投手に。宇田川は4回も投げました。\n\n'
+    + '5回裏に、ピッチャーが宇田川から茂木に替わりました。更に、5回裏に4番に四球を出した後に、茂木からまた宇田川に投手を交代しました。';
+  const subs = parseSubstitutions(txt, PS);
+  assert.equal(subs.length, 3);
+  assert.deepEqual(subs.map((s) => [s.inning, s.outId, s.inId]), [
+    [3, 't', 'u'], [5, 'u', 'm'], [5, 'm', 'u'],
+  ]);
+  assert.ok(subs.every((s) => s.position === '投')); // ピッチャー/投手→投
 });
 test('parseSubstitution: 守備位置が明示なら「代打」の否定文に釣られず守備交代', () => {
   const r = parseSubstitution('2回裏の6番打者を三振に取った後、キャッチャー河合が負傷で山城に交代。代打山城はそうでなく守備から', CORR_PLAYERS);
