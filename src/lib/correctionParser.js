@@ -195,12 +195,17 @@ export function parseResultCorrections(rawText) {
 // game.playLogs から、その回の自軍打席を集め、対象打者名 or 打席順で1件に絞る。
 // 戻り値: { ok:true, log } | { ok:false, reason, matches? }
 export function findTargetAtBat(game, parsed) {
-  const logs = (game.playLogs || []).filter((l) => l.kind === 'atbat' && l.inning === parsed.inning);
+  const inn = Number(parsed.inning); // AIが文字列で返す場合に備え数値化
+  const logs = (game.playLogs || []).filter((l) => l.kind === 'atbat' && Number(l.inning) === inn);
   if (logs.length === 0) return { ok: false, reason: 'noInningPlays' };
 
   let candidates = logs;
   if (parsed.targetPlayerId) {
     candidates = logs.filter((l) => l.payload?.playerId === parsed.targetPlayerId);
+    // 既に付け替え済み等で対象選手が居なくても、その打順(order)で1件に絞れれば救済
+    if (candidates.length === 0 && parsed.targetOrder != null) {
+      candidates = logs.filter((l) => l.payload?.order === parsed.targetOrder);
+    }
   } else if (parsed.ordinal) {
     const one = logs[parsed.ordinal - 1];
     candidates = one ? [one] : [];
