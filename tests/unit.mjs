@@ -142,6 +142,15 @@ test('parseResultCorrections: 「ゴロでなく犠飛で1点」を結果修正�
   assert.equal(rc[0].patch.direction, 'CF');
   assert.equal(rc[0].patch.rbi, 1);
 });
+test('parseSubstitution: 「7回は髙島が投げました」= 投手1人でも登板として解釈(退く側は後で解決)', () => {
+  const PS = [{ id: 't', name: '髙島' }, { id: 'u', name: '宇田川' }];
+  const r = parseSubstitution('また7回は髙島が投げました', PS);
+  assert.equal(r.ok, true);
+  assert.equal(r.inning, 7);
+  assert.equal(r.position, '投');
+  assert.equal(r.inId, 't');
+  assert.equal(r.outId, null); // 退く側は未指定(呼び出し側が直前投手に解決)
+});
 test('parseSubstitution: 守備位置が明示なら「代打」の否定文に釣られず守備交代', () => {
   const r = parseSubstitution('2回裏の6番打者を三振に取った後、キャッチャー河合が負傷で山城に交代。代打山城はそうでなく守備から', CORR_PLAYERS);
   assert.equal(r.ok, true);
