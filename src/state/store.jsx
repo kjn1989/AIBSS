@@ -525,6 +525,9 @@ export function reducer(state, action) {
     case 'SET_LINEUP': {
       const g = deep(state.games[action.gameId]);
       g.lineup = action.lineup; // [{order, playerId, position}]
+      // 試合開始前(まだ打席が無い)のスタメンをスナップショット保存。
+      // lineup は交代で書き換わるため、伝統表記(先発の守備位置)の生成にはこれを使う。
+      if (!(g.atBats?.length)) g.startingLineup = action.lineup.map((l) => ({ ...l }));
       g.usedPlayerIds = [...new Set([...g.usedPlayerIds, ...action.lineup.map((l) => l.playerId).filter(Boolean)])];
       g.updatedAt = Date.now();
       return { ...state, games: { ...state.games, [g.id]: g } };
@@ -547,7 +550,9 @@ export function reducer(state, action) {
       }
       g.playLogs.push(newPlayLog({
         gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'sub',
-        text: action.label || '選手交代', payload: { order: action.order, in: action.playerId, out: outgoing },
+        text: action.label || '選手交代',
+        // kind(ph/pr/def)とposition を残し、伝統的な位置表記(打/走+守備位置)を後から再現できるようにする
+        payload: { order: action.order, in: action.playerId, out: outgoing, kind: action.kind || (action.asRunner ? 'pr' : 'def'), position: action.position || null },
       }));
       g.updatedAt = Date.now();
       return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
@@ -556,7 +561,17 @@ export function reducer(state, action) {
       // 守備位置のみ変更(交代を伴わない)
       const g = deep(state.games[action.gameId]);
       const slot = g.lineup.find((l) => l.order === action.order);
-      if (slot) slot.position = action.position;
+      if (slot && slot.position !== action.position) {
+        const prev = slot.position;
+        slot.position = action.position;
+        // 位置変更を記録(伝統表記の「中左」のような連結に使う)。試合中(打席発生後)のみ。
+        if ((g.atBats?.length) && slot.playerId) {
+          g.playLogs.push(newPlayLog({
+            gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'position',
+            text: '', payload: { order: action.order, playerId: slot.playerId, position: action.position, from: prev },
+          }));
+        }
+      }
       g.updatedAt = Date.now();
       return { ...state, games: { ...state.games, [g.id]: g } };
     }

@@ -73,6 +73,7 @@ export function SubstituteSheet({ game, slot, onClose, initialKind = 'ph' }) {
               order: slot.order,
               playerId,
               position,
+              kind, // ph=代打 / pr=代走 / def=守備交代(伝統表記の生成に使う)
               asRunner: kind === 'pr',
               label: t('order.sub.log', {
                 kind: kindLabel, inName: nameOf(playerId), order: slot.order, outName: nameOf(slot.playerId),
