@@ -3,7 +3,7 @@ import { useStore, usePlayerName, useT } from '../state/store.jsx';
 import { RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES, resultCategory, multiOutLabel, outTypeLabel } from '../lib/model.js';
 import { playLabel } from '../lib/voiceParser.js';
 import { computeBoxScore } from '../lib/boxscore.js';
-import { parseBatterCorrection, findTargetAtBat, parseSubstitution } from '../lib/correctionParser.js';
+import { parseBatterCorrection, findTargetAtBat, parseSubstitutions } from '../lib/correctionParser.js';
 import { posFull } from '../lib/lineupBox.js';
 import Sheet from './Sheet.jsx';
 import FullscreenView from './FullscreenView.jsx';
@@ -249,20 +249,37 @@ function NLCorrectionCard({ game }) {
 
   const apply = () => {
     setMsg(null);
-    // 1) まず「交代(守備交代・代打・代走・リエントリー)」の意図を判定
-    const sub = parseSubstitution(text, state.players);
-    if (sub.ok) {
-      const order = orderOf(sub.outId);
-      if (order == null) { setMsg({ kind: 'err', text: t('gp.nlSubNoOrder', { name: sub.outName }) }); return; }
-      const posLabel = sub.position ? posFull(sub.position, lang) : t('gp.nlSubNoPos');
-      if (!window.confirm(t('gp.nlSubConfirm', { inning: sub.inning, out: sub.outName, in: sub.inName, pos: posLabel }))) return;
-      const kindLabel = { ph: t('box.rolePh'), pr: t('box.rolePr'), def: t('gp.subDef') }[sub.subKind] || t('gp.subDef');
-      dispatch({
-        type: 'RETRO_SUBSTITUTE', gameId: game.id, order,
-        outId: sub.outId, inId: sub.inId, position: sub.position, subKind: sub.subKind, inning: sub.inning,
-        label: `${kindLabel}: ${nameOf(sub.inId)} (${order}番 ${nameOf(sub.outId)}に代わり)`,
-      });
-      setMsg({ kind: 'ok', text: t('gp.nlSubDone', { in: sub.inName }) });
+    // 1) まず「交代(守備交代・代打・代走・リエントリー)」の意図を判定(複数件まとめて)
+    const subs = parseSubstitutions(text, state.players);
+    if (subs.length) {
+      // 打順の解決。交代連鎖(A→B→C)では、入った選手が退いた選手の打順を引き継ぐ。
+      const orderCache = new Map();
+      const resolve = (pid) => (orderCache.has(pid) ? orderCache.get(pid) : orderOf(pid));
+      const toApply = [];
+      const unresolved = [];
+      for (const s of subs) {
+        const order = resolve(s.outId);
+        if (order == null) { unresolved.push(s.outName); continue; }
+        orderCache.set(s.outId, order);
+        orderCache.set(s.inId, order); // 次の交代で in選手が退く側になっても打順を引ける
+        toApply.push({ ...s, order });
+      }
+      if (!toApply.length) { setMsg({ kind: 'err', text: t('gp.nlSubNoOrder', { name: unresolved.join('、') }) }); return; }
+      const listStr = toApply.map((s) => t('gp.nlSubItem', {
+        inning: s.inning, out: s.outName, in: s.inName, pos: s.position ? posFull(s.position, lang) : t('gp.nlSubNoPos'),
+      })).join('\n');
+      if (!window.confirm(t('gp.nlSubConfirmMulti', { list: listStr }))) return;
+      for (const s of toApply) {
+        const kindLabel = { ph: t('box.rolePh'), pr: t('box.rolePr'), def: t('gp.subDef') }[s.subKind] || t('gp.subDef');
+        dispatch({
+          type: 'RETRO_SUBSTITUTE', gameId: game.id, order: s.order,
+          outId: s.outId, inId: s.inId, position: s.position, subKind: s.subKind, inning: s.inning,
+          label: `${kindLabel}: ${nameOf(s.inId)} (${s.order}番 ${nameOf(s.outId)}に代わり)`,
+        });
+      }
+      setMsg({ kind: 'ok', text: unresolved.length
+        ? t('gp.nlSubDonePartial', { n: toApply.length, names: unresolved.join('、') })
+        : t('gp.nlSubDoneMulti', { n: toApply.length }) });
       setText('');
       return;
     }
