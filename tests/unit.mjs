@@ -161,6 +161,16 @@ test('findTargetAtBat: その回の対象打者の打席を1件特定', () => {
   assert.equal(found.ok, true);
   assert.equal(found.log.id, 'a');
 });
+test('findTargetAtBat: 回が文字列("3")でも数値の打席にマッチ(AI返り値対策)', () => {
+  const game = { playLogs: [
+    { id: 'a', kind: 'atbat', inning: 3, payload: { playerId: 'irimajiri', order: 5, result: 'single' } },
+  ] };
+  // inning は文字列、targetPlayerId 不一致でも targetOrder で救済
+  const f1 = findTargetAtBat(game, { inning: '3', targetPlayerId: 'irimajiri' });
+  assert.equal(f1.ok, true);
+  const f2 = findTargetAtBat(game, { inning: '3', targetPlayerId: 'nobody', targetOrder: 5 });
+  assert.equal(f2.ok, true);
+});
 
 // ---- 出場選手ボックススコアの伝統的な位置表記 ----
 test('posChar: DHは指、擬似位置(打/控)は空', () => {

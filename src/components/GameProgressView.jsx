@@ -264,19 +264,21 @@ function NLCorrectionCard({ game }) {
   // AIの操作配列 → 中間表現(regexパスと同形 { subs, reassigns, resultCorrs })
   const aiOpsToIntermediate = (ops) => {
     const subs = []; const reassigns = []; const resultCorrs = [];
+    const num = (v) => (v == null || v === 'null' || v === '' ? null : Number(v)); // AIの文字列数値に備える
     for (const op of ops || []) {
-      if (op.type === 'reassign' && op.inning) {
+      const inning = num(op.inning);
+      if (op.type === 'reassign' && inning) {
         const newId = idByName(op.to);
-        if (newId) reassigns.push({ inning: op.inning, ordinal: op.ordinal || null, targetId: idByName(op.from), targetName: op.from, newId, newName: op.to });
-      } else if (op.type === 'substitution' && op.inning) {
+        if (newId) reassigns.push({ inning, ordinal: num(op.ordinal), targetId: idByName(op.from), targetName: op.from, newId, newName: op.to });
+      } else if (op.type === 'substitution' && inning) {
         const outId = idByName(op.out); const inId = idByName(op.in);
-        if (outId && inId) subs.push({ inning: op.inning, outId, outName: op.out, inId, inName: op.in, position: clean(op.position), subKind: op.role || 'def' });
-      } else if (op.type === 'result' && op.inning && op.result) {
-        resultCorrs.push({ inning: op.inning, batterId: idByName(op.batter), patch: {
+        if (outId && inId) subs.push({ inning, outId, outName: op.out, inId, inName: op.in, position: clean(op.position), subKind: op.role || 'def' });
+      } else if (op.type === 'result' && inning && op.result) {
+        resultCorrs.push({ inning, batterId: idByName(op.batter), patch: {
           result: op.result, direction: clean(op.direction),
           outType: op.result === 'out' ? (clean(op.outType) || 'ground') : null,
           soType: op.result === 'so' ? 'swinging' : null,
-          ...(op.rbi != null ? { rbi: op.rbi } : {}),
+          ...(num(op.rbi) != null ? { rbi: num(op.rbi) } : {}),
         } });
       }
     }
@@ -324,9 +326,12 @@ function NLCorrectionCard({ game }) {
     const inningToLog = new Map();
     const reUnresolved = [];
     for (const r of reassigns) {
-      const found = findTargetAtBat(game, { inning: r.inning, ordinal: r.ordinal, targetPlayerId: r.targetId });
+      const targetOrder = r.targetId ? orderOf(r.targetId) : null;
+      const found = findTargetAtBat(game, { inning: r.inning, ordinal: r.ordinal, targetPlayerId: r.targetId, targetOrder });
+      // 既にその選手に付け替え済み(=対象がnewId)ならスキップ(成功扱い・重複防止)
+      if (found.ok && found.log.payload?.playerId === r.newId) { inningToLog.set(r.inning, found.log.id); continue; }
       if (found.ok) { reAppl.push({ ...r, logId: found.log.id }); inningToLog.set(r.inning, found.log.id); }
-      else reUnresolved.push(`${r.inning}回`);
+      else reUnresolved.push(`${r.inning}回${r.targetName ? `(${r.targetName})` : ''}`);
     }
     // 付け替えから「代打/代走」の交代も合成し、出場選手ツリーに反映(以降の回も自動付け替え)
     const synthSubs = [];
@@ -356,6 +361,7 @@ function NLCorrectionCard({ game }) {
 
     const totalOps = subAppl.length + synthSubs.length + reAppl.length + resAppl.length;
     if (!totalOps) {
+      if (reUnresolved.length) { setMsg({ kind: 'err', text: t('gp.nlReAllNotFound', { innings: reUnresolved.join('、') }) }); return; }
       const single = parseBatterCorrection(text, state.players);
       const key = !single.ok
         ? ({ noInning: 'gp.nlErrInning', empty: 'gp.nlErrInning', noTarget: 'gp.nlErrTarget', noNewName: 'gp.nlErrNewName' }[single.reason] || 'gp.nlErrInning')
