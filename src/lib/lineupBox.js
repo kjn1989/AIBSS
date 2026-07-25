@@ -32,38 +32,80 @@ function composeNotation(marks) {
     const c = posChar(m.position);
     if (c && positions[positions.length - 1] !== c) positions.push(c);
   }
-  if (isStart) return `(${positions.join('') || posChar(marks[0].position)})`;
+  if (isStart) {
+    const body = positions.join('') || posChar(marks[0].position);
+    return body ? `(${body})` : ''; // 守備位置不明の先発(過去データ)は空表示
+  }
   const body = prefix + positions.join('');
   return body || '—';
+}
+
+// 各打順スロットの「先発」を決める。
+// startingLineup があればそれを使う。無い過去試合は、その打順で最初に行われた
+// 交代の out(交代前にいた選手)を先発とみなす(交代が無ければ現lineupの選手)。
+function resolveStarters(game) {
+  if (game.startingLineup && game.startingLineup.length) {
+    return game.startingLineup.map((s) => ({ order: s.order, playerId: s.playerId, position: s.position || null }));
+  }
+  const firstOut = new Map(); // order -> 最初の交代前にいた選手
+  for (const log of game.playLogs || []) {
+    if (log.kind === 'sub') {
+      const p = log.payload || {};
+      if (p.out != null && !firstOut.has(p.order)) firstOut.set(p.order, p.out);
+    }
+  }
+  const orders = new Set();
+  for (const l of game.lineup || []) orders.add(l.order);
+  for (const o of firstOut.keys()) orders.add(o);
+  for (const ab of game.atBats || []) if (ab.order != null) orders.add(ab.order);
+
+  const out = [];
+  for (const order of orders) {
+    const cur = (game.lineup || []).find((l) => l.order === order);
+    if (firstOut.has(order)) {
+      out.push({ order, playerId: firstOut.get(order), position: null }); // 先発の位置は交代で上書き済み=不明
+    } else if (cur && cur.playerId != null) {
+      out.push({ order, playerId: cur.playerId, position: cur.position || null });
+    }
+  }
+  return out;
 }
 
 // 打順スロットごとに登場順の選手行を作る。
 // 戻り値: [{ order, players: [{ playerId, notation, isStarter }] }]
 export function buildLineupRows(game) {
-  const starters = (game.startingLineup && game.startingLineup.length)
-    ? game.startingLineup
-    : (game.lineup || []); // 過去データ: スナップショットが無ければ現lineupを先発とみなす(ベストエフォート)
   const byOrder = new Map(); // order -> [{ playerId, marks:[] }]
   const ensure = (order) => {
     if (!byOrder.has(order)) byOrder.set(order, []);
     return byOrder.get(order);
   };
 
-  for (const s of starters) {
-    if (!s || s.playerId == null) continue;
-    ensure(s.order).push({ playerId: s.playerId, marks: [{ kind: 'start', position: s.position || null }] });
+  for (const s of resolveStarters(game)) {
+    if (s.playerId == null) continue;
+    ensure(s.order).push({ playerId: s.playerId, marks: [{ kind: 'start', position: s.position }] });
   }
 
   for (const log of game.playLogs || []) {
     if (log.kind === 'sub') {
       const p = log.payload || {};
       if (p.in == null) continue;
-      ensure(p.order).push({ playerId: p.in, marks: [{ kind: p.kind || 'def', position: p.position || null }] });
+      const chain = ensure(p.order);
+      if (chain[chain.length - 1]?.playerId === p.in) continue; // 同一選手の二重追加を防ぐ(保険)
+      chain.push({ playerId: p.in, marks: [{ kind: p.kind || 'def', position: p.position || null }] });
     } else if (log.kind === 'position') {
       const p = log.payload || {};
       const chain = byOrder.get(p.order);
       const cur = chain && chain[chain.length - 1];
       if (cur && cur.playerId === p.playerId) cur.marks.push({ kind: 'move', position: p.position || null });
+    }
+  }
+
+  // 位置不明の「最終出場者」には、現lineupの守備位置を補う(過去データの守備交代を拾う)
+  for (const [order, chain] of byOrder) {
+    const cur = (game.lineup || []).find((l) => l.order === order);
+    const last = chain[chain.length - 1];
+    if (cur && last && last.playerId === cur.playerId && cur.position) {
+      if (!last.marks.some((m) => posChar(m.position))) last.marks.push({ kind: 'move', position: cur.position });
     }
   }
 
