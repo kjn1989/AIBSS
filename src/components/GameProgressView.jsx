@@ -314,8 +314,14 @@ function NLCorrectionCard({ game }) {
     const resolveOrder = (pid) => (orderCache.has(pid) ? orderCache.get(pid) : orderOf(pid));
     const subAppl = [];
     const subUnresolved = [];
-    for (const s of subs) {
-      const order = resolveOrder(s.outId);
+    for (let s of subs) {
+      let order = resolveOrder(s.outId);
+      if (order == null && s.position) {
+        // 守備位置が明示されていれば、その位置の現在の選手が居る打順で解決する。
+        // 退く選手名が実データと食い違っても「その位置の実際の守備者→新選手」として救済。
+        const slot = (game.lineup || []).find((l) => l.position === s.position && l.playerId);
+        if (slot) { s = { ...s, outId: slot.playerId, outName: nameOf(slot.playerId) }; order = slot.order; }
+      }
       if (order == null) { subUnresolved.push(s.outName); continue; }
       orderCache.set(s.outId, order); orderCache.set(s.inId, order);
       subAppl.push({ ...s, order });
@@ -361,6 +367,7 @@ function NLCorrectionCard({ game }) {
 
     const totalOps = subAppl.length + synthSubs.length + reAppl.length + resAppl.length;
     if (!totalOps) {
+      if (subUnresolved.length) { setMsg({ kind: 'err', text: t('gp.nlSubNoOrder', { name: subUnresolved.join('、') }) }); return; }
       if (reUnresolved.length) { setMsg({ kind: 'err', text: t('gp.nlReAllNotFound', { innings: reUnresolved.join('、') }) }); return; }
       const single = parseBatterCorrection(text, state.players);
       const key = !single.ok
