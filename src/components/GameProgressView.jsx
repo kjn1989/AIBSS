@@ -5,6 +5,7 @@ import { playLabel } from '../lib/voiceParser.js';
 import { computeBoxScore } from '../lib/boxscore.js';
 import { parseBatterCorrection, findTargetAtBat, parseSubstitutions, parseBatterReassignments, parseResultCorrections } from '../lib/correctionParser.js';
 import { posFull } from '../lib/lineupBox.js';
+import { interpretCorrection } from '../lib/gemini.js';
 import Sheet from './Sheet.jsx';
 import FullscreenView from './FullscreenView.jsx';
 
@@ -232,6 +233,7 @@ function NLCorrectionCard({ game }) {
   const nameOf = usePlayerName();
   const [text, setText] = useState('');
   const [msg, setMsg] = useState(null); // { kind:'ok'|'err', text }
+  const [busy, setBusy] = useState(false);
 
   // 選手の打順スロットを特定する。既に交代で退いた選手(現lineupに居ない)でも、
   // スタメン・交代ログ・打席のどこかから拾えるようにする。
@@ -247,13 +249,64 @@ function NLCorrectionCard({ game }) {
     return ab ? ab.order : null;
   };
 
-  const apply = () => {
-    setMsg(null);
-    // 1文章に混在しうる「交代」「複数回の打者付け替え」「結果修正」をすべて解釈してまとめて適用する。
-    const subs = parseSubstitutions(text, state.players);
-    const reassigns = parseBatterReassignments(text, state.players);
-    const resultCorrs = parseResultCorrections(text);
+  // AIに渡す試合コンテキスト(登録選手・現打順・自軍の打席記録)
+  const buildContext = () => ({
+    players: state.players.map((p) => ({ name: p.name, number: p.number })),
+    lineup: (game.lineup || []).map((l) => ({ order: l.order, name: nameOf(l.playerId), position: l.position || '' })),
+    atbats: (game.playLogs || []).filter((l) => l.kind === 'atbat').map((l) => ({
+      inning: l.inning, order: l.payload?.order, batter: nameOf(l.payload?.playerId),
+      result: playLabel(l.payload?.result, l.payload?.direction, l.payload?.outType, l.payload?.soType, state.settings.edition, lang),
+    })),
+  });
+  const idByName = (nm) => state.players.find((p) => p.name === nm)?.id || null;
+  const clean = (v) => (v && v !== 'null' ? v : null);
 
+  // AIの操作配列 → 中間表現(regexパスと同形 { subs, reassigns, resultCorrs })
+  const aiOpsToIntermediate = (ops) => {
+    const subs = []; const reassigns = []; const resultCorrs = [];
+    for (const op of ops || []) {
+      if (op.type === 'reassign' && op.inning) {
+        const newId = idByName(op.to);
+        if (newId) reassigns.push({ inning: op.inning, ordinal: op.ordinal || null, targetId: idByName(op.from), targetName: op.from, newId, newName: op.to });
+      } else if (op.type === 'substitution' && op.inning) {
+        const outId = idByName(op.out); const inId = idByName(op.in);
+        if (outId && inId) subs.push({ inning: op.inning, outId, outName: op.out, inId, inName: op.in, position: clean(op.position), subKind: op.role || 'def' });
+      } else if (op.type === 'result' && op.inning && op.result) {
+        resultCorrs.push({ inning: op.inning, batterId: idByName(op.batter), patch: {
+          result: op.result, direction: clean(op.direction),
+          outType: op.result === 'out' ? (clean(op.outType) || 'ground') : null,
+          soType: op.result === 'so' ? 'swinging' : null,
+          ...(op.rbi != null ? { rbi: op.rbi } : {}),
+        } });
+      }
+    }
+    return { subs, reassigns, resultCorrs };
+  };
+  const produceRegex = () => ({
+    subs: parseSubstitutions(text, state.players),
+    reassigns: parseBatterReassignments(text, state.players),
+    resultCorrs: parseResultCorrections(text),
+  });
+  const isEmpty = (im) => !(im.subs.length || im.reassigns.length || im.resultCorrs.length);
+
+  const apply = async () => {
+    setMsg(null);
+    const apiKey = state.settings.geminiApiKey;
+    let im = null;
+    if (apiKey && navigator.onLine) {
+      setBusy(true);
+      try {
+        const r = await interpretCorrection({ apiKey, text, ...buildContext() });
+        if (r && r.ops) im = aiOpsToIntermediate(r.ops);
+      } catch { /* AI失敗→オフライン解釈へフォールバック */ }
+      setBusy(false);
+    }
+    if (!im || isEmpty(im)) im = produceRegex(); // AI未使用/未解釈は端末内パーサで
+    resolveAndApply(im);
+  };
+
+  const resolveAndApply = (im) => {
+    const { subs, reassigns, resultCorrs } = im;
     // 明示的な交代(守備/投手/代打…)。連鎖(A→B→C)は入った選手が打順を引き継ぐ。
     const orderCache = new Map();
     const resolveOrder = (pid) => (orderCache.has(pid) ? orderCache.get(pid) : orderOf(pid));
@@ -293,6 +346,10 @@ function NLCorrectionCard({ game }) {
     const resAppl = [];
     for (const rc of resultCorrs) {
       let logId = inningToLog.get(rc.inning);
+      if (!logId && rc.batterId) {
+        const l = (game.playLogs || []).find((x) => x.kind === 'atbat' && x.inning === rc.inning && x.payload?.playerId === rc.batterId);
+        if (l) logId = l.id;
+      }
       if (!logId) { const logs = (game.playLogs || []).filter((l) => l.kind === 'atbat' && l.inning === rc.inning); if (logs.length === 1) logId = logs[0].id; }
       if (logId) resAppl.push({ ...rc, logId });
     }
@@ -342,7 +399,12 @@ function NLCorrectionCard({ game }) {
         rows={2} value={text} placeholder={t('gp.nlPlaceholder')}
         onChange={(e) => setText(e.target.value)} style={{ width: '100%' }}
       />
-      <button className="primary mt8" style={{ width: '100%' }} disabled={!text.trim()} onClick={apply}>{t('gp.nlApply')}</button>
+      <button className="primary mt8" style={{ width: '100%' }} disabled={!text.trim() || busy} onClick={apply}>
+        {busy ? t('gp.nlInterpreting') : t('gp.nlApply')}
+      </button>
+      <p className="small dim mt8" style={{ marginBottom: 0 }}>
+        {state.settings.geminiApiKey ? t('gp.nlAiOn') : t('gp.nlAiOff')}
+      </p>
       {msg && (msg.kind === 'ok'
         ? <div className="small mt8" style={{ color: 'var(--green)', fontWeight: 700 }}>✅ {msg.text}</div>
         : <div className="warn-box mt8">⚠️ {msg.text}</div>
