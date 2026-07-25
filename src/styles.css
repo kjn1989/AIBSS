@@ -1046,6 +1046,8 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 }
 .ss-table th { color: var(--text-dim); font-weight: 600; }
 .ss-table .ss-team, .ss-table .ss-name { text-align: left; white-space: nowrap; padding: 4px 6px; }
+.ss-table .ss-pos { font-weight: 700; color: var(--accent); white-space: nowrap; }
+.ss-table tr.ss-sub td { background: color-mix(in srgb, var(--accent) 6%, transparent); }
 .ss-matrix { display: block; overflow-x: auto; }
 .ss-footer { text-align: center; font-size: 10px; color: var(--text-dim); }
 /* スコアシートのセル色分け(画面・PDF共通) */

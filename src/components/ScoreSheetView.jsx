@@ -2,6 +2,7 @@ import React from 'react';
 import { useStore, usePlayerName, useT } from '../state/store.jsx';
 import { RESULTS, DIRECTIONS, formatIP, resultCategory, multiOutLabel } from '../lib/model.js';
 import { computeBoxScore } from '../lib/boxscore.js';
+import { buildLineupRows } from '../lib/lineupBox.js';
 import FullscreenView from './FullscreenView.jsx';
 
 // 打席結果の超短縮表記(スコアシートのセル用): 例「中安」「遊ゴ」「左本」「四球」/ 英語は "LF1B" 等。
@@ -61,30 +62,42 @@ export default function ScoreSheetView({ game, onClose }) {
   const maxInning = Math.max(9, game.inning || 1);
   const innings = Array.from({ length: maxInning }, (_, i) => i + 1);
 
-  // 打順スロットごとに: 出場した選手(打席順) + イニング別の結果short
+  // 打順スロットごとに、出場選手を「登場順」で各自1行に分ける(伝統的なスコアブック方式)。
+  // 位置=(先発)/打(代打)/走(代走)+守備位置。各選手の打席だけをその行のイニング欄に置く。
+  const rowsByOrder = new Map(buildLineupRows(game).map((r) => [r.order, r.players.map((p) => ({ ...p }))]));
   const slots = [];
   for (let order = 1; order <= 9; order++) {
     const abs = game.atBats.filter((ab) => ab.order === order && ab.result);
-    const playerIds = [];
-    for (const ab of abs) if (!playerIds.includes(ab.playerId)) playerIds.push(ab.playerId);
-    const lineupPid = game.lineup.find((l) => l.order === order)?.playerId;
-    if (lineupPid && !playerIds.includes(lineupPid)) playerIds.push(lineupPid);
-    if (playerIds.length === 0 && abs.length === 0) continue;
-    const byInning = {};
+    const players = rowsByOrder.get(order) || [];
+    // 出場表に無いが打席がある選手を補完(過去データの取りこぼし防止)
     for (const ab of abs) {
-      const inn = ab.snapshot?.inning || 1;
-      (byInning[inn] = byInning[inn] || []).push({
-        txt: shortLabel(ab, edition, lang, t),
-        cat: resultCategory(ab.result),
-        multi: multiOutLabel(ab.outsOnPlay || 0),
-      });
+      if (!players.some((p) => p.playerId === ab.playerId)) {
+        players.push({ playerId: ab.playerId, notation: '—', isStarter: players.length === 0 });
+      }
     }
-    const totals = {
-      ab: abs.filter((a) => RESULTS[a.result]?.ab).length,
-      h: abs.filter((a) => RESULTS[a.result]?.hit).length,
-      rbi: abs.reduce((s, a) => s + (a.rbi || 0), 0),
-    };
-    slots.push({ order, playerIds, byInning, totals });
+    if (players.length === 0) continue;
+    const playerRows = players.map((p) => {
+      const pabs = abs.filter((ab) => ab.playerId === p.playerId);
+      const byInning = {};
+      for (const ab of pabs) {
+        const inn = ab.snapshot?.inning || 1;
+        (byInning[inn] = byInning[inn] || []).push({
+          txt: shortLabel(ab, edition, lang, t),
+          cat: resultCategory(ab.result),
+          multi: multiOutLabel(ab.outsOnPlay || 0),
+        });
+      }
+      return {
+        ...p,
+        byInning,
+        totals: {
+          ab: pabs.filter((a) => RESULTS[a.result]?.ab).length,
+          h: pabs.filter((a) => RESULTS[a.result]?.hit).length,
+          rbi: pabs.reduce((s, a) => s + (a.rbi || 0), 0),
+        },
+      };
+    });
+    slots.push({ order, playerRows });
   }
 
   const records = [...game.pitchingRecords].sort((a, b) => a.appearanceOrder - b.appearanceOrder);
@@ -133,19 +146,20 @@ export default function ScoreSheetView({ game, onClose }) {
             <table className="ss-table ss-matrix">
               <thead>
                 <tr>
-                  <th>{t('ss.order')}</th><th className="ss-name">{t('stats.player')}</th>
+                  <th>{t('ss.order')}</th><th>{t('box.pos')}</th><th className="ss-name">{t('stats.player')}</th>
                   {innings.map((i) => <th key={i}>{i}</th>)}
                   <th>{t('ss.ab')}</th><th>{t('ss.hits')}</th><th>{t('ss.rbi')}</th>
                 </tr>
               </thead>
               <tbody>
-                {slots.map((s) => (
-                  <tr key={s.order}>
-                    <td>{s.order}</td>
-                    <td className="ss-name">{s.playerIds.map((id) => nameOf(id)).join(' → ')}</td>
+                {slots.map((s) => s.playerRows.map((pr, ri) => (
+                  <tr key={`${s.order}-${pr.playerId}-${ri}`} className={ri > 0 ? 'ss-sub' : ''}>
+                    <td>{ri === 0 ? s.order : ''}</td>
+                    <td className="ss-pos">{pr.notation}</td>
+                    <td className="ss-name">{nameOf(pr.playerId)}</td>
                     {innings.map((i) => (
                       <td key={i}>
-                        {(s.byInning[i] || []).map((c, ci) => (
+                        {(pr.byInning[i] || []).map((c, ci) => (
                           <React.Fragment key={ci}>
                             {ci > 0 && <span className="ss-sep">/</span>}
                             <span className={`ss-cell ${c.cat}`}>{c.txt}{c.multi ? <b className="ss-mp" title={c.multi}>⚡</b> : ''}</span>
@@ -153,11 +167,11 @@ export default function ScoreSheetView({ game, onClose }) {
                         ))}
                       </td>
                     ))}
-                    <td>{s.totals.ab}</td>
-                    <td>{s.totals.h}</td>
-                    <td>{s.totals.rbi}</td>
+                    <td>{pr.totals.ab}</td>
+                    <td>{pr.totals.h}</td>
+                    <td>{pr.totals.rbi}</td>
                   </tr>
-                ))}
+                )))}
               </tbody>
             </table>
           )}
