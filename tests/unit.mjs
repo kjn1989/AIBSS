@@ -8,7 +8,7 @@ import { aggregateBatting, battingMetrics, pitchingMetrics, titleLeaders } from 
 import { translate } from '../src/lib/i18n.js';
 import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, parseDirectionOnly } from '../src/lib/voiceParser.js';
 import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections } from '../src/lib/correctionParser.js';
-import { buildLineupRows, posChar, roleTag } from '../src/lib/lineupBox.js';
+import { buildLineupRows, posChar, roleTag, distributeToAppearances } from '../src/lib/lineupBox.js';
 
 test('parseDirectionOnly: 方向のみの発話は方向、結果語を含めばnull(言い直し扱い)', () => {
   assert.equal(parseDirectionOnly('ライト'), 'RF');
@@ -241,6 +241,39 @@ test('buildLineupRows/roleTag: 先発はバッジ無し・交代は回と役割�
   assert.equal(slot6.players[1].inning, 3); // 交代で入った回
   assert.equal(roleTag(slot6.players[1]), 'relief'); // 投手への守備交代=救援
   assert.equal(slot6.players[1].posCode, '投');
+});
+
+test('distributeToAppearances: 再登場した投手の打席が登場行ごとに振り分けられ二重表示にならない', () => {
+  // 投手スロットの登場順: 髙島(先発) → 宇田川(3回) → 茂木(5回) → 宇田川(5回再登板) → 髙島(7回再登板)
+  const players = [
+    { playerId: 'takashima', inning: null },
+    { playerId: 'udagawa', inning: 3 },
+    { playerId: 'mogi', inning: 5 },
+    { playerId: 'udagawa', inning: 5 },
+    { playerId: 'takashima', inning: 7 },
+  ];
+  const abs = [
+    { playerId: 'takashima', result: 'double', snapshot: { inning: 2 } }, // 髙島(先発)
+    { playerId: 'udagawa', result: 'single', snapshot: { inning: 4 } },   // 宇田川(1回目)
+    { playerId: 'udagawa', result: 'bb', snapshot: { inning: 6 } },       // 宇田川(2回目)
+    { playerId: 'takashima', result: 'out', snapshot: { inning: 7 } },    // 髙島(7回再登板)
+  ];
+  const { abBuckets } = distributeToAppearances(players, abs);
+  assert.deepEqual(abBuckets.map((b) => b.length), [1, 1, 0, 1, 1]);
+  assert.equal(abBuckets[0][0].snapshot.inning, 2); // 髙島(先発)= 2回の二塁打のみ
+  assert.equal(abBuckets[1][0].snapshot.inning, 4); // 宇田川(1回目)= 4回のみ
+  assert.equal(abBuckets[3][0].snapshot.inning, 6); // 宇田川(2回目)= 6回のみ
+  assert.equal(abBuckets[4][0].snapshot.inning, 7); // 髙島(7回)= 7回のみ(先発行には入らない)
+});
+
+test('distributeToAppearances: 盗塁ログも回に応じて登場行へ振り分ける', () => {
+  const players = [{ playerId: 'a', inning: null }, { playerId: 'a', inning: 6 }];
+  const sbLogs = [
+    { kind: 'sb', inning: 2, payload: { playerId: 'a' } },
+    { kind: 'sb', inning: 7, payload: { playerId: 'a' } },
+  ];
+  const { sbCounts } = distributeToAppearances(players, [], sbLogs);
+  assert.deepEqual(sbCounts, [1, 1]);
 });
 
 // ---- plays.js ----

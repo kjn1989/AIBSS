@@ -2,7 +2,7 @@ import React from 'react';
 import { useStore, usePlayerName, useT } from '../state/store.jsx';
 import { RESULTS, DIRECTIONS, formatIP, resultCategory, multiOutLabel } from '../lib/model.js';
 import { computeBoxScore } from '../lib/boxscore.js';
-import { buildLineupRows } from '../lib/lineupBox.js';
+import { buildLineupRows, distributeToAppearances } from '../lib/lineupBox.js';
 import FullscreenView from './FullscreenView.jsx';
 
 // 打席結果の超短縮表記(スコアシートのセル用): 例「中安」「遊ゴ」「左本」「四球」/ 英語は "LF1B" 等。
@@ -76,8 +76,10 @@ export default function ScoreSheetView({ game, onClose }) {
       }
     }
     if (players.length === 0) continue;
-    const playerRows = players.map((p) => {
-      const pabs = abs.filter((ab) => ab.playerId === p.playerId);
+    // 同一選手が再登場した場合、打席を「登場した回」で1行だけに振り分ける(重複表示を防ぐ)。
+    const { abBuckets } = distributeToAppearances(players, abs);
+    const playerRows = players.map((p, pi) => {
+      const pabs = abBuckets[pi];
       const byInning = {};
       for (const ab of pabs) {
         const inn = ab.snapshot?.inning || 1;

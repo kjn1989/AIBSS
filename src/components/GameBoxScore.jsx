@@ -1,7 +1,23 @@
 import React from 'react';
 import { useStore, usePlayerName, useT } from '../state/store.jsx';
-import { aggregateBatting } from '../lib/stats.js';
-import { buildLineupRows, roleTag, posFull } from '../lib/lineupBox.js';
+import { RESULTS } from '../lib/model.js';
+import { buildLineupRows, roleTag, posFull, distributeToAppearances } from '../lib/lineupBox.js';
+
+// 1登場ぶんの打席群(+盗塁数)から表示用の打撃ラインを作る。
+// aggregateBatting と同じ判定基準(打数・安打・本塁打)を打席サブセットに適用する。
+function lineFromBucket(atBats, sb) {
+  let pa = 0; let ab = 0; let h = 0; let rbi = 0; let hr = 0;
+  for (const a of atBats) {
+    const def = RESULTS[a.result];
+    if (!def) continue;
+    pa += 1;
+    if (def.ab) ab += 1;
+    if (def.hit) h += 1;
+    if (a.result === 'hr') hr += 1;
+    rbi += a.rbi || 0;
+  }
+  return { pa, ab, h, rbi, hr, sb };
+}
 
 // 出場選手のボックススコア(打順ツリー方式)。
 // 引き算のデザイン: 先発はバッジ無しでシンプルに。交代で入った選手にだけ「回」と役割
@@ -15,12 +31,11 @@ export default function GameBoxScore({ game }) {
   const numberOf = (id) => state.players.find((p) => p.id === id)?.number || '';
   const rows = buildLineupRows(game);
   if (!rows.length) return null;
-  const bat = aggregateBatting([game]); // playerId -> このゲームの打撃成績
+  const sbLogs = (game.playLogs || []).filter((l) => l.kind === 'sb');
 
   const roleLabel = { ph: t('box.rolePh'), pr: t('box.rolePr'), def: t('box.roleDef'), relief: t('box.roleRelief') };
-  const statLine = (pid) => {
-    const s = bat[pid];
-    if (!s || !s.pa) return null;
+  const statLine = (s) => {
+    if (!s || (!s.pa && !s.sb)) return null;
     const parts = [t('box.abN', { n: s.ab }), t('box.hN', { n: s.h })];
     if (s.rbi) parts.push(t('box.rbiN', { n: s.rbi }));
     if (s.hr) parts.push(t('box.hrN', { n: s.hr }));
@@ -33,13 +48,17 @@ export default function GameBoxScore({ game }) {
       <div className="section-title" style={{ marginTop: 0 }}>{t('box.title')}</div>
       <p className="small dim" style={{ marginTop: 0 }}>{t('box.desc2')}</p>
       <div className="bx-tree">
-        {rows.map((slot) => (
+        {rows.map((slot) => {
+          // 同一選手の再登場で成績が二重表示にならないよう、打席・盗塁を登場行ごとに振り分ける。
+          const abs = game.atBats.filter((ab) => ab.order === slot.order && ab.result);
+          const { abBuckets, sbCounts } = distributeToAppearances(slot.players, abs, sbLogs);
+          return (
           <div className="bx-slot" key={slot.order}>
             <div className="bx-ord">{slot.order}</div>
             <div className="bx-players">
               {slot.players.map((p, i) => {
                 const tag = roleTag(p);
-                const sl = statLine(p.playerId);
+                const sl = statLine(lineFromBucket(abBuckets[i], sbCounts[i]));
                 return (
                   <div className={`bx-card${i > 0 ? ' sub' : ''}`} key={`${p.playerId}-${i}`}>
                     <div className="bx-top">
@@ -54,7 +73,8 @@ export default function GameBoxScore({ game }) {
               })}
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
