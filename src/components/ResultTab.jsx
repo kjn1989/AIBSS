@@ -200,12 +200,17 @@ export default function ResultTab() {
       <div className="section-title">{t('restab.progress')}</div>
       <GameProgressContent game={game} editable />
 
-      {game.status === 'ongoing' && game.id === state.currentGameId && (
-        <>
-          <div className="section-title">{t('restab.pitching')}</div>
-          <PitchingGameManagement game={game} />
-        </>
-      )}
+      {(() => {
+        const isCurrentOngoing = game.status === 'ongoing' && game.id === state.currentGameId;
+        // 進行中: 継投UIつき。終了後でも登板記録があれば成績調整だけ出す。
+        if (!isCurrentOngoing && game.pitchingRecords.length === 0) return null;
+        return (
+          <>
+            <div className="section-title">{t('restab.pitching')}</div>
+            <PitchingGameManagement game={game} manage={isCurrentOngoing} />
+          </>
+        );
+      })()}
 
       <ImportCard />
 
