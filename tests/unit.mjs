@@ -141,6 +141,25 @@ test('buildLineupRows: 先発は括弧、代打→守備は「打中」、守備
   assert.equal(slot4.players[1].notation, '打中');
   assert.equal(slot4.players[1].isStarter, false);
 });
+test('buildLineupRows: 先発スナップショット無し(過去試合)は交代のoutから先発を復元し重複しない', () => {
+  const game = {
+    // startingLineup 無し。現lineupは交代後(山城が4番)
+    lineup: [{ order: 4, playerId: 'yamashiro', position: '捕' }],
+    atBats: [
+      { order: 4, playerId: 'kawai', result: 'single' },
+      { order: 4, playerId: 'yamashiro', result: 'double' },
+    ],
+    playLogs: [
+      { kind: 'sub', payload: { order: 4, in: 'yamashiro', out: 'kawai' } }, // kind/position無しの旧データ
+    ],
+  };
+  const slot4 = buildLineupRows(game).find((r) => r.order === 4);
+  assert.equal(slot4.players.length, 2); // 河合と山城の2行(重複しない)
+  assert.equal(slot4.players[0].playerId, 'kawai');
+  assert.equal(slot4.players[0].isStarter, true);
+  assert.equal(slot4.players[1].playerId, 'yamashiro');
+  assert.equal(slot4.players[1].notation, '捕'); // 現lineupの位置を最終出場者へ補完
+});
 
 // ---- plays.js ----
 test('proposeMoves: 単打は三塁・二塁走者が生還し一塁走者は二塁へ', () => {
