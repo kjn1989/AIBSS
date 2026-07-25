@@ -9,9 +9,16 @@
 // 端末内で完結し、AIキー不要。判別できない場合は理由つきで返す。
 // ============================================================
 
+import { parseUtterance } from './voiceParser.js';
+
 // 全角数字→半角
 function toHalf(s) {
   return (s || '').replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0));
+}
+
+// 文(。．！？改行)に分割
+function splitSentences(text) {
+  return toHalf(text || '').split(/[。．.!！?？\n]+/).map((s) => s.trim()).filter(Boolean);
 }
 
 // テキスト中に現れる登録選手名を、出現位置つきで拾う(長い名前優先・内包する短名は除外)。
@@ -127,6 +134,61 @@ export function parseBatterCorrection(rawText, players = []) {
     targetPlayerId: targetHit?.id || null,
     newPlayerId: newHit.id,
   };
+}
+
+// 複数回にまたがる打者付け替えを解釈する。
+// 例: 「清水の5回、7回の打撃は中島です」→ [{inning:5,...},{inning:7,...}]
+// 各文で「打撃/打席」を含み、回番号(複数可)と2名(先=対象/後=付け替え先)を拾う。
+export function parseBatterReassignments(rawText, players = []) {
+  const out = [];
+  for (const seg of splitSentences(rawText)) {
+    if (!/打撃|打席/.test(seg)) continue;
+    const innings = [...seg.matchAll(/(\d+)\s*回/g)].map((m) => parseInt(m[1], 10));
+    if (!innings.length) continue;
+    const hits = findNameHits(seg, players);
+    const newHit = hits[hits.length - 1];
+    const targetHit = hits.slice(0, -1).find((h) => h.id !== newHit?.id) || null;
+    if (!newHit || (!targetHit && !/第\s*\d+\s*打席/.test(seg))) continue;
+    const ordM = seg.match(/第\s*(\d+)\s*打席/);
+    const ordinal = ordM ? parseInt(ordM[1], 10) : null;
+    for (const inning of innings) {
+      out.push({
+        inning, ordinal: innings.length === 1 ? ordinal : null,
+        targetId: targetHit?.id || null, targetName: targetHit?.name || null,
+        newId: newHit.id, newName: newHit.name,
+      });
+    }
+  }
+  return out;
+}
+
+// 打席結果の修正を解釈する。
+// 例: 「7回はセンターゴロではなく、センター犠牲フライで1点でした」
+//     →[{ inning:7, patch:{ result:'sacFly', direction:'CF', rbi:1 } }]
+// 「ではなく/でなく」以降を正しい結果とみなし、音声パーサで結果種別・方向を得る。
+export function parseResultCorrections(rawText) {
+  const out = [];
+  for (const seg of splitSentences(rawText)) {
+    const innM = seg.match(/(\d+)\s*回/);
+    if (!innM) continue;
+    if (!/でなく|ではなく|でした|です/.test(seg)) continue;
+    const parts = seg.split(/でなく|ではなく/);
+    const phrase = parts.length > 1 ? parts.slice(1).join('') : seg;
+    const top = (parseUtterance(phrase) || []).find((c) => c.kind === 'play' && c.result);
+    if (!top) continue;
+    const rbiM = phrase.match(/(\d+)\s*点/);
+    out.push({
+      inning: parseInt(innM[1], 10),
+      patch: {
+        result: top.result,
+        direction: top.direction || null,
+        outType: top.result === 'out' ? (top.outType || 'ground') : null,
+        soType: top.result === 'so' ? (top.soType || 'swinging') : null,
+        ...(rbiM ? { rbi: parseInt(rbiM[1], 10) } : {}),
+      },
+    });
+  }
+  return out;
 }
 
 // 解釈結果から、対象の打席ログ(kind:'atbat')を特定する。

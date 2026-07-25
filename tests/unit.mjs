@@ -7,7 +7,7 @@ import { gameEndCheck, initialPresetIdFor, describeRules } from '../src/lib/rule
 import { aggregateBatting, battingMetrics, pitchingMetrics, titleLeaders } from '../src/lib/stats.js';
 import { translate } from '../src/lib/i18n.js';
 import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, parseDirectionOnly } from '../src/lib/voiceParser.js';
-import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions } from '../src/lib/correctionParser.js';
+import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections } from '../src/lib/correctionParser.js';
 import { buildLineupRows, posChar, roleTag } from '../src/lib/lineupBox.js';
 
 test('parseDirectionOnly: 方向のみの発話は方向、結果語を含めばnull(言い直し扱い)', () => {
@@ -125,6 +125,21 @@ test('parseSubstitutions: 1文章から複数の投手交代をすべて抽出',
     [3, 't', 'u'], [5, 'u', 'm'], [5, 'm', 'u'],
   ]);
   assert.ok(subs.every((s) => s.position === '投')); // ピッチャー/投手→投
+});
+test('parseBatterReassignments: 複数回の打者付け替え(5回・7回)を両方抽出', () => {
+  const PS = [{ id: 's', name: '清水' }, { id: 'n', name: '中島' }];
+  const txt = '中島が清水の代打で入りました。清水の5回、7回の打撃は中島です。';
+  const rs = parseBatterReassignments(txt, PS);
+  assert.equal(rs.length, 2);
+  assert.deepEqual(rs.map((r) => [r.inning, r.targetId, r.newId]), [[5, 's', 'n'], [7, 's', 'n']]);
+});
+test('parseResultCorrections: 「ゴロでなく犠飛で1点」を結果修正として解釈', () => {
+  const rc = parseResultCorrections('なお、7回はセンターゴロではなく、センター犠牲フライで1点でした。');
+  assert.equal(rc.length, 1);
+  assert.equal(rc[0].inning, 7);
+  assert.equal(rc[0].patch.result, 'sacFly');
+  assert.equal(rc[0].patch.direction, 'CF');
+  assert.equal(rc[0].patch.rbi, 1);
 });
 test('parseSubstitution: 守備位置が明示なら「代打」の否定文に釣られず守備交代', () => {
   const r = parseSubstitution('2回裏の6番打者を三振に取った後、キャッチャー河合が負傷で山城に交代。代打山城はそうでなく守備から', CORR_PLAYERS);
