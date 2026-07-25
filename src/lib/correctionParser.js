@@ -34,6 +34,45 @@ function findNameHits(text, players) {
   return hits.sort((a, b) => a.index - b.index);
 }
 
+// 守備位置ワード(カタカナ/漢字)→コード。長い語を優先してマッチさせる。
+const POSITION_WORDS = {
+  ピッチャー: '投', 投手: '投', キャッチャー: '捕', 捕手: '捕',
+  ファースト: '一', 一塁: '一', セカンド: '二', 二塁: '二', サード: '三', 三塁: '三',
+  ショート: '遊', 遊撃: '遊', レフト: '左', 左翼: '左', センター: '中', 中堅: '中',
+  ライト: '右', 右翼: '右', 指名打者: 'DH',
+};
+const SUB_KEYWORDS = /交代|代わっ|代わり|代え|入れ替|負傷|退場|退い|下げ|リエントリー|再出場|入っ/;
+
+// 文章から「交代(守備交代・代打・代走・リエントリー)」を解釈する。
+// 例: 「2回にキャッチャー河合が負傷し山城と交代」「6回、髙島に代わって宇田川」
+// 先に登場する選手名=退く側(out)、後の別選手=入る側(in) とみなす(確認ダイアログで是正可能)。
+// 戻り値: { ok:true, inning, outId, outName, inId, inName, position, subKind } | { ok:false, reason }
+export function parseSubstitution(rawText, players = []) {
+  const text = toHalf(rawText || '').trim();
+  if (!text) return { ok: false, reason: 'empty' };
+  const inningM = text.match(/(\d+)\s*回/);
+  if (!inningM) return { ok: false, reason: 'noInning' };
+  const inning = parseInt(inningM[1], 10);
+
+  let position = null;
+  for (const w of Object.keys(POSITION_WORDS).sort((a, b) => b.length - a.length)) {
+    if (text.includes(w)) { position = POSITION_WORDS[w]; break; }
+  }
+  const hasSubKw = SUB_KEYWORDS.test(text);
+  if (!hasSubKw && !position) return { ok: false, reason: 'notSub' }; // 交代ではなさそう→打者付け替えへ
+
+  const hits = findNameHits(text, players);
+  const outHit = hits[0] || null;
+  const inHit = hits.slice(1).find((h) => h.id !== outHit?.id) || null;
+  if (!outHit || !inHit) return { ok: false, reason: 'needTwoNames' };
+
+  let subKind = 'def';
+  if (/代打/.test(text)) subKind = 'ph';
+  else if (/代走/.test(text)) subKind = 'pr';
+
+  return { ok: true, inning, outId: outHit.id, outName: outHit.name, inId: inHit.id, inName: inHit.name, position, subKind };
+}
+
 // 文章を解釈する。players: [{ id, name }]
 // 戻り値: { ok:true, inning, ordinal, targetName, newName, targetPlayerId, newPlayerId }
 //       | { ok:false, reason }

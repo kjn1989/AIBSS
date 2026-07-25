@@ -3,7 +3,8 @@ import { useStore, usePlayerName, useT } from '../state/store.jsx';
 import { RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES, resultCategory, multiOutLabel, outTypeLabel } from '../lib/model.js';
 import { playLabel } from '../lib/voiceParser.js';
 import { computeBoxScore } from '../lib/boxscore.js';
-import { parseBatterCorrection, findTargetAtBat } from '../lib/correctionParser.js';
+import { parseBatterCorrection, findTargetAtBat, parseSubstitution } from '../lib/correctionParser.js';
+import { posFull } from '../lib/lineupBox.js';
 import Sheet from './Sheet.jsx';
 import FullscreenView from './FullscreenView.jsx';
 
@@ -232,8 +233,33 @@ function NLCorrectionCard({ game }) {
   const [text, setText] = useState('');
   const [msg, setMsg] = useState(null); // { kind:'ok'|'err', text }
 
+  const orderOf = (pid) => {
+    const slot = (game.lineup || []).find((l) => l.playerId === pid);
+    if (slot) return slot.order;
+    const ab = (game.atBats || []).find((a) => a.playerId === pid);
+    return ab ? ab.order : null;
+  };
+
   const apply = () => {
     setMsg(null);
+    // 1) まず「交代(守備交代・代打・代走・リエントリー)」の意図を判定
+    const sub = parseSubstitution(text, state.players);
+    if (sub.ok) {
+      const order = orderOf(sub.outId);
+      if (order == null) { setMsg({ kind: 'err', text: t('gp.nlSubNoOrder', { name: sub.outName }) }); return; }
+      const posLabel = sub.position ? posFull(sub.position, lang) : t('gp.nlSubNoPos');
+      if (!window.confirm(t('gp.nlSubConfirm', { inning: sub.inning, out: sub.outName, in: sub.inName, pos: posLabel }))) return;
+      const kindLabel = { ph: t('box.rolePh'), pr: t('box.rolePr'), def: t('gp.subDef') }[sub.subKind] || t('gp.subDef');
+      dispatch({
+        type: 'RETRO_SUBSTITUTE', gameId: game.id, order,
+        outId: sub.outId, inId: sub.inId, position: sub.position, subKind: sub.subKind, inning: sub.inning,
+        label: `${kindLabel}: ${nameOf(sub.inId)} (${order}番 ${nameOf(sub.outId)}に代わり)`,
+      });
+      setMsg({ kind: 'ok', text: t('gp.nlSubDone', { in: sub.inName }) });
+      setText('');
+      return;
+    }
+    // 2) 打者の付け替え(ある打席の“打者”を別選手へ)
     const parsed = parseBatterCorrection(text, state.players);
     if (!parsed.ok) {
       const key = {
