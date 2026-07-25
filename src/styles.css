@@ -984,6 +984,24 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 .linescore-table td.team { text-align: left; font-weight: 700; min-width: 70px; }
 .linescore-table td.num { font-weight: 800; }
 
+/* ---- 出場選手ボックススコア(登場順・伝統的な位置表記) ---- */
+.box-table { border-collapse: collapse; width: 100%; min-width: 420px; font-size: 13px; }
+.box-table th, .box-table td {
+  padding: 7px 8px; border-bottom: 1px solid var(--border);
+  text-align: center; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.box-table th { color: var(--text-dim); font-weight: 600; }
+.box-table th.left, .box-table td.left { text-align: left; }
+.box-table td.ord { color: var(--text-dim); font-weight: 700; width: 34px; }
+.box-table td.notation {
+  font-weight: 700; color: var(--accent); letter-spacing: .02em; min-width: 44px;
+}
+.box-table td.pname { font-weight: 700; min-width: 96px; }
+.box-table td.num { font-weight: 700; }
+/* 交代で入った選手の行は先発と区別してひとまとまりに見せる */
+.box-table tr.sub-row td { border-bottom-color: var(--border); background: color-mix(in srgb, var(--accent) 5%, transparent); }
+.box-table tr.sub-row td.ord { background: transparent; }
+
 /* ---- 回ごとのグループ + プレイカード ---- */
 .inning-group { margin: 16px 0 4px; }
 .inning-header {

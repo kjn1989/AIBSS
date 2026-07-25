@@ -597,6 +597,10 @@ export const MESSAGES = {
     'gp.nlErrNewName': '付け替え先の選手が見つかりません。登録名で入力してください。',
     'gp.nlErrNotFound': 'その回に該当する打席が見つかりませんでした。回や打者名をご確認ください。',
     'gp.nlErrAmbiguous': '候補が複数あります。プレイの ✎ から個別に修正してください。',
+    'box.title': '出場選手・打撃成績(登場順)',
+    'box.desc': '交代・リエントリーも登場順に1行ずつ。位置=(先発) / 打(代打) / 走(代走) + 守備位置(例: 打中=代打→中堅、中左=中堅→左翼)。',
+    'box.order': '打順', 'box.pos': '位置', 'box.player': '選手',
+    'box.ab': '打', 'box.h': '安', 'box.rbi': '点', 'box.hr': '本', 'box.sb': '盗', 'box.so': '三',
     'gp.total': '計', 'gp.h': 'H', 'gp.e': 'E',
 
     // 公式クラウド(OfficialCloudCard)
@@ -1293,6 +1297,10 @@ export const MESSAGES = {
     'gp.nlErrNewName': 'Couldn’t find the new player. Use the registered name.',
     'gp.nlErrNotFound': 'No matching at-bat found in that inning. Check the inning and batter name.',
     'gp.nlErrAmbiguous': 'Multiple candidates. Use the ✎ on the play to fix it individually.',
+    'box.title': 'Batters (in order of appearance)',
+    'box.desc': 'Every player—including subs and re-entries—on their own row. Position = (starter) / 打 PH / 走 PR + fielding spot (e.g. 打中 = PH→CF, 中左 = CF→LF).',
+    'box.order': 'Ord', 'box.pos': 'Pos', 'box.player': 'Player',
+    'box.ab': 'AB', 'box.h': 'H', 'box.rbi': 'RBI', 'box.hr': 'HR', 'box.sb': 'SB', 'box.so': 'SO',
     'gp.total': 'R', 'gp.h': 'H', 'gp.e': 'E',
 
     'occ.role.owner': 'Admin', 'occ.role.scorer': 'Scorer', 'occ.role.viewer': 'Viewer',

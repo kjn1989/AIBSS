@@ -285,7 +285,7 @@ export function GameProgressContent({ game, editable = false }) {
   const [editLog, setEditLog] = useState(null);
   const box = computeBoxScore(game);
   // 'run'ログは各プレイカード内のmoveLinesに既に含まれるため二重表示を避ける
-  const groups = groupByHalfInning(game.playLogs.filter((l) => l.kind !== 'run'));
+  const groups = groupByHalfInning(game.playLogs.filter((l) => l.kind !== 'run' && l.kind !== 'position'));
   const myTeamName = state.settings.teamName || t('restab.teamFallback');
   const oppTeamName = game.opponent || t('restab.opponentFallback');
 

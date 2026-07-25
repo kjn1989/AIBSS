@@ -3,6 +3,7 @@ import { useStore, usePlayerName, useT } from '../state/store.jsx';
 import { computeHighlights, highlightShareText } from '../lib/highlights.js';
 import { shareHighlightImage } from '../lib/shareImage.js';
 import { GameProgressContent } from './GameProgressView.jsx';
+import GameBoxScore from './GameBoxScore.jsx';
 import { PitchingGameManagement } from './PitchingTab.jsx';
 import ScoreSheetView from './ScoreSheetView.jsx';
 import NewspaperView from './NewspaperView.jsx';
@@ -193,6 +194,8 @@ export default function ResultTab() {
       <button className="mt12" style={{ width: '100%' }} onClick={() => setShowNewspaper(true)}>
         {t('restab.makeNewspaper')}
       </button>
+
+      <GameBoxScore game={game} />
 
       <div className="section-title">{t('restab.progress')}</div>
       <GameProgressContent game={game} editable />

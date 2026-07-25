@@ -8,6 +8,7 @@ import { aggregateBatting, battingMetrics, pitchingMetrics, titleLeaders } from 
 import { translate } from '../src/lib/i18n.js';
 import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, parseDirectionOnly } from '../src/lib/voiceParser.js';
 import { parseBatterCorrection, findTargetAtBat } from '../src/lib/correctionParser.js';
+import { buildLineupRows, posChar } from '../src/lib/lineupBox.js';
 
 test('parseDirectionOnly: 方向のみの発話は方向、結果語を含めばnull(言い直し扱い)', () => {
   assert.equal(parseDirectionOnly('ライト'), 'RF');
@@ -110,6 +111,35 @@ test('findTargetAtBat: その回の対象打者の打席を1件特定', () => {
   const found = findTargetAtBat(game, parsed);
   assert.equal(found.ok, true);
   assert.equal(found.log.id, 'a');
+});
+
+// ---- 出場選手ボックススコアの伝統的な位置表記 ----
+test('posChar: DHは指、擬似位置(打/控)は空', () => {
+  assert.equal(posChar('二'), '二');
+  assert.equal(posChar('DH'), '指');
+  assert.equal(posChar('打'), '');
+  assert.equal(posChar('控'), '');
+});
+test('buildLineupRows: 先発は括弧、代打→守備は「打中」、守備位置変更は「中左」', () => {
+  const game = {
+    startingLineup: [
+      { order: 1, playerId: 'a', position: '中' },
+      { order: 4, playerId: 'd', position: '一' },
+    ],
+    playLogs: [
+      // 1番: 中堅→左翼へ移動
+      { kind: 'position', payload: { order: 1, playerId: 'a', position: '左' } },
+      // 4番: 代打eが出て、その後中堅を守る
+      { kind: 'sub', payload: { order: 4, in: 'e', out: 'd', kind: 'ph', position: '中' } },
+    ],
+  };
+  const rows = buildLineupRows(game);
+  const slot1 = rows.find((r) => r.order === 1);
+  const slot4 = rows.find((r) => r.order === 4);
+  assert.equal(slot1.players[0].notation, '(中左)');
+  assert.equal(slot4.players[0].notation, '(一)');
+  assert.equal(slot4.players[1].notation, '打中');
+  assert.equal(slot4.players[1].isStarter, false);
 });
 
 // ---- plays.js ----
