@@ -101,8 +101,10 @@ function RecordCard({ game, pr }) {
   );
 }
 
-// 進行中の試合の登板・継投管理(成績タブに埋め込んで使う)
-export function PitchingGameManagement({ game }) {
+// 登板・継投管理(成績タブに埋め込んで使う)。
+// manage=true: 進行中の試合として継投(次の投手を送り出す)UIも表示。
+// manage=false: 終了済み試合など。継投UIは隠し、各投手の成績調整カードのみ表示。
+export function PitchingGameManagement({ game, manage = true }) {
   const { state, dispatch } = useStore();
   const t = useT();
   const nameOf = usePlayerName();
@@ -112,6 +114,10 @@ export function PitchingGameManagement({ game }) {
 
   return (
     <div>
+      {!manage && records.length > 0 && (
+        <p className="small dim" style={{ marginTop: 0 }}>{t('pt.editFinishedHint')}</p>
+      )}
+      {manage && (
       <div className="card">
         <h2>{t('pt.title', { date: game.date, opp: game.opponent || t('restab.opponentFallback') })}</h2>
         <div className="flex">
@@ -146,9 +152,10 @@ export function PitchingGameManagement({ game }) {
           </div>
         )}
       </div>
+      )}
 
       {records.length === 0 ? (
-        <div className="big-note">{t('pt.noRecordsA')}<br />{t('pt.noRecordsB')}</div>
+        manage && <div className="big-note">{t('pt.noRecordsA')}<br />{t('pt.noRecordsB')}</div>
       ) : (
         records.map((pr) => <RecordCard key={pr.id} game={game} pr={pr} />)
       )}
