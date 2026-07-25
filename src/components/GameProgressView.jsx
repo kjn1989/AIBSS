@@ -272,7 +272,7 @@ function NLCorrectionCard({ game }) {
         if (newId) reassigns.push({ inning, ordinal: num(op.ordinal), targetId: idByName(op.from), targetName: op.from, newId, newName: op.to });
       } else if (op.type === 'substitution' && inning) {
         const outId = idByName(op.out); const inId = idByName(op.in);
-        if (outId && inId) subs.push({ inning, outId, outName: op.out, inId, inName: op.in, position: clean(op.position), subKind: op.role || 'def' });
+        if (outId && inId) subs.push({ inning, outId, outName: op.out, inId, inName: op.in, position: clean(op.position), subKind: op.role || 'def', afterOppOrder: num(op.afterBatter) });
       } else if (op.type === 'result' && inning && op.result) {
         resultCorrs.push({ inning, batterId: idByName(op.batter), patch: {
           result: op.result, direction: clean(op.direction),
@@ -388,7 +388,7 @@ function NLCorrectionCard({ game }) {
 
     const doSub = (s) => {
       const kindLabel = { ph: t('box.rolePh'), pr: t('box.rolePr'), def: t('gp.subDef') }[s.subKind] || t('gp.subDef');
-      dispatch({ type: 'RETRO_SUBSTITUTE', gameId: game.id, order: s.order, outId: s.outId, inId: s.inId, position: s.position, subKind: s.subKind, inning: s.inning, label: `${kindLabel}: ${nameOf(s.inId)} (${s.order}番 ${nameOf(s.outId)}に代わり)` });
+      dispatch({ type: 'RETRO_SUBSTITUTE', gameId: game.id, order: s.order, outId: s.outId, inId: s.inId, position: s.position, subKind: s.subKind, inning: s.inning, afterOppOrder: s.afterOppOrder ?? null, label: `${kindLabel}: ${nameOf(s.inId)} (${s.order}番 ${nameOf(s.outId)}に代わり)` });
     };
     synthSubs.forEach(doSub);
     subAppl.forEach(doSub);

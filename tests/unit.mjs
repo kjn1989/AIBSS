@@ -125,6 +125,7 @@ test('parseSubstitutions: 1文章から複数の投手交代をすべて抽出',
     [3, 't', 'u'], [5, 'u', 'm'], [5, 'm', 'u'],
   ]);
   assert.ok(subs.every((s) => s.position === '投')); // ピッチャー/投手→投
+  assert.equal(subs[2].afterOppOrder, 4); // 「4番に四球を出した後に」→ 回途中交代のアンカー
 });
 test('parseBatterReassignments: 複数回の打者付け替え(5回・7回)を両方抽出', () => {
   const PS = [{ id: 's', name: '清水' }, { id: 'n', name: '中島' }];
