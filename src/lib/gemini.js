@@ -124,7 +124,7 @@ export async function interpretCorrection({ apiKey, text, players = [], lineup =
 出力形式:
 {"operations":[
  {"type":"reassign","inning":整数,"from":"元の打者(登録名)","to":"実際の打者(登録名)","ordinal":整数またはnull},
- {"type":"substitution","inning":整数,"out":"退く選手","in":"入る選手","position":"投|捕|一|二|三|遊|左|中|右|DH|null","role":"ph|pr|def"},
+ {"type":"substitution","inning":整数,"out":"退く選手","in":"入る選手","position":"投|捕|一|二|三|遊|左|中|右|DH|null","role":"ph|pr|def","afterBatter":相手打者の打順(回の途中で交代した場合その打者の後)またはnull},
  {"type":"result","inning":整数,"batter":"打者(登録名)またはnull","result":"single|double|triple|hr|out|so|bb|hbp|error|sacBunt|sacFly","direction":"P|C|1B|2B|3B|SS|LF|CF|RF|null","outType":"ground|fly|liner|dp|null","rbi":整数またはnull}
 ]}
 規則: reassign=ある回の打者が実は別選手だった時の付け替え。substitution=交代の記録(role: ph=代打, pr=代走, def=守備交代や投手交代)。result=打席結果の訂正(方向directionは打球方向)。

@@ -81,7 +81,14 @@ export function parseSubstitution(rawText, players = []) {
     else if (/代走/.test(text)) subKind = 'pr';
   }
 
-  return { ok: true, inning, outId: outHit.id, outName: outHit.name, inId: inHit.id, inName: inHit.name, position, subKind };
+  // 回の途中の交代アンカー:「◯番(に四球など)を出した後に」→ その相手打者の後で交代。
+  let afterOppOrder = null;
+  if (/後/.test(text)) {
+    const bm = text.match(/(\d+)\s*番/);
+    if (bm) afterOppOrder = parseInt(bm[1], 10);
+  }
+
+  return { ok: true, inning, outId: outHit.id, outName: outHit.name, inId: inHit.id, inName: inHit.name, position, subKind, afterOppOrder };
 }
 
 // 1つの文章から「複数の交代」をまとめて解釈する。
