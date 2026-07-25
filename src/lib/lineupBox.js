@@ -138,6 +138,43 @@ export function buildLineupRows(game) {
   }));
 }
 
+// スロット(打順)内の各登場行に、その打順の打席・盗塁を1つずつ割り当てる。
+// 同じ選手が再登場(リエントリー/救援→再登板など)した場合、そのままだと
+// 全登場行が「その選手の全打席」を拾って二重表示になる。打席・盗塁の回を見て、
+// その回以下で最も遅く始まった登場の行にだけ入れることで重複を防ぐ。
+// players: buildLineupRows(...).players の1スロット分(各要素は { playerId, inning })
+// 戻り値: { abBuckets:[[atBat...]], sbCounts:[n...] }(players と同順・同長)
+export function distributeToAppearances(players, atBats = [], sbLogs = []) {
+  const entryInn = (p) => (p.inning == null ? -Infinity : Number(p.inning));
+  // playerId と 回 から、割り当て先の登場行インデックスを選ぶ。
+  const pickIndex = (pid, inn) => {
+    let best = -1;
+    let bestInn = -Infinity;
+    for (let i = 0; i < players.length; i++) {
+      if (players[i].playerId !== pid) continue;
+      const e = entryInn(players[i]);
+      // その登場が対象の回までに始まっていて、より遅く始まった登場を優先
+      if (e <= inn && (best === -1 || e >= bestInn)) { best = i; bestInn = e; }
+    }
+    // 見つからない(登場回が打席回より後=データ矛盾)場合は最初の該当行へ
+    if (best === -1) best = players.findIndex((p) => p.playerId === pid);
+    return best;
+  };
+  const abBuckets = players.map(() => []);
+  const sbCounts = players.map(() => 0);
+  for (const ab of atBats) {
+    const idx = pickIndex(ab.playerId, ab.snapshot?.inning || 1);
+    if (idx !== -1) abBuckets[idx].push(ab);
+  }
+  for (const log of sbLogs) {
+    const pid = log.payload?.playerId;
+    if (pid == null) continue;
+    const idx = pickIndex(pid, Number(log.inning) || 1);
+    if (idx !== -1) sbCounts[idx] += 1;
+  }
+  return { abBuckets, sbCounts };
+}
+
 // カード/ツリー表示用の“役割ラベル種別”を返す。守備交代で投手に就く=救援。
 export function roleTag(p) {
   if (p.isStarter || p.role === 'start') return null; // 先発はバッジ無し(引き算のデザイン)
