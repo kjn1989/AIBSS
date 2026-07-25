@@ -992,6 +992,9 @@ export function reducer(state, action) {
       const g = deep(state.games[action.gameId]);
       const { order, inId, outId, position, subKind, inning } = action;
       if (order == null || !inId) return state;
+      // 同じ付け替え(out→in)が別の回/種別で既に記録されていれば置き換える(重複防止)。
+      // 例: 「代打・山城」を後から「2回の守備交代」に直すケース。
+      g.playLogs = g.playLogs.filter((l) => !(l.kind === 'sub' && l.payload?.order === order && l.payload?.in === inId && l.payload?.out === outId));
       const subLog = newPlayLog({
         gameId: g.id, inning, isTop: g.isTop, kind: 'sub',
         text: action.label || '選手交代',

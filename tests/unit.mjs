@@ -115,6 +115,15 @@ test('parseSubstitution: 代打/代走の種別と、交代文でない文の切
   // 交代の語も守備位置も無い(打者付け替え)文は notSub を返す→呼び出し側で打者付け替えへ
   assert.equal(parseSubstitution('3回の入交の打席は髙島', CORR_PLAYERS).ok, false);
 });
+test('parseSubstitution: 守備位置が明示なら「代打」の否定文に釣られず守備交代', () => {
+  const r = parseSubstitution('2回裏の6番打者を三振に取った後、キャッチャー河合が負傷で山城に交代。代打山城はそうでなく守備から', CORR_PLAYERS);
+  assert.equal(r.ok, true);
+  assert.equal(r.inning, 2);
+  assert.equal(r.outId, 'kawai');
+  assert.equal(r.inId, 'yamashiro');
+  assert.equal(r.position, '捕');
+  assert.equal(r.subKind, 'def'); // キャッチャー明示→守備交代(文中の「代打」に釣られない)
+});
 test('findTargetAtBat: その回の対象打者の打席を1件特定', () => {
   const game = { playLogs: [
     { id: 'a', kind: 'atbat', inning: 3, payload: { playerId: 'irimajiri', result: 'single' } },

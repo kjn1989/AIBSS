@@ -66,9 +66,13 @@ export function parseSubstitution(rawText, players = []) {
   const inHit = hits.slice(1).find((h) => h.id !== outHit?.id) || null;
   if (!outHit || !inHit) return { ok: false, reason: 'needTwoNames' };
 
+  // 守備位置が明示されていれば守備交代を優先(「代打…でなく」等の否定文に引っ張られないため)。
+  // 位置指定が無いときだけ 代打/代走 を採用する。
   let subKind = 'def';
-  if (/代打/.test(text)) subKind = 'ph';
-  else if (/代走/.test(text)) subKind = 'pr';
+  if (!position) {
+    if (/代打/.test(text)) subKind = 'ph';
+    else if (/代走/.test(text)) subKind = 'pr';
+  }
 
   return { ok: true, inning, outId: outHit.id, outName: outHit.name, inId: inHit.id, inName: inHit.name, position, subKind };
 }
