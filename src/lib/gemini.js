@@ -14,19 +14,24 @@ const MODEL = 'gemini-flash-latest';
 // 戻り値: 成功 { data: <parsed> } / 失敗 { error: <表示用文字列> } / 未設定・オフライン null
 async function callGeminiJSON(apiKey, prompt, { maxOutputTokens = 1024, temperature = 0.9 } = {}) {
   if (!apiKey || !navigator.onLine) return null;
+
+  const request = (generationConfig) => fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig }),
+    }
+  );
+
   try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`,
-      {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          // thinkingBudget: 0 で内部思考トークンを無効化(有効だと出力が思考に消費され本文が空になる)。
-          generationConfig: { temperature, maxOutputTokens, thinkingConfig: { thinkingBudget: 0 } },
-        }),
-      }
-    );
+    // 1回目: thinkingBudget:0 で内部思考を無効化(対応モデルは出力が思考に消費されず本文が埋まる)。
+    let res = await request({ temperature, maxOutputTokens, thinkingConfig: { thinkingBudget: 0 } });
+    // 一部の新しいモデルは thinkingBudget:0 を「無効な引数」として400を返す。
+    // その場合は thinkingConfig を外して再試行(思考ぶんを見込んで出力トークンを増やす)。
+    if (res.status === 400) {
+      res = await request({ temperature, maxOutputTokens: Math.max(maxOutputTokens * 3, 4096) });
+    }
     if (!res.ok) {
       const body = await res.text().catch(() => '');
       let reason = body;
