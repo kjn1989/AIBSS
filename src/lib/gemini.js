@@ -128,7 +128,8 @@ export async function interpretCorrection({ apiKey, text, players = [], lineup =
  {"type":"result","inning":整数,"batter":"打者(登録名)またはnull","result":"single|double|triple|hr|out|so|bb|hbp|error|sacBunt|sacFly","direction":"P|C|1B|2B|3B|SS|LF|CF|RF|null","outType":"ground|fly|liner|dp|null","rbi":整数またはnull}
 ]}
 規則: reassign=ある回の打者が実は別選手だった時の付け替え。substitution=交代の記録(role: ph=代打, pr=代走, def=守備交代や投手交代)。result=打席結果の訂正(方向directionは打球方向)。
-複数の修正があれば全て列挙。該当が無ければ operations は空配列。登録名に無い選手名は使わない。回や打者は下記の記録から特定する。
+「◯回は△△が投げた/登板した」のように新しい投手だけが書かれている場合も substitution(position:"投") として出力し、out はその直前の投手をあなたが特定する(不明ならnull)。
+複数の交代・登板があれば全て漏れなく列挙する。該当が無ければ operations は空配列。登録名に無い選手名は使わない。回や打者は下記の記録から特定する。
 【登録選手】${pl}
 【現在の打順】${lu}
 【自軍の打席記録】\n${ab}

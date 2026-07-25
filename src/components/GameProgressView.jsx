@@ -272,7 +272,8 @@ function NLCorrectionCard({ game }) {
         if (newId) reassigns.push({ inning, ordinal: num(op.ordinal), targetId: idByName(op.from), targetName: op.from, newId, newName: op.to });
       } else if (op.type === 'substitution' && inning) {
         const outId = idByName(op.out); const inId = idByName(op.in);
-        if (outId && inId) subs.push({ inning, outId, outName: op.out, inId, inName: op.in, position: clean(op.position), subKind: op.role || 'def', afterOppOrder: num(op.afterBatter) });
+        // 退く選手が特定できなくても、守備位置(投手等)があれば受け付ける(呼び出し側で解決)
+        if (inId && (outId || clean(op.position))) subs.push({ inning, outId, outName: op.out || null, inId, inName: op.in, position: clean(op.position), subKind: op.role || 'def', afterOppOrder: num(op.afterBatter) });
       } else if (op.type === 'result' && inning && op.result) {
         resultCorrs.push({ inning, batterId: idByName(op.batter), patch: {
           result: op.result, direction: clean(op.direction),
@@ -291,19 +292,36 @@ function NLCorrectionCard({ game }) {
   });
   const isEmpty = (im) => !(im.subs.length || im.reassigns.length || im.resultCorrs.length);
 
+  // AI解釈と端末内解釈を統合(片方の取りこぼしをもう片方で補完)。重複は除去。
+  const mergeIm = (a, b) => {
+    const uniq = (arr, keyFn) => {
+      const m = new Map();
+      for (const x of arr) {
+        const k = keyFn(x);
+        if (!m.has(k)) m.set(k, x);
+        else if (x.outId && !m.get(k).outId) m.set(k, x); // 退く側が特定できている方を優先
+      }
+      return [...m.values()];
+    };
+    return {
+      subs: uniq([...(a.subs || []), ...(b.subs || [])], (s) => `${s.inning}|${s.inId}|${s.position || ''}`),
+      reassigns: uniq([...(a.reassigns || []), ...(b.reassigns || [])], (r) => `${r.inning}|${r.newId}`),
+      resultCorrs: uniq([...(a.resultCorrs || []), ...(b.resultCorrs || [])], (rc) => `${rc.inning}|${rc.patch.result}`),
+    };
+  };
+
   const apply = async () => {
     setMsg(null);
     const apiKey = state.settings.geminiApiKey;
-    let im = null;
+    let im = produceRegex(); // まず端末内で解釈(常に土台にする)
     if (apiKey && navigator.onLine) {
       setBusy(true);
       try {
         const r = await interpretCorrection({ apiKey, text, ...buildContext() });
-        if (r && r.ops) im = aiOpsToIntermediate(r.ops);
-      } catch { /* AI失敗→オフライン解釈へフォールバック */ }
+        if (r && r.ops) im = mergeIm(aiOpsToIntermediate(r.ops), im); // AIを重ねて統合
+      } catch { /* AI失敗→端末内解釈のまま */ }
       setBusy(false);
     }
-    if (!im || isEmpty(im)) im = produceRegex(); // AI未使用/未解釈は端末内パーサで
     resolveAndApply(im);
   };
 
@@ -314,16 +332,25 @@ function NLCorrectionCard({ game }) {
     const resolveOrder = (pid) => (orderCache.has(pid) ? orderCache.get(pid) : orderOf(pid));
     const subAppl = [];
     const subUnresolved = [];
-    for (let s of subs) {
+    // バッチ内の「直前の投手」を追う(退く側が未指定の投手交代の解決に使う)
+    let curPitcher = (game.startingLineup || []).find((l) => l.position === '投')?.playerId
+      || (game.lineup || []).find((l) => l.position === '投')?.playerId || null;
+    const orderedSubs = [...subs].sort((a, b) => a.inning - b.inning); // 回順(同回は挿入順維持=安定ソート)
+    for (let s of orderedSubs) {
       let order = resolveOrder(s.outId);
+      // 投手交代で退く側が未特定なら、直前の投手を退く側にする
+      if (order == null && s.position === '投' && curPitcher && curPitcher !== s.inId) {
+        const o = resolveOrder(curPitcher);
+        if (o != null) { s = { ...s, outId: curPitcher, outName: nameOf(curPitcher) }; order = o; }
+      }
       if (order == null && s.position) {
-        // 守備位置が明示されていれば、その位置の現在の選手が居る打順で解決する。
-        // 退く選手名が実データと食い違っても「その位置の実際の守備者→新選手」として救済。
+        // 守備位置が明示なら、その位置の現在の選手が居る打順で解決(実データの守備者→新選手)
         const slot = (game.lineup || []).find((l) => l.position === s.position && l.playerId);
         if (slot) { s = { ...s, outId: slot.playerId, outName: nameOf(slot.playerId) }; order = slot.order; }
       }
-      if (order == null) { subUnresolved.push(s.outName); continue; }
+      if (order == null) { subUnresolved.push(s.outName || `?→${s.inName}`); continue; }
       orderCache.set(s.outId, order); orderCache.set(s.inId, order);
+      if (s.position === '投') curPitcher = s.inId; // 次の投手交代の退く側候補
       subAppl.push({ ...s, order });
     }
 

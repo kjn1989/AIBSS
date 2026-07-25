@@ -65,28 +65,28 @@ export function parseSubstitution(rawText, players = []) {
   for (const w of Object.keys(POSITION_WORDS).sort((a, b) => b.length - a.length)) {
     if (text.includes(w)) { position = POSITION_WORDS[w]; break; }
   }
-  const hasSubKw = SUB_KEYWORDS.test(text);
+  const pitcherCtx = /投げ|登板|マウンド/.test(text); // 「◯回は△△が投げた」等
+  if (!position && pitcherCtx) position = '投';
+  const hasSubKw = SUB_KEYWORDS.test(text) || pitcherCtx;
   if (!hasSubKw && !position) return { ok: false, reason: 'notSub' }; // 交代ではなさそう→打者付け替えへ
-
-  const hits = findNameHits(text, players);
-  const outHit = hits[0] || null;
-  const inHit = hits.slice(1).find((h) => h.id !== outHit?.id) || null;
-  if (!outHit || !inHit) return { ok: false, reason: 'needTwoNames' };
-
-  // 守備位置が明示されていれば守備交代を優先(「代打…でなく」等の否定文に引っ張られないため)。
-  // 位置指定が無いときだけ 代打/代走 を採用する。
-  let subKind = 'def';
-  if (!position) {
-    if (/代打/.test(text)) subKind = 'ph';
-    else if (/代走/.test(text)) subKind = 'pr';
-  }
 
   // 回の途中の交代アンカー:「◯番(に四球など)を出した後に」→ その相手打者の後で交代。
   let afterOppOrder = null;
-  if (/後/.test(text)) {
-    const bm = text.match(/(\d+)\s*番/);
-    if (bm) afterOppOrder = parseInt(bm[1], 10);
+  if (/後/.test(text)) { const bm = text.match(/(\d+)\s*番/); if (bm) afterOppOrder = parseInt(bm[1], 10); }
+  // 守備位置が明示なら守備交代を優先。位置指定が無いときだけ 代打/代走 を採用。
+  let subKind = 'def';
+  if (!position) { if (/代打/.test(text)) subKind = 'ph'; else if (/代走/.test(text)) subKind = 'pr'; }
+
+  const hits = findNameHits(text, players);
+  const distinctIn = hits.slice(1).find((h) => h.id !== hits[0]?.id) || null;
+  const continued = /も\s*(投げ|登板|投球)|投げ続け/.test(text); // 「◯回も投げた」= 継続(交代ではない)
+  // 投手が1人だけ:「◯回は△△が投げた」= その回から△△登板(退く側は呼び出し側が直前投手に解決)
+  if (position === '投' && hits[0] && !distinctIn && !continued) {
+    return { ok: true, inning, outId: null, outName: null, inId: hits[0].id, inName: hits[0].name, position: '投', subKind: 'def', afterOppOrder };
   }
+  const outHit = hits[0] || null;
+  const inHit = distinctIn;
+  if (!outHit || !inHit) return { ok: false, reason: 'needTwoNames' };
 
   return { ok: true, inning, outId: outHit.id, outName: outHit.name, inId: inHit.id, inName: inHit.name, position, subKind, afterOppOrder };
 }
