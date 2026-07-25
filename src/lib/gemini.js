@@ -113,6 +113,31 @@ export async function convertMemoToPlay({ apiKey, memo, situation }) {
   return { candidates: r.data.candidates };
 }
 
+// 「AIスコア修正」: 記録係の自由文を、行うべき修正操作の配列に変換する。
+// context: { players:[{name,number}], lineup:[{order,name,position}], atbats:[{inning,order,batter,result}] }
+// 戻り値: { ops: [...] } | { error } | null(キー無し/オフライン)
+export async function interpretCorrection({ apiKey, text, players = [], lineup = [], atbats = [] }) {
+  const pl = players.map((p) => (p.number ? `${p.name}(#${p.number})` : p.name)).join('、');
+  const lu = lineup.map((l) => `${l.order}番 ${l.name}${l.position ? `(${l.position})` : ''}`).join('、');
+  const ab = atbats.map((a) => `${a.inning}回 ${a.order}番 ${a.batter}: ${a.result}`).join('\n');
+  const prompt = `あなたは野球のスコア記録を修正するアシスタントです。記録係の文章を読み、行うべき修正を厳密なJSONだけで出力してください(説明文は禁止)。選手は必ず下の登録名で参照します。
+出力形式:
+{"operations":[
+ {"type":"reassign","inning":整数,"from":"元の打者(登録名)","to":"実際の打者(登録名)","ordinal":整数またはnull},
+ {"type":"substitution","inning":整数,"out":"退く選手","in":"入る選手","position":"投|捕|一|二|三|遊|左|中|右|DH|null","role":"ph|pr|def"},
+ {"type":"result","inning":整数,"batter":"打者(登録名)またはnull","result":"single|double|triple|hr|out|so|bb|hbp|error|sacBunt|sacFly","direction":"P|C|1B|2B|3B|SS|LF|CF|RF|null","outType":"ground|fly|liner|dp|null","rbi":整数またはnull}
+]}
+規則: reassign=ある回の打者が実は別選手だった時の付け替え。substitution=交代の記録(role: ph=代打, pr=代走, def=守備交代や投手交代)。result=打席結果の訂正(方向directionは打球方向)。
+複数の修正があれば全て列挙。該当が無ければ operations は空配列。登録名に無い選手名は使わない。回や打者は下記の記録から特定する。
+【登録選手】${pl}
+【現在の打順】${lu}
+【自軍の打席記録】\n${ab}
+【文章】${text}`;
+  const r = await callGeminiJSON(apiKey, prompt, { maxOutputTokens: 1536, temperature: 0.15 });
+  if (!r || r.error) return r;
+  return { ops: Array.isArray(r.data?.operations) ? r.data.operations : [] };
+}
+
 // APIキーが無い/オフライン時の簡易フォールバック(キーワード規則)。1件の候補を返す。
 export function guessPlayFromMemo(memo) {
   const t = (memo || '').toLowerCase();
