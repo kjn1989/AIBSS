@@ -3,6 +3,7 @@ import { useStore, usePlayerName, useT } from '../state/store.jsx';
 import { RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES, resultCategory, multiOutLabel, outTypeLabel } from '../lib/model.js';
 import { playLabel } from '../lib/voiceParser.js';
 import { computeBoxScore } from '../lib/boxscore.js';
+import { parseBatterCorrection, findTargetAtBat } from '../lib/correctionParser.js';
 import Sheet from './Sheet.jsx';
 import FullscreenView from './FullscreenView.jsx';
 
@@ -83,8 +84,13 @@ function EditPlaySheet({ game, log, onClose }) {
   const [soType, setSoType] = useState(p.soType || 'swinging');
   const [rbi, setRbi] = useState(p.rbi ?? null);
   const isAtBat = log.kind === 'atbat';
+  const [playerId, setPlayerId] = useState(p.playerId || null);
 
   const save = () => {
+    // 打者の付け替え(リエントリー対応)は結果編集より先に反映する
+    if (isAtBat && playerId && playerId !== p.playerId) {
+      dispatch({ type: 'REASSIGN_ATBAT', gameId: game.id, logId: log.id, newPlayerId: playerId });
+    }
     dispatch({
       type: 'EDIT_PLAY_LOG',
       gameId: game.id,
@@ -102,7 +108,17 @@ function EditPlaySheet({ game, log, onClose }) {
 
   return (
     <Sheet title={t('gp.editTitle', { inning: log.inning, half: t(log.isTop ? 'half.top' : 'half.bottom') })} onClose={onClose}>
-      <div className="section-title" style={{ marginTop: 0 }}>{t('gp.result')}</div>
+      {isAtBat && (
+        <>
+          <div className="section-title" style={{ marginTop: 0 }}>{t('gp.reassignBatter')}</div>
+          <select className="small" style={{ width: '100%' }} value={playerId || ''} onChange={(e) => setPlayerId(e.target.value)}>
+            {state.players.map((pl) => (
+              <option key={pl.id} value={pl.id}>{pl.name}{pl.number ? ` #${pl.number}` : ''}</option>
+            ))}
+          </select>
+        </>
+      )}
+      <div className="section-title" style={isAtBat ? undefined : { marginTop: 0 }}>{t('gp.result')}</div>
       <div className="grid3">
         {Object.entries(RESULTS).map(([k, def]) => (
           <button key={k} className={`small ${result === k ? 'primary' : ''}`} onClick={() => setResult(k)}>
@@ -206,6 +222,59 @@ function groupByHalfInning(playLogs) {
   return groups.reverse(); // 新しい回を上に
 }
 
+// 文章での打者修正カード。リエントリー等で打者の帰属がズレたとき、
+// 「3回の入交の打席は髙島」のように文章で入力すると、その打席の打者を付け替える。
+function NLCorrectionCard({ game }) {
+  const { state, dispatch } = useStore();
+  const t = useT();
+  const lang = state.settings.lang || 'ja';
+  const nameOf = usePlayerName();
+  const [text, setText] = useState('');
+  const [msg, setMsg] = useState(null); // { kind:'ok'|'err', text }
+
+  const apply = () => {
+    setMsg(null);
+    const parsed = parseBatterCorrection(text, state.players);
+    if (!parsed.ok) {
+      const key = {
+        empty: 'gp.nlErrInning', noInning: 'gp.nlErrInning', noTarget: 'gp.nlErrTarget',
+        noNewName: 'gp.nlErrNewName',
+      }[parsed.reason] || 'gp.nlErrInning';
+      setMsg({ kind: 'err', text: t(key) });
+      return;
+    }
+    const found = findTargetAtBat(game, parsed);
+    if (!found.ok) {
+      const key = found.reason === 'ambiguous' ? 'gp.nlErrAmbiguous' : 'gp.nlErrNotFound';
+      setMsg({ kind: 'err', text: t(key) });
+      return;
+    }
+    const log = found.log;
+    const p = log.payload || {};
+    const playText = `${nameOf(p.playerId)} ${playLabel(p.result, p.direction, p.outType, p.soType, state.settings.edition, lang)}`;
+    if (!window.confirm(t('gp.nlConfirm', { inning: parsed.inning, play: playText, name: parsed.newName }))) return;
+    dispatch({ type: 'REASSIGN_ATBAT', gameId: game.id, logId: log.id, newPlayerId: parsed.newPlayerId });
+    setMsg({ kind: 'ok', text: t('gp.nlDone') });
+    setText('');
+  };
+
+  return (
+    <div className="card">
+      <div className="section-title" style={{ marginTop: 0 }}>{t('gp.nlTitle')}</div>
+      <p className="small dim" style={{ marginTop: 0 }}>{t('gp.nlDesc')}</p>
+      <textarea
+        rows={2} value={text} placeholder={t('gp.nlPlaceholder')}
+        onChange={(e) => setText(e.target.value)} style={{ width: '100%' }}
+      />
+      <button className="primary mt8" style={{ width: '100%' }} disabled={!text.trim()} onClick={apply}>{t('gp.nlApply')}</button>
+      {msg && (msg.kind === 'ok'
+        ? <div className="small mt8" style={{ color: 'var(--green)', fontWeight: 700 }}>✅ {msg.text}</div>
+        : <div className="warn-box mt8">⚠️ {msg.text}</div>
+      )}
+    </div>
+  );
+}
+
 // 試合結果タブにも埋め込めるよう、線分スコア+回別プレイを描画する中身部分
 export function GameProgressContent({ game, editable = false }) {
   const { state } = useStore();
@@ -253,6 +322,8 @@ export function GameProgressContent({ game, editable = false }) {
           </tbody>
         </table>
       </div>
+
+      {editable && groups.length > 0 && <NLCorrectionCard game={game} />}
 
       {groups.length === 0 && <div className="dim small" style={{ padding: '0 4px' }}>{t('score.noPlays')}</div>}
 

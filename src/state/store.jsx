@@ -942,6 +942,34 @@ export function reducer(state, action) {
       return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
     }
 
+    // ===== 打者の付け替え(リエントリー等で打者の帰属がズレた打席を、正しい選手へ) =====
+    // 打順スロット(order)はそのままに、その打席の選手(playerId)だけを差し替える。
+    // AtBatレコード・打席ログ・(直後にあれば)打者自身の得点ログを一括で付け替え、成績を再計算。
+    case 'REASSIGN_ATBAT': {
+      const g = deep(state.games[action.gameId]);
+      const idx = g.playLogs.findIndex((l) => l.id === action.logId);
+      if (idx < 0) return state;
+      const log = g.playLogs[idx];
+      if (log.kind !== 'atbat') return state;
+      const oldId = log.payload.playerId;
+      const newId = action.newPlayerId;
+      if (!newId || newId === oldId) return state;
+      const ab = g.atBats.find((a) => a.id === log.payload.atBatId);
+      if (ab) ab.playerId = newId;
+      log.payload = { ...log.payload, playerId: newId };
+      const name = playerNameOf(state, newId);
+      const label = (log.payload.result === 'so' && SO_TYPES[log.payload.soType]) || RESULTS[log.payload.result]?.label || log.payload.result;
+      const dir = DIRECTIONS[log.payload.direction] || '';
+      log.text = `${name} ${dir}${label}` + (log.payload.runs ? ` (${log.payload.runs}点)` : '');
+      // 直後の得点ログ(打者自身の生還。CONFIRM_PLAYで打席ログの直後にpushされる)も付け替える
+      const nxt = g.playLogs[idx + 1];
+      if (nxt && nxt.kind === 'run' && nxt.payload?.playerId === oldId) {
+        nxt.payload = { ...nxt.payload, playerId: newId };
+      }
+      g.updatedAt = Date.now();
+      return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
+    }
+
     // ===== スコアの手動修正(回を指定して±) =====
     case 'ADJUST_SCORE': {
       const g = deep(state.games[action.gameId]);
