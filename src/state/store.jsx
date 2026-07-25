@@ -10,6 +10,7 @@ import {
   OPP_LETTERS, DEFAULT_EDITION, normalizeEdition, multiOutLabel,
 } from '../lib/model.js';
 import { generateDemoData } from '../lib/demo.js';
+import { rebuildPitchingStats } from '../lib/pitchingRebuild.js';
 import { idbSave } from '../lib/durableStore.js';
 import { translate, DEFAULT_LANG } from '../lib/i18n.js';
 import { getActiveProfileId, profileStorageKey, listProfiles, updateProfileMeta } from '../lib/profiles.js';
@@ -707,6 +708,9 @@ export function reducer(state, action) {
         ensurePitchingRecord(g, g.currentPitcherId).outsRecorded += g.outs - outsBefore;
       }
       const labels = { sb: '盗塁', cs: '盗塁死', wp: '暴投', pb: '捕逸', pickoff: '牽制死', pickoffThrow: '牽制', balk: 'ボーク' };
+      // このイベントで増えたアウト数。後から投手成績を再集計しても投球回が失われないよう、
+      // ライブ加算(上)だけで終わらせずログにも残す。
+      const outsDelta = g.outs - outsBefore;
       if (action.event === 'sb') {
         // 盗塁は「成功した走者ごと」に1ログ。重盗でも全員の個人成績(盗塁数)に正しく反映される
         const safe = (action.moves || []).filter((mv) => mv.to !== 'out');
@@ -717,11 +721,20 @@ export function reducer(state, action) {
             payload: { moves: [mv], playerId: idsByFrom[mv.from] },
           }));
         }
+        // 重盗などで刺された走者がいれば、そのアウトを別ログに残す(成功ログと混ざらないように)
+        const caught = (action.moves || []).filter((mv) => mv.to === 'out');
+        if (caught.length > 0) {
+          g.playLogs.push(newPlayLog({
+            gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'runner',
+            text: labels.cs,
+            payload: { moves: caught, playerId: idsByFrom[caught[0].from] ?? null, outs: outsDelta },
+          }));
+        }
       } else {
         g.playLogs.push(newPlayLog({
           gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'runner',
           text: labels[action.event] || '走者イベント',
-          payload: { moves: action.moves, playerId: idsByFrom[action.moves?.[0]?.from] ?? null },
+          payload: { moves: action.moves, playerId: idsByFrom[action.moves?.[0]?.from] ?? null, outs: outsDelta },
         }));
       }
       if (g.outs >= 3) changeHalf(g);
@@ -1038,63 +1051,15 @@ export function reducer(state, action) {
     }
 
     // ===== 投手成績の再集計(交代タイムラインに基づき、守備プレイを正しい投手へ振り直す) =====
-    // 投手交代(kind:'pitcher' または position='投'のsub)を時系列に辿り、各守備プレイの
-    // 被安打・与四死球・奪三振・対戦打者・アウト・失点・球数を、その時点の投手へ集計し直す。
-    // 注: 自責点は近似(全失点を自責として仮置き)、継投跨ぎの走者・盗塁死等の一部は
-    //     手動の「投手詳細調整」で微調整可能。勝利/S/Hは保持する。
+    // 実体は純粋関数 rebuildPitchingStats(src/lib/pitchingRebuild.js)。
+    // 打席のアウトに加えて走塁アウトも数え、さらに「完了した守備イニング=3アウト」で
+    // 照合するため、記録漏れによる投球回のズレが自動で埋まる。勝利/S/Hは保持する。
     case 'RECOMPUTE_PITCHING': {
       const g = deep(state.games[action.gameId]);
-      const isPitcherChange = (l) => l.kind === 'pitcher' || (l.kind === 'sub' && l.payload?.position === '投');
-      // 開始投手: スタメンの投 → 最初の交代のout → 最小appearanceOrderの記録
-      let startPitcher = (g.startingLineup || []).find((l) => l.position === '投')?.playerId || null;
-      if (!startPitcher) {
-        const firstChange = (g.playLogs || []).find(isPitcherChange);
-        startPitcher = firstChange?.payload?.out || null;
-      }
-      if (!startPitcher && g.pitchingRecords.length) {
-        startPitcher = [...g.pitchingRecords].sort((a, b) => a.appearanceOrder - b.appearanceOrder)[0].playerId;
-      }
-      const prevDec = {};
-      for (const pr of g.pitchingRecords) prevDec[pr.playerId] = { win: pr.win, save: pr.save, hold: pr.hold };
-      const recs = new Map();
-      let appearance = 0;
-      const ensure = (pid) => {
-        if (!recs.has(pid)) {
-          appearance += 1;
-          const pr = newPitchingRecord({ gameId: g.id, playerId: pid, appearanceOrder: appearance });
-          const d = prevDec[pid];
-          if (d) { pr.win = d.win; pr.save = d.save; pr.hold = d.hold; }
-          recs.set(pid, pr);
-        }
-        return recs.get(pid);
-      };
-      // プレイを時系列に辿り、投手交代ログで現投手を切り替えつつ守備プレイを集計する。
-      // 交代ログは挿入時に正しい位置(回頭 or 打者アンカー)へ置かれるため、回内の交代も分けられる。
-      let cur = startPitcher;
-      let lastPid = startPitcher;
-      if (cur) ensure(cur);
-      for (const l of g.playLogs) {
-        if (isPitcherChange(l) && l.payload?.in) { cur = l.payload.in; ensure(cur); continue; }
-        if (l.kind !== 'defense' || !cur) continue;
-        const p = l.payload || {};
-        lastPid = cur;
-        const pr = ensure(cur);
-        const def = RESULTS[p.result];
-        if (def?.hit) pr.hitsAllowed += 1;
-        if (def?.ab) pr.abFaced = (pr.abFaced || 0) + 1;
-        if (p.result === 'bb') pr.walks += 1;
-        if (p.result === 'hbp') pr.hitByPitch += 1;
-        if (p.result === 'so') pr.strikeouts += 1;
-        pr.outsRecorded += p.outsOnPlay || 0;
-        pr.runs += p.runs || 0;
-        pr.earnedRuns += p.runs || 0; // 近似(自責=失点)。手動調整で補正可
-        pr.pitches += p.pitchCount || 0;
-        if (p.pitchCount) { const k = String(l.inning); pr.pitchesByInning[k] = (pr.pitchesByInning[k] || 0) + p.pitchCount; }
-        l.payload = { ...p, pitcherId: cur }; // どの投手が投げたかを再設定(対左右split用)
-      }
-      if (recs.size) {
-        g.pitchingRecords = [...recs.values()];
-        g.currentPitcherId = lastPid || g.currentPitcherId;
+      const { records, lastPitcherId } = rebuildPitchingStats(g);
+      if (records.length) {
+        g.pitchingRecords = records;
+        g.currentPitcherId = lastPitcherId || g.currentPitcherId;
       }
       g.updatedAt = Date.now();
       return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };

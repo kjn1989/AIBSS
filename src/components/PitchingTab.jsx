@@ -112,10 +112,20 @@ export function PitchingGameManagement({ game, manage = true }) {
 
   const records = [...game.pitchingRecords].sort((a, b) => a.appearanceOrder - b.appearanceOrder);
 
+  // 交代の記録から投手成績を作り直す。完了した守備イニングは3アウトとして照合するので、
+  // 記録漏れによる投球回のズレ(例: 3イニング投げ切ったのに2.2回)が自動で埋まる。
+  const recompute = () => {
+    if (!window.confirm(t('pt.recalcConfirm'))) return;
+    dispatch({ type: 'RECOMPUTE_PITCHING', gameId: game.id });
+  };
+
   return (
     <div>
-      {!manage && records.length > 0 && (
-        <p className="small dim" style={{ marginTop: 0 }}>{t('pt.editFinishedHint')}</p>
+      {records.length > 0 && (
+        <div className="card">
+          <div className="small dim">{manage ? t('pt.recalcHint') : t('pt.editFinishedHint')}</div>
+          <button className="mt8" style={{ width: '100%' }} onClick={recompute}>{t('pt.recalc')}</button>
+        </div>
       )}
       {manage && (
       <div className="card">
