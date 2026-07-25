@@ -9,6 +9,7 @@ import { translate } from '../src/lib/i18n.js';
 import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, parseDirectionOnly } from '../src/lib/voiceParser.js';
 import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections } from '../src/lib/correctionParser.js';
 import { buildLineupRows, posChar, roleTag, distributeToAppearances } from '../src/lib/lineupBox.js';
+import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
 
 test('parseDirectionOnly: 方向のみの発話は方向、結果語を含めばnull(言い直し扱い)', () => {
   assert.equal(parseDirectionOnly('ライト'), 'RF');
@@ -274,6 +275,78 @@ test('distributeToAppearances: 盗塁ログも回に応じて登場行へ振り�
   ];
   const { sbCounts } = distributeToAppearances(players, [], sbLogs);
   assert.deepEqual(sbCounts, [1, 1]);
+});
+
+// ---- pitchingRebuild.js ----
+// 以下のテストは全て「先攻(isHome:false)」= 自軍は裏(isTop:false)に守備、表(isTop:true)に攻撃。
+// 相手の打席アウトを n 個ぶん並べるヘルパー。
+const defOuts = (inning, n) => Array.from({ length: n }, () => ({
+  kind: 'defense', inning, isTop: false, payload: { result: 'out', outType: 'ground', outsOnPlay: 1 },
+}));
+const pitGame = (over) => ({
+  id: 'g', isHome: false, status: 'finished', myScore: 5, oppScore: 1,
+  startingLineup: [{ order: 9, playerId: 'takashima', position: '投' }],
+  pitchingRecords: [], playLogs: [], ...over,
+});
+
+test('rebuildPitchingStats: 完了した守備イニングは3アウトとして照合し記録漏れを補う', () => {
+  // 1〜3回を投げ切っているが、2回だけ記録が2アウトしかない(走塁アウトの取りこぼし)
+  const game = pitGame({ playLogs: [...defOuts(1, 3), ...defOuts(2, 2), ...defOuts(3, 3)] });
+  const { records, filledOuts } = rebuildPitchingStats(game);
+  assert.equal(filledOuts, 1);
+  assert.equal(records.length, 1);
+  assert.equal(records[0].playerId, 'takashima');
+  assert.equal(records[0].outsRecorded, 9); // 2.2回ではなく3.0回になる
+});
+
+test('rebuildPitchingStats: 走塁アウト(outs付きrunnerログ)も投球回に数える', () => {
+  const game = pitGame({
+    status: 'ongoing',
+    playLogs: [
+      ...defOuts(1, 2),
+      { kind: 'runner', inning: 1, isTop: false, text: '盗塁死', payload: { outs: 1 } },
+      ...defOuts(2, 1), // 進行中の最終回は照合しない
+    ],
+  });
+  const { records, filledOuts } = rebuildPitchingStats(game);
+  assert.equal(filledOuts, 0); // 1回は走塁アウト込みで3アウト揃っている
+  assert.equal(records[0].outsRecorded, 4); // 1.1回
+});
+
+test('rebuildPitchingStats: 記録漏れは回を締めた投手に付き、自軍攻撃の走塁アウトは数えない', () => {
+  const game = pitGame({
+    playLogs: [
+      ...defOuts(1, 3),
+      { kind: 'runner', inning: 1, isTop: true, text: '盗塁死', payload: { outs: 1 } }, // 自軍攻撃(表)→ 除外
+      { kind: 'sub', inning: 2, isTop: false, payload: { order: 9, in: 'udagawa', out: 'takashima', kind: 'def', position: '投' } },
+      ...defOuts(2, 2), // 2回は2アウトしか記録が無い → 締めた宇田川に1つ補う
+    ],
+  });
+  const { records } = rebuildPitchingStats(game);
+  const by = Object.fromEntries(records.map((r) => [r.playerId, r.outsRecorded]));
+  assert.equal(by.takashima, 3); // 自軍攻撃の走塁アウトは加算されない
+  assert.equal(by.udagawa, 3);
+});
+
+test('rebuildPitchingStats: 相手の打席を記録していない回には架空のアウトを足さない', () => {
+  // 2回裏は暴投ログだけで打席が1つも記録されていない → 3アウトを勝手に足さない
+  const game = pitGame({
+    playLogs: [
+      ...defOuts(1, 3),
+      { kind: 'runner', inning: 2, isTop: false, text: '暴投', payload: { outs: 0 } },
+      ...defOuts(3, 3),
+    ],
+  });
+  const { records, filledOuts } = rebuildPitchingStats(game);
+  assert.equal(filledOuts, 0);
+  assert.equal(records[0].outsRecorded, 6);
+});
+
+test('rebuildPitchingStats: サヨナラ負けの最終回は3アウトに補完しない', () => {
+  const game = pitGame({ myScore: 2, oppScore: 3, playLogs: [...defOuts(1, 3), ...defOuts(2, 1)] });
+  const { records, filledOuts } = rebuildPitchingStats(game);
+  assert.equal(filledOuts, 0);
+  assert.equal(records[0].outsRecorded, 4); // 1.1回のまま
 });
 
 // ---- plays.js ----
