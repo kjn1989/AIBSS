@@ -258,7 +258,18 @@ function NLCorrectionCard({ game }) {
       result: playLabel(l.payload?.result, l.payload?.direction, l.payload?.outType, l.payload?.soType, state.settings.edition, lang),
     })),
   });
-  const idByName = (nm) => state.players.find((p) => p.name === nm)?.id || null;
+  // 同名で二重登録された選手がいる場合、この試合に既に出ている方を優先して選ぶ
+  // (別レコードを掴むと「同じ人」と繋がらず、打順移動や成績が分断されるため)。
+  const inThisGame = new Set([
+    ...(game.lineup || []).map((l) => l.playerId),
+    ...(game.startingLineup || []).map((l) => l.playerId),
+    ...(game.atBats || []).map((a) => a.playerId),
+    ...(game.playLogs || []).flatMap((l) => [l.payload?.playerId, l.payload?.in, l.payload?.out]),
+  ].filter(Boolean));
+  const idByName = (nm) => {
+    const matches = state.players.filter((p) => p.name === nm);
+    return (matches.find((p) => inThisGame.has(p.id)) || matches[0])?.id || null;
+  };
   const clean = (v) => (v && v !== 'null' ? v : null);
 
   // AIの操作配列 → 中間表現(regexパスと同形 { subs, reassigns, resultCorrs })

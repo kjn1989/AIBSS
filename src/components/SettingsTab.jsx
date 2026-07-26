@@ -10,6 +10,72 @@ import { listProfiles, getActiveProfileId, addProfile, switchActiveProfile, dele
 import OfficialCloudCard from './OfficialCloudCard.jsx';
 import Sheet from './Sheet.jsx';
 
+// 同じ名前で二重登録された選手を検出して統合を促すカード。
+// 二重登録があると「同じ人」と判定できず、打順移動の表示や通算成績が分断される。
+// 出場記録が多い方(=本来使われている方)を残す側の既定にする。
+function DuplicatePlayersCard() {
+  const { state, dispatch } = useStore();
+  const t = useT();
+
+  // 名前ごとにまとめ、2件以上あるものを重複とみなす
+  const byName = new Map();
+  for (const p of state.players) {
+    const key = (p.name || '').trim();
+    if (!key) continue;
+    if (!byName.has(key)) byName.set(key, []);
+    byName.get(key).push(p);
+  }
+  // 各選手が何回出場記録に現れるか(残す側を決める材料)
+  const useCount = (id) => {
+    let n = 0;
+    for (const g of Object.values(state.games)) {
+      for (const ab of g.atBats || []) if (ab.playerId === id) n++;
+      for (const l of g.lineup || []) if (l.playerId === id) n++;
+      for (const l of g.startingLineup || []) if (l.playerId === id) n++;
+      for (const log of g.playLogs || []) {
+        const p = log.payload || {};
+        if (p.playerId === id || p.in === id || p.out === id) n++;
+      }
+    }
+    return n;
+  };
+
+  const dups = [...byName.entries()].filter(([, list]) => list.length > 1);
+  if (dups.length === 0) return null;
+
+  return (
+    <div className="card">
+      <div className="section-title" style={{ marginTop: 0 }}>{t('set.dupTitle')}</div>
+      <p className="small dim" style={{ marginTop: 0 }}>{t('set.dupDesc')}</p>
+      {dups.map(([name, list]) => {
+        // 出場記録が多い順、同数なら背番号がある方を優先して残す
+        const ranked = [...list].sort((a, b) => (useCount(b.id) - useCount(a.id)) || ((b.number ? 1 : 0) - (a.number ? 1 : 0)));
+        const keep = ranked[0];
+        const others = ranked.slice(1);
+        const label = (p) => `${p.name}${p.number ? ` #${p.number}` : t('set.dupNoNumber')}（${t('set.dupUses', { n: useCount(p.id) })}）`;
+        return (
+          <div className="row" key={name} style={{ alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            <div className="grow">
+              <b>{name}</b>
+              <div className="small dim">{t('set.dupKeep', { who: label(keep) })}</div>
+              {others.map((o) => <div className="small dim" key={o.id}>{t('set.dupMerge', { who: label(o) })}</div>)}
+            </div>
+            <button
+              className="primary small"
+              onClick={() => {
+                if (!window.confirm(t('set.dupConfirm', { name, keep: label(keep), n: others.length }))) return;
+                for (const o of others) dispatch({ type: 'MERGE_PLAYERS', keepId: keep.id, mergeId: o.id });
+              }}
+            >
+              {t('set.dupAction')}
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function SettingsTab() {
   const { state, dispatch } = useStore();
   const t = useT();
@@ -121,6 +187,8 @@ export default function SettingsTab() {
           {state.players.length === 0 && <div className="dim small mt8">{t('set.noPlayers')}</div>}
         </div>
       </div>
+
+      <DuplicatePlayersCard />
 
       <div className="card">
         <h2>{t('set.demoTitle')}</h2>
