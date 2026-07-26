@@ -427,6 +427,19 @@ function NLCorrectionCard({ game }) {
       }
       posAppl.push({ ...pc, order: hit.order, from: hit.from });
     }
+    // 既にこの試合に出ている選手を、別の打順へ「交代」で入れると打順移動になり、
+    // その打順の打席まで奪ってしまう(例:「2回から山城はキャッチャーです」が
+    // 「松田→山城」の交代として解釈され、松田の打席が山城に移ってしまう)。
+    // 正当な打順移動なら、同じ指示の中で元の打順から抜ける交代も必ず記録されるので、
+    // それが無いものは採用しない。守備位置の変更としては別途 alignAppl で反映される。
+    subs = subs.filter((s) => {
+      const own = slotOfPlayer(s.inId);
+      if (!own) return true; // まだ出ていない選手=本当の交代
+      const target = orderOf(s.outId);
+      if (target == null || target === own.order) return true; // 自分の打順の中の話
+      return subs.some((o) => o !== s && o.outId === s.inId && orderOf(o.outId) === own.order);
+    });
+
     // 明示的な交代(守備/投手/代打…)。連鎖(A→B→C)は入った選手が打順を引き継ぐ。
     const orderCache = new Map();
     const resolveOrder = (pid) => (orderCache.has(pid) ? orderCache.get(pid) : orderOf(pid));
