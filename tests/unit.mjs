@@ -144,17 +144,33 @@ test('parseDefensiveAlignment: 「7回の守備はショート茂木、サード
     [7, 'm', '遊'], [7, 'i', '三'], [7, 'u', '二'],
   ]);
 });
+test('parseDefensiveAlignment: 「◯◯は6回からレフトからファーストに変更」= 1人の守備位置変更', () => {
+  const PS = [{ id: 'n', name: '中島' }, { id: 's', name: '清水' }];
+  const rs = parseDefensiveAlignment('中島は6回からレフトからファーストに変更していました', PS);
+  assert.equal(rs.length, 1);
+  assert.equal(rs[0].inning, 6);
+  assert.equal(rs[0].playerId, 'n');
+  assert.equal(rs[0].position, '一'); // 「AからBに」のB(移動後)を採る
+});
+test('parseDefensiveAlignment: 1人の文でも位置変更の文脈が無ければ拾わない / 投手はの交代側に任せる', () => {
+  const PS = [{ id: 'n', name: '中島' }, { id: 'u', name: '宇田川' }];
+  // 打席の記述(位置ワードは打球方向)を守備位置変更と誤検出しない
+  assert.equal(parseDefensiveAlignment('1回 中島 レフト前ヒット', PS).length, 0);
+  // 投手への変更は継投の記録が必要なので parseSubstitutions の担当
+  assert.equal(parseDefensiveAlignment('3回から宇田川がピッチャーに変更', PS).length, 0);
+});
 test('parseSubstitutions: 守備陣形の申告を「交代」と誤読しない', () => {
   const PS = [{ id: 'm', name: '茂木' }, { id: 'i', name: '入交' }, { id: 'u', name: '宇田川' }];
   // 以前は先頭2名を拾って「茂木→入交(二塁)」という誤った交代を1件作っていた
   assert.deepEqual(parseSubstitutions('7回の守備はショート茂木、サード入交、セカンド宇田川でした', PS), []);
 });
-test('parseDefensiveAlignment: 交代文や位置1つの文は拾わない(交代解釈と取り合わない)', () => {
+test('parseDefensiveAlignment: 交代文は拾わない(交代解釈と取り合わない)', () => {
   const PS = [{ id: 'y', name: '山城' }, { id: 'm', name: '松田' }, { id: 'k', name: '河合' }];
   // 交代語を含む文は parseSubstitutions の担当
   assert.equal(parseDefensiveAlignment('2回にキャッチャー河合が負傷、ファースト山城と交代', PS).length, 0);
-  // 位置が1つだけの文も交代解釈に任せる
-  assert.equal(parseDefensiveAlignment('6回の守備はキャッチャー松田でした', PS).length, 0);
+  // 1人ぶんの守備位置の申告は拾う(交代語が無いので交代側とは取り合わない)
+  const one = parseDefensiveAlignment('6回の守備はキャッチャー松田でした', PS);
+  assert.deepEqual(one.map((r) => [r.inning, r.playerId, r.position]), [[6, 'm', '捕']]);
 });
 test('parsePositionCorrections: 「先発守備位置は正しくはライト」= 回の指定なしで位置訂正', () => {
   const PS = [{ id: 's', name: '清水' }, { id: 'm', name: '松田' }];
