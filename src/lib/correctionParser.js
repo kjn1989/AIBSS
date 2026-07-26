@@ -51,7 +51,33 @@ const POSITION_WORDS = {
 const SUB_KEYWORDS = /交代|代わっ|代わり|代え|入れ替|負傷|退場|退い|下げ|リエントリー|再出場|入っ/;
 // 打席結果を表す語。守備位置の話か打席の話かを見分けるのに使う
 // (音声パーサは曖昧な文でも安打を返すため、キーワードの有無で判定する)。
-const RESULT_WORDS = /安打|ヒット|ゴロ|フライ|ライナー|三振|四球|死球|本塁打|ホームラン|二塁打|三塁打|ツーベース|スリーベース|犠飛|犠打|犠牲|エラー|失策|併殺|ゲッツー|打点|出塁|盗塁|振り逃げ|バント|打席|打撃/;
+const RESULT_WORDS = /安打|単打|ヒット|ゴロ|フライ|ライナー|三振|四球|死球|デッドボール|本塁打|ホームラン|二塁打|三塁打|ツーベース|スリーベース|犠飛|犠打|犠牲|エラー|失策|併殺|ゲッツー|打点|適時打|タイムリー|出塁|盗塁|振り逃げ|空振り|見逃し|凡退|バント|打席|打撃/;
+
+// 「3-6回」「3〜6回」「3回から6回」のような回の範囲を読む。
+// 単独の「6回」なら from=to=6。範囲が読めなければ null。
+export function parseInningRange(seg) {
+  const m = seg.match(/(\d+)\s*回?\s*(?:から|[-–—〜～~ー])\s*(\d+)\s*回/);
+  if (m) {
+    const from = parseInt(m[1], 10);
+    const to = parseInt(m[2], 10);
+    if (to > from && to - from <= 12) return { from, to };
+    if (to === from) return { from, to };
+  }
+  const one = seg.match(/(\d+)\s*回/);
+  return one ? { from: parseInt(one[1], 10), to: parseInt(one[1], 10) } : null;
+}
+
+// その文章に「この2人の交代」がはっきり書かれているか。
+// AIや正規表現が守備位置の申告を交代と読み違えたときの誤適用を防ぐ判定に使う。
+export function isExplicitSubText(rawText, names = []) {
+  const list = names.filter(Boolean);
+  if (!list.length) return false;
+  for (const seg of splitSentences(rawText)) {
+    if (!SUB_KEYWORDS.test(seg)) continue;
+    if (list.every((n) => seg.includes(n))) return true;
+  }
+  return false;
+}
 
 // テキスト中の守備位置ワードを出現位置つきで拾う(長い語を優先し、内包する短語は除外)。
 function findPositionHits(text) {
@@ -106,9 +132,10 @@ export function parseDefensiveAlignment(rawText, players = []) {
   const out = [];
   for (const seg of splitSentences(rawText)) {
     if (/交代|代わ|替わ|代打|代走/.test(seg)) continue; // 交代文は parseSubstitutions の担当
-    const innM = seg.match(/(\d+)\s*回/);
-    if (!innM) continue;
-    const inning = parseInt(innM[1], 10);
+    const range = parseInningRange(seg);
+    if (!range) continue;
+    const inning = range.from;
+    const toInning = range.to;
     const posHits = findPositionHits(seg);
     if (!posHits.length) continue;
     const nameHits = findNameHits(seg, players);
@@ -121,7 +148,7 @@ export function parseDefensiveAlignment(rawText, players = []) {
       for (const ph of posHits) {
         const next = posHits.find((x) => x.index > ph.index);
         const nm = nameHits.find((n) => n.index >= ph.span[1] && (!next || n.index < next.index));
-        if (nm) out.push({ inning, playerId: nm.id, playerName: nm.name, position: ph.code });
+        if (nm) out.push({ inning, toInning, playerId: nm.id, playerName: nm.name, position: ph.code });
       }
     } else {
       // (B) 打席結果の記述(「レフト前ヒット」「中犠飛」等)は守備位置ではないので除く。
@@ -129,7 +156,7 @@ export function parseDefensiveAlignment(rawText, players = []) {
       if (RESULT_WORDS.test(seg)) continue;
       const to = posHits[posHits.length - 1].code;
       if (to === '投') continue; // 投手への変更は継投の記録が要るので交代側に任せる
-      out.push({ inning, playerId: nameHits[0].id, playerName: nameHits[0].name, position: to });
+      out.push({ inning, toInning, playerId: nameHits[0].id, playerName: nameHits[0].name, position: to });
     }
   }
   return out;
@@ -285,6 +312,10 @@ export function parseResultCorrections(rawText, players = []) {
     if (!/でなく|ではなく|でした|です/.test(seg)) continue;
     const parts = seg.split(/でなく|ではなく/);
     const phrase = parts.length > 1 ? parts.slice(1).join('') : seg;
+    // 打席結果を表す語が無い文は打撃の話ではない。音声パーサは守備位置ワード
+    // (「キャッチャー」等)だけでも安打を返すため、ここで足切りしないと
+    // 「3-6回は山城だけですキャッチャー」が「捕手ヒット」に化ける。
+    if (!RESULT_WORDS.test(phrase) && !/[投捕一二三遊左中右]\s*(?:飛|ゴ|直|安|本|塁打)/.test(phrase)) continue;
     const top = (parseUtterance(phrase) || []).find((c) => c.kind === 'play' && c.result);
     if (!top) continue;
     const rbiM = phrase.match(/(\d+)\s*点/);
