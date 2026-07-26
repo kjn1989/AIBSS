@@ -11,7 +11,10 @@ import {
 } from '../lib/model.js';
 import { generateDemoData } from '../lib/demo.js';
 import { rebuildPitchingStats } from '../lib/pitchingRebuild.js';
-import { resolveStarters } from '../lib/lineupBox.js';
+import { resolveStarters, alignmentByInning, findPositionIssues } from '../lib/lineupBox.js';
+
+// 1人しか就けない守備位置(「打」=全員打ち・「控」は複数人可)。位置変更の入れ替え判定に使う。
+const UNIQUE_POSITIONS = new Set(['投', '捕', '一', '二', '三', '遊', '左', '中', '右', 'DH']);
 import { remapPlayerInGame, fillPlayerGaps } from '../lib/mergePlayers.js';
 import { rebuildBatters } from '../lib/battersRebuild.js';
 import { idbSave } from '../lib/durableStore.js';
@@ -84,6 +87,45 @@ function loadPersisted() {
 }
 
 // 旧バージョンのセーブデータに後から追加されたフィールドの既定値を補う
+// ある打順の占有者を、先発+残っている交代・位置ログから作り直す。
+// 誤って記録された交代を取り消したあと、その枠を誰に戻すかの判定に使う。
+function replaySlot(g, order) {
+  const st = resolveStarters(g).find((l) => l.order === order);
+  let cur = st ? { playerId: st.playerId, position: st.position || null } : null;
+  for (const l of g.playLogs || []) {
+    const p = l.payload || {};
+    if (l.kind === 'sub' && p.order === order && p.in) {
+      cur = { playerId: p.in, position: p.position || cur?.position || null };
+    } else if (l.kind === 'position' && p.order === order && cur && cur.playerId === p.playerId) {
+      cur = { ...cur, position: p.position || cur.position };
+    }
+  }
+  return cur;
+}
+
+// 誤って記録された交代ログを取り消す。その打順を本来の占有者に戻し、
+// 付け替わっていた打席も返す。playLogs からの除去は呼び出し側で済ませておく。
+function undoSubLog(g, sl, nameOf) {
+  const o = sl.payload?.order;
+  const inId = sl.payload?.in;
+  if (o == null || !inId) return;
+  const back = replaySlot(g, o);
+  if (!back || back.playerId === inId) return;
+  const slot = g.lineup.find((l) => l.order === o);
+  if (slot && slot.playerId === inId) { slot.playerId = back.playerId; slot.position = back.position || slot.position; }
+  const from = Number(sl.inning || 0);
+  for (const ab of g.atBats || []) {
+    if (ab.order === o && ab.playerId === inId && Number(ab.snapshot?.inning || 0) >= from) ab.playerId = back.playerId;
+  }
+  for (const l of g.playLogs || []) {
+    if (l.kind === 'atbat' && l.payload?.order === o && l.payload?.playerId === inId && Number(l.inning || 0) >= from) {
+      l.payload = { ...l.payload, playerId: back.playerId };
+      const rest = String(l.text || '').split(' ').slice(1).join(' ');
+      l.text = `${nameOf(back.playerId)} ${rest}`.trim();
+    }
+  }
+}
+
 function ensureOppFields(g) {
   const out = g.oppLineup ? { ...g } : {
     ...g,
@@ -593,14 +635,27 @@ export function reducer(state, action) {
       const slot = g.lineup.find((l) => l.order === action.order);
       if (slot && slot.position !== action.position) {
         const prev = slot.position;
-        slot.position = action.position;
         // 位置変更を記録(伝統表記の「中左」のような連結に使う)。試合中(打席発生後)のみ。
-        if ((g.atBats?.length) && slot.playerId) {
+        const logMove = (s, from) => {
+          if (!(g.atBats?.length) || !s.playerId) return;
           g.playLogs.push(newPlayLog({
             gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'position',
-            text: '', payload: { order: action.order, playerId: slot.playerId, position: action.position, from: prev },
+            text: '', payload: { order: s.order, playerId: s.playerId, position: s.position, from },
           }));
+        };
+        // 守備は1人1か所。移った先に居た選手を、空いた位置へ移す。
+        // 片方だけ動かすと必ず「その位置に2人・元の位置が不在」になるため、対で動かす。
+        // (swap:false は、呼び出し側が9人ぶんの配置を丸ごと指定する場合に使う)
+        if (action.swap !== false && UNIQUE_POSITIONS.has(action.position)) {
+          for (const other of g.lineup) {
+            if (other.order === action.order || other.position !== action.position) continue;
+            const from = other.position;
+            other.position = prev || '控';
+            logMove(other, from);
+          }
         }
+        slot.position = action.position;
+        logMove(slot, prev);
       }
       g.updatedAt = Date.now();
       return { ...state, games: { ...state.games, [g.id]: g } };
@@ -1064,15 +1119,33 @@ export function reducer(state, action) {
       const g = deep(state.games[action.gameId]);
       const { order, playerId, position, inning } = action;
       if (order == null || !playerId || !position) return state;
+      // その回の守備陣を見て、いま誰がどこを守っているかを起点にする。
+      // 打順の指定が実際の枠とズレていても、その回に居る枠へ反映する。
+      const align = alignmentByInning(g).get(Number(inning)) || [];
+      const mine = align.find((a) => a.order === order && a.playerId === playerId)
+        || align.find((a) => a.playerId === playerId) || null;
+      const effOrder = mine ? mine.order : order;
+      const before = mine ? mine.position : (g.lineup.find((l) => l.order === order)?.position || null);
+      // その回に出ていない選手なら、入れ替え相手を動かすと守備が壊れるので位置だけ記録する
+      const displaced = (action.swap === false || !UNIQUE_POSITIONS.has(position) || !mine)
+        ? [] : align.filter((a) => a.position === position && a.order !== effOrder);
       // 同じ打順・同じ回の位置ログが既にあれば置き換える(重複防止)
-      g.playLogs = g.playLogs.filter((l) => !(l.kind === 'position' && l.payload?.order === order && Number(l.inning) === Number(inning)));
-      const slot = g.lineup.find((l) => l.order === order);
-      const log = newPlayLog({
-        gameId: g.id, inning, isTop: !!g.isHome, kind: 'position', text: '',
-        payload: { order, playerId, position, from: slot?.position || null },
-      });
-      const at = g.playLogs.findIndex((l) => (l.inning || 0) >= inning);
-      if (at < 0) g.playLogs.push(log); else g.playLogs.splice(at, 0, log);
+      const touched = new Set([effOrder, ...displaced.map((d) => d.order)]);
+      g.playLogs = g.playLogs.filter((l) => !(l.kind === 'position' && touched.has(l.payload?.order) && Number(l.inning) === Number(inning)));
+      const insert = (payload) => {
+        const log = newPlayLog({ gameId: g.id, inning, isTop: !!g.isHome, kind: 'position', text: '', payload });
+        const at = g.playLogs.findIndex((l) => (l.inning || 0) >= inning);
+        if (at < 0) g.playLogs.push(log); else g.playLogs.splice(at, 0, log);
+      };
+      // 守備は1人1か所。その位置に居た選手は、空いた位置(移る選手が居た位置)へ移す。
+      // 片方だけ動かすと必ず「その位置に2人・元の位置が不在」になるため対で動かす。
+      for (const d of displaced) {
+        insert({ order: d.order, playerId: d.playerId, position: before || '控', from: d.position });
+        const ds = g.lineup.find((l) => l.order === d.order);
+        if (ds && ds.playerId === d.playerId) ds.position = before || '控';
+      }
+      insert({ order: effOrder, playerId, position, from: before });
+      const slot = g.lineup.find((l) => l.order === effOrder);
       if (slot && slot.playerId === playerId) slot.position = position;
       g.updatedAt = Date.now();
       return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
@@ -1088,6 +1161,14 @@ export function reducer(state, action) {
       // 同じ付け替え(out→in)が別の回/種別で既に記録されていれば置き換える(重複防止)。
       // 例: 「代打・山城」を後から「2回の守備交代」に直すケース。
       g.playLogs = g.playLogs.filter((l) => !(l.kind === 'sub' && l.payload?.order === order && l.payload?.in === inId && l.payload?.out === outId));
+      // 1人が同時に2つの打順に入ることはあり得ない。別の打順へ入れた記録が残っていれば
+      // それを取り消し、その打順を元の選手に戻す(この記録違いが「同じ位置に2人」「守る人が
+      // 居ない」という警告を大量に生む元になる)。
+      const stale = g.playLogs.filter((l) => l.kind === 'sub' && l.payload?.in === inId && l.payload?.order !== order);
+      if (stale.length) {
+        g.playLogs = g.playLogs.filter((l) => !stale.includes(l));
+        for (const sl of stale) undoSubLog(g, sl, (id) => playerNameOf(state, id));
+      }
       const subLog = newPlayLog({
         gameId: g.id, inning, isTop: g.isTop, kind: 'sub',
         text: action.label || '選手交代',
@@ -1137,6 +1218,34 @@ export function reducer(state, action) {
       if (slot && slot.playerId === outId) { slot.playerId = inId; if (position) slot.position = position; }
       if (outId && !g.retiredPlayerIds.includes(outId)) g.retiredPlayerIds.push(outId);
       if (!g.usedPlayerIds.includes(inId)) g.usedPlayerIds.push(inId);
+      g.updatedAt = Date.now();
+      return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
+    }
+
+    // ===== 同じ選手が2つの打順に入っている状態の修復 =====
+    // 1人が同時に2枠に居ることはあり得ないので、最初に入った枠だけを残し、
+    // あとから入れた記録を取り消して、その枠を本来の選手に戻す。
+    // (この食い違いが「同じ位置に2人」「守る人が居ない」を大量に生む元になる)
+    case 'FIX_DUPLICATE_SLOTS': {
+      const g = deep(state.games[action.gameId]);
+      const { sameSlots } = findPositionIssues(g);
+      if (!sameSlots.length) return state;
+      const nameOf = (id) => playerNameOf(state, id);
+      let removed = 0;
+      for (const pid of new Set(sameSlots.map((s) => s.playerId))) {
+        const starterOrder = resolveStarters(g).find((l) => l.playerId === pid)?.order ?? null;
+        const subs = g.playLogs
+          .filter((l) => l.kind === 'sub' && l.payload?.in === pid)
+          .sort((a, b) => Number(a.inning || 0) - Number(b.inning || 0));
+        // 先発で入っている枠があればそれを残す。無ければ最初に入った交代の枠を残す。
+        const keepOrder = starterOrder ?? subs[0]?.payload?.order ?? null;
+        if (keepOrder == null) continue;
+        const drop = subs.filter((l) => l.payload.order !== keepOrder);
+        if (!drop.length) continue;
+        g.playLogs = g.playLogs.filter((l) => !drop.includes(l));
+        for (const sl of drop) { undoSubLog(g, sl, nameOf); removed += 1; }
+      }
+      if (!removed) return state;
       g.updatedAt = Date.now();
       return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
     }

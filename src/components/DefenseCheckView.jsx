@@ -68,7 +68,8 @@ export default function DefenseCheckView({ game, newPlayerIds = [], onClose }) {
   const save = () => {
     for (const l of slots) {
       const pos = draft[l.order] || '';
-      if (pos && pos !== l.position) dispatch({ type: 'SET_POSITION', gameId: game.id, order: l.order, position: pos });
+      // 9人ぶんの配置をここで作り切っているので、reducer側の自動入れ替えは使わない
+      if (pos && pos !== l.position) dispatch({ type: 'SET_POSITION', gameId: game.id, order: l.order, position: pos, swap: false });
     }
     onClose();
   };

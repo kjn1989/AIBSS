@@ -213,6 +213,8 @@ export function assignAtBatsByPlayer(rows, atBats = [], sbLogs = []) {
 // 問題が続いている回を範囲(from〜to)にまとめて返す。
 // 戻り値: { duplicates: [{ position, playerIds, from, to }], missing: [{ position, from, to }] }
 const STANDARD_POSITIONS = ['投', '捕', '一', '二', '三', '遊', '左', '中', '右'];
+// 1人しか就けない守備位置。「打」(全員打ち)と「控」は複数人でも正常なので除く。
+const FIELD_POSITIONS = new Set([...STANDARD_POSITIONS, 'DH']);
 
 // 回ごとの守備陣(打順→{playerId, position})を作る。回N の状態は「N回までの交代を適用した形」。
 export function alignmentByInning(game) {
@@ -236,11 +238,11 @@ export function alignmentByInning(game) {
       }
       i += 1;
     }
-    out.set(inn, [...slots.values()].filter((v) => v.playerId && v.position).map((v) => ({ ...v })));
+    out.set(inn, [...slots.entries()].filter(([, v]) => v.playerId && v.position).map(([order, v]) => ({ order, ...v })));
   }
   // 最終回は現lineupを正とする(位置ログが残っていない変更を取りこぼさない)
   const last = (game.lineup || []).filter((l) => l.playerId && l.position);
-  if (last.length) out.set(maxInning, last.map((l) => ({ playerId: l.playerId, position: l.position })));
+  if (last.length) out.set(maxInning, last.map((l) => ({ order: l.order, playerId: l.playerId, position: l.position })));
   return out;
 }
 
@@ -260,17 +262,35 @@ export function findPositionIssues(game) {
   const byInning = alignmentByInning(game);
   const dupSeen = new Map();  // `${position}|${playerIds}` -> { position, playerIds, innings }
   const missSeen = new Map(); // position -> innings
+  const slotSeen = new Map(); // playerId -> { orders:Set, innings:[] } (同じ選手が2つの打順に居る)
 
   for (const [inn, slots] of byInning) {
     const byPos = new Map();
+    const byPlayer = new Map();
     for (const s of slots) {
       if (!byPos.has(s.position)) byPos.set(s.position, []);
       byPos.get(s.position).push(s.playerId);
+      if (s.order != null) {
+        if (!byPlayer.has(s.playerId)) byPlayer.set(s.playerId, new Set());
+        byPlayer.get(s.playerId).add(s.order);
+      }
+    }
+    // 同じ選手が同時に2つの打順に入っている(記録の重ねがけで起きる)
+    for (const [playerId, orders] of byPlayer) {
+      if (orders.size < 2) continue;
+      if (!slotSeen.has(playerId)) slotSeen.set(playerId, { playerId, orders: new Set(), innings: [] });
+      const e = slotSeen.get(playerId);
+      for (const o of orders) e.orders.add(o);
+      e.innings.push(inn);
     }
     for (const [position, playerIds] of byPos) {
-      if (playerIds.length < 2) continue;
-      const key = `${position}|${[...playerIds].sort().join(',')}`;
-      if (!dupSeen.has(key)) dupSeen.set(key, { position, playerIds, innings: [] });
+      // 「打」(全員打ち)や「控」は複数人が正常なので守備位置の重複としては見ない
+      if (!FIELD_POSITIONS.has(position)) continue;
+      // 同じ選手が2枠に居るだけの場合は「2人が同じ位置」ではない(上の slotSeen で扱う)
+      const distinct = [...new Set(playerIds)];
+      if (distinct.length < 2) continue;
+      const key = `${position}|${[...distinct].sort().join(',')}`;
+      if (!dupSeen.has(key)) dupSeen.set(key, { position, playerIds: distinct, innings: [] });
       dupSeen.get(key).innings.push(inn);
     }
     // 守備位置が9つ揃うはずの布陣のときだけ「不在」を見る(DHや人数不足の試合で誤警告しない)
@@ -291,7 +311,11 @@ export function findPositionIssues(game) {
   for (const [position, innings] of missSeen) {
     for (const r of toRanges(innings)) missing.push({ position, ...r });
   }
-  return { duplicates, missing };
+  const sameSlots = [];
+  for (const s of slotSeen.values()) {
+    for (const r of toRanges(s.innings)) sameSlots.push({ playerId: s.playerId, orders: [...s.orders].sort((a, b) => a - b), ...r });
+  }
+  return { duplicates, missing, sameSlots };
 }
 
 // カード/ツリー表示用の“役割ラベル種別”を返す。守備交代で投手に就く=救援。
