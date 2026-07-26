@@ -1064,15 +1064,30 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
   font-size: 11px; font-variant-numeric: tabular-nums;
 }
 .ss-table th, .ss-table td {
-  border: 1px solid var(--border); padding: 4px 3px; text-align: center; min-width: 22px;
+  border: 1px solid var(--border); padding: 4px 2px; text-align: center;
 }
 .ss-table th { color: var(--text-dim); font-weight: 600; }
-.ss-table .ss-team, .ss-table .ss-name { text-align: left; white-space: nowrap; padding: 4px 6px; }
+/* チーム名・選手名は列幅内で省略(長い名前でも表全体を押し広げない) */
+.ss-table .ss-team, .ss-table .ss-name {
+  text-align: left; padding: 4px 4px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 0;
+}
 .ss-table .ss-pos { font-weight: 700; color: var(--accent); white-space: nowrap; }
 /* 打順移動の矢印(←8 / →9)。位置表記より控えめにして邪魔しない */
-.ss-table .ss-move { font-size: 9px; font-weight: 700; color: var(--text-dim); margin-left: 2px; }
+.ss-table .ss-move { font-size: 9px; font-weight: 700; color: var(--text-dim); margin-left: 1px; }
 .ss-table tr.ss-sub td { background: color-mix(in srgb, var(--accent) 6%, transparent); }
-.ss-matrix { display: block; overflow-x: auto; }
+
+/* ---- 横スクロールなしでスマホ幅に収める(列幅を固定配分) ---- */
+/* 線分スコア: チーム名 + 9イニング + 計/H/E */
+.ss-table.ss-line { table-layout: fixed; font-size: 10px; }
+.ss-table.ss-line th:first-child, .ss-table.ss-line td:first-child { width: 26%; }
+/* 打席マトリクス: 打順/位置/選手 + 9イニング + 打数/安打/打点 */
+.ss-matrix { table-layout: fixed; font-size: 10px; }
+.ss-matrix th:nth-child(1), .ss-matrix td:nth-child(1) { width: 6%; }
+.ss-matrix th:nth-child(2), .ss-matrix td:nth-child(2) { width: 14%; }
+.ss-matrix th:nth-child(3), .ss-matrix td:nth-child(3) { width: 15%; }
+/* 結果セルは1文字ずつ縦に折り返して細い列に収める(中安→中/安) */
+.ss-matrix td .ss-cell { display: inline-block; word-break: break-all; line-height: 1.15; }
 .ss-footer { text-align: center; font-size: 10px; color: var(--text-dim); }
 /* スコアシートのセル色分け(画面・PDF共通) */
 .ss-cell { font-weight: 700; }
@@ -1108,7 +1123,9 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
   .scoresheet-root .ss-table { font-size: 12px; margin-bottom: 14px; }
   .scoresheet-root .ss-table th, .scoresheet-root .ss-table td { border-color: #000; color: #000; padding: 5px 4px; }
   .scoresheet-root .ss-title span, .scoresheet-root .ss-footer, .scoresheet-root .ss-table th { color: #333; }
-  .ss-matrix { display: table; overflow: visible; }
+  /* 印刷は用紙幅に余裕があるので、固定配分をやめて内容なりの幅に戻す */
+  .ss-matrix, .ss-table.ss-line { table-layout: auto; font-size: 12px; }
+  .scoresheet-root .ss-table .ss-team, .scoresheet-root .ss-table .ss-name { max-width: none; }
   /* PDFでも結果色を保持(印刷向けに濃いめの値へ) */
   .scoresheet-root .ss-cell.hit { color: #1a7f37 !important; }
   .scoresheet-root .ss-cell.walk { color: #0969da !important; }
