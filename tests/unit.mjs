@@ -8,7 +8,7 @@ import { aggregateBatting, battingMetrics, pitchingMetrics, titleLeaders } from 
 import { translate } from '../src/lib/i18n.js';
 import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, parseDirectionOnly } from '../src/lib/voiceParser.js';
 import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections } from '../src/lib/correctionParser.js';
-import { buildLineupRows, posChar, roleTag, distributeToAppearances, resolveStarters } from '../src/lib/lineupBox.js';
+import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarters } from '../src/lib/lineupBox.js';
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
 import { remapPlayerInGame, fillPlayerGaps } from '../src/lib/mergePlayers.js';
 
@@ -362,37 +362,63 @@ test('resolveStarters: startingLineup が無い過去試合でも交代のoutか
   assert.equal(slot7.players[0].isStarter, true);
 });
 
-test('distributeToAppearances: 再登場した投手の打席が登場行ごとに振り分けられ二重表示にならない', () => {
-  // 投手スロットの登場順: 髙島(先発) → 宇田川(3回) → 茂木(5回) → 宇田川(5回再登板) → 髙島(7回再登板)
-  const players = [
+test('assignAtBatsByPlayer: 再登場した選手の打席が二重表示にならず、最初の行にまとまる', () => {
+  // 6番: 髙島(先発) → 宇田川(3回) → 茂木(5回) → 宇田川(5回再登板) → 髙島(7回再登板)
+  const rows = [{ order: 6, players: [
     { playerId: 'takashima', inning: null },
     { playerId: 'udagawa', inning: 3 },
     { playerId: 'mogi', inning: 5 },
     { playerId: 'udagawa', inning: 5 },
     { playerId: 'takashima', inning: 7 },
-  ];
+  ] }];
   const abs = [
-    { playerId: 'takashima', result: 'double', snapshot: { inning: 2 } }, // 髙島(先発)
-    { playerId: 'udagawa', result: 'single', snapshot: { inning: 4 } },   // 宇田川(1回目)
-    { playerId: 'udagawa', result: 'bb', snapshot: { inning: 6 } },       // 宇田川(2回目)
-    { playerId: 'takashima', result: 'out', snapshot: { inning: 7 } },    // 髙島(7回再登板)
+    { playerId: 'takashima', result: 'double', snapshot: { inning: 2 } },
+    { playerId: 'udagawa', result: 'single', snapshot: { inning: 4 } },
+    { playerId: 'udagawa', result: 'bb', snapshot: { inning: 6 } },
+    { playerId: 'takashima', result: 'out', snapshot: { inning: 7 } },
   ];
-  const { abBuckets } = distributeToAppearances(players, abs);
-  assert.deepEqual(abBuckets.map((b) => b.length), [1, 1, 0, 1, 1]);
-  assert.equal(abBuckets[0][0].snapshot.inning, 2); // 髙島(先発)= 2回の二塁打のみ
-  assert.equal(abBuckets[1][0].snapshot.inning, 4); // 宇田川(1回目)= 4回のみ
-  assert.equal(abBuckets[3][0].snapshot.inning, 6); // 宇田川(2回目)= 6回のみ
-  assert.equal(abBuckets[4][0].snapshot.inning, 7); // 髙島(7回)= 7回のみ(先発行には入らない)
+  const m = assignAtBatsByPlayer(rows, abs);
+  const p = rows[0].players;
+  assert.equal(m.get(p[0]).atBats.length, 2); // 髙島の2打席は先発行にまとまる
+  assert.equal(m.get(p[1]).atBats.length, 2); // 宇田川の2打席は3回の行にまとまる
+  assert.equal(m.get(p[4]).atBats.length, 0); // 再登板の行には重複させない
+  assert.equal(m.get(p[3]).atBats.length, 0);
+  assert.equal(m.get(p[4]).primary, false);
+  assert.equal(m.get(p[4]).primaryOrder, 6);
+  // 全打席がちょうど1回ずつ割り当てられている(重複も欠落もない)
+  assert.equal(p.reduce((s, x) => s + m.get(x).atBats.length, 0), abs.length);
 });
 
-test('distributeToAppearances: 盗塁ログも回に応じて登場行へ振り分ける', () => {
-  const players = [{ playerId: 'a', inning: null }, { playerId: 'a', inning: 6 }];
+test('assignAtBatsByPlayer: 打順を移った選手の打撃結果が1行にまとまる', () => {
+  // 8番 平川(先発三塁) が5回から9番レフトへ。打席は8番・9番の両方の回に発生。
+  const rows = [
+    { order: 8, players: [{ playerId: 'hirakawa', inning: null }, { playerId: 'mogi', inning: 5 }] },
+    { order: 9, players: [{ playerId: 'okuda', inning: null }, { playerId: 'hirakawa', inning: 5 }] },
+  ];
+  const abs = [
+    { playerId: 'hirakawa', order: 8, result: 'single', snapshot: { inning: 2 } },
+    { playerId: 'hirakawa', order: 8, result: 'single', snapshot: { inning: 3 } },
+    { playerId: 'hirakawa', order: 9, result: 'out', snapshot: { inning: 5 } }, // 移った先での打席
+  ];
+  const m = assignAtBatsByPlayer(rows, abs);
+  const at8 = rows[0].players[0];
+  const at9 = rows[1].players[1];
+  assert.equal(m.get(at8).atBats.length, 3); // 3打席すべて8番の行へ
+  assert.equal(m.get(at8).primary, true);
+  assert.equal(m.get(at9).atBats.length, 0); // 移動先の行は空(0打数ではなく空欄表示)
+  assert.equal(m.get(at9).primary, false);
+  assert.equal(m.get(at9).primaryOrder, 8); // 「8番に記載」と案内できる
+});
+
+test('assignAtBatsByPlayer: 盗塁も同じ行にまとまる', () => {
+  const rows = [{ order: 1, players: [{ playerId: 'a', inning: null }, { playerId: 'a', inning: 6 }] }];
   const sbLogs = [
     { kind: 'sb', inning: 2, payload: { playerId: 'a' } },
     { kind: 'sb', inning: 7, payload: { playerId: 'a' } },
   ];
-  const { sbCounts } = distributeToAppearances(players, [], sbLogs);
-  assert.deepEqual(sbCounts, [1, 1]);
+  const m = assignAtBatsByPlayer(rows, [], sbLogs);
+  assert.equal(m.get(rows[0].players[0]).sb, 2);
+  assert.equal(m.get(rows[0].players[1]).sb, 0);
 });
 
 // ---- pitchingRebuild.js ----

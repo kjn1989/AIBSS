@@ -2,7 +2,7 @@ import React from 'react';
 import { useStore, usePlayerName, useT } from '../state/store.jsx';
 import { RESULTS, DIRECTIONS, formatIP, resultCategory, multiOutLabel } from '../lib/model.js';
 import { computeBoxScore } from '../lib/boxscore.js';
-import { buildLineupRows, distributeToAppearances } from '../lib/lineupBox.js';
+import { buildLineupRows, assignAtBatsByPlayer } from '../lib/lineupBox.js';
 import FullscreenView from './FullscreenView.jsx';
 
 // 打席結果の超短縮表記(スコアシートのセル用): 例「中安」「遊ゴ」「左本」「四球」/ 英語は "LF1B" 等。
@@ -63,23 +63,33 @@ export default function ScoreSheetView({ game, onClose }) {
   const innings = Array.from({ length: maxInning }, (_, i) => i + 1);
 
   // 打順スロットごとに、出場選手を「登場順」で各自1行に分ける(伝統的なスコアブック方式)。
-  // 位置=(先発)/打(代打)/走(代走)+守備位置。各選手の打席だけをその行のイニング欄に置く。
-  const rowsByOrder = new Map(buildLineupRows(game).map((r) => [r.order, r.players.map((p) => ({ ...p }))]));
+  // 位置=(先発)/打(代打)/走(代走)+守備位置。
+  // 打撃結果は「1人=1行」に集約する(打順を移った選手が複数行に分散しないように)。
+  const rows = buildLineupRows(game);
+  const rowsByOrder = new Map(rows.map((r) => [r.order, r.players]));
+  // 出場表に無いが打席がある選手を補完(過去データの取りこぼし防止)
+  const blank = { notation: '—', isStarter: false, role: 'def', inning: null, posCode: null, fromOrder: null, toOrder: null };
+  for (const ab of game.atBats) {
+    if (!ab.result || ab.order == null) continue;
+    let players = rowsByOrder.get(ab.order);
+    if (!players) {
+      players = [];
+      rowsByOrder.set(ab.order, players);
+      rows.push({ order: ab.order, players });
+    }
+    if (!players.some((p) => p.playerId === ab.playerId)) {
+      players.push({ ...blank, playerId: ab.playerId, isStarter: players.length === 0 });
+    }
+  }
+  const assigned = assignAtBatsByPlayer(rows, game.atBats.filter((ab) => ab.result));
+
   const slots = [];
   for (let order = 1; order <= 9; order++) {
-    const abs = game.atBats.filter((ab) => ab.order === order && ab.result);
     const players = rowsByOrder.get(order) || [];
-    // 出場表に無いが打席がある選手を補完(過去データの取りこぼし防止)
-    for (const ab of abs) {
-      if (!players.some((p) => p.playerId === ab.playerId)) {
-        players.push({ playerId: ab.playerId, notation: '—', isStarter: players.length === 0 });
-      }
-    }
     if (players.length === 0) continue;
-    // 同一選手が再登場した場合、打席を「登場した回」で1行だけに振り分ける(重複表示を防ぐ)。
-    const { abBuckets } = distributeToAppearances(players, abs);
-    const playerRows = players.map((p, pi) => {
-      const pabs = abBuckets[pi];
+    const playerRows = players.map((p) => {
+      const bucket = assigned.get(p) || { atBats: [], primary: true, primaryOrder: order };
+      const pabs = bucket.atBats;
       const byInning = {};
       for (const ab of pabs) {
         const inn = ab.snapshot?.inning || 1;
@@ -92,11 +102,13 @@ export default function ScoreSheetView({ game, onClose }) {
       return {
         ...p,
         byInning,
-        totals: {
+        // 集約先でない行は打撃欄を空にする(0打数と紛らわしくしない)
+        totals: bucket.primary ? {
           ab: pabs.filter((a) => RESULTS[a.result]?.ab).length,
           h: pabs.filter((a) => RESULTS[a.result]?.hit).length,
           rbi: pabs.reduce((s, a) => s + (a.rbi || 0), 0),
-        },
+        } : null,
+        primaryOrder: bucket.primaryOrder,
       };
     });
     slots.push({ order, playerRows });
@@ -174,9 +186,10 @@ export default function ScoreSheetView({ game, onClose }) {
                         ))}
                       </td>
                     ))}
-                    <td>{pr.totals.ab}</td>
-                    <td>{pr.totals.h}</td>
-                    <td>{pr.totals.rbi}</td>
+                    {/* 集約先でない行は空欄。打撃成績はその選手の主たる行(位置欄の←印の打順)にまとめている */}
+                    <td>{pr.totals ? pr.totals.ab : ''}</td>
+                    <td>{pr.totals ? pr.totals.h : ''}</td>
+                    <td>{pr.totals ? pr.totals.rbi : ''}</td>
                   </tr>
                 )))}
               </tbody>
