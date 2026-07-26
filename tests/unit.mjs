@@ -12,7 +12,7 @@ import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarter
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
 import { remapPlayerInGame, fillPlayerGaps } from '../src/lib/mergePlayers.js';
 import { computeBoxScore } from '../src/lib/boxscore.js';
-import { rebuildBatters, findDuplicateAtBats } from '../src/lib/battersRebuild.js';
+import { rebuildBatters, findDuplicateAtBats, findOrderBreaks, canRebuildOrders } from '../src/lib/battersRebuild.js';
 
 test('parseDirectionOnly: 方向のみの発話は方向、結果語を含めばnull(言い直し扱い)', () => {
   assert.equal(parseDirectionOnly('ライト'), 'RF');
@@ -355,6 +355,40 @@ test('rebuildBatters: 交代の記録どおりに各打席の打者を振り直�
   assert.equal(game.atBats[1].playerId, 'mogi'); // 交代後は茂木へ
   assert.equal(game.playLogs[2].payload.playerId, 'mogi');
   assert.ok(game.updatedAt); // 同期に載るよう更新時刻を進める
+});
+
+test('findOrderBreaks/rebuildBatters: 打順の並びのズレを検出して振り直す', () => {
+  // 1巡目は正しく、2巡目で「6番が3連続・4番が抜ける」ズレが入った状態を再現
+  const seq = [1, 2, 3, 4, 5, 6, 7, 8, 9, /* 2巡目 */ 1, 2, 3, 5, 6, 6, 6, 7, 8];
+  const fixed = [1, 2, 3, 4, 5, 6, 7, 8, 9, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+  const game = {
+    startingLineup: [1, 2, 3, 4, 5, 6, 7, 8, 9].map((o) => ({ order: o, playerId: `s${o}` })),
+    atBats: seq.map((o, i) => ({ id: `a${i}`, playerId: `s${o}`, order: o, result: 'out', snapshot: { inning: 1 + Math.floor(i / 3) } })),
+    playLogs: seq.map((o, i) => ({ kind: 'atbat', inning: 1 + Math.floor(i / 3), payload: { order: o, playerId: `s${o}`, atBatId: `a${i}`, result: 'out' } })),
+  };
+  assert.ok(findOrderBreaks(game) > 0);
+  assert.equal(canRebuildOrders(game), true); // ほぼ巡回しているので振り直して良い
+  rebuildBatters(game, (id) => id);
+  assert.equal(findOrderBreaks(game), 0);
+  assert.deepEqual(game.atBats.map((a) => a.order), fixed);
+  assert.deepEqual(game.playLogs.map((l) => l.payload.order), fixed);
+});
+
+test('canRebuildOrders: 打席を全部は記録していない試合では振り直さない(壊さない)', () => {
+  // 要点だけ記録した試合(打順が飛び飛び)は巡回の前提が成り立たないので対象外
+  const seq = [1, 5, 9, 3, 7, 2, 8, 4, 6, 1, 5];
+  const game = {
+    startingLineup: [], atBats: [],
+    playLogs: seq.map((o, i) => ({ kind: 'atbat', inning: 1 + i, payload: { order: o, playerId: 'p', result: 'out' } })),
+  };
+  assert.ok(findOrderBreaks(game) > 0);
+  assert.equal(canRebuildOrders(game), false);
+});
+
+test('findOrderBreaks: 正しい並び(9番の次は1番)はズレとみなさない', () => {
+  const mk = (order, inning) => ({ kind: 'atbat', inning, payload: { order, playerId: 'p', result: 'out' } });
+  const game = { startingLineup: [], atBats: [], playLogs: [mk(8, 3), mk(9, 3), mk(1, 3), mk(2, 4)] };
+  assert.equal(findOrderBreaks(game), 0);
 });
 
 test('rebuildBatters: 既に正しければ何も変えない', () => {

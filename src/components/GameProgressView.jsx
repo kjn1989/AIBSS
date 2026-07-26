@@ -5,7 +5,7 @@ import { playLabel } from '../lib/voiceParser.js';
 import { computeBoxScore } from '../lib/boxscore.js';
 import { parseBatterCorrection, findTargetAtBat, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment } from '../lib/correctionParser.js';
 import { posFull, buildLineupRows } from '../lib/lineupBox.js';
-import { findDuplicateAtBats } from '../lib/battersRebuild.js';
+import { findDuplicateAtBats, canRebuildOrders, findOrderBreaks } from '../lib/battersRebuild.js';
 import { interpretCorrection } from '../lib/gemini.js';
 import Sheet from './Sheet.jsx';
 import FullscreenView from './FullscreenView.jsx';
@@ -235,7 +235,9 @@ function NLCorrectionCard({ game }) {
   const [text, setText] = useState('');
   const [msg, setMsg] = useState(null); // { kind:'ok'|'err', text }
   const [busy, setBusy] = useState(false);
-  const dupAtBats = findDuplicateAtBats(game); // 付け替えの重ねがけで壊れた打席の検出
+  // 付け替えの重ねがけで壊れた打席の検出(同じ回に2打順で打席 / 打順の並びのズレ)
+  const dupAtBats = findDuplicateAtBats(game);
+  const orderBreaks = canRebuildOrders(game) ? findOrderBreaks(game) : 0;
 
   // 選手の打順スロットを特定する。既に交代で退いた選手(現lineupに居ない)でも、
   // スタメン・交代ログ・打席のどこかから拾えるようにする。
@@ -559,11 +561,13 @@ function NLCorrectionCard({ game }) {
         {state.settings.geminiApiKey ? t('gp.nlAiOn') : t('gp.nlAiOff')}
       </p>
       {/* 1人が同じ回に2打席ある等、付け替えの重ねがけで壊れた状態を検出したときだけ出す修復 */}
-      {dupAtBats.length > 0 && (
+      {(dupAtBats.length > 0 || orderBreaks > 0) && (
         <div className="warn-box mt8">
-          ⚠️ {t('gp.nlDupFound', {
-            list: dupAtBats.map((d) => t('gp.nlDupItem', { name: nameOf(d.playerId), inning: d.inning, n: d.count })).join('、'),
-          })}
+          ⚠️ {dupAtBats.length > 0
+            ? t('gp.nlDupFound', {
+              list: dupAtBats.map((d) => t('gp.nlDupItem', { name: nameOf(d.playerId), inning: d.inning, n: d.count })).join('、'),
+            })
+            : t('gp.nlOrderBroken', { n: orderBreaks })}
           <button
             className="mt8" style={{ width: '100%' }}
             onClick={() => {
