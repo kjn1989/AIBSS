@@ -184,22 +184,32 @@ test('parseDefensiveAlignment: 「2回から山城はキャッチャーです」
   assert.equal(parseDefensiveAlignment('7回表の中島は中犠飛です', PS).length, 0);
 });
 
-test('findPositionIssues: 同じ守備位置に2人・守る人が居ない位置を検出', () => {
-  const game = { lineup: [
-    { order: 1, playerId: 'a', position: '投' }, { order: 2, playerId: 'b', position: '一' },
-    { order: 3, playerId: 'c', position: '一' }, // 一塁が2人 → 捕手が不在
-    { order: 4, playerId: 'd', position: '二' }, { order: 5, playerId: 'e', position: '三' },
-    { order: 6, playerId: 'f', position: '遊' }, { order: 7, playerId: 'g', position: '左' },
-    { order: 8, playerId: 'h', position: '中' }, { order: 9, playerId: 'i', position: '右' },
-  ] };
+test('findPositionIssues: 同じ守備位置に2人・守る人が居ない位置を、発生している回の範囲つきで検出', () => {
+  // 先発は正常。3回に捕手が交代したのに位置が一塁のままで、以降ずっと一塁2人・捕手不在。
+  const POS = ['投', '捕', '一', '二', '三', '遊', '左', '中', '右'];
+  const starters = POS.map((p, i) => ({ order: i + 1, playerId: `s${i + 1}`, position: p }));
+  const game = {
+    startingLineup: starters,
+    lineup: starters.map((s) => (s.order === 2 ? { ...s, playerId: 'sub1', position: '一' } : { ...s })),
+    playLogs: [
+      { kind: 'atbat', inning: 1, payload: { order: 1, playerId: 's1', result: 'out' } },
+      { kind: 'sub', inning: 3, payload: { order: 2, in: 'sub1', out: 's2', kind: 'def', position: '一' } },
+      { kind: 'atbat', inning: 5, payload: { order: 1, playerId: 's1', result: 'out' } },
+    ],
+  };
   const r = findPositionIssues(game);
-  assert.deepEqual(r.duplicates, [{ position: '一', playerIds: ['b', 'c'] }]);
-  assert.deepEqual(r.missing, ['捕']);
+  assert.deepEqual(r.duplicates, [{ position: '一', playerIds: ['sub1', 's3'], from: 3, to: 5 }]);
+  assert.deepEqual(r.missing, [{ position: '捕', from: 3, to: 5 }]);
 });
 
-test('findPositionIssues: 9人揃っていない試合では「不在」を出さない(誤警告しない)', () => {
-  const game = { lineup: [{ order: 1, playerId: 'a', position: '投' }, { order: 2, playerId: 'b', position: '捕' }] };
-  const r = findPositionIssues(game);
+test('findPositionIssues: 正常な守備なら何も報告しない / 9人揃わない試合では不在を出さない', () => {
+  const POS = ['投', '捕', '一', '二', '三', '遊', '左', '中', '右'];
+  const starters = POS.map((p, i) => ({ order: i + 1, playerId: `s${i + 1}`, position: p }));
+  const ok = { startingLineup: starters, lineup: starters.map((s) => ({ ...s })), playLogs: [{ kind: 'atbat', inning: 1, payload: { order: 1 } }] };
+  assert.deepEqual(findPositionIssues(ok), { duplicates: [], missing: [] });
+
+  const few = { startingLineup: [], lineup: [{ order: 1, playerId: 'a', position: '投' }, { order: 2, playerId: 'b', position: '捕' }], playLogs: [] };
+  const r = findPositionIssues(few);
   assert.deepEqual(r.duplicates, []);
   assert.deepEqual(r.missing, []);
 });

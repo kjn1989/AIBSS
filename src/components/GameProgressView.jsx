@@ -239,6 +239,8 @@ function NLCorrectionCard({ game }) {
   const dupAtBats = findDuplicateAtBats(game);
   const orderBreaks = canRebuildOrders(game) ? findOrderBreaks(game) : 0;
   const posIssues = findPositionIssues(game); // 同じ守備位置に2人 / 守備位置が不在
+  // 「3〜6回」「5回」のように、発生している回を範囲で示す
+  const inningRange = (r) => (r.from === r.to ? t('gp.nlInningOne', { n: r.from }) : t('gp.nlInningRange', { from: r.from, to: r.to }));
 
   // 選手の打順スロットを特定する。既に交代で退いた選手(現lineupに居ない)でも、
   // スタメン・交代ログ・打席のどこかから拾えるようにする。
@@ -604,9 +606,12 @@ function NLCorrectionCard({ game }) {
         <div className="warn-box mt8">
           ⚠️ {[
             ...posIssues.duplicates.map((d) => t('gp.nlPosDup', {
-              pos: posFull(d.position, lang), names: d.playerIds.map((id) => nameOf(id)).join('・'),
+              range: inningRange(d), pos: posFull(d.position, lang),
+              names: d.playerIds.map((id) => nameOf(id)).join('・'),
             })),
-            ...(posIssues.missing.length ? [t('gp.nlPosMissing', { list: posIssues.missing.map((p) => posFull(p, lang)).join('・') })] : []),
+            ...posIssues.missing.map((m) => t('gp.nlPosMissing', {
+              range: inningRange(m), pos: posFull(m.position, lang),
+            })),
           ].join(' ')}
           <div className="small dim mt8">{t('gp.nlPosFixHint')}</div>
         </div>

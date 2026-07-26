@@ -205,23 +205,92 @@ export function assignAtBatsByPlayer(rows, atBats = [], sbLogs = []) {
   return out;
 }
 
-// 守備位置の整合チェック(現在の打順を対象)。
+// 守備位置の整合チェック。
 // 同じ位置に2人いる／守るべき位置に誰も居ない、は交代や訂正の取りこぼしでしか起きない。
 // 例: 捕手が交代したのに位置が一塁のままだと「一塁が2人・捕手が不在」になる。
-// 戻り値: { duplicates: [{ position, playerIds }], missing: [position] }
+//
+// いつ起きているかが分かるよう、交代を回ごとに辿って各回の守備陣を作り、
+// 問題が続いている回を範囲(from〜to)にまとめて返す。
+// 戻り値: { duplicates: [{ position, playerIds, from, to }], missing: [{ position, from, to }] }
 const STANDARD_POSITIONS = ['投', '捕', '一', '二', '三', '遊', '左', '中', '右'];
-export function findPositionIssues(game) {
-  const slots = (game.lineup || []).filter((l) => l.playerId && l.position);
-  const byPos = new Map();
-  for (const l of slots) {
-    if (!byPos.has(l.position)) byPos.set(l.position, []);
-    byPos.get(l.position).push(l.playerId);
+
+// 回ごとの守備陣(打順→{playerId, position})を作る。回N の状態は「N回までの交代を適用した形」。
+function alignmentByInning(game) {
+  const slots = new Map();
+  for (const s of resolveStarters(game)) {
+    if (s.playerId != null) slots.set(s.order, { playerId: s.playerId, position: s.position || null });
   }
-  const duplicates = [...byPos.entries()]
-    .filter(([, ids]) => ids.length > 1)
-    .map(([position, playerIds]) => ({ position, playerIds }));
-  // 守備位置が9つ揃うはずの布陣のときだけ「不在」を見る(DHや人数不足の試合で誤警告しない)
-  const missing = slots.length >= 9 ? STANDARD_POSITIONS.filter((p) => !byPos.has(p)) : [];
+  const logs = (game.playLogs || []).filter((l) => l.kind === 'sub' || l.kind === 'position');
+  const maxInning = Math.max(1, ...(game.playLogs || []).map((l) => Number(l.inning) || 1));
+  const out = new Map();
+  let i = 0;
+  for (let inn = 1; inn <= maxInning; inn++) {
+    while (i < logs.length && (Number(logs[i].inning) || 1) <= inn) {
+      const l = logs[i];
+      const p = l.payload || {};
+      if (l.kind === 'sub' && p.order != null && p.in) {
+        slots.set(p.order, { playerId: p.in, position: p.position || slots.get(p.order)?.position || null });
+      } else if (l.kind === 'position' && p.order != null) {
+        const cur = slots.get(p.order);
+        if (cur && cur.playerId === p.playerId) cur.position = p.position || cur.position;
+      }
+      i += 1;
+    }
+    out.set(inn, [...slots.values()].filter((v) => v.playerId && v.position).map((v) => ({ ...v })));
+  }
+  // 最終回は現lineupを正とする(位置ログが残っていない変更を取りこぼさない)
+  const last = (game.lineup || []).filter((l) => l.playerId && l.position);
+  if (last.length) out.set(maxInning, last.map((l) => ({ playerId: l.playerId, position: l.position })));
+  return out;
+}
+
+// 連続する回を範囲にまとめる: [3,4,5,7] -> [{from:3,to:5},{from:7,to:7}]
+function toRanges(innings) {
+  const sorted = [...new Set(innings)].sort((a, b) => a - b);
+  const out = [];
+  for (const n of sorted) {
+    const last = out[out.length - 1];
+    if (last && n === last.to + 1) last.to = n;
+    else out.push({ from: n, to: n });
+  }
+  return out;
+}
+
+export function findPositionIssues(game) {
+  const byInning = alignmentByInning(game);
+  const dupSeen = new Map();  // `${position}|${playerIds}` -> { position, playerIds, innings }
+  const missSeen = new Map(); // position -> innings
+
+  for (const [inn, slots] of byInning) {
+    const byPos = new Map();
+    for (const s of slots) {
+      if (!byPos.has(s.position)) byPos.set(s.position, []);
+      byPos.get(s.position).push(s.playerId);
+    }
+    for (const [position, playerIds] of byPos) {
+      if (playerIds.length < 2) continue;
+      const key = `${position}|${[...playerIds].sort().join(',')}`;
+      if (!dupSeen.has(key)) dupSeen.set(key, { position, playerIds, innings: [] });
+      dupSeen.get(key).innings.push(inn);
+    }
+    // 守備位置が9つ揃うはずの布陣のときだけ「不在」を見る(DHや人数不足の試合で誤警告しない)
+    if (slots.length >= 9) {
+      for (const p of STANDARD_POSITIONS) {
+        if (byPos.has(p)) continue;
+        if (!missSeen.has(p)) missSeen.set(p, []);
+        missSeen.get(p).push(inn);
+      }
+    }
+  }
+
+  const duplicates = [];
+  for (const d of dupSeen.values()) {
+    for (const r of toRanges(d.innings)) duplicates.push({ position: d.position, playerIds: d.playerIds, ...r });
+  }
+  const missing = [];
+  for (const [position, innings] of missSeen) {
+    for (const r of toRanges(innings)) missing.push({ position, ...r });
+  }
   return { duplicates, missing };
 }
 
