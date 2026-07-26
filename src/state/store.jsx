@@ -12,6 +12,7 @@ import {
 import { generateDemoData } from '../lib/demo.js';
 import { rebuildPitchingStats } from '../lib/pitchingRebuild.js';
 import { resolveStarters } from '../lib/lineupBox.js';
+import { remapPlayerInGame, fillPlayerGaps } from '../lib/mergePlayers.js';
 import { idbSave } from '../lib/durableStore.js';
 import { translate, DEFAULT_LANG } from '../lib/i18n.js';
 import { getActiveProfileId, profileStorageKey, listProfiles, updateProfileMeta } from '../lib/profiles.js';
@@ -372,37 +373,13 @@ export function reducer(state, action) {
       const dup = state.players.find((p) => p.id === mergeId);
       if (!keep || !dup) return state;
 
-      const swap = (id) => (id === mergeId ? keepId : id);
       const games = {};
       for (const [gid, g0] of Object.entries(state.games)) {
         const g = deep(g0);
-        for (const l of g.lineup || []) l.playerId = swap(l.playerId);
-        for (const l of g.startingLineup || []) l.playerId = swap(l.playerId);
-        for (const ab of g.atBats || []) ab.playerId = swap(ab.playerId);
-        for (const pr of g.pitchingRecords || []) pr.playerId = swap(pr.playerId);
-        for (const b of g.importedBatting || []) b.playerId = swap(b.playerId);
-        for (const p of g.importedPitching || []) p.playerId = swap(p.playerId);
-        g.retiredPlayerIds = [...new Set((g.retiredPlayerIds || []).map(swap))];
-        g.usedPlayerIds = [...new Set((g.usedPlayerIds || []).map(swap))];
-        g.currentPitcherId = g.currentPitcherId ? swap(g.currentPitcherId) : g.currentPitcherId;
-        for (const b of [1, 2, 3]) {
-          const r = g.runners?.[b];
-          if (r?.playerId) r.playerId = swap(r.playerId);
-        }
-        for (const log of g.playLogs || []) {
-          const p = log.payload;
-          if (!p) continue;
-          for (const key of ['playerId', 'in', 'out', 'pitcherId', 'batterId']) {
-            if (p[key]) p[key] = swap(p[key]);
-          }
-        }
+        remapPlayerInGame(g, mergeId, keepId); // 付け替えが起きた試合は updatedAt も進む
         games[gid] = g;
       }
-      // 空欄の項目は重複側の値で補完(背番号だけ入っている方を活かす)
-      const filled = { ...keep };
-      for (const key of ['number', 'throws', 'bats', 'position', 'memo']) {
-        if (!filled[key] && dup[key]) filled[key] = dup[key];
-      }
+      const filled = fillPlayerGaps(keep, dup);
       return {
         ...state,
         games,
