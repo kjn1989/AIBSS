@@ -63,9 +63,13 @@ export default function GameBoxScore({ game }) {
                   <div className={`bx-card${i > 0 ? ' sub' : ''}`} key={`${p.playerId}-${i}`}>
                     <div className="bx-top">
                       {p.inning != null && <span className="bx-inn">{t('box.inningN', { n: p.inning })}</span>}
-                      {tag && <span className={`bx-role ${tag}`}>{roleLabel[tag]}</span>}
+                      {/* 打順を移ってきた選手は「◯番より」。途中出場ではなく出場を続けていることを示す */}
+                      {p.fromOrder != null
+                        ? <span className="bx-role move">{t('box.fromOrder', { n: p.fromOrder })}</span>
+                        : tag && <span className={`bx-role ${tag}`}>{roleLabel[tag]}</span>}
                       {p.posCode && <span className="bx-pos">{posFull(p.posCode, lang)}</span>}
                       <span className="bx-name">{nameOf(p.playerId)}{numberOf(p.playerId) ? <span className="bx-num">#{numberOf(p.playerId)}</span> : ''}</span>
+                      {p.toOrder != null && <span className="bx-move">{t('box.toOrder', { n: p.toOrder })}</span>}
                     </div>
                     <div className="bx-bottom">{sl || t('box.noPa')}</div>
                   </div>

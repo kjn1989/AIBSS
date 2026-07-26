@@ -157,7 +157,12 @@ export default function ScoreSheetView({ game, onClose }) {
                 {slots.map((s) => s.playerRows.map((pr, ri) => (
                   <tr key={`${s.order}-${pr.playerId}-${ri}`} className={ri > 0 ? 'ss-sub' : ''}>
                     <td>{ri === 0 ? s.order : ''}</td>
-                    <td className="ss-pos">{pr.notation}</td>
+                    {/* 打順を移った選手は「←8」「→9」で移動元/先を示し、途中出場と区別できるようにする */}
+                    <td className="ss-pos">
+                      {pr.notation}
+                      {pr.fromOrder != null && <span className="ss-move" title={t('box.fromOrder', { n: pr.fromOrder })}>←{pr.fromOrder}</span>}
+                      {pr.toOrder != null && <span className="ss-move" title={t('box.toOrder', { n: pr.toOrder })}>→{pr.toOrder}</span>}
+                    </td>
                     <td className="ss-name">{nameOf(pr.playerId)}</td>
                     {innings.map((i) => (
                       <td key={i}>

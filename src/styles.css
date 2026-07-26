@@ -1016,6 +1016,9 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 .bx-role.pr { background: var(--purple); color: #fff; }
 .bx-role.def { background: var(--blue); color: #fff; }
 .bx-role.relief { background: var(--gold); color: #201608; }
+/* 打順移動(出場継続): 交代バッジと区別できるよう塗りつぶさず枠線で示す */
+.bx-role.move { background: transparent; border: 1px dashed var(--accent); color: var(--accent); }
+.bx-move { font-size: 11px; font-weight: 700; color: var(--text-dim); }
 .bx-pos { font-size: 12.5px; font-weight: 700; color: var(--accent); }
 .bx-name { font-weight: 800; font-size: 15px; }
 .bx-num { color: var(--text-dim); font-weight: 600; font-size: .82em; margin-left: 3px; }
@@ -1066,6 +1069,8 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 .ss-table th { color: var(--text-dim); font-weight: 600; }
 .ss-table .ss-team, .ss-table .ss-name { text-align: left; white-space: nowrap; padding: 4px 6px; }
 .ss-table .ss-pos { font-weight: 700; color: var(--accent); white-space: nowrap; }
+/* 打順移動の矢印(←8 / →9)。位置表記より控えめにして邪魔しない */
+.ss-table .ss-move { font-size: 9px; font-weight: 700; color: var(--text-dim); margin-left: 2px; }
 .ss-table tr.ss-sub td { background: color-mix(in srgb, var(--accent) 6%, transparent); }
 .ss-matrix { display: block; overflow-x: auto; }
 .ss-footer { text-align: center; font-size: 10px; color: var(--text-dim); }
