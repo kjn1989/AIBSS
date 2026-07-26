@@ -361,6 +361,56 @@ export function reducer(state, action) {
       const players = state.players.map((p) => (p.id === action.id ? { ...p, ...action.patch } : p));
       return { ...state, players };
     }
+    // ===== 同名で二重登録された選手の統合 =====
+    // 同じ人が2件の選手レコードに分かれていると、打順移動の検出や通算成績が分断される
+    // (例: 8番の平川と9番の平川が別人扱いになる)。全試合の参照を keepId に付け替え、
+    // 重複レコードを削除して1人にまとめる。背番号など空欄の項目は残る側に補完する。
+    case 'MERGE_PLAYERS': {
+      const { keepId, mergeId } = action;
+      if (!keepId || !mergeId || keepId === mergeId) return state;
+      const keep = state.players.find((p) => p.id === keepId);
+      const dup = state.players.find((p) => p.id === mergeId);
+      if (!keep || !dup) return state;
+
+      const swap = (id) => (id === mergeId ? keepId : id);
+      const games = {};
+      for (const [gid, g0] of Object.entries(state.games)) {
+        const g = deep(g0);
+        for (const l of g.lineup || []) l.playerId = swap(l.playerId);
+        for (const l of g.startingLineup || []) l.playerId = swap(l.playerId);
+        for (const ab of g.atBats || []) ab.playerId = swap(ab.playerId);
+        for (const pr of g.pitchingRecords || []) pr.playerId = swap(pr.playerId);
+        for (const b of g.importedBatting || []) b.playerId = swap(b.playerId);
+        for (const p of g.importedPitching || []) p.playerId = swap(p.playerId);
+        g.retiredPlayerIds = [...new Set((g.retiredPlayerIds || []).map(swap))];
+        g.usedPlayerIds = [...new Set((g.usedPlayerIds || []).map(swap))];
+        g.currentPitcherId = g.currentPitcherId ? swap(g.currentPitcherId) : g.currentPitcherId;
+        for (const b of [1, 2, 3]) {
+          const r = g.runners?.[b];
+          if (r?.playerId) r.playerId = swap(r.playerId);
+        }
+        for (const log of g.playLogs || []) {
+          const p = log.payload;
+          if (!p) continue;
+          for (const key of ['playerId', 'in', 'out', 'pitcherId', 'batterId']) {
+            if (p[key]) p[key] = swap(p[key]);
+          }
+        }
+        games[gid] = g;
+      }
+      // 空欄の項目は重複側の値で補完(背番号だけ入っている方を活かす)
+      const filled = { ...keep };
+      for (const key of ['number', 'throws', 'bats', 'position', 'memo']) {
+        if (!filled[key] && dup[key]) filled[key] = dup[key];
+      }
+      return {
+        ...state,
+        games,
+        players: state.players.filter((p) => p.id !== mergeId).map((p) => (p.id === keepId ? filled : p)),
+        pendingDeletes: mergeId.startsWith('demo-') ? state.pendingDeletes : addTomb(state.pendingDeletes, 'players', [mergeId]),
+      };
+    }
+
     case 'DELETE_PLAYER': {
       const idx = state.players.findIndex((p) => p.id === action.id);
       const item = state.players[idx];
