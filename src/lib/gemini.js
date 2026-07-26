@@ -13,6 +13,20 @@
 const MODEL_CANDIDATES = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest'];
 let preferredModel = null; // 一度成功したモデルは次回から先に試す(無駄な失敗を減らす)
 
+// Geminiのエラーは英語で返るため、記録係がそのまま読んで対処できる日本語にする。
+// 原因の切り分けに使えるようHTTPコードは残し、必要なら原文も短く添える。
+function describeApiError(status, raw = '') {
+  const m = String(raw);
+  const brief = m.replace(/\s+/g, ' ').slice(0, 60);
+  if (status === 429) return '無料枠の上限に達しました (HTTP 429)';
+  if (status === 400 && /api[_ ]?key|API_KEY_INVALID/i.test(m)) return 'APIキーが正しくありません (HTTP 400)';
+  if (status === 400) return `リクエストが受け付けられませんでした (HTTP 400: ${brief})`;
+  if (status === 401 || status === 403) return `APIキーが無効か、利用が許可されていません (HTTP ${status})`;
+  if (status === 404) return '指定のAIモデルが利用できません (HTTP 404)';
+  if (status >= 500) return `Gemini側が混雑または障害中です (HTTP ${status})`;
+  return `AIの呼び出しに失敗しました (HTTP ${status}: ${brief})`;
+}
+
 // 1モデルぶんの呼び出し。戻り値: { status, data } | { status, error }
 async function callModel(model, apiKey, prompt, maxOutputTokens, temperature) {
   const request = (generationConfig) => fetch(
@@ -39,7 +53,7 @@ async function callModel(model, apiKey, prompt, maxOutputTokens, temperature) {
     } catch {
       /* JSONでなければそのまま */
     }
-    return { status: res.status, error: `HTTP ${res.status}: ${reason}`.slice(0, 200) };
+    return { status: res.status, error: describeApiError(res.status, reason) };
   }
   const data = await res.json();
   const raw = data.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';
@@ -68,11 +82,11 @@ async function callGeminiJSON(apiKey, prompt, { maxOutputTokens = 1024, temperat
       // 上限(429)・そのキーで使えない(404)は、別モデルなら通ることがあるので次を試す
       if (r.status === 429 || r.status === 404) { if (preferredModel === model) preferredModel = null; continue; }
       return { error: r.error }; // キー不正など、モデルを変えても直らないものは即返す
-    } catch (e) {
-      last = e?.message || 'ネットワークエラー';
+    } catch {
+      last = 'AIに接続できませんでした（通信エラー）';
     }
   }
-  return { error: last || 'ネットワークエラー' };
+  return { error: last || 'AIに接続できませんでした（通信エラー）' };
 }
 
 // 送信前のプライバシー保護: テキスト内の登録選手名を「選手」に置換する。
