@@ -3,7 +3,7 @@ import { useStore, usePlayerName, useT } from '../state/store.jsx';
 import { RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES, resultCategory, multiOutLabel, outTypeLabel } from '../lib/model.js';
 import { playLabel } from '../lib/voiceParser.js';
 import { computeBoxScore } from '../lib/boxscore.js';
-import { parseBatterCorrection, findTargetAtBat, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections } from '../lib/correctionParser.js';
+import { parseBatterCorrection, findTargetAtBat, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment } from '../lib/correctionParser.js';
 import { posFull, buildLineupRows } from '../lib/lineupBox.js';
 import { interpretCorrection } from '../lib/gemini.js';
 import Sheet from './Sheet.jsx';
@@ -274,11 +274,15 @@ function NLCorrectionCard({ game }) {
 
   // AIの操作配列 → 中間表現(regexパスと同形 { subs, reassigns, resultCorrs })
   const aiOpsToIntermediate = (ops) => {
-    const subs = []; const reassigns = []; const resultCorrs = []; const posCorrs = [];
+    const subs = []; const reassigns = []; const resultCorrs = []; const posCorrs = []; const aligns = [];
     const num = (v) => (v == null || v === 'null' || v === '' ? null : Number(v)); // AIの文字列数値に備える
     for (const op of ops || []) {
       const inning = num(op.inning);
-      if (op.type === 'position') {
+      if (op.type === 'defense' && inning) {
+        // 「◯回の守備は◯◯」= 出場中の選手の守備位置変更(交代ではない)
+        const pid = idByName(op.player);
+        if (pid && clean(op.position)) aligns.push({ inning, playerId: pid, playerName: op.player, position: clean(op.position) });
+      } else if (op.type === 'position') {
         // 先発守備位置の訂正(回を伴わない)
         const pid = idByName(op.player);
         if (pid && clean(op.position)) posCorrs.push({ playerId: pid, playerName: op.player, position: clean(op.position) });
@@ -298,15 +302,16 @@ function NLCorrectionCard({ game }) {
         } });
       }
     }
-    return { subs, reassigns, resultCorrs, posCorrs };
+    return { subs, reassigns, resultCorrs, posCorrs, aligns };
   };
   const produceRegex = () => ({
     subs: parseSubstitutions(text, state.players),
     reassigns: parseBatterReassignments(text, state.players),
     resultCorrs: parseResultCorrections(text),
     posCorrs: parsePositionCorrections(text, state.players),
+    aligns: parseDefensiveAlignment(text, state.players),
   });
-  const isEmpty = (im) => !(im.subs.length || im.reassigns.length || im.resultCorrs.length || im.posCorrs.length);
+  const isEmpty = (im) => !(im.subs.length || im.reassigns.length || im.resultCorrs.length || im.posCorrs.length || im.aligns.length);
 
   // AI解釈と端末内解釈を統合(片方の取りこぼしをもう片方で補完)。重複は除去。
   const mergeIm = (a, b) => {
@@ -324,6 +329,7 @@ function NLCorrectionCard({ game }) {
       reassigns: uniq([...(a.reassigns || []), ...(b.reassigns || [])], (r) => `${r.inning}|${r.newId}`),
       resultCorrs: uniq([...(a.resultCorrs || []), ...(b.resultCorrs || [])], (rc) => `${rc.inning}|${rc.patch.result}`),
       posCorrs: uniq([...(a.posCorrs || []), ...(b.posCorrs || [])], (pc) => `${pc.playerId}`),
+      aligns: uniq([...(a.aligns || []), ...(b.aligns || [])], (al) => `${al.inning}|${al.playerId}`),
     };
   };
 
@@ -343,7 +349,28 @@ function NLCorrectionCard({ game }) {
   };
 
   const resolveAndApply = (im) => {
-    const { subs, reassigns, resultCorrs, posCorrs = [] } = im;
+    const { reassigns, resultCorrs, posCorrs = [], aligns = [] } = im;
+    let subs = im.subs;
+    // 守備陣形の申告(◯回の守備は…): 既に出場中の選手なら守備位置の変更、
+    // 出場していない選手ならその位置への交代として扱う。
+    const alignAppl = [];
+    const alignUnresolved = [];
+    for (const al of aligns) {
+      const slot = (game.lineup || []).find((l) => l.playerId === al.playerId);
+      if (slot) {
+        if (slot.position === al.position) continue; // 既にその位置
+        alignAppl.push({ ...al, order: slot.order, from: slot.position || null });
+      } else {
+        // 出場していない=交代。その位置の現在の守備者と入れ替える(交代の解決へ回す)
+        const cur = (game.lineup || []).find((l) => l.position === al.position && l.playerId);
+        if (!cur) { alignUnresolved.push(al.playerName || nameOf(al.playerId)); continue; }
+        subs = [...subs, {
+          inning: al.inning, outId: cur.playerId, outName: nameOf(cur.playerId),
+          inId: al.playerId, inName: al.playerName || nameOf(al.playerId),
+          position: al.position, subKind: 'def', afterOppOrder: null,
+        }];
+      }
+    }
     // 守備位置の訂正: 出場選手ツリー(画面の表示と同じ組み立て)から対象の出場を特定する。
     // startingLineupが無い過去試合でも、表示上その選手が先発として出ていれば訂正できる。
     const posAppl = [];
@@ -424,8 +451,9 @@ function NLCorrectionCard({ game }) {
       if (logId) resAppl.push({ ...rc, logId });
     }
 
-    const totalOps = subAppl.length + synthSubs.length + reAppl.length + resAppl.length + posAppl.length;
+    const totalOps = subAppl.length + synthSubs.length + reAppl.length + resAppl.length + posAppl.length + alignAppl.length;
     if (!totalOps) {
+      if (alignUnresolved.length) { setMsg({ kind: 'err', text: t('gp.nlPosNotStarter', { name: alignUnresolved.join('、') }) }); return; }
       if (posUnresolved.length) { setMsg({ kind: 'err', text: t('gp.nlPosNotStarter', { name: posUnresolved.join('、') }) }); return; }
       if (subUnresolved.length) { setMsg({ kind: 'err', text: t('gp.nlSubNoOrder', { name: subUnresolved.join('、') }) }); return; }
       if (reUnresolved.length) { setMsg({ kind: 'err', text: t('gp.nlReAllNotFound', { innings: reUnresolved.join('、') }) }); return; }
@@ -439,6 +467,10 @@ function NLCorrectionCard({ game }) {
 
     const subLabel = (s) => t('gp.nlSubItem', { inning: s.inning, out: s.outName, in: s.inName, pos: s.position ? posFull(s.position, lang) : t('gp.nlSubNoPos') });
     const lines = [
+      ...alignAppl.map((al) => t('gp.nlAlignItem', {
+        inning: al.inning, order: al.order, name: al.playerName || nameOf(al.playerId),
+        from: al.from ? posFull(al.from, lang) : '—', to: posFull(al.position, lang),
+      })),
       ...posAppl.map((pc) => t('gp.nlPosItem', {
         order: pc.order, name: pc.playerName || nameOf(pc.playerId),
         from: pc.from ? posFull(pc.from, lang) : '—', to: posFull(pc.position, lang),
@@ -455,6 +487,7 @@ function NLCorrectionCard({ game }) {
       dispatch({ type: 'RETRO_SUBSTITUTE', gameId: game.id, order: s.order, outId: s.outId, inId: s.inId, position: s.position, subKind: s.subKind, inning: s.inning, afterOppOrder: s.afterOppOrder ?? null, label: `${kindLabel}: ${nameOf(s.inId)} (${s.order}番 ${nameOf(s.outId)}に代わり)` });
     };
     posAppl.forEach((pc) => dispatch({ type: 'FIX_STARTING_POSITION', gameId: game.id, playerId: pc.playerId, position: pc.position }));
+    alignAppl.forEach((al) => dispatch({ type: 'RETRO_POSITION', gameId: game.id, order: al.order, playerId: al.playerId, position: al.position, inning: al.inning }));
     synthSubs.forEach(doSub);
     subAppl.forEach(doSub);
     reAppl.forEach((r) => dispatch({ type: 'REASSIGN_ATBAT', gameId: game.id, logId: r.logId, newPlayerId: r.newId }));

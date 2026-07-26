@@ -1055,6 +1055,28 @@ export function reducer(state, action) {
       return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
     }
 
+    // ===== 文章での守備位置変更(あとから「◯回からこの位置」を差し込む) =====
+    // 交代ではなく、既に出場している選手の守備位置だけが変わったケース
+    // (例: 7回からショート茂木・サード入交・セカンド宇田川、という内野の組み替え)。
+    // その回の守備の頭に position ログを挿入し、現lineupの守備位置も合わせる。
+    case 'RETRO_POSITION': {
+      const g = deep(state.games[action.gameId]);
+      const { order, playerId, position, inning } = action;
+      if (order == null || !playerId || !position) return state;
+      // 同じ打順・同じ回の位置ログが既にあれば置き換える(重複防止)
+      g.playLogs = g.playLogs.filter((l) => !(l.kind === 'position' && l.payload?.order === order && Number(l.inning) === Number(inning)));
+      const slot = g.lineup.find((l) => l.order === order);
+      const log = newPlayLog({
+        gameId: g.id, inning, isTop: !!g.isHome, kind: 'position', text: '',
+        payload: { order, playerId, position, from: slot?.position || null },
+      });
+      const at = g.playLogs.findIndex((l) => (l.inning || 0) >= inning);
+      if (at < 0) g.playLogs.push(log); else g.playLogs.splice(at, 0, log);
+      if (slot && slot.playerId === playerId) slot.position = position;
+      g.updatedAt = Date.now();
+      return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
+    }
+
     // ===== 文章での交代記録(あとから守備交代・代打・リエントリーを差し込む) =====
     // 指定した回に out→in の交代ログを挿入し、その回より後の当該打順の打席を in へ付け替える。
     // 出場選手ツリー・スコアシートは 'sub' ログから系譜を再構成するため、これで反映される。

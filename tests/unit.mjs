@@ -7,7 +7,7 @@ import { gameEndCheck, initialPresetIdFor, describeRules } from '../src/lib/rule
 import { aggregateBatting, battingMetrics, pitchingMetrics, titleLeaders } from '../src/lib/stats.js';
 import { translate } from '../src/lib/i18n.js';
 import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, parseDirectionOnly } from '../src/lib/voiceParser.js';
-import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections } from '../src/lib/correctionParser.js';
+import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment } from '../src/lib/correctionParser.js';
 import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarters } from '../src/lib/lineupBox.js';
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
 import { remapPlayerInGame, fillPlayerGaps } from '../src/lib/mergePlayers.js';
@@ -135,6 +135,25 @@ test('parseBatterReassignments: 複数回の打者付け替え(5回・7回)を�
   const rs = parseBatterReassignments(txt, PS);
   assert.equal(rs.length, 2);
   assert.deepEqual(rs.map((r) => [r.inning, r.targetId, r.newId]), [[5, 's', 'n'], [7, 's', 'n']]);
+});
+test('parseDefensiveAlignment: 「7回の守備はショート茂木、サード入交、セカンド宇田川」= 3件の守備位置', () => {
+  const PS = [{ id: 'm', name: '茂木' }, { id: 'i', name: '入交' }, { id: 'u', name: '宇田川' }];
+  const rs = parseDefensiveAlignment('7回の守備はショート茂木、サード入交、セカンド宇田川でした', PS);
+  assert.deepEqual(rs.map((r) => [r.inning, r.playerId, r.position]), [
+    [7, 'm', '遊'], [7, 'i', '三'], [7, 'u', '二'],
+  ]);
+});
+test('parseSubstitutions: 守備陣形の申告を「交代」と誤読しない', () => {
+  const PS = [{ id: 'm', name: '茂木' }, { id: 'i', name: '入交' }, { id: 'u', name: '宇田川' }];
+  // 以前は先頭2名を拾って「茂木→入交(二塁)」という誤った交代を1件作っていた
+  assert.deepEqual(parseSubstitutions('7回の守備はショート茂木、サード入交、セカンド宇田川でした', PS), []);
+});
+test('parseDefensiveAlignment: 交代文や位置1つの文は拾わない(交代解釈と取り合わない)', () => {
+  const PS = [{ id: 'y', name: '山城' }, { id: 'm', name: '松田' }, { id: 'k', name: '河合' }];
+  // 交代語を含む文は parseSubstitutions の担当
+  assert.equal(parseDefensiveAlignment('2回にキャッチャー河合が負傷、ファースト山城と交代', PS).length, 0);
+  // 位置が1つだけの文も交代解釈に任せる
+  assert.equal(parseDefensiveAlignment('6回の守備はキャッチャー松田でした', PS).length, 0);
 });
 test('parsePositionCorrections: 「先発守備位置は正しくはライト」= 回の指定なしで位置訂正', () => {
   const PS = [{ id: 's', name: '清水' }, { id: 'm', name: '松田' }];

@@ -89,6 +89,31 @@ export function parsePositionCorrections(rawText, players = []) {
   return out;
 }
 
+// 守備陣形の申告を解釈する。ある回からの守備位置を、位置＋選手の組で並べた文。
+// 例: 「7回の守備はショート茂木、サード入交、セカンド宇田川でした」
+//     →[{inning:7, playerId:'茂木', position:'遊'}, {…'三'}, {…'二'}]
+// 交代の言い回し(◯◯が△△と交代)とは別物なので、交代語を含む文は対象外にする。
+// 位置が1つだけの文も、従来どおり交代の解釈に任せる(取り合いを避ける)。
+export function parseDefensiveAlignment(rawText, players = []) {
+  const out = [];
+  for (const seg of splitSentences(rawText)) {
+    if (/交代|代わ|替わ|代打|代走/.test(seg)) continue; // 交代文は parseSubstitutions の担当
+    const innM = seg.match(/(\d+)\s*回/);
+    if (!innM) continue;
+    const inning = parseInt(innM[1], 10);
+    const posHits = findPositionHits(seg);
+    if (posHits.length < 2) continue; // 位置1つは交代解釈に任せる
+    const nameHits = findNameHits(seg, players);
+    for (const ph of posHits) {
+      const next = posHits.find((x) => x.index > ph.index);
+      // その位置ワードの直後(次の位置ワードより前)に現れる選手名を対応づける
+      const nm = nameHits.find((n) => n.index >= ph.span[1] && (!next || n.index < next.index));
+      if (nm) out.push({ inning, playerId: nm.id, playerName: nm.name, position: ph.code });
+    }
+  }
+  return out;
+}
+
 // 文章から「交代(守備交代・代打・代走・リエントリー)」を解釈する。
 // 例: 「2回にキャッチャー河合が負傷し山城と交代」「6回、髙島に代わって宇田川」
 // 先に登場する選手名=退く側(out)、後の別選手=入る側(in) とみなす(確認ダイアログで是正可能)。
@@ -108,6 +133,10 @@ export function parseSubstitution(rawText, players = []) {
   if (!position && pitcherCtx) position = '投';
   const hasSubKw = SUB_KEYWORDS.test(text) || pitcherCtx;
   if (!hasSubKw && !position) return { ok: false, reason: 'notSub' }; // 交代ではなさそう→打者付け替えへ
+  // 「◯回の守備はショート茂木、サード入交、セカンド宇田川」のように守備位置が複数並ぶ文は
+  // 陣形の申告(parseDefensiveAlignment の担当)。交代として読むと先頭2名を勝手に
+  // out→in にしてしまうため、交代語が無ければここでは扱わない。
+  if (!hasSubKw && findPositionHits(text).length >= 2) return { ok: false, reason: 'alignment' };
 
   // 回の途中の交代アンカー:「◯番(に四球など)を出した後に」→ その相手打者の後で交代。
   let afterOppOrder = null;
