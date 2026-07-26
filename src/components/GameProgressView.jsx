@@ -5,6 +5,7 @@ import { playLabel } from '../lib/voiceParser.js';
 import { computeBoxScore } from '../lib/boxscore.js';
 import { parseBatterCorrection, findTargetAtBat, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment } from '../lib/correctionParser.js';
 import { posFull, buildLineupRows } from '../lib/lineupBox.js';
+import { findDuplicateAtBats } from '../lib/battersRebuild.js';
 import { interpretCorrection } from '../lib/gemini.js';
 import Sheet from './Sheet.jsx';
 import FullscreenView from './FullscreenView.jsx';
@@ -234,6 +235,7 @@ function NLCorrectionCard({ game }) {
   const [text, setText] = useState('');
   const [msg, setMsg] = useState(null); // { kind:'ok'|'err', text }
   const [busy, setBusy] = useState(false);
+  const dupAtBats = findDuplicateAtBats(game); // 付け替えの重ねがけで壊れた打席の検出
 
   // 選手の打順スロットを特定する。既に交代で退いた選手(現lineupに居ない)でも、
   // スタメン・交代ログ・打席のどこかから拾えるようにする。
@@ -368,19 +370,34 @@ function NLCorrectionCard({ game }) {
     let subs = im.subs;
     // 守備陣形の申告(◯回の守備は…): 既に出場中の選手なら守備位置の変更、
     // 出場していない選手ならその位置への交代として扱う。
+    const lineupRows = buildLineupRows(game);
+    // その選手が既にこの試合に出ているか(出場ツリー基準)。出ているなら打順は動かさない。
+    const slotOfPlayer = (pid) => {
+      const cur = (game.lineup || []).find((l) => l.playerId === pid);
+      if (cur) return { order: cur.order, from: cur.position || null };
+      for (const s of lineupRows) {
+        const p = s.players.find((x) => x.playerId === pid);
+        if (p) return { order: s.order, from: p.posCode || null };
+      }
+      return null;
+    };
+
     const alignAppl = [];
     const alignUnresolved = [];
     const alreadyOk = []; // 既にその守備位置(黙って捨てると別のエラーが出て紛らわしいので記録する)
     for (const al of aligns) {
-      const slot = (game.lineup || []).find((l) => l.playerId === al.playerId);
-      if (slot) {
-        if (slot.position === al.position) {
-          alreadyOk.push(`${slot.order}${t('gp.nlOrderSuffix')} ${al.playerName || nameOf(al.playerId)}（${posFull(al.position, lang)}）`);
+      // 既に出場している選手は「自分の打順のまま守備位置だけ変更」。
+      // ここで他人の打順への交代にしてしまうと、その打順の打席まで付け替わり、
+      // 同じ回に2打席ある等の壊れた記録になるため、必ず自分のスロットで処理する。
+      const own = slotOfPlayer(al.playerId);
+      if (own) {
+        if (own.from === al.position) {
+          alreadyOk.push(`${own.order}${t('gp.nlOrderSuffix')} ${al.playerName || nameOf(al.playerId)}（${posFull(al.position, lang)}）`);
           continue;
         }
-        alignAppl.push({ ...al, order: slot.order, from: slot.position || null });
+        alignAppl.push({ ...al, order: own.order, from: own.from });
       } else {
-        // 出場していない=交代。その位置の現在の守備者と入れ替える(交代の解決へ回す)
+        // この試合に出ていない選手=交代。その位置の現在の守備者と入れ替える(交代の解決へ回す)
         const cur = (game.lineup || []).find((l) => l.position === al.position && l.playerId);
         if (!cur) { alignUnresolved.push(al.playerName || nameOf(al.playerId)); continue; }
         subs = [...subs, {
@@ -394,7 +411,6 @@ function NLCorrectionCard({ game }) {
     // startingLineupが無い過去試合でも、表示上その選手が先発として出ていれば訂正できる。
     const posAppl = [];
     const posUnresolved = [];
-    const lineupRows = buildLineupRows(game);
     for (const pc of posCorrs) {
       let hit = null;
       for (const slot of lineupRows) {
@@ -542,6 +558,23 @@ function NLCorrectionCard({ game }) {
       <p className="small dim mt8" style={{ marginBottom: 0 }}>
         {state.settings.geminiApiKey ? t('gp.nlAiOn') : t('gp.nlAiOff')}
       </p>
+      {/* 1人が同じ回に2打席ある等、付け替えの重ねがけで壊れた状態を検出したときだけ出す修復 */}
+      {dupAtBats.length > 0 && (
+        <div className="warn-box mt8">
+          ⚠️ {t('gp.nlDupFound', {
+            list: dupAtBats.map((d) => t('gp.nlDupItem', { name: nameOf(d.playerId), inning: d.inning, n: d.count })).join('、'),
+          })}
+          <button
+            className="mt8" style={{ width: '100%' }}
+            onClick={() => {
+              if (!window.confirm(t('gp.nlRebuildConfirm'))) return;
+              dispatch({ type: 'REBUILD_BATTERS', gameId: game.id });
+            }}
+          >
+            {t('gp.nlRebuild')}
+          </button>
+        </div>
+      )}
       {msg && (msg.kind === 'ok'
         ? <div className="small mt8" style={{ color: 'var(--green)', fontWeight: 700 }}>✅ {msg.text}</div>
         : <div className="warn-box mt8">⚠️ {msg.text}</div>

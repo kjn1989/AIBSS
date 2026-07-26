@@ -13,6 +13,7 @@ import { generateDemoData } from '../lib/demo.js';
 import { rebuildPitchingStats } from '../lib/pitchingRebuild.js';
 import { resolveStarters } from '../lib/lineupBox.js';
 import { remapPlayerInGame, fillPlayerGaps } from '../lib/mergePlayers.js';
+import { rebuildBatters } from '../lib/battersRebuild.js';
 import { idbSave } from '../lib/durableStore.js';
 import { translate, DEFAULT_LANG } from '../lib/i18n.js';
 import { getActiveProfileId, profileStorageKey, listProfiles, updateProfileMeta } from '../lib/profiles.js';
@@ -1107,12 +1108,23 @@ export function reducer(state, action) {
           : g.playLogs.findIndex((l) => (l.inning || 0) > inning);
       }
       if (at < 0) g.playLogs.push(subLog); else g.playLogs.splice(at, 0, subLog);
-      // 交代した回より後の、その打順の out選手の打席を in選手へ付け替える(以降は交代選手の打席)
+      // 交代した回より後の、その打順の out選手の打席を in選手へ付け替える(以降は交代選手の打席)。
+      // ただし in選手がその回に既に打席を持っている場合は付け替えない。1人が同じ回に
+      // 2打席持つ状態(例: 7回に「右飛/四球/左飛」)は誤った付け替えの結果でしかないため。
+      const inningsOfIn = new Set(
+        g.atBats.filter((ab) => ab.playerId === inId).map((ab) => Number(ab.snapshot?.inning || 0))
+      );
+      const canMove = (inn) => !inningsOfIn.has(Number(inn));
       for (const ab of g.atBats) {
-        if (ab.order === order && ab.playerId === outId && (ab.snapshot?.inning || 0) > inning) ab.playerId = inId;
+        const inn = ab.snapshot?.inning || 0;
+        if (ab.order === order && ab.playerId === outId && inn > inning && canMove(inn)) {
+          ab.playerId = inId;
+          inningsOfIn.add(Number(inn));
+        }
       }
       for (const l of g.playLogs) {
-        if (l.kind === 'atbat' && l.payload?.order === order && l.payload?.playerId === outId && (l.inning || 0) > inning) {
+        if (l.kind === 'atbat' && l.payload?.order === order && l.payload?.playerId === outId && (l.inning || 0) > inning
+            && !g.atBats.some((ab) => ab.id === l.payload.atBatId && ab.playerId === outId)) {
           const nm = playerNameOf(state, inId);
           const lbl = (l.payload.result === 'so' && SO_TYPES[l.payload.soType]) || RESULTS[l.payload.result]?.label || l.payload.result;
           const dir = DIRECTIONS[l.payload.direction] || '';
@@ -1126,6 +1138,16 @@ export function reducer(state, action) {
       if (outId && !g.retiredPlayerIds.includes(outId)) g.retiredPlayerIds.push(outId);
       if (!g.usedPlayerIds.includes(inId)) g.usedPlayerIds.push(inId);
       g.updatedAt = Date.now();
+      return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
+    }
+
+    // ===== 打者の再割り当て(交代の記録から、各打席の打者を振り直す) =====
+    // 付け替えを重ねて実際の出場と食い違ったとき(1人が同じ回に2打席ある等)の修復。
+    // 打順は動かさず、各打席の「誰が打ったか」だけを交代の記録に合わせ直す。
+    case 'REBUILD_BATTERS': {
+      const g = deep(state.games[action.gameId]);
+      const n = rebuildBatters(g, (id) => playerNameOf(state, id));
+      if (!n) return state;
       return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
     }
 

@@ -12,6 +12,7 @@ import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarter
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
 import { remapPlayerInGame, fillPlayerGaps } from '../src/lib/mergePlayers.js';
 import { computeBoxScore } from '../src/lib/boxscore.js';
+import { rebuildBatters, findDuplicateAtBats } from '../src/lib/battersRebuild.js';
 
 test('parseDirectionOnly: 方向のみの発話は方向、結果語を含めばnull(言い直し扱い)', () => {
   assert.equal(parseDirectionOnly('ライト'), 'RF');
@@ -291,6 +292,49 @@ test('buildLineupRows/roleTag: 先発はバッジ無し・交代は回と役割�
   assert.equal(slot6.players[1].inning, 3); // 交代で入った回
   assert.equal(roleTag(slot6.players[1]), 'relief'); // 投手への守備交代=救援
   assert.equal(slot6.players[1].posCode, '投');
+});
+
+// ---- battersRebuild.js ----
+test('findDuplicateAtBats: 同じ回に2打席ある選手を検出する(付け替えの誤り)', () => {
+  const game = { atBats: [
+    { id: 'a', playerId: 'u', result: 'out', snapshot: { inning: 7 } },
+    { id: 'b', playerId: 'u', result: 'bb', snapshot: { inning: 7 } },
+    { id: 'c', playerId: 'x', result: 'single', snapshot: { inning: 7 } },
+  ] };
+  assert.deepEqual(findDuplicateAtBats(game), [{ playerId: 'u', inning: 7, count: 2 }]);
+});
+
+test('rebuildBatters: 交代の記録どおりに各打席の打者を振り直す', () => {
+  // 8番: 平川(先発) → 5回から茂木。7回の打席が誤って宇田川に付いている。
+  const game = {
+    startingLineup: [{ order: 8, playerId: 'hira', position: '三' }],
+    lineup: [{ order: 8, playerId: 'mogi', position: '三' }],
+    atBats: [
+      { id: 'a1', playerId: 'hira', order: 8, result: 'single', snapshot: { inning: 2 } },
+      { id: 'a2', playerId: 'udagawa', order: 8, result: 'out', snapshot: { inning: 7 } },
+    ],
+    playLogs: [
+      { kind: 'atbat', inning: 2, payload: { order: 8, playerId: 'hira', atBatId: 'a1', result: 'single' } },
+      { kind: 'sub', inning: 5, payload: { order: 8, in: 'mogi', out: 'hira', kind: 'def', position: '三' } },
+      { kind: 'atbat', inning: 7, payload: { order: 8, playerId: 'udagawa', atBatId: 'a2', result: 'out' } },
+    ],
+  };
+  const n = rebuildBatters(game, (id) => id);
+  assert.equal(n, 1); // 7回の1打席だけ直る
+  assert.equal(game.atBats[0].playerId, 'hira'); // 交代前はそのまま
+  assert.equal(game.atBats[1].playerId, 'mogi'); // 交代後は茂木へ
+  assert.equal(game.playLogs[2].payload.playerId, 'mogi');
+  assert.ok(game.updatedAt); // 同期に載るよう更新時刻を進める
+});
+
+test('rebuildBatters: 既に正しければ何も変えない', () => {
+  const game = {
+    startingLineup: [{ order: 1, playerId: 'a', position: '中' }],
+    atBats: [{ id: 'x', playerId: 'a', order: 1, result: 'single', snapshot: { inning: 1 } }],
+    playLogs: [{ kind: 'atbat', inning: 1, payload: { order: 1, playerId: 'a', atBatId: 'x', result: 'single' } }],
+  };
+  assert.equal(rebuildBatters(game, (id) => id), 0);
+  assert.equal(game.updatedAt, undefined);
 });
 
 // ---- boxscore.js ----
