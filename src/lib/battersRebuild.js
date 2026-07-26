@@ -79,9 +79,67 @@ function conflictsOf(game, assign) {
   return out;
 }
 
+// 打線の人数(通常9。DH等で増えることがあるので実データの最大打順を見る)
+function lineupSize(game) {
+  const orders = [9];
+  for (const l of game.startingLineup || []) if (l.order != null) orders.push(l.order);
+  for (const l of game.lineup || []) if (l.order != null) orders.push(l.order);
+  for (const ab of game.atBats || []) if (ab.order != null) orders.push(ab.order);
+  return Math.max(...orders);
+}
+
+// 自軍の打席を時系列に並べたもの
+const myAtBatLogs = (game) => (game.playLogs || []).filter((l) => l.kind === 'atbat' && l.payload?.order != null);
+
+// 打順は打席の並びで決まる(1→2→…→9→1→…)。この並びから外れている打席の数を返す。
+// 0でなければ、記録された打順が実際の並びとずれている(例: ある回で6番だけ3打席、4番が0打席)。
+export function findOrderBreaks(game) {
+  const n = lineupSize(game);
+  const logs = myAtBatLogs(game);
+  let breaks = 0;
+  for (let i = 1; i < logs.length; i++) {
+    const expect = (logs[i - 1].payload.order % n) + 1;
+    if (logs[i].payload.order !== expect) breaks += 1;
+  }
+  return breaks;
+}
+
+// 打順の振り直しをして良いか。
+// 打席を全部は記録していない試合(要点だけ記録した等)では巡回の前提が成り立たず、
+// 振り直すとかえって壊すため、「ほぼ巡回しているのに一部だけ崩れている」ときに限る。
+export function canRebuildOrders(game) {
+  const logs = myAtBatLogs(game);
+  const breaks = findOrderBreaks(game);
+  if (logs.length < 9 || breaks === 0) return false;
+  return breaks <= logs.length * 0.25;
+}
+
+// 打席の並びから打順を振り直す。最初の打席の打順を起点に1つずつ進める。
+// 戻り値: 直した打席数
+function rebuildOrders(game) {
+  const n = lineupSize(game);
+  const logs = myAtBatLogs(game);
+  if (!logs.length) return 0;
+  const abById = new Map((game.atBats || []).map((ab) => [ab.id, ab]));
+  let cur = logs[0].payload.order;
+  let changed = 0;
+  for (const log of logs) {
+    if (log.payload.order !== cur) {
+      log.payload = { ...log.payload, order: cur };
+      const ab = abById.get(log.payload.atBatId);
+      if (ab) ab.order = cur;
+      changed += 1;
+    }
+    cur = (cur % n) + 1;
+  }
+  return changed;
+}
+
 // game を破壊的に書き換える。
-// 戻り値: { atBats: 直した打席数, removedSubs: 取り除いた交代数, total }
+// 戻り値: { atBats: 直した打席数, removedSubs: 取り除いた交代数, orders: 直した打順数, total }
 export function rebuildBatters(game, nameOf = () => '') {
+  // 打者の割り当ては打順を前提にするので、まず打順の並びを直す
+  const orders = canRebuildOrders(game) ? rebuildOrders(game) : 0;
   const index = new Map((game.playLogs || []).map((l, i) => [l, i]));
   const skip = new Set();
   let result = walk(game, skip);
@@ -127,9 +185,9 @@ export function rebuildBatters(game, nameOf = () => '') {
   // 表示し続け、開き直すたびに同じ矛盾が出てしまう。
   if (skip.size) game.playLogs = game.playLogs.filter((l) => !skip.has(l));
 
-  const total = changed + skip.size;
+  const total = changed + skip.size + orders;
   if (total) game.updatedAt = Date.now(); // 同期のLast-Write-Winsに確実に載せる
-  return { atBats: changed, removedSubs: skip.size, total };
+  return { atBats: changed, removedSubs: skip.size, orders, total };
 }
 
 // 「同じ回に、1人が別々の打順で打席を持っている」= 物理的にあり得ない状態を検出する。
