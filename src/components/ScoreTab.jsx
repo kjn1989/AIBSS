@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useStore, useT, useCurrentGame, usePlayerName, isMyTeamBatting, currentBatter, currentOppBatter } from '../state/store.jsx';
 import Scoreboard from './Scoreboard.jsx';
 import Diamond from './Diamond.jsx';
@@ -10,6 +10,7 @@ import Sheet from './Sheet.jsx';
 import VoiceControl from './VoiceControl.jsx';
 import { SubstituteSheet } from './OrderTab.jsx';
 import HighlightSheet from './HighlightSheet.jsx';
+import DefenseCheckView from './DefenseCheckView.jsx';
 import GameProgressView from './GameProgressView.jsx';
 import { POSITIONS, OPP_LETTERS, resultCategory, multiOutLabel, positionLabel } from '../lib/model.js';
 import { playLabel } from '../lib/voiceParser.js';
@@ -577,6 +578,28 @@ export default function ScoreTab() {
   const nameOf = usePlayerName();
   const [sheet, setSheet] = useState(null); // {kind:'play',result} | {kind:'runner',base} | {kind:'batter'}
   const [showProgress, setShowProgress] = useState(false);
+  // 代打・代走を出した攻撃が終わったら、守備につく前に守備位置を確認する(パワプロと同じ流れ)。
+  // 代打がそのまま元の位置に入るとは限らず、他の選手も含めて組み替えることが多いため。
+  const [defenseCheck, setDefenseCheck] = useState(null); // { playerIds: [id] }
+  const halfKey = game ? `${game.inning}|${game.isTop ? 'T' : 'B'}` : '';
+  const prevHalfRef = useRef(halfKey);
+  useEffect(() => {
+    const prev = prevHalfRef.current;
+    prevHalfRef.current = halfKey;
+    if (!game || game.status !== 'ongoing' || !halfKey || prev === halfKey || !prev) return;
+    const [pInn, pHalf] = prev.split('|');
+    const prevIsTop = pHalf === 'T';
+    const weBatted = prevIsTop !== game.isHome;     // 直前は自軍の攻撃だったか
+    const weField = !isMyTeamBatting(game);          // これから自軍の守備か
+    if (!weBatted || !weField || !game.lineup.length) return;
+    // 直前の攻撃で代打・代走に出た選手を拾う
+    const entered = (game.playLogs || [])
+      .filter((l) => l.kind === 'sub' && ['ph', 'pr'].includes(l.payload?.kind)
+        && Number(l.inning) === Number(pInn) && !!l.isTop === prevIsTop)
+      .map((l) => l.payload.in)
+      .filter(Boolean);
+    if (entered.length) setDefenseCheck({ playerIds: [...new Set(entered)] });
+  }, [halfKey]);
   const logInning = (l) => t('score.logInning', { inning: l.inning, half: t(l.isTop ? 'half.top' : 'half.bottom') });
 
   // 公式クラウド接続中で書き込み権限が無い場合は入力UIを出さず閲覧専用にする。
@@ -788,6 +811,9 @@ export default function ScoreTab() {
 
       <VoiceControl game={game} />
       {showProgress && <GameProgressView game={game} onClose={() => setShowProgress(false)} />}
+      {defenseCheck && (
+        <DefenseCheckView game={game} newPlayerIds={defenseCheck.playerIds} onClose={() => setDefenseCheck(null)} />
+      )}
 
       {sheet?.kind === 'play' && (
         <PlaySheet
