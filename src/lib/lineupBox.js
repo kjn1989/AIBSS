@@ -215,7 +215,7 @@ export function assignAtBatsByPlayer(rows, atBats = [], sbLogs = []) {
 const STANDARD_POSITIONS = ['投', '捕', '一', '二', '三', '遊', '左', '中', '右'];
 
 // 回ごとの守備陣(打順→{playerId, position})を作る。回N の状態は「N回までの交代を適用した形」。
-function alignmentByInning(game) {
+export function alignmentByInning(game) {
   const slots = new Map();
   for (const s of resolveStarters(game)) {
     if (s.playerId != null) slots.set(s.order, { playerId: s.playerId, position: s.position || null });

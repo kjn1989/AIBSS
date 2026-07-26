@@ -3,8 +3,8 @@ import { useStore, usePlayerName, useT } from '../state/store.jsx';
 import { RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES, resultCategory, multiOutLabel, outTypeLabel } from '../lib/model.js';
 import { playLabel } from '../lib/voiceParser.js';
 import { computeBoxScore } from '../lib/boxscore.js';
-import { parseBatterCorrection, findTargetAtBat, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment } from '../lib/correctionParser.js';
-import { posFull, buildLineupRows, findPositionIssues } from '../lib/lineupBox.js';
+import { parseBatterCorrection, findTargetAtBat, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment, isExplicitSubText } from '../lib/correctionParser.js';
+import { posFull, buildLineupRows, findPositionIssues, alignmentByInning } from '../lib/lineupBox.js';
 import { findDuplicateAtBats, canRebuildOrders, findOrderBreaks } from '../lib/battersRebuild.js';
 import { interpretCorrection } from '../lib/gemini.js';
 import Sheet from './Sheet.jsx';
@@ -288,7 +288,7 @@ function NLCorrectionCard({ game }) {
       if (op.type === 'defense' && inning) {
         // 「◯回の守備は◯◯」= 出場中の選手の守備位置変更(交代ではない)
         const pid = idByName(op.player);
-        if (pid && clean(op.position)) aligns.push({ inning, playerId: pid, playerName: op.player, position: clean(op.position) });
+        if (pid && clean(op.position)) aligns.push({ inning, toInning: num(op.toInning) || inning, playerId: pid, playerName: op.player, position: clean(op.position) });
       } else if (op.type === 'position') {
         // 先発守備位置の訂正(回を伴わない)
         const pid = idByName(op.player);
@@ -336,7 +336,17 @@ function NLCorrectionCard({ game }) {
       reassigns: uniq([...(a.reassigns || []), ...(b.reassigns || [])], (r) => `${r.inning}|${r.newId}`),
       resultCorrs: uniq([...(a.resultCorrs || []), ...(b.resultCorrs || [])], (rc) => `${rc.inning}|${rc.patch.result}`),
       posCorrs: uniq([...(a.posCorrs || []), ...(b.posCorrs || [])], (pc) => `${pc.playerId}`),
-      aligns: uniq([...(a.aligns || []), ...(b.aligns || [])], (al) => `${al.inning}|${al.playerId}`),
+      // 同じ回・同じ選手の位置指定は1つにまとめ、範囲は広い方(AIと端末内で食い違うことがある)を採る
+      aligns: (() => {
+        const m = new Map();
+        for (const al of [...(a.aligns || []), ...(b.aligns || [])]) {
+          const k = `${al.inning}|${al.playerId}`;
+          const cur = m.get(k);
+          if (!cur) m.set(k, al);
+          else cur.toInning = Math.max(Number(cur.toInning) || cur.inning, Number(al.toInning) || al.inning);
+        }
+        return [...m.values()];
+      })(),
     };
   };
 
@@ -387,6 +397,18 @@ function NLCorrectionCard({ game }) {
       return null;
     };
 
+    // 「3〜6回は山城がキャッチャー」のように範囲で言われたら、その各回に位置を記録する。
+    // 回ごとの守備陣形と突き合わせ、まだその位置になっていない回だけを対象にする。
+    const alignMap = alignmentByInning(game);
+    const inningsToFix = (playerId, position, from, to) => {
+      const out = [];
+      for (let i = from; i <= to; i++) {
+        const cur = (alignMap.get(i) || []).find((x) => x.playerId === playerId);
+        if (!cur || cur.position !== position) out.push(i);
+      }
+      return out;
+    };
+
     const alignAppl = [];
     const alignUnresolved = [];
     const alreadyOk = []; // 既にその守備位置(黙って捨てると別のエラーが出て紛らわしいので記録する)
@@ -396,11 +418,13 @@ function NLCorrectionCard({ game }) {
       // 同じ回に2打席ある等の壊れた記録になるため、必ず自分のスロットで処理する。
       const own = slotOfPlayer(al.playerId);
       if (own) {
-        if (own.from === al.position) {
+        const to = Math.max(Number(al.toInning) || al.inning, al.inning);
+        const innings = inningsToFix(al.playerId, al.position, al.inning, to);
+        if (!innings.length) {
           alreadyOk.push(`${own.order}${t('gp.nlOrderSuffix')} ${al.playerName || nameOf(al.playerId)}（${posFull(al.position, lang)}）`);
           continue;
         }
-        alignAppl.push({ ...al, order: own.order, from: own.from });
+        alignAppl.push({ ...al, toInning: to, innings, order: own.order, from: own.from });
       } else {
         // この試合に出ていない選手=交代。その位置の現在の守備者と入れ替える(交代の解決へ回す)
         const cur = (game.lineup || []).find((l) => l.position === al.position && l.playerId);
@@ -434,11 +458,14 @@ function NLCorrectionCard({ game }) {
     // 「松田→山城」の交代として解釈され、松田の打席が山城に移ってしまう)。
     // 正当な打順移動なら、同じ指示の中で元の打順から抜ける交代も必ず記録されるので、
     // それが無いものは採用しない。守備位置の変更としては別途 alignAppl で反映される。
+    // ただし「AがBと交代しました」と文章にはっきり書かれている場合は、記録側の打順が
+    // ズレているだけなので、そのまま交代として受け付ける(この訂正が本来の目的)。
     subs = subs.filter((s) => {
       const own = slotOfPlayer(s.inId);
       if (!own) return true; // まだ出ていない選手=本当の交代
       const target = orderOf(s.outId);
       if (target == null || target === own.order) return true; // 自分の打順の中の話
+      if (isExplicitSubText(text, [s.outName || nameOf(s.outId), s.inName || nameOf(s.inId)])) return true;
       return subs.some((o) => o !== s && o.outId === s.inId && orderOf(o.outId) === own.order);
     });
 
@@ -467,6 +494,14 @@ function NLCorrectionCard({ game }) {
       orderCache.set(s.outId, order); orderCache.set(s.inId, order);
       if (s.position === '投') curPitcher = s.inId; // 次の投手交代の退く側候補
       subAppl.push({ ...s, order });
+    }
+
+    // 同じ指示の中で交代も書かれている場合、その選手は交代先の打順に移る。
+    // 守備位置の申告は移った先の打順に付け替える(元の打順に位置ログを残すと、
+    // 「2回に河合→山城、3〜6回は山城が捕手」で別の打順が捕手になってしまう)。
+    for (const al of alignAppl) {
+      const s = subAppl.find((x) => x.inId === al.playerId);
+      if (s && s.order !== al.order) { al.order = s.order; al.from = s.position || al.from; }
     }
 
     // 複数回の打者付け替えを、対象の打席ログへ解決
@@ -529,8 +564,8 @@ function NLCorrectionCard({ game }) {
 
     const subLabel = (s) => t('gp.nlSubItem', { inning: s.inning, out: s.outName, in: s.inName, pos: s.position ? posFull(s.position, lang) : t('gp.nlSubNoPos') });
     const lines = [
-      ...alignAppl.map((al) => t('gp.nlAlignItem', {
-        inning: al.inning, order: al.order, name: al.playerName || nameOf(al.playerId),
+      ...alignAppl.map((al) => t(al.toInning > al.inning ? 'gp.nlAlignItemRange' : 'gp.nlAlignItem', {
+        inning: al.inning, toInning: al.toInning, order: al.order, name: al.playerName || nameOf(al.playerId),
         from: al.from ? posFull(al.from, lang) : '—', to: posFull(al.position, lang),
       })),
       ...posAppl.map((pc) => t('gp.nlPosItem', {
@@ -553,9 +588,12 @@ function NLCorrectionCard({ game }) {
       dispatch({ type: 'RETRO_SUBSTITUTE', gameId: game.id, order: s.order, outId: s.outId, inId: s.inId, position: s.position, subKind: s.subKind, inning: s.inning, afterOppOrder: s.afterOppOrder ?? null, label: `${kindLabel}: ${nameOf(s.inId)} (${s.order}番 ${nameOf(s.outId)}に代わり)` });
     };
     posAppl.forEach((pc) => dispatch({ type: 'FIX_STARTING_POSITION', gameId: game.id, playerId: pc.playerId, position: pc.position }));
-    alignAppl.forEach((al) => dispatch({ type: 'RETRO_POSITION', gameId: game.id, order: al.order, playerId: al.playerId, position: al.position, inning: al.inning }));
+    // 交代を先に反映してから守備位置を記録する(交代で打順が移る場合に位置が正しい枠に載る)
     synthSubs.forEach(doSub);
     subAppl.forEach(doSub);
+    alignAppl.forEach((al) => (al.innings || [al.inning]).forEach((inn) => dispatch({
+      type: 'RETRO_POSITION', gameId: game.id, order: al.order, playerId: al.playerId, position: al.position, inning: inn,
+    })));
     reAppl.forEach((r) => dispatch({ type: 'REASSIGN_ATBAT', gameId: game.id, logId: r.logId, newPlayerId: r.newId }));
     resAppl.forEach((rc) => dispatch({ type: 'EDIT_PLAY_LOG', gameId: game.id, logId: rc.logId, patch: rc.patch }));
     const hasPitcherChange = subAppl.some((s) => s.position === '投');

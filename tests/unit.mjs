@@ -7,7 +7,7 @@ import { gameEndCheck, initialPresetIdFor, describeRules } from '../src/lib/rule
 import { aggregateBatting, battingMetrics, pitchingMetrics, titleLeaders } from '../src/lib/stats.js';
 import { translate } from '../src/lib/i18n.js';
 import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, parseDirectionOnly } from '../src/lib/voiceParser.js';
-import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment } from '../src/lib/correctionParser.js';
+import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parseInningRange, isExplicitSubText } from '../src/lib/correctionParser.js';
 import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarters, findPositionIssues } from '../src/lib/lineupBox.js';
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
 import { remapPlayerInGame, fillPlayerGaps } from '../src/lib/mergePlayers.js';
@@ -182,6 +182,32 @@ test('parseDefensiveAlignment: 「2回から山城はキャッチャーです」
   // 打席結果の記述は守備位置として拾わない
   assert.equal(parseDefensiveAlignment('1回 中島 レフト前ヒット', PS).length, 0);
   assert.equal(parseDefensiveAlignment('7回表の中島は中犠飛です', PS).length, 0);
+});
+
+test('parseInningRange: 「3-6回」「3回から6回」などの回の範囲を読む', () => {
+  assert.deepEqual(parseInningRange('3-6回は山城だけですキャッチャー'), { from: 3, to: 6 });
+  assert.deepEqual(parseInningRange('3〜6回はキャッチャー山城'), { from: 3, to: 6 });
+  assert.deepEqual(parseInningRange('3回から6回まで山城がキャッチャー'), { from: 3, to: 6 });
+  assert.deepEqual(parseInningRange('7回の守備はショート茂木'), { from: 7, to: 7 });
+  assert.equal(parseInningRange('キャッチャーは山城です'), null);
+});
+test('parseDefensiveAlignment: 回の範囲つきの申告(3-6回)を toInning つきで拾う', () => {
+  const PS = [{ id: 'y', name: '山城' }, { id: 'k', name: '河合' }];
+  const rs = parseDefensiveAlignment('3-6回は山城だけですキャッチャー', PS);
+  assert.equal(rs.length, 1);
+  assert.deepEqual([rs[0].inning, rs[0].toInning, rs[0].playerId, rs[0].position], [3, 6, 'y', '捕']);
+});
+test('parseResultCorrections: 打席結果の語が無い文を結果修正にしない', () => {
+  const PS = [{ id: 'y', name: '山城' }, { id: 'k', name: '河合' }];
+  // 「〜です」で終わる守備位置の申告を「捕手 ヒット」と誤解釈していた
+  assert.deepEqual(parseResultCorrections('3-6回は山城だけですキャッチャー', PS), []);
+  assert.deepEqual(parseResultCorrections('2回から山城はキャッチャーです', PS), []);
+});
+test('isExplicitSubText: 交代語と2人の名前が同じ文にあるかを判定', () => {
+  const txt = '2回は6番バッターがアウトの後に、キャッチャーは河合から山城に交代しました。3-6回は山城だけですキャッチャー。';
+  assert.equal(isExplicitSubText(txt, ['河合', '山城']), true);
+  // 交代語の無い守備位置の申告は「はっきり書かれた交代」ではない
+  assert.equal(isExplicitSubText('2回から山城はキャッチャーです', ['松田', '山城']), false);
 });
 
 test('findPositionIssues: 同じ守備位置に2人・守る人が居ない位置を、発生している回の範囲つきで検出', () => {
