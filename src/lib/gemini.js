@@ -6,17 +6,17 @@
 // APIキーは設定画面で任意入力。未設定/オフライン時は呼ばない(呼び出し元でフォールバック)。
 // ============================================================
 
-// 個別バージョンを固定すると廃止時に壊れるため、Googleが常に生きたモデルを
-// 指し続けるエイリアス(-latest)を使う。
-const MODEL = 'gemini-flash-latest';
+// 無料枠(レート上限)はモデルごとに別枠で、しかもモデルによって大きく違う。
+// エイリアス(-latest)は上限の厳しいプレビュー系を指すことがあり、ほとんど使って
+// いなくても 429 になることがある。そこで安定版から順に試し、429(上限)や
+// 404(そのキーで使えない)なら次の候補へ回す。廃止によるロックインも避けられる。
+const MODEL_CANDIDATES = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest'];
+let preferredModel = null; // 一度成功したモデルは次回から先に試す(無駄な失敗を減らす)
 
-// 低レベル共通呼び出し。プロンプトを投げてJSONを1つ取り出す。
-// 戻り値: 成功 { data: <parsed> } / 失敗 { error: <表示用文字列> } / 未設定・オフライン null
-async function callGeminiJSON(apiKey, prompt, { maxOutputTokens = 1024, temperature = 0.9 } = {}) {
-  if (!apiKey || !navigator.onLine) return null;
-
+// 1モデルぶんの呼び出し。戻り値: { status, data } | { status, error }
+async function callModel(model, apiKey, prompt, maxOutputTokens, temperature) {
   const request = (generationConfig) => fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
     {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -24,35 +24,55 @@ async function callGeminiJSON(apiKey, prompt, { maxOutputTokens = 1024, temperat
     }
   );
 
-  try {
-    // 1回目: thinkingBudget:0 で内部思考を無効化(対応モデルは出力が思考に消費されず本文が埋まる)。
-    let res = await request({ temperature, maxOutputTokens, thinkingConfig: { thinkingBudget: 0 } });
-    // 一部の新しいモデルは thinkingBudget:0 を「無効な引数」として400を返す。
-    // その場合は thinkingConfig を外して再試行(思考ぶんを見込んで出力トークンを増やす)。
-    if (res.status === 400) {
-      res = await request({ temperature, maxOutputTokens: Math.max(maxOutputTokens * 3, 4096) });
-    }
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      let reason = body;
-      try {
-        reason = JSON.parse(body)?.error?.message || body;
-      } catch {
-        /* JSONでなければそのまま */
-      }
-      return { error: `HTTP ${res.status}: ${reason}`.slice(0, 200) };
-    }
-    const data = await res.json();
-    const raw = data.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';
-    const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      const finishReason = data.candidates?.[0]?.finishReason;
-      return { error: `AIの応答からJSONを取り出せませんでした${finishReason ? ` (finishReason: ${finishReason})` : ''}` };
-    }
-    return { data: JSON.parse(jsonMatch[0]) };
-  } catch (e) {
-    return { error: e?.message || 'ネットワークエラー' };
+  // 1回目: thinkingBudget:0 で内部思考を無効化(対応モデルは出力が思考に消費されず本文が埋まる)。
+  let res = await request({ temperature, maxOutputTokens, thinkingConfig: { thinkingBudget: 0 } });
+  // 一部の新しいモデルは thinkingBudget:0 を「無効な引数」として400を返す。
+  // その場合は thinkingConfig を外して再試行(思考ぶんを見込んで出力トークンを増やす)。
+  if (res.status === 400) {
+    res = await request({ temperature, maxOutputTokens: Math.max(maxOutputTokens * 3, 4096) });
   }
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    let reason = body;
+    try {
+      reason = JSON.parse(body)?.error?.message || body;
+    } catch {
+      /* JSONでなければそのまま */
+    }
+    return { status: res.status, error: `HTTP ${res.status}: ${reason}`.slice(0, 200) };
+  }
+  const data = await res.json();
+  const raw = data.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';
+  const jsonMatch = raw.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    const finishReason = data.candidates?.[0]?.finishReason;
+    return { status: 200, error: `AIの応答からJSONを取り出せませんでした${finishReason ? ` (finishReason: ${finishReason})` : ''}` };
+  }
+  return { status: 200, data: JSON.parse(jsonMatch[0]) };
+}
+
+// 低レベル共通呼び出し。プロンプトを投げてJSONを1つ取り出す。
+// 戻り値: 成功 { data: <parsed> } / 失敗 { error: <表示用文字列> } / 未設定・オフライン null
+async function callGeminiJSON(apiKey, prompt, { maxOutputTokens = 1024, temperature = 0.9 } = {}) {
+  if (!apiKey || !navigator.onLine) return null;
+
+  const order = preferredModel
+    ? [preferredModel, ...MODEL_CANDIDATES.filter((m) => m !== preferredModel)]
+    : MODEL_CANDIDATES;
+  let last = null;
+  for (const model of order) {
+    try {
+      const r = await callModel(model, apiKey, prompt, maxOutputTokens, temperature);
+      if (r.data) { preferredModel = model; return { data: r.data }; }
+      last = r.error;
+      // 上限(429)・そのキーで使えない(404)は、別モデルなら通ることがあるので次を試す
+      if (r.status === 429 || r.status === 404) { if (preferredModel === model) preferredModel = null; continue; }
+      return { error: r.error }; // キー不正など、モデルを変えても直らないものは即返す
+    } catch (e) {
+      last = e?.message || 'ネットワークエラー';
+    }
+  }
+  return { error: last || 'ネットワークエラー' };
 }
 
 // 送信前のプライバシー保護: テキスト内の登録選手名を「選手」に置換する。

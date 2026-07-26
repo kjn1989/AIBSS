@@ -357,7 +357,10 @@ function NLCorrectionCard({ game }) {
   // 失敗時はGeminiが返した理由(HTTP 429=無料枠の上限、400=キー不正 など)もそのまま見せる。
   const modeNote = (mode, detail = '') => {
     const base = { ai: t('gp.nlModeAi'), error: t('gp.nlModeError'), nokey: t('gp.nlModeNoKey'), offline: t('gp.nlModeOffline') }[mode] || '';
-    return mode === 'error' && detail ? `${base}${t('gp.nlAiReason', { reason: detail })}` : base;
+    if (mode !== 'error' || !detail) return base;
+    // 429は「使いすぎ」とは限らない(無料枠はモデルごと・分/日ごとの別枠)ので噛み砕いて添える
+    const hint = /429|quota|rate limit/i.test(detail) ? t('gp.nlAiQuota') : '';
+    return `${base}${t('gp.nlAiReason', { reason: detail })}${hint}`;
   };
 
   const resolveAndApply = (im, mode = 'local', detail = '') => {
