@@ -11,6 +11,7 @@ import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstit
 import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarters } from '../src/lib/lineupBox.js';
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
 import { remapPlayerInGame, fillPlayerGaps } from '../src/lib/mergePlayers.js';
+import { computeBoxScore } from '../src/lib/boxscore.js';
 
 test('parseDirectionOnly: 方向のみの発話は方向、結果語を含めばnull(言い直し扱い)', () => {
   assert.equal(parseDirectionOnly('ライト'), 'RF');
@@ -274,6 +275,30 @@ test('buildLineupRows/roleTag: 先発はバッジ無し・交代は回と役割�
   assert.equal(slot6.players[1].inning, 3); // 交代で入った回
   assert.equal(roleTag(slot6.players[1]), 'relief'); // 投手への守備交代=救援
   assert.equal(slot6.players[1].posCode, '投');
+});
+
+// ---- boxscore.js ----
+test('computeBoxScore: 実際に行われた回までを返す(7回で終了なら8・9回の空欄を出さない)', () => {
+  const linescore = {};
+  for (let i = 1; i <= 7; i++) linescore[String(i)] = { my: 1, opp: 0 };
+  const game = { inning: 7, linescore, atBats: [], playLogs: [], myScore: 7, oppScore: 0 };
+  const box = computeBoxScore(game);
+  assert.equal(box.innings.length, 7);
+  assert.equal(box.innings[6].inning, 7);
+});
+
+test('computeBoxScore: 延長は行われた回まで伸ばす', () => {
+  const linescore = {};
+  for (let i = 1; i <= 11; i++) linescore[String(i)] = { my: 0, opp: 0 };
+  const game = { inning: 11, linescore, atBats: [], playLogs: [], myScore: 0, oppScore: 0 };
+  assert.equal(computeBoxScore(game).innings.length, 11);
+});
+
+test('computeBoxScore: 開始直後でも最低1回分は返す', () => {
+  const game = { inning: 1, linescore: {}, atBats: [], playLogs: [], myScore: 0, oppScore: 0 };
+  const box = computeBoxScore(game);
+  assert.equal(box.innings.length, 1);
+  assert.equal(box.innings[0].played, false);
 });
 
 // ---- mergePlayers.js ----

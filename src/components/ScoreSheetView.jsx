@@ -59,8 +59,11 @@ export default function ScoreSheetView({ game, onClose }) {
   const edition = state.settings.edition;
   const teamName = state.settings.teamName || t('restab.teamFallback');
   const oppName = game.opponent || t('restab.opponentFallback');
-  const maxInning = Math.max(9, game.inning || 1);
-  const innings = Array.from({ length: maxInning }, (_, i) => i + 1);
+  // イニング列は線分スコアと同じ「実際に行われた回」に揃える(見出しと中身のズレも防ぐ)。
+  // 打席が記録されている回が線分スコアより先まである場合はそこまで伸ばす。
+  const lastAb = game.atBats.reduce((m, ab) => Math.max(m, ab.snapshot?.inning || 0), 0);
+  const lastInning = Math.max(box.innings.length, lastAb, 1);
+  const innings = Array.from({ length: lastInning }, (_, i) => i + 1);
 
   // 打順スロットごとに、出場選手を「登場順」で各自1行に分ける(伝統的なスコアブック方式)。
   // 位置=(先発)/打(代打)/走(代走)+守備位置。
@@ -141,14 +144,14 @@ export default function ScoreSheetView({ game, onClose }) {
             <tbody>
               <tr>
                 <td className="ss-team" title={game.isHome ? oppName : teamName}>{game.isHome ? oppName : teamName}</td>
-                {box.innings.map((i) => <td key={i.inning}>{i.played ? (game.isHome ? i.opp : i.my) : ''}</td>)}
+                {innings.map((n) => { const i = box.innings[n - 1]; return <td key={n}>{i?.played ? (game.isHome ? i.opp : i.my) : ''}</td>; })}
                 <td><b>{game.isHome ? box.opp.r : box.my.r}</b></td>
                 <td>{game.isHome ? box.opp.h : box.my.h}</td>
                 <td>{game.isHome ? box.opp.e : box.my.e}</td>
               </tr>
               <tr>
                 <td className="ss-team" title={game.isHome ? teamName : oppName}>{game.isHome ? teamName : oppName}</td>
-                {box.innings.map((i) => <td key={i.inning}>{i.played ? (game.isHome ? i.my : i.opp) : ''}</td>)}
+                {innings.map((n) => { const i = box.innings[n - 1]; return <td key={n}>{i?.played ? (game.isHome ? i.my : i.opp) : ''}</td>; })}
                 <td><b>{game.isHome ? box.my.r : box.opp.r}</b></td>
                 <td>{game.isHome ? box.my.h : box.opp.h}</td>
                 <td>{game.isHome ? box.my.e : box.opp.e}</td>
