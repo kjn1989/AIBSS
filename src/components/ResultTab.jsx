@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useStore, usePlayerName, useT } from '../state/store.jsx';
 import { computeHighlights, highlightShareText } from '../lib/highlights.js';
 import { shareHighlightImage } from '../lib/shareImage.js';
-import { GameProgressContent } from './GameProgressView.jsx';
+import { GameProgressContent, LinescoreTable } from './GameProgressView.jsx';
 import GameBoxScore from './GameBoxScore.jsx';
 import { PitchingGameManagement } from './PitchingTab.jsx';
 import ScoreSheetView from './ScoreSheetView.jsx';
@@ -65,6 +65,9 @@ function HighlightCard({ game }) {
           {wlKey ? t(wlKey) : h.resultLabel}
         </span>
       </div>
+
+      {/* スコアの直下に線分スコア(小型)。試合結果ページだけで流れが掴めるようにする */}
+      <div className="hl-linescore"><LinescoreTable game={game} compact /></div>
 
       {h.clutch && (
         <div className="hl-row">
@@ -198,7 +201,8 @@ export default function ResultTab() {
       <GameBoxScore game={game} />
 
       <div className="section-title">{t('restab.progress')}</div>
-      <GameProgressContent game={game} editable />
+      {/* 線分スコアは上の試合レポートに出しているのでここでは省く */}
+      <GameProgressContent game={game} editable showLinescore={false} />
 
       {(() => {
         const isCurrentOngoing = game.status === 'ongoing' && game.id === state.currentGameId;

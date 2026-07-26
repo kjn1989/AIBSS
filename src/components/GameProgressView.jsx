@@ -481,15 +481,57 @@ function NLCorrectionCard({ game }) {
   );
 }
 
-// 試合結果タブにも埋め込めるよう、線分スコア+回別プレイを描画する中身部分
-export function GameProgressContent({ game, editable = false }) {
+// 線分スコア表(イニング別得点+計/安/失)。compact=true は試合レポート内に収める小型版で、
+// チーム名を1行に省略表示して横スクロールなしで収まるようにする。
+export function LinescoreTable({ game, compact = false }) {
+  const { state } = useStore();
+  const t = useT();
+  const box = computeBoxScore(game);
+  const myTeamName = state.settings.teamName || t('restab.teamFallback');
+  const oppTeamName = game.opponent || t('restab.opponentFallback');
+  const away = game.isHome ? oppTeamName : myTeamName; // 先攻(表)のチーム
+  const home = game.isHome ? myTeamName : oppTeamName;
+  const cell = (i) => (i.played ? (game.isHome ? i.opp : i.my) : '');
+  const cellHome = (i) => (i.played ? (game.isHome ? i.my : i.opp) : '');
+
+  return (
+    <table className={`linescore-table${compact ? ' compact' : ''}`}>
+      <thead>
+        <tr>
+          <th></th>
+          {box.innings.map((i) => <th key={i.inning}>{i.inning}</th>)}
+          <th>{t('gp.total')}</th><th>{t('gp.h')}</th><th>{t('gp.e')}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td className="team" title={away}>{away}</td>
+          {box.innings.map((i) => <td key={i.inning}>{cell(i)}</td>)}
+          <td className="num">{game.isHome ? box.opp.r : box.my.r}</td>
+          <td className="num">{game.isHome ? box.opp.h : box.my.h}</td>
+          <td className="num">{game.isHome ? box.opp.e : box.my.e}</td>
+        </tr>
+        <tr>
+          <td className="team" title={home}>{home}</td>
+          {box.innings.map((i) => <td key={i.inning}>{cellHome(i)}</td>)}
+          <td className="num">{game.isHome ? box.my.r : box.opp.r}</td>
+          <td className="num">{game.isHome ? box.my.h : box.opp.h}</td>
+          <td className="num">{game.isHome ? box.my.e : box.opp.e}</td>
+        </tr>
+      </tbody>
+    </table>
+  );
+}
+
+// 試合結果タブにも埋め込めるよう、線分スコア+回別プレイを描画する中身部分。
+// showLinescore=false は、呼び出し側(試合レポート)が既に線分スコアを出している場合に使う。
+export function GameProgressContent({ game, editable = false, showLinescore = true }) {
   const { state } = useStore();
   const t = useT();
   const lang = state.settings.lang || 'ja';
   const nameOf = usePlayerName();
   const numberOf = (id) => state.players.find((p) => p.id === id)?.number || '';
   const [editLog, setEditLog] = useState(null);
-  const box = computeBoxScore(game);
   // 'run'ログは各プレイカード内のmoveLinesに既に含まれるため二重表示を避ける
   const groups = groupByHalfInning(game.playLogs.filter((l) => l.kind !== 'run' && l.kind !== 'position'));
   const myTeamName = state.settings.teamName || t('restab.teamFallback');
@@ -497,37 +539,11 @@ export function GameProgressContent({ game, editable = false }) {
 
   return (
     <div>
-      <div className="card" style={{ overflowX: 'auto' }}>
-        <table className="linescore-table">
-          <thead>
-            <tr>
-              <th></th>
-              {box.innings.map((i) => <th key={i.inning}>{i.inning}</th>)}
-              <th>{t('gp.total')}</th><th>{t('gp.h')}</th><th>{t('gp.e')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td className="team">{game.isHome ? oppTeamName : myTeamName}</td>
-              {box.innings.map((i) => (
-                <td key={i.inning}>{i.played ? (game.isHome ? i.opp : i.my) : ''}</td>
-              ))}
-              <td className="num">{game.isHome ? box.opp.r : box.my.r}</td>
-              <td className="num">{game.isHome ? box.opp.h : box.my.h}</td>
-              <td className="num">{game.isHome ? box.opp.e : box.my.e}</td>
-            </tr>
-            <tr>
-              <td className="team">{game.isHome ? myTeamName : oppTeamName}</td>
-              {box.innings.map((i) => (
-                <td key={i.inning}>{i.played ? (game.isHome ? i.my : i.opp) : ''}</td>
-              ))}
-              <td className="num">{game.isHome ? box.my.r : box.opp.r}</td>
-              <td className="num">{game.isHome ? box.my.h : box.opp.h}</td>
-              <td className="num">{game.isHome ? box.my.e : box.opp.e}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      {showLinescore && (
+        <div className="card" style={{ overflowX: 'auto' }}>
+          <LinescoreTable game={game} compact />
+        </div>
+      )}
 
       {editable && groups.length > 0 && <NLCorrectionCard game={game} />}
 

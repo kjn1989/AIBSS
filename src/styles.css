@@ -202,9 +202,11 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
   border-radius: var(--radius);
   padding: 16px;
 }
-.hl-score { text-align: center; margin-bottom: 14px; }
-.hl-score .hl-vs { font-size: 13px; color: var(--text-dim); }
-.hl-score .hl-final { font-size: 40px; font-weight: 900; color: var(--gold); font-variant-numeric: tabular-nums; margin: 4px 0; }
+.hl-score { text-align: center; margin-bottom: 10px; }
+.hl-score .hl-vs { font-size: 12px; color: var(--text-dim); }
+.hl-score .hl-final { font-size: 32px; font-weight: 900; color: var(--gold); font-variant-numeric: tabular-nums; margin: 2px 0; line-height: 1.1; }
+/* 試合レポート内の線分スコア(スコアの直下。区切り線で見出しの代わりにする) */
+.hl-linescore { margin: 0 0 12px; padding-top: 10px; border-top: 1px solid var(--border); }
 .hl-row { border-top: 1px solid var(--border); padding: 10px 0; }
 .hl-row .hl-label { font-size: 12px; font-weight: 700; color: var(--text-dim); margin-bottom: 4px; }
 .hl-row .hl-body { font-size: 15px; font-weight: 600; }
@@ -983,6 +985,17 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 .linescore-table th { color: var(--text-dim); font-weight: 600; }
 .linescore-table td.team { text-align: left; font-weight: 700; min-width: 70px; }
 .linescore-table td.num { font-weight: 800; }
+
+/* 小型版: 横スクロールなしでスマホ幅に収める。
+   列幅を固定配分し(チーム名26%/残りを均等)、長いチーム名は1行で省略表示する。 */
+.linescore-table.compact { font-size: 11px; min-width: 0; table-layout: fixed; }
+.linescore-table.compact th, .linescore-table.compact td { padding: 4px 1px; min-width: 0; }
+.linescore-table.compact th:first-child, .linescore-table.compact td:first-child { width: 31%; }
+.linescore-table.compact td.team {
+  min-width: 0; max-width: 0; /* table-layout:fixed 下で幅指定を効かせ、はみ出しを省略に回す */
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 4px;
+}
+.linescore-table.compact tr:last-child td { border-bottom: none; }
 
 /* ---- 出場選手ボックススコア(打順ツリー・引き算のデザイン) ---- */
 .bx-tree { display: flex; flex-direction: column; gap: 12px; }
