@@ -4,7 +4,7 @@ import { RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES, resultCategory, multiOutLabel
 import { playLabel } from '../lib/voiceParser.js';
 import { computeBoxScore } from '../lib/boxscore.js';
 import { parseBatterCorrection, findTargetAtBat, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment } from '../lib/correctionParser.js';
-import { posFull, buildLineupRows } from '../lib/lineupBox.js';
+import { posFull, buildLineupRows, findPositionIssues } from '../lib/lineupBox.js';
 import { findDuplicateAtBats, canRebuildOrders, findOrderBreaks } from '../lib/battersRebuild.js';
 import { interpretCorrection } from '../lib/gemini.js';
 import Sheet from './Sheet.jsx';
@@ -238,6 +238,7 @@ function NLCorrectionCard({ game }) {
   // 付け替えの重ねがけで壊れた打席の検出(同じ回に2打順で打席 / 打順の並びのズレ)
   const dupAtBats = findDuplicateAtBats(game);
   const orderBreaks = canRebuildOrders(game) ? findOrderBreaks(game) : 0;
+  const posIssues = findPositionIssues(game); // 同じ守備位置に2人 / 守備位置が不在
 
   // 選手の打順スロットを特定する。既に交代で退いた選手(現lineupに居ない)でも、
   // スタメン・交代ログ・打席のどこかから拾えるようにする。
@@ -584,6 +585,17 @@ function NLCorrectionCard({ game }) {
           >
             {t('gp.nlRebuild')}
           </button>
+        </div>
+      )}
+      {(posIssues.duplicates.length > 0 || posIssues.missing.length > 0) && (
+        <div className="warn-box mt8">
+          ⚠️ {[
+            ...posIssues.duplicates.map((d) => t('gp.nlPosDup', {
+              pos: posFull(d.position, lang), names: d.playerIds.map((id) => nameOf(id)).join('・'),
+            })),
+            ...(posIssues.missing.length ? [t('gp.nlPosMissing', { list: posIssues.missing.map((p) => posFull(p, lang)).join('・') })] : []),
+          ].join(' ')}
+          <div className="small dim mt8">{t('gp.nlPosFixHint')}</div>
         </div>
       )}
       {msg && (msg.kind === 'ok'

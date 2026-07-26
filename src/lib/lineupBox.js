@@ -205,6 +205,26 @@ export function assignAtBatsByPlayer(rows, atBats = [], sbLogs = []) {
   return out;
 }
 
+// 守備位置の整合チェック(現在の打順を対象)。
+// 同じ位置に2人いる／守るべき位置に誰も居ない、は交代や訂正の取りこぼしでしか起きない。
+// 例: 捕手が交代したのに位置が一塁のままだと「一塁が2人・捕手が不在」になる。
+// 戻り値: { duplicates: [{ position, playerIds }], missing: [position] }
+const STANDARD_POSITIONS = ['投', '捕', '一', '二', '三', '遊', '左', '中', '右'];
+export function findPositionIssues(game) {
+  const slots = (game.lineup || []).filter((l) => l.playerId && l.position);
+  const byPos = new Map();
+  for (const l of slots) {
+    if (!byPos.has(l.position)) byPos.set(l.position, []);
+    byPos.get(l.position).push(l.playerId);
+  }
+  const duplicates = [...byPos.entries()]
+    .filter(([, ids]) => ids.length > 1)
+    .map(([position, playerIds]) => ({ position, playerIds }));
+  // 守備位置が9つ揃うはずの布陣のときだけ「不在」を見る(DHや人数不足の試合で誤警告しない)
+  const missing = slots.length >= 9 ? STANDARD_POSITIONS.filter((p) => !byPos.has(p)) : [];
+  return { duplicates, missing };
+}
+
 // カード/ツリー表示用の“役割ラベル種別”を返す。守備交代で投手に就く=救援。
 export function roleTag(p) {
   if (p.isStarter || p.role === 'start') return null; // 先発はバッジ無し(引き算のデザイン)
