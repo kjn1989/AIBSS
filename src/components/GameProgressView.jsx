@@ -411,6 +411,7 @@ function NLCorrectionCard({ game }) {
 
     const alignAppl = [];
     const alignUnresolved = [];
+    const alignOffField = []; // その回の守備に出ていない選手の位置指定
     const alreadyOk = []; // 既にその守備位置(黙って捨てると別のエラーが出て紛らわしいので記録する)
     for (const al of aligns) {
       // 既に出場している選手は「自分の打順のまま守備位置だけ変更」。
@@ -419,6 +420,12 @@ function NLCorrectionCard({ game }) {
       const own = slotOfPlayer(al.playerId);
       if (own) {
         const to = Math.max(Number(al.toInning) || al.inning, al.inning);
+        // その回の守備に居ない選手の位置は動かせない(交代の記録が先に必要)
+        const onField = (inn) => (alignMap.get(inn) || []).some((x) => x.playerId === al.playerId);
+        if (alignMap.has(al.inning) && !onField(al.inning) && !onField(to)) {
+          alignOffField.push(t('gp.nlAlignOffFieldItem', { name: al.playerName || nameOf(al.playerId), inning: al.inning }));
+          continue;
+        }
         const innings = inningsToFix(al.playerId, al.position, al.inning, to);
         if (!innings.length) {
           alreadyOk.push(`${own.order}${t('gp.nlOrderSuffix')} ${al.playerName || nameOf(al.playerId)}（${posFull(al.position, lang)}）`);
@@ -550,6 +557,7 @@ function NLCorrectionCard({ game }) {
       const note = modeNote(mode, detail); // どの経路で解釈したかを添える(AI未接続かの切り分け用)
       // 指定どおりに既になっている場合は「エラー」ではないので、そう伝える
       if (alreadyOk.length) { setMsg({ kind: 'ok', text: t('gp.nlAlreadyOk', { list: alreadyOk.join('、') }) + note }); return; }
+      if (alignOffField.length) { setMsg({ kind: 'err', text: t('gp.nlAlignOffField', { list: alignOffField.join('、') }) + note }); return; }
       if (alignUnresolved.length) { setMsg({ kind: 'err', text: t('gp.nlPosNotStarter', { name: alignUnresolved.join('、') }) + note }); return; }
       if (posUnresolved.length) { setMsg({ kind: 'err', text: t('gp.nlPosNotStarter', { name: posUnresolved.join('、') }) + note }); return; }
       if (subUnresolved.length) { setMsg({ kind: 'err', text: t('gp.nlSubNoOrder', { name: subUnresolved.join('、') }) + note }); return; }
@@ -600,6 +608,7 @@ function NLCorrectionCard({ game }) {
     if (hasPitcherChange) dispatch({ type: 'RECOMPUTE_PITCHING', gameId: game.id });
 
     const notes = [];
+    if (alignOffField.length) notes.push(t('gp.nlAlignOffFieldShort', { list: alignOffField.join('、') }));
     if (posUnresolved.length) notes.push(t('gp.nlPosNotStarterShort', { names: posUnresolved.join('、') }));
     if (subUnresolved.length) notes.push(t('gp.nlSubNoOrderShort', { names: subUnresolved.join('、') }));
     if (reUnresolved.length) notes.push(t('gp.nlReNotFoundShort', { innings: reUnresolved.join('、') }));
@@ -637,6 +646,23 @@ function NLCorrectionCard({ game }) {
             }}
           >
             {t('gp.nlRebuild')}
+          </button>
+        </div>
+      )}
+      {/* 同じ選手が2つの打順に入っている: 位置の重複・不在をまとめて生む元なので先に直す */}
+      {posIssues.sameSlots.length > 0 && (
+        <div className="warn-box mt8">
+          ⚠️ {posIssues.sameSlots.map((s) => t('gp.nlSlotDup', {
+            range: inningRange(s), name: nameOf(s.playerId), orders: s.orders.join('・'),
+          })).join(' ')}
+          <button
+            className="mt8" style={{ width: '100%' }}
+            onClick={() => {
+              if (!window.confirm(t('gp.nlSlotFixConfirm'))) return;
+              dispatch({ type: 'FIX_DUPLICATE_SLOTS', gameId: game.id });
+            }}
+          >
+            {t('gp.nlSlotFix')}
           </button>
         </div>
       )}

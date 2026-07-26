@@ -232,12 +232,40 @@ test('findPositionIssues: 正常な守備なら何も報告しない / 9人揃�
   const POS = ['投', '捕', '一', '二', '三', '遊', '左', '中', '右'];
   const starters = POS.map((p, i) => ({ order: i + 1, playerId: `s${i + 1}`, position: p }));
   const ok = { startingLineup: starters, lineup: starters.map((s) => ({ ...s })), playLogs: [{ kind: 'atbat', inning: 1, payload: { order: 1 } }] };
-  assert.deepEqual(findPositionIssues(ok), { duplicates: [], missing: [] });
+  assert.deepEqual(findPositionIssues(ok), { duplicates: [], missing: [], sameSlots: [] });
 
   const few = { startingLineup: [], lineup: [{ order: 1, playerId: 'a', position: '投' }, { order: 2, playerId: 'b', position: '捕' }], playLogs: [] };
   const r = findPositionIssues(few);
   assert.deepEqual(r.duplicates, []);
   assert.deepEqual(r.missing, []);
+});
+
+test('findPositionIssues: 全員打ち(「打」)や控えは守備位置の重複として報告しない', () => {
+  const POS = ['投', '捕', '一', '二', '三', '遊', '左', '中', '右'];
+  const starters = POS.map((p, i) => ({ order: i + 1, playerId: `s${i + 1}`, position: p }));
+  const all = [...starters, { order: 10, playerId: 's10', position: '打' }, { order: 11, playerId: 's11', position: '打' }];
+  const g = { startingLineup: all, lineup: all.map((s) => ({ ...s })), playLogs: [{ kind: 'atbat', inning: 1, payload: { order: 1 } }] };
+  assert.deepEqual(findPositionIssues(g).duplicates, []);
+});
+test('findPositionIssues: 同じ選手が2つの打順に居る状態を専用に検出する', () => {
+  const POS = ['投', '捕', '一', '二', '三', '遊', '左', '中', '右'];
+  const starters = POS.map((p, i) => ({ order: i + 1, playerId: `s${i + 1}`, position: p }));
+  const g = {
+    startingLineup: starters,
+    lineup: starters.map((s) => (s.order === 5 ? { ...s, playerId: 'x' } : { ...s })),
+    playLogs: [
+      { kind: 'atbat', inning: 1, payload: { order: 1 } },
+      { kind: 'sub', inning: 2, payload: { order: 2, in: 'x', out: 's2', position: '捕' } },
+      { kind: 'sub', inning: 4, payload: { order: 5, in: 'x', out: 's5', position: '三' } },
+      { kind: 'atbat', inning: 6, payload: { order: 1 } },
+    ],
+  };
+  const r = findPositionIssues(g);
+  assert.equal(r.sameSlots.length, 1);
+  assert.equal(r.sameSlots[0].playerId, 'x');
+  assert.deepEqual(r.sameSlots[0].orders, [2, 5]);
+  // 同じ人が2枠に居るだけの状態を「2人が同じ位置」として報告しない
+  assert.equal(r.duplicates.every((d) => new Set(d.playerIds).size >= 2), true);
 });
 
 test('parsePositionCorrections: 「先発守備位置は正しくはライト」= 回の指定なしで位置訂正', () => {
