@@ -295,13 +295,43 @@ test('buildLineupRows/roleTag: 先発はバッジ無し・交代は回と役割�
 });
 
 // ---- battersRebuild.js ----
-test('findDuplicateAtBats: 同じ回に2打席ある選手を検出する(付け替えの誤り)', () => {
+test('findDuplicateAtBats: 同じ回に別々の打順で打席がある選手だけを検出する', () => {
   const game = { atBats: [
-    { id: 'a', playerId: 'u', result: 'out', snapshot: { inning: 7 } },
-    { id: 'b', playerId: 'u', result: 'bb', snapshot: { inning: 7 } },
-    { id: 'c', playerId: 'x', result: 'single', snapshot: { inning: 7 } },
+    { id: 'a', playerId: 'u', order: 6, result: 'out', snapshot: { inning: 7 } },
+    { id: 'b', playerId: 'u', order: 8, result: 'bb', snapshot: { inning: 7 } }, // 別打順=あり得ない
+    { id: 'c', playerId: 'x', order: 1, result: 'single', snapshot: { inning: 7 } },
   ] };
   assert.deepEqual(findDuplicateAtBats(game), [{ playerId: 'u', inning: 7, count: 2 }]);
+});
+
+test('findDuplicateAtBats: 同じ打順での複数打席(打者一巡)は正常として扱う', () => {
+  const game = { atBats: [
+    { id: 'a', playerId: 'u', order: 3, result: 'single', snapshot: { inning: 3 } },
+    { id: 'b', playerId: 'u', order: 3, result: 'double', snapshot: { inning: 3 } },
+  ] };
+  assert.deepEqual(findDuplicateAtBats(game), []);
+});
+
+test('rebuildBatters: 1人を2打順に置く矛盾した交代を取り除いて元の打者へ戻す', () => {
+  // 6番=宇田川(先発投手)。誤った交代で宇田川が8番にも入れられ、8番の打席まで奪っていた。
+  const game = {
+    startingLineup: [{ order: 6, playerId: 'u', position: '投' }, { order: 8, playerId: 'hira', position: '三' }],
+    atBats: [
+      { id: 'a1', playerId: 'u', order: 6, result: 'out', snapshot: { inning: 7 } },
+      { id: 'a2', playerId: 'u', order: 8, result: 'out', snapshot: { inning: 7 } },
+    ],
+    playLogs: [
+      { id: 'bad', kind: 'sub', inning: 7, payload: { order: 8, in: 'u', out: 'hira', kind: 'def', position: '二' } },
+      { id: 'p1', kind: 'atbat', inning: 7, payload: { order: 6, playerId: 'u', atBatId: 'a1', result: 'out' } },
+      { id: 'p2', kind: 'atbat', inning: 7, payload: { order: 8, playerId: 'u', atBatId: 'a2', result: 'out' } },
+    ],
+  };
+  const n = rebuildBatters(game, (id) => id);
+  assert.equal(n.removedSubs, 1); // 矛盾した交代ログを削除
+  assert.equal(game.playLogs.some((l) => l.id === 'bad'), false);
+  assert.equal(game.atBats[0].playerId, 'u');    // 6番はそのまま
+  assert.equal(game.atBats[1].playerId, 'hira'); // 8番は本来の平川へ戻る
+  assert.deepEqual(findDuplicateAtBats(game), []); // 矛盾が解消している
 });
 
 test('rebuildBatters: 交代の記録どおりに各打席の打者を振り直す', () => {
@@ -320,7 +350,7 @@ test('rebuildBatters: 交代の記録どおりに各打席の打者を振り直�
     ],
   };
   const n = rebuildBatters(game, (id) => id);
-  assert.equal(n, 1); // 7回の1打席だけ直る
+  assert.equal(n.atBats, 1); // 7回の1打席だけ直る
   assert.equal(game.atBats[0].playerId, 'hira'); // 交代前はそのまま
   assert.equal(game.atBats[1].playerId, 'mogi'); // 交代後は茂木へ
   assert.equal(game.playLogs[2].payload.playerId, 'mogi');
@@ -333,7 +363,7 @@ test('rebuildBatters: 既に正しければ何も変えない', () => {
     atBats: [{ id: 'x', playerId: 'a', order: 1, result: 'single', snapshot: { inning: 1 } }],
     playLogs: [{ kind: 'atbat', inning: 1, payload: { order: 1, playerId: 'a', atBatId: 'x', result: 'single' } }],
   };
-  assert.equal(rebuildBatters(game, (id) => id), 0);
+  assert.equal(rebuildBatters(game, (id) => id).total, 0);
   assert.equal(game.updatedAt, undefined);
 });
 

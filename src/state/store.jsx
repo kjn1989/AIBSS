@@ -1147,7 +1147,7 @@ export function reducer(state, action) {
     case 'REBUILD_BATTERS': {
       const g = deep(state.games[action.gameId]);
       const n = rebuildBatters(g, (id) => playerNameOf(state, id));
-      if (!n) return state;
+      if (!n.total) return state;
       return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
     }
 
