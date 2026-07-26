@@ -4,7 +4,7 @@ import { RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES, resultCategory, multiOutLabel
 import { playLabel } from '../lib/voiceParser.js';
 import { computeBoxScore } from '../lib/boxscore.js';
 import { parseBatterCorrection, findTargetAtBat, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections } from '../lib/correctionParser.js';
-import { posFull } from '../lib/lineupBox.js';
+import { posFull, buildLineupRows } from '../lib/lineupBox.js';
 import { interpretCorrection } from '../lib/gemini.js';
 import Sheet from './Sheet.jsx';
 import FullscreenView from './FullscreenView.jsx';
@@ -333,14 +333,20 @@ function NLCorrectionCard({ game }) {
 
   const resolveAndApply = (im) => {
     const { subs, reassigns, resultCorrs, posCorrs = [] } = im;
-    // 先発守備位置の訂正: スタメンに居る選手のみ対象(交代で入った選手は交代の記録が正)
+    // 守備位置の訂正: 出場選手ツリー(画面の表示と同じ組み立て)から対象の出場を特定する。
+    // startingLineupが無い過去試合でも、表示上その選手が先発として出ていれば訂正できる。
     const posAppl = [];
     const posUnresolved = [];
+    const lineupRows = buildLineupRows(game);
     for (const pc of posCorrs) {
-      const st = (game.startingLineup || []).find((l) => l.playerId === pc.playerId);
-      if (!st) { posUnresolved.push(pc.playerName || nameOf(pc.playerId)); continue; }
-      if (st.position === pc.position) continue; // 既に正しい
-      posAppl.push({ ...pc, order: st.order, from: st.position || null });
+      let hit = null;
+      for (const slot of lineupRows) {
+        const p = slot.players.find((x) => x.playerId === pc.playerId);
+        if (p) { hit = { order: slot.order, from: p.posCode || null, isStarter: p.isStarter }; break; }
+      }
+      if (!hit) { posUnresolved.push(pc.playerName || nameOf(pc.playerId)); continue; }
+      if (hit.from === pc.position) continue; // 既に正しい
+      posAppl.push({ ...pc, order: hit.order, from: hit.from });
     }
     // 明示的な交代(守備/投手/代打…)。連鎖(A→B→C)は入った選手が打順を引き継ぐ。
     const orderCache = new Map();

@@ -8,7 +8,7 @@ import { aggregateBatting, battingMetrics, pitchingMetrics, titleLeaders } from 
 import { translate } from '../src/lib/i18n.js';
 import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, parseDirectionOnly } from '../src/lib/voiceParser.js';
 import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections } from '../src/lib/correctionParser.js';
-import { buildLineupRows, posChar, roleTag, distributeToAppearances } from '../src/lib/lineupBox.js';
+import { buildLineupRows, posChar, roleTag, distributeToAppearances, resolveStarters } from '../src/lib/lineupBox.js';
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
 
 test('parseDirectionOnly: 方向のみの発話は方向、結果語を含めばnull(言い直し扱い)', () => {
@@ -254,6 +254,21 @@ test('buildLineupRows/roleTag: 先発はバッジ無し・交代は回と役割�
   assert.equal(slot6.players[1].inning, 3); // 交代で入った回
   assert.equal(roleTag(slot6.players[1]), 'relief'); // 投手への守備交代=救援
   assert.equal(slot6.players[1].posCode, '投');
+});
+
+test('resolveStarters: startingLineup が無い過去試合でも交代のoutから先発と守備位置を復元', () => {
+  // 7番: 清水(先発) → 5回に中島が代打。startingLineup は保存されていない。
+  const game = {
+    lineup: [{ order: 7, playerId: 'nakajima', position: '左' }],
+    playLogs: [{ kind: 'sub', inning: 5, payload: { order: 7, in: 'nakajima', out: 'shimizu', kind: 'ph' } }],
+    atBats: [],
+  };
+  const st = resolveStarters(game).find((s) => s.order === 7);
+  assert.equal(st.playerId, 'shimizu'); // 交代のout=先発として復元される
+  // 出場ツリー上も清水が先発行に来る(=守備位置訂正の対象にできる)
+  const slot7 = buildLineupRows(game).find((r) => r.order === 7);
+  assert.equal(slot7.players[0].playerId, 'shimizu');
+  assert.equal(slot7.players[0].isStarter, true);
 });
 
 test('distributeToAppearances: 再登場した投手の打席が登場行ごとに振り分けられ二重表示にならない', () => {
