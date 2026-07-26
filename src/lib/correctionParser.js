@@ -89,11 +89,16 @@ export function parsePositionCorrections(rawText, players = []) {
   return out;
 }
 
-// 守備陣形の申告を解釈する。ある回からの守備位置を、位置＋選手の組で並べた文。
-// 例: 「7回の守備はショート茂木、サード入交、セカンド宇田川でした」
-//     →[{inning:7, playerId:'茂木', position:'遊'}, {…'三'}, {…'二'}]
-// 交代の言い回し(◯◯が△△と交代)とは別物なので、交代語を含む文は対象外にする。
-// 位置が1つだけの文も、従来どおり交代の解釈に任せる(取り合いを避ける)。
+// その回からの守備位置(交代ではなく、出場中の選手の位置の変更)を解釈する。
+// 2つの言い回しに対応する:
+//  (A) 位置＋選手の組が並ぶ陣形の申告 (選手2人以上)
+//      「7回の守備はショート茂木、サード入交、セカンド宇田川でした」
+//      →[{inning:7,'茂木','遊'}, {…'三'}, {…'二'}]
+//  (B) 1人の守備位置変更 (選手1人)
+//      「中島は6回からレフトからファーストに変更していました」→[{inning:6,'中島','一'}]
+//      移動後の位置は最後に現れた位置ワードを採る(「AからBに」でもBが取れる)。
+// 交代の言い回し(◯◯が△△と交代)は parseSubstitutions の担当なので対象外。
+// 投手への変更も継投の記録が必要なため交代側に任せる。
 export function parseDefensiveAlignment(rawText, players = []) {
   const out = [];
   for (const seg of splitSentences(rawText)) {
@@ -102,13 +107,25 @@ export function parseDefensiveAlignment(rawText, players = []) {
     if (!innM) continue;
     const inning = parseInt(innM[1], 10);
     const posHits = findPositionHits(seg);
-    if (posHits.length < 2) continue; // 位置1つは交代解釈に任せる
+    if (!posHits.length) continue;
     const nameHits = findNameHits(seg, players);
-    for (const ph of posHits) {
-      const next = posHits.find((x) => x.index > ph.index);
-      // その位置ワードの直後(次の位置ワードより前)に現れる選手名を対応づける
-      const nm = nameHits.find((n) => n.index >= ph.span[1] && (!next || n.index < next.index));
-      if (nm) out.push({ inning, playerId: nm.id, playerName: nm.name, position: ph.code });
+    if (!nameHits.length) continue;
+    const distinct = [...new Set(nameHits.map((h) => h.id))];
+
+    if (distinct.length >= 2) {
+      // (A) 位置ワードの直後(次の位置ワードより前)に現れる選手名を対応づける
+      if (posHits.length < 2) continue;
+      for (const ph of posHits) {
+        const next = posHits.find((x) => x.index > ph.index);
+        const nm = nameHits.find((n) => n.index >= ph.span[1] && (!next || n.index < next.index));
+        if (nm) out.push({ inning, playerId: nm.id, playerName: nm.name, position: ph.code });
+      }
+    } else {
+      // (B) 位置変更だと分かる文脈のときだけ拾う(打席の記述などを誤検出しない)
+      if (!/変更|変わ|移動|移っ|守備|ポジション|守っ/.test(seg)) continue;
+      const to = posHits[posHits.length - 1].code;
+      if (to === '投') continue; // 投手への変更は継投の記録が要るので交代側に任せる
+      out.push({ inning, playerId: nameHits[0].id, playerName: nameHits[0].name, position: to });
     }
   }
   return out;
