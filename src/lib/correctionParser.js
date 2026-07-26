@@ -254,26 +254,44 @@ export function parseBatterReassignments(rawText, players = []) {
   return out;
 }
 
+// 短縮表記(中犠飛・右飛・遊ゴ…)の先頭1文字から打球方向を取る。
+// 音声パーサは「センター犠牲フライ」等の言い方が前提で、短縮表記の方向を拾えないため補う。
+const DIR_CHAR = { 投: 'P', 捕: 'C', 一: '1B', 二: '2B', 三: '3B', 遊: 'SS', 左: 'LF', 中: 'CF', 右: 'RF' };
+function directionFromShort(phrase) {
+  // 方向の1文字＋結果語が続く形だけを見る(「中島」のような名前に引っかからないように)
+  const m = phrase.match(/([投捕一二三遊左中右])\s*(?:犠飛|犠打|飛|ゴ|直|安|本|塁打|[23２３])/);
+  return m ? DIR_CHAR[m[1]] : null;
+}
+
 // 打席結果の修正を解釈する。
 // 例: 「7回はセンターゴロではなく、センター犠牲フライで1点でした」
 //     →[{ inning:7, patch:{ result:'sacFly', direction:'CF', rbi:1 } }]
+//     「7回表の中島は中犠飛です。宇田川は四球です。」
+//     →[{ inning:7, batterId:'中島', … }, { inning:7, batterId:'宇田川', … }]
 // 「ではなく/でなく」以降を正しい結果とみなし、音声パーサで結果種別・方向を得る。
-export function parseResultCorrections(rawText) {
+// 回が省略された文は直前の回を引き継ぐ。対象打者名があれば拾い、どの打席かの特定に使う。
+export function parseResultCorrections(rawText, players = []) {
   const out = [];
+  let lastInning = null;
   for (const seg of splitSentences(rawText)) {
     const innM = seg.match(/(\d+)\s*回/);
-    if (!innM) continue;
+    if (innM) lastInning = parseInt(innM[1], 10);
+    const inning = lastInning;
+    if (inning == null) continue;
     if (!/でなく|ではなく|でした|です/.test(seg)) continue;
     const parts = seg.split(/でなく|ではなく/);
     const phrase = parts.length > 1 ? parts.slice(1).join('') : seg;
     const top = (parseUtterance(phrase) || []).find((c) => c.kind === 'play' && c.result);
     if (!top) continue;
     const rbiM = phrase.match(/(\d+)\s*点/);
+    const hit = findNameHits(seg, players)[0] || null; // 対象打者(「◯回の△△は…」の△△)
     out.push({
-      inning: parseInt(innM[1], 10),
+      inning,
+      batterId: hit?.id || null,
+      batterName: hit?.name || null,
       patch: {
         result: top.result,
-        direction: top.direction || null,
+        direction: top.direction || directionFromShort(phrase),
         outType: top.result === 'out' ? (top.outType || 'ground') : null,
         soType: top.result === 'so' ? (top.soType || 'swinging') : null,
         ...(rbiM ? { rbi: parseInt(rbiM[1], 10) } : {}),

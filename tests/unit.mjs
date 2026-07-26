@@ -193,6 +193,16 @@ test('parseResultCorrections: 「ゴロでなく犠飛で1点」を結果修正�
   assert.equal(rc[0].patch.direction, 'CF');
   assert.equal(rc[0].patch.rbi, 1);
 });
+test('parseResultCorrections: 打者名つき・回の省略・短縮表記の方向を解釈', () => {
+  const PS = [{ id: 'n', name: '中島' }, { id: 'u', name: '宇田川' }];
+  const rs = parseResultCorrections('7回表の中島は中犠飛です。宇田川は四球です。', PS);
+  assert.equal(rs.length, 2);
+  // 1文目: 打者=中島、短縮表記「中犠飛」から方向CFも取る
+  assert.deepEqual([rs[0].inning, rs[0].batterId, rs[0].patch.result, rs[0].patch.direction], [7, 'n', 'sacFly', 'CF']);
+  // 2文目: 回が無くても直前の7回を引き継ぎ、打者=宇田川
+  assert.deepEqual([rs[1].inning, rs[1].batterId, rs[1].patch.result], [7, 'u', 'bb']);
+});
+
 test('parseSubstitution: 「7回は髙島が投げました」= 投手1人でも登板として解釈(退く側は後で解決)', () => {
   const PS = [{ id: 't', name: '髙島' }, { id: 'u', name: '宇田川' }];
   const r = parseSubstitution('また7回は髙島が投げました', PS);
