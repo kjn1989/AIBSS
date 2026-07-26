@@ -1109,12 +1109,26 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 .hist-chip .mini-badge { color: var(--gold); font-weight: 800; }
 
 @media print {
-  @page { size: A4 portrait; margin: 14mm; }
+  @page { size: A4 portrait; margin: 12mm; }
+  /* 画面用の暗い背景が用紙に出ないように、印刷では地を白にする */
+  html, body { background: #fff !important; }
   body * { visibility: hidden; }
   .scoresheet-root, .scoresheet-root * { visibility: visible; }
-  /* 用紙の余白は@pageで確保。中央寄せで左上への偏りを解消する */
+  /* 印刷しない部分は場所ごと消す(visibility:hiddenだと空白として残るため)。
+     全画面ビューは body 直下へポータル描画されるので、アプリ本体(#root)を
+     消してもスコアシートは残る。これが無いと用紙の先頭に巨大な余白ができる。 */
+  .no-print { display: none !important; }
+  body > #root { display: none !important; }
+  /* 全画面オーバーレイは position:fixed + transform のため、中の絶対配置が
+     「用紙」ではなく「画面」を基準にしてしまい、用紙の右側にオーバーレイの
+     暗い背景が帯状に残っていた。印刷時は通常フローに戻して用紙幅に合わせる。 */
+  .fullscreen-view {
+    position: static !important; transform: none !important; display: block !important;
+    background: #fff !important; inset: auto !important;
+  }
+  .fullscreen-body { overflow: visible !important; padding: 0 !important; }
   .scoresheet-root {
-    position: absolute; left: 0; right: 0; top: 0; margin: 0 auto; width: auto; max-width: 100%;
+    position: static; width: 100%;
     background: #fff !important; color: #000; border: none; border-radius: 0; padding: 0;
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
@@ -1123,9 +1137,12 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
   .scoresheet-root .ss-table { font-size: 12px; margin-bottom: 14px; }
   .scoresheet-root .ss-table th, .scoresheet-root .ss-table td { border-color: #000; color: #000; padding: 5px 4px; }
   .scoresheet-root .ss-title span, .scoresheet-root .ss-footer, .scoresheet-root .ss-table th { color: #333; }
-  /* 印刷は用紙幅に余裕があるので、固定配分をやめて内容なりの幅に戻す */
-  .ss-matrix, .ss-table.ss-line { table-layout: auto; font-size: 12px; }
-  .scoresheet-root .ss-table .ss-team, .scoresheet-root .ss-table .ss-name { max-width: none; }
+  /* 列幅の固定配分は印刷でも維持する(用紙幅に必ず収め、はみ出しを作らない)。
+     A4は横に余裕があるので、名前が省略されることは実質なくなる。 */
+  .ss-matrix, .ss-table.ss-line { font-size: 12px; }
+  /* ページをまたぐときは見出し行を各ページに繰り返し、行の途中で切らない */
+  .ss-table thead { display: table-header-group; }
+  .ss-table tr { page-break-inside: avoid; break-inside: avoid; }
   /* PDFでも結果色を保持(印刷向けに濃いめの値へ) */
   .scoresheet-root .ss-cell.hit { color: #1a7f37 !important; }
   .scoresheet-root .ss-cell.walk { color: #0969da !important; }
