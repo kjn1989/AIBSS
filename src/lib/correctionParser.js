@@ -49,6 +49,9 @@ const POSITION_WORDS = {
   ライト: '右', 右翼: '右', 指名打者: 'DH',
 };
 const SUB_KEYWORDS = /交代|代わっ|代わり|代え|入れ替|負傷|退場|退い|下げ|リエントリー|再出場|入っ/;
+// 打席結果を表す語。守備位置の話か打席の話かを見分けるのに使う
+// (音声パーサは曖昧な文でも安打を返すため、キーワードの有無で判定する)。
+const RESULT_WORDS = /安打|ヒット|ゴロ|フライ|ライナー|三振|四球|死球|本塁打|ホームラン|二塁打|三塁打|ツーベース|スリーベース|犠飛|犠打|犠牲|エラー|失策|併殺|ゲッツー|打点|出塁|盗塁|振り逃げ|バント|打席|打撃/;
 
 // テキスト中の守備位置ワードを出現位置つきで拾う(長い語を優先し、内包する短語は除外)。
 function findPositionHits(text) {
@@ -121,8 +124,9 @@ export function parseDefensiveAlignment(rawText, players = []) {
         if (nm) out.push({ inning, playerId: nm.id, playerName: nm.name, position: ph.code });
       }
     } else {
-      // (B) 位置変更だと分かる文脈のときだけ拾う(打席の記述などを誤検出しない)
-      if (!/変更|変わ|移動|移っ|守備|ポジション|守っ/.test(seg)) continue;
+      // (B) 打席結果の記述(「レフト前ヒット」「中犠飛」等)は守備位置ではないので除く。
+      //     逆に結果語が無ければ「◯回から◯◯は△△」のような素直な言い方も拾える。
+      if (RESULT_WORDS.test(seg)) continue;
       const to = posHits[posHits.length - 1].code;
       if (to === '投') continue; // 投手への変更は継投の記録が要るので交代側に任せる
       out.push({ inning, playerId: nameHits[0].id, playerName: nameHits[0].name, position: to });

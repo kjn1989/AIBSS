@@ -8,7 +8,7 @@ import { aggregateBatting, battingMetrics, pitchingMetrics, titleLeaders } from 
 import { translate } from '../src/lib/i18n.js';
 import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, parseDirectionOnly } from '../src/lib/voiceParser.js';
 import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment } from '../src/lib/correctionParser.js';
-import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarters } from '../src/lib/lineupBox.js';
+import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarters, findPositionIssues } from '../src/lib/lineupBox.js';
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
 import { remapPlayerInGame, fillPlayerGaps } from '../src/lib/mergePlayers.js';
 import { computeBoxScore } from '../src/lib/boxscore.js';
@@ -173,6 +173,37 @@ test('parseDefensiveAlignment: 交代文は拾わない(交代解釈と取り合
   const one = parseDefensiveAlignment('6回の守備はキャッチャー松田でした', PS);
   assert.deepEqual(one.map((r) => [r.inning, r.playerId, r.position]), [[6, 'm', '捕']]);
 });
+test('parseDefensiveAlignment: 「2回から山城はキャッチャーです」のような素直な言い方も拾う', () => {
+  const PS = [{ id: 'y', name: '山城' }, { id: 'n', name: '中島' }];
+  assert.deepEqual(
+    parseDefensiveAlignment('2回から山城はキャッチャーです', PS).map((r) => [r.inning, r.playerId, r.position]),
+    [[2, 'y', '捕']],
+  );
+  // 打席結果の記述は守備位置として拾わない
+  assert.equal(parseDefensiveAlignment('1回 中島 レフト前ヒット', PS).length, 0);
+  assert.equal(parseDefensiveAlignment('7回表の中島は中犠飛です', PS).length, 0);
+});
+
+test('findPositionIssues: 同じ守備位置に2人・守る人が居ない位置を検出', () => {
+  const game = { lineup: [
+    { order: 1, playerId: 'a', position: '投' }, { order: 2, playerId: 'b', position: '一' },
+    { order: 3, playerId: 'c', position: '一' }, // 一塁が2人 → 捕手が不在
+    { order: 4, playerId: 'd', position: '二' }, { order: 5, playerId: 'e', position: '三' },
+    { order: 6, playerId: 'f', position: '遊' }, { order: 7, playerId: 'g', position: '左' },
+    { order: 8, playerId: 'h', position: '中' }, { order: 9, playerId: 'i', position: '右' },
+  ] };
+  const r = findPositionIssues(game);
+  assert.deepEqual(r.duplicates, [{ position: '一', playerIds: ['b', 'c'] }]);
+  assert.deepEqual(r.missing, ['捕']);
+});
+
+test('findPositionIssues: 9人揃っていない試合では「不在」を出さない(誤警告しない)', () => {
+  const game = { lineup: [{ order: 1, playerId: 'a', position: '投' }, { order: 2, playerId: 'b', position: '捕' }] };
+  const r = findPositionIssues(game);
+  assert.deepEqual(r.duplicates, []);
+  assert.deepEqual(r.missing, []);
+});
+
 test('parsePositionCorrections: 「先発守備位置は正しくはライト」= 回の指定なしで位置訂正', () => {
   const PS = [{ id: 's', name: '清水' }, { id: 'm', name: '松田' }];
   const rs = parsePositionCorrections('清水の先発守備位置がファーストになっていますが、正しくはライトでした', PS);
