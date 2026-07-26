@@ -485,6 +485,20 @@ test('fillPlayerGaps: 残す側の空欄を統合する側の値で補完する'
   assert.equal(merged.id, 'a');
 });
 
+test('buildLineupRows: 位置ログが無い守備位置変更も現lineupから表記に反映(打左→打左一)', () => {
+  // 7番: 清水(先発右翼) → 5回に中島が代打(左翼)。その後 中島は一塁へ(lineupだけが一)。
+  const game = {
+    startingLineup: [{ order: 7, playerId: 'shimizu', position: '右' }],
+    lineup: [{ order: 7, playerId: 'nakajima', position: '一' }],
+    playLogs: [{ kind: 'sub', inning: 5, payload: { order: 7, in: 'nakajima', out: 'shimizu', kind: 'ph', position: '左' } }],
+    atBats: [],
+  };
+  const slot7 = buildLineupRows(game).find((r) => r.order === 7);
+  assert.equal(slot7.players[0].notation, '(右)');
+  assert.equal(slot7.players[1].notation, '打左一'); // 代打→左翼→一塁
+  assert.equal(slot7.players[1].posCode, '一');      // 最後に就いた守備位置
+});
+
 test('buildLineupRows: 打順を移った選手は fromOrder/toOrder が付き、途中出場と区別できる', () => {
   // 8番 平川(先発三塁) が5回からレフトへ。9番の奥田と入れ替わり、8番には茂木が入る。
   const game = {

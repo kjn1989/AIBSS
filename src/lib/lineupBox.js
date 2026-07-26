@@ -110,13 +110,15 @@ export function buildLineupRows(game) {
     }
   }
 
-  // 位置不明の「最終出場者」には、現lineupの守備位置を補う(過去データの守備交代を拾う)
+  // 最終出場者の守備位置は現lineupを正とする。位置ログが残っていない守備位置変更
+  // (交代の記録経由で lineup だけ変わった場合など)も表記の連結に反映する。
+  // 例: 5回に代打で入って左翼→6回から一塁 なら「打左一」。
   for (const [order, chain] of byOrder) {
     const cur = (game.lineup || []).find((l) => l.order === order);
     const last = chain[chain.length - 1];
-    if (cur && last && last.playerId === cur.playerId && cur.position) {
-      if (!last.marks.some((m) => posChar(m.position))) last.marks.push({ kind: 'move', position: cur.position });
-    }
+    if (!cur || !last || last.playerId !== cur.playerId || !cur.position) continue;
+    const shown = [...last.marks].reverse().map((m) => m.position).find((p) => posChar(p)) || null;
+    if (shown !== cur.position) last.marks.push({ kind: 'move', position: cur.position });
   }
 
   const rows = [...byOrder.keys()].sort((a, b) => a - b).map((order) => ({
