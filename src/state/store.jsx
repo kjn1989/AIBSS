@@ -11,6 +11,7 @@ import {
 } from '../lib/model.js';
 import { generateDemoData } from '../lib/demo.js';
 import { rebuildPitchingStats } from '../lib/pitchingRebuild.js';
+import { resolveStarters } from '../lib/lineupBox.js';
 import { idbSave } from '../lib/durableStore.js';
 import { translate, DEFAULT_LANG } from '../lib/i18n.js';
 import { getActiveProfileId, profileStorageKey, listProfiles, updateProfileMeta } from '../lib/profiles.js';
@@ -970,18 +971,31 @@ export function reducer(state, action) {
       return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
     }
 
-    // ===== 先発守備位置の訂正(スタメン入力ミスの是正。交代ではないので回を伴わない) =====
-    // startingLineup の守備位置を直し、その打順に今もその選手が居るなら現lineupも合わせる。
-    // 交代で入った選手が就いた位置(subログのposition)は交代の記録なので触らない。
+    // ===== 守備位置の訂正(入力ミスの是正。交代ではないので回を伴わない) =====
+    // 先発なら startingLineup を、途中出場ならその交代ログの守備位置を直す。
+    // その打順に今もその選手が居るなら現lineupの守備位置も合わせる。
+    // startingLineup が無い過去試合は、表示と同じ推定(resolveStarters)で先に実体化する。
     case 'FIX_STARTING_POSITION': {
       const g = deep(state.games[action.gameId]);
       const { playerId, position } = action;
       if (!playerId || !position) return state;
+      if (!g.startingLineup || !g.startingLineup.length) g.startingLineup = resolveStarters(g);
+      const applyToSlot = (order) => {
+        const slot = (g.lineup || []).find((l) => l.order === order);
+        if (slot && slot.playerId === playerId) slot.position = position;
+      };
       const st = (g.startingLineup || []).find((l) => l.playerId === playerId);
-      if (!st) return state;
-      st.position = position;
-      const slot = (g.lineup || []).find((l) => l.order === st.order);
-      if (slot && slot.playerId === playerId) slot.position = position;
+      if (st) {
+        st.position = position;
+        applyToSlot(st.order);
+      } else {
+        // 途中出場: その選手が入った交代ログの守備位置を訂正する(最後の登場を対象)
+        const subs = (g.playLogs || []).filter((l) => l.kind === 'sub' && l.payload?.in === playerId);
+        const log = subs[subs.length - 1];
+        if (!log) return state;
+        log.payload = { ...log.payload, position };
+        applyToSlot(log.payload.order);
+      }
       g.updatedAt = Date.now();
       return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
     }

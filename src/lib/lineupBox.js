@@ -51,7 +51,7 @@ function composeNotation(marks) {
 // 各打順スロットの「先発」を決める。
 // startingLineup があればそれを使う。無い過去試合は、その打順で最初に行われた
 // 交代の out(交代前にいた選手)を先発とみなす(交代が無ければ現lineupの選手)。
-function resolveStarters(game) {
+export function resolveStarters(game) {
   if (game.startingLineup && game.startingLineup.length) {
     return game.startingLineup.map((s) => ({ order: s.order, playerId: s.playerId, position: s.position || null }));
   }
