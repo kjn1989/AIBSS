@@ -163,41 +163,44 @@ export function buildLineupRows(game) {
   return rows;
 }
 
-// スロット(打順)内の各登場行に、その打順の打席・盗塁を1つずつ割り当てる。
-// 同じ選手が再登場(リエントリー/救援→再登板など)した場合、そのままだと
-// 全登場行が「その選手の全打席」を拾って二重表示になる。打席・盗塁の回を見て、
-// その回以下で最も遅く始まった登場の行にだけ入れることで重複を防ぐ。
-// players: buildLineupRows(...).players の1スロット分(各要素は { playerId, inning })
-// 戻り値: { abBuckets:[[atBat...]], sbCounts:[n...] }(players と同順・同長)
-export function distributeToAppearances(players, atBats = [], sbLogs = []) {
-  const entryInn = (p) => (p.inning == null ? -Infinity : Number(p.inning));
-  // playerId と 回 から、割り当て先の登場行インデックスを選ぶ。
-  const pickIndex = (pid, inn) => {
-    let best = -1;
-    let bestInn = -Infinity;
-    for (let i = 0; i < players.length; i++) {
-      if (players[i].playerId !== pid) continue;
-      const e = entryInn(players[i]);
-      // その登場が対象の回までに始まっていて、より遅く始まった登場を優先
-      if (e <= inn && (best === -1 || e >= bestInn)) { best = i; bestInn = e; }
+// 選手ごとに「主たる出場行(=最初に出場した行)」を決め、その選手の打席・盗塁を
+// すべてそこに集約する。
+//
+// 同じ選手は、リエントリーや再登板で同じ打順に複数回現れることも、守備の入れ替えで
+// 別の打順へ移ることもある。行ごとに打席を振り分けると1人の打撃成績が複数行に散り、
+// スコアシートが読みにくくなる(逆に何も制御しないと全行に同じ打席が重複表示される)。
+// そこで「1人の打撃結果は1行」に統一する。集約先でない行は打撃欄を空にして、
+// 0打数と紛らわしくならないようにする(位置表記と ←/→ の印で系譜は追える)。
+//
+// rows: buildLineupRows(game) の戻り値(全打順ぶん)
+// 戻り値: Map<行の選手オブジェクト, { atBats, sb, primary, primaryOrder }>
+export function assignAtBatsByPlayer(rows, atBats = [], sbLogs = []) {
+  const innOf = (p) => (p.inning == null ? -Infinity : Number(p.inning)); // 先発は最先
+  const primary = new Map(); // playerId -> { p, order }
+  for (const row of rows) {
+    for (const p of row.players) {
+      const cur = primary.get(p.playerId);
+      if (!cur || innOf(p) < innOf(cur.p)) primary.set(p.playerId, { p, order: row.order });
     }
-    // 見つからない(登場回が打席回より後=データ矛盾)場合は最初の該当行へ
-    if (best === -1) best = players.findIndex((p) => p.playerId === pid);
-    return best;
-  };
-  const abBuckets = players.map(() => []);
-  const sbCounts = players.map(() => 0);
+  }
+
+  const out = new Map();
+  for (const row of rows) {
+    for (const p of row.players) {
+      const top = primary.get(p.playerId);
+      out.set(p, { atBats: [], sb: 0, primary: top?.p === p, primaryOrder: top?.order ?? row.order });
+    }
+  }
   for (const ab of atBats) {
-    const idx = pickIndex(ab.playerId, ab.snapshot?.inning || 1);
-    if (idx !== -1) abBuckets[idx].push(ab);
+    const top = primary.get(ab.playerId);
+    if (top) out.get(top.p).atBats.push(ab);
   }
   for (const log of sbLogs) {
     const pid = log.payload?.playerId;
-    if (pid == null) continue;
-    const idx = pickIndex(pid, Number(log.inning) || 1);
-    if (idx !== -1) sbCounts[idx] += 1;
+    const top = pid != null ? primary.get(pid) : null;
+    if (top) out.get(top.p).sb += 1;
   }
-  return { abBuckets, sbCounts };
+  return out;
 }
 
 // カード/ツリー表示用の“役割ラベル種別”を返す。守備交代で投手に就く=救援。

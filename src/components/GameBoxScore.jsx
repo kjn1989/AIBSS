@@ -1,7 +1,7 @@
 import React from 'react';
 import { useStore, usePlayerName, useT } from '../state/store.jsx';
 import { RESULTS } from '../lib/model.js';
-import { buildLineupRows, roleTag, posFull, distributeToAppearances } from '../lib/lineupBox.js';
+import { buildLineupRows, roleTag, posFull, assignAtBatsByPlayer } from '../lib/lineupBox.js';
 
 // 1登場ぶんの打席群(+盗塁数)から表示用の打撃ラインを作る。
 // aggregateBatting と同じ判定基準(打数・安打・本塁打)を打席サブセットに適用する。
@@ -32,6 +32,8 @@ export default function GameBoxScore({ game }) {
   const rows = buildLineupRows(game);
   if (!rows.length) return null;
   const sbLogs = (game.playLogs || []).filter((l) => l.kind === 'sb');
+  // 打撃成績は「1人=1行」に集約(打順を移った選手が複数カードに分散しないように)
+  const assigned = assignAtBatsByPlayer(rows, (game.atBats || []).filter((ab) => ab.result), sbLogs);
 
   const roleLabel = { ph: t('box.rolePh'), pr: t('box.rolePr'), def: t('box.roleDef'), relief: t('box.roleRelief') };
   const statLine = (s) => {
@@ -48,17 +50,17 @@ export default function GameBoxScore({ game }) {
       <div className="section-title" style={{ marginTop: 0 }}>{t('box.title')}</div>
       <p className="small dim" style={{ marginTop: 0 }}>{t('box.desc2')}</p>
       <div className="bx-tree">
-        {rows.map((slot) => {
-          // 同一選手の再登場で成績が二重表示にならないよう、打席・盗塁を登場行ごとに振り分ける。
-          const abs = game.atBats.filter((ab) => ab.order === slot.order && ab.result);
-          const { abBuckets, sbCounts } = distributeToAppearances(slot.players, abs, sbLogs);
-          return (
+        {rows.map((slot) => (
           <div className="bx-slot" key={slot.order}>
             <div className="bx-ord">{slot.order}</div>
             <div className="bx-players">
               {slot.players.map((p, i) => {
                 const tag = roleTag(p);
-                const sl = statLine(lineFromBucket(abBuckets[i], sbCounts[i]));
+                const bucket = assigned.get(p) || { atBats: [], sb: 0, primary: true, primaryOrder: slot.order };
+                // 集約先でないカードは、成績の代わりに「◯番に記載」と案内する
+                const sl = bucket.primary
+                  ? statLine(lineFromBucket(bucket.atBats, bucket.sb))
+                  : t('box.statsInOrder', { n: bucket.primaryOrder });
                 return (
                   <div className={`bx-card${i > 0 ? ' sub' : ''}`} key={`${p.playerId}-${i}`}>
                     <div className="bx-top">
@@ -77,8 +79,7 @@ export default function GameBoxScore({ game }) {
               })}
             </div>
           </div>
-          );
-        })}
+        ))}
       </div>
     </div>
   );
