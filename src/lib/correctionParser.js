@@ -50,6 +50,45 @@ const POSITION_WORDS = {
 };
 const SUB_KEYWORDS = /交代|代わっ|代わり|代え|入れ替|負傷|退場|退い|下げ|リエントリー|再出場|入っ/;
 
+// テキスト中の守備位置ワードを出現位置つきで拾う(長い語を優先し、内包する短語は除外)。
+function findPositionHits(text) {
+  const hits = [];
+  for (const w of Object.keys(POSITION_WORDS).sort((a, b) => b.length - a.length)) {
+    let from = 0;
+    let i;
+    while ((i = text.indexOf(w, from)) !== -1) {
+      const span = [i, i + w.length];
+      if (!hits.some((h) => h.span[0] <= span[0] && span[1] <= h.span[1])) hits.push({ code: POSITION_WORDS[w], index: i, span });
+      from = i + w.length;
+    }
+  }
+  return hits.sort((a, b) => a.index - b.index);
+}
+
+// 先発(スタメン)の守備位置そのものの訂正を解釈する。
+// 交代と違い「回」を伴わないのが特徴(入力時に回を要求しない)。
+// 例: 「清水の先発守備位置がファーストになっていますが、正しくはライトでした」
+//     →[{ playerId, playerName, position:'右' }]
+// 「正しくは/本当は/ではなく」以降に現れる位置を採用し、無ければ最後に現れた位置を採る。
+export function parsePositionCorrections(rawText, players = []) {
+  const out = [];
+  for (const seg of splitSentences(rawText)) {
+    if (/\d+\s*回/.test(seg)) continue; // 回の指定があるものは交代として扱う
+    if (!/守備|ポジション|先発|スタメン|守って/.test(seg)) continue;
+    const hits = findNameHits(seg, players);
+    if (!hits.length) continue;
+    // 2人以上出てくる文は交代の可能性が高いので、位置訂正としては扱わない
+    if (hits.some((h) => h.id !== hits[0].id)) continue;
+    const posHits = findPositionHits(seg);
+    if (!posHits.length) continue;
+    const marker = seg.match(/正しく|本当|実際|ではなく|でなく/);
+    const after = marker ? posHits.filter((p) => p.index > marker.index) : [];
+    const list = after.length ? after : posHits;
+    out.push({ playerId: hits[0].id, playerName: hits[0].name, position: list[list.length - 1].code });
+  }
+  return out;
+}
+
 // 文章から「交代(守備交代・代打・代走・リエントリー)」を解釈する。
 // 例: 「2回にキャッチャー河合が負傷し山城と交代」「6回、髙島に代わって宇田川」
 // 先に登場する選手名=退く側(out)、後の別選手=入る側(in) とみなす(確認ダイアログで是正可能)。

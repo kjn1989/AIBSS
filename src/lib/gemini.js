@@ -125,9 +125,11 @@ export async function interpretCorrection({ apiKey, text, players = [], lineup =
 {"operations":[
  {"type":"reassign","inning":整数,"from":"元の打者(登録名)","to":"実際の打者(登録名)","ordinal":整数またはnull},
  {"type":"substitution","inning":整数,"out":"退く選手","in":"入る選手","position":"投|捕|一|二|三|遊|左|中|右|DH|null","role":"ph|pr|def","afterBatter":相手打者の打順(回の途中で交代した場合その打者の後)またはnull},
- {"type":"result","inning":整数,"batter":"打者(登録名)またはnull","result":"single|double|triple|hr|out|so|bb|hbp|error|sacBunt|sacFly","direction":"P|C|1B|2B|3B|SS|LF|CF|RF|null","outType":"ground|fly|liner|dp|null","rbi":整数またはnull}
+ {"type":"result","inning":整数,"batter":"打者(登録名)またはnull","result":"single|double|triple|hr|out|so|bb|hbp|error|sacBunt|sacFly","direction":"P|C|1B|2B|3B|SS|LF|CF|RF|null","outType":"ground|fly|liner|dp|null","rbi":整数またはnull},
+ {"type":"position","player":"選手(登録名)","position":"投|捕|一|二|三|遊|左|中|右|DH"}
 ]}
 規則: reassign=ある回の打者が実は別選手だった時の付け替え。substitution=交代の記録(role: ph=代打, pr=代走, def=守備交代や投手交代)。result=打席結果の訂正(方向directionは打球方向)。
+position=先発(スタメン)の守備位置そのものの登録ミスの訂正。「◯◯の先発守備位置が△△になっているが正しくは□□」のように回を伴わず、交代ではなく最初から誤って登録されていた場合に使う(positionには訂正後の正しい位置を入れる)。回が出てくる場合は position ではなく substitution。
 「◯回は△△が投げた/登板した」のように新しい投手だけが書かれている場合も substitution(position:"投") として出力し、out はその直前の投手をあなたが特定する(不明ならnull)。
 複数の交代・登板があれば全て漏れなく列挙する。該当が無ければ operations は空配列。登録名に無い選手名は使わない。回や打者は下記の記録から特定する。
 【登録選手】${pl}

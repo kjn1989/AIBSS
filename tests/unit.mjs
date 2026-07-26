@@ -7,7 +7,7 @@ import { gameEndCheck, initialPresetIdFor, describeRules } from '../src/lib/rule
 import { aggregateBatting, battingMetrics, pitchingMetrics, titleLeaders } from '../src/lib/stats.js';
 import { translate } from '../src/lib/i18n.js';
 import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, parseDirectionOnly } from '../src/lib/voiceParser.js';
-import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections } from '../src/lib/correctionParser.js';
+import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections } from '../src/lib/correctionParser.js';
 import { buildLineupRows, posChar, roleTag, distributeToAppearances } from '../src/lib/lineupBox.js';
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
 
@@ -134,6 +134,18 @@ test('parseBatterReassignments: 複数回の打者付け替え(5回・7回)を�
   const rs = parseBatterReassignments(txt, PS);
   assert.equal(rs.length, 2);
   assert.deepEqual(rs.map((r) => [r.inning, r.targetId, r.newId]), [[5, 's', 'n'], [7, 's', 'n']]);
+});
+test('parsePositionCorrections: 「先発守備位置は正しくはライト」= 回の指定なしで位置訂正', () => {
+  const PS = [{ id: 's', name: '清水' }, { id: 'm', name: '松田' }];
+  const rs = parsePositionCorrections('清水の先発守備位置がファーストになっていますが、正しくはライトでした', PS);
+  assert.equal(rs.length, 1);
+  assert.equal(rs[0].playerId, 's');
+  assert.equal(rs[0].position, '右'); // 「正しくは」以降の位置を採用(ファーストに引きずられない)
+});
+test('parsePositionCorrections: 回を含む文・2人出てくる文は交代扱いにして拾わない', () => {
+  const PS = [{ id: 'y', name: '山城' }, { id: 'm', name: '松田' }];
+  assert.equal(parsePositionCorrections('6回から守備のキャッチャーは山城から松田に替わりました', PS).length, 0);
+  assert.equal(parsePositionCorrections('守備は山城から松田に交代', PS).length, 0);
 });
 test('parseResultCorrections: 「ゴロでなく犠飛で1点」を結果修正として解釈', () => {
   const rc = parseResultCorrections('なお、7回はセンターゴロではなく、センター犠牲フライで1点でした。');
