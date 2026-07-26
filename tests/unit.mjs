@@ -10,6 +10,7 @@ import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfi
 import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections } from '../src/lib/correctionParser.js';
 import { buildLineupRows, posChar, roleTag, distributeToAppearances, resolveStarters } from '../src/lib/lineupBox.js';
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
+import { remapPlayerInGame, fillPlayerGaps } from '../src/lib/mergePlayers.js';
 
 test('parseDirectionOnly: 方向のみの発話は方向、結果語を含めばnull(言い直し扱い)', () => {
   assert.equal(parseDirectionOnly('ライト'), 'RF');
@@ -254,6 +255,56 @@ test('buildLineupRows/roleTag: 先発はバッジ無し・交代は回と役割�
   assert.equal(slot6.players[1].inning, 3); // 交代で入った回
   assert.equal(roleTag(slot6.players[1]), 'relief'); // 投手への守備交代=救援
   assert.equal(slot6.players[1].posCode, '投');
+});
+
+// ---- mergePlayers.js ----
+test('remapPlayerInGame: 全ての参照を付け替え、updatedAtを進める(クラウド同期で元に戻らない)', () => {
+  const game = {
+    updatedAt: 1000, currentPitcherId: 'dup',
+    lineup: [{ order: 9, playerId: 'dup', position: '左' }],
+    startingLineup: [{ order: 9, playerId: 'dup', position: '三' }],
+    atBats: [{ playerId: 'dup', order: 9 }],
+    pitchingRecords: [{ playerId: 'dup', outsRecorded: 3 }],
+    importedBatting: [{ playerId: 'dup', h: 1 }],
+    importedPitching: [{ playerId: 'dup', outsRecorded: 3 }],
+    retiredPlayerIds: ['dup'], usedPlayerIds: ['dup', 'keep'],
+    runners: { 1: { playerId: 'dup' }, 2: null, 3: null },
+    playLogs: [
+      { kind: 'atbat', payload: { playerId: 'dup' } },
+      { kind: 'sub', payload: { in: 'dup', out: 'other' } },
+      { kind: 'defense', payload: { pitcherId: 'dup' } },
+    ],
+  };
+  const touched = remapPlayerInGame(game, 'dup', 'keep', 2000);
+  assert.equal(touched, true);
+  assert.equal(game.updatedAt, 2000); // これが無いと同期のLWWで古い版に上書きされる
+  assert.equal(game.lineup[0].playerId, 'keep');
+  assert.equal(game.startingLineup[0].playerId, 'keep');
+  assert.equal(game.atBats[0].playerId, 'keep');
+  assert.equal(game.pitchingRecords[0].playerId, 'keep');
+  assert.equal(game.importedBatting[0].playerId, 'keep');
+  assert.equal(game.importedPitching[0].playerId, 'keep');
+  assert.equal(game.currentPitcherId, 'keep');
+  assert.equal(game.runners[1].playerId, 'keep');
+  assert.deepEqual(game.retiredPlayerIds, ['keep']);
+  assert.deepEqual(game.usedPlayerIds, ['keep']); // 重複は1つにまとまる
+  assert.equal(game.playLogs[0].payload.playerId, 'keep');
+  assert.equal(game.playLogs[1].payload.in, 'keep');
+  assert.equal(game.playLogs[1].payload.out, 'other');
+  assert.equal(game.playLogs[2].payload.pitcherId, 'keep');
+});
+
+test('remapPlayerInGame: 対象が居ない試合は updatedAt を変えない(無用な再送を防ぐ)', () => {
+  const game = { updatedAt: 1000, lineup: [{ order: 1, playerId: 'x' }], playLogs: [] };
+  assert.equal(remapPlayerInGame(game, 'dup', 'keep', 2000), false);
+  assert.equal(game.updatedAt, 1000);
+});
+
+test('fillPlayerGaps: 残す側の空欄を統合する側の値で補完する', () => {
+  const merged = fillPlayerGaps({ id: 'a', name: '平川', number: '', bats: 'R' }, { id: 'b', name: '平川', number: '31', bats: 'L' });
+  assert.equal(merged.number, '31'); // 空欄は補完
+  assert.equal(merged.bats, 'R');    // 既に値があれば残す側を優先
+  assert.equal(merged.id, 'a');
 });
 
 test('buildLineupRows: 打順を移った選手は fromOrder/toOrder が付き、途中出場と区別できる', () => {
