@@ -311,7 +311,7 @@ function NLCorrectionCard({ game }) {
   const produceRegex = () => ({
     subs: parseSubstitutions(text, state.players),
     reassigns: parseBatterReassignments(text, state.players),
-    resultCorrs: parseResultCorrections(text),
+    resultCorrs: parseResultCorrections(text, state.players),
     posCorrs: parsePositionCorrections(text, state.players),
     aligns: parseDefensiveAlignment(text, state.players),
   });
@@ -482,11 +482,14 @@ function NLCorrectionCard({ game }) {
     // 結果修正を対象の打席ログへ解決(その回の付け替え対象、無ければ回内で1件のみのとき)
     const resAppl = [];
     for (const rc of resultCorrs) {
-      let logId = inningToLog.get(rc.inning);
-      if (!logId && rc.batterId) {
-        const l = (game.playLogs || []).find((x) => x.kind === 'atbat' && x.inning === rc.inning && x.payload?.playerId === rc.batterId);
+      // 打者名が書かれていればそれを最優先(同じ回に複数の打席があっても特定できる)
+      let logId = null;
+      if (rc.batterId) {
+        const l = (game.playLogs || []).find((x) => x.kind === 'atbat'
+          && Number(x.inning) === Number(rc.inning) && x.payload?.playerId === rc.batterId);
         if (l) logId = l.id;
       }
+      if (!logId) logId = inningToLog.get(rc.inning);
       if (!logId) { const logs = (game.playLogs || []).filter((l) => l.kind === 'atbat' && l.inning === rc.inning); if (logs.length === 1) logId = logs[0].id; }
       if (logId) resAppl.push({ ...rc, logId });
     }
@@ -521,7 +524,11 @@ function NLCorrectionCard({ game }) {
       ...subAppl.map(subLabel),
       ...synthSubs.map(subLabel),
       ...reAppl.map((r) => t('gp.nlReItem', { inning: r.inning, name: r.newName })),
-      ...resAppl.map((rc) => t('gp.nlResItem', { inning: rc.inning, label: playLabel(rc.patch.result, rc.patch.direction, rc.patch.outType, rc.patch.soType, state.settings.edition, lang) })),
+      ...resAppl.map((rc) => t('gp.nlResItem', {
+        inning: rc.inning,
+        who: rc.batterId ? ` ${rc.batterName || nameOf(rc.batterId)}` : '',
+        label: playLabel(rc.patch.result, rc.patch.direction, rc.patch.outType, rc.patch.soType, state.settings.edition, lang),
+      })),
     ];
     if (!window.confirm(t('gp.nlConfirmOps', { list: lines.join('\n') }))) return;
 
