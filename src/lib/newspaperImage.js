@@ -114,6 +114,18 @@ function fitFont(measure, text, maxW, startPx, fontOf, minPx = 11) {
   return px;
 }
 
+// 決められた幅に必ず収める。まずフォントを縮め、最小サイズでも溢れるなら末尾を「…」で省略する。
+// (長いチーム名が枠外にはみ出すのを防ぐ。fitFontだけでは最小サイズで打ち切って溢れていた)
+function fitText(measure, text, maxW, startPx, fontOf, minPx = 11) {
+  const src = String(text ?? '');
+  const px = fitFont(measure, src, maxW, startPx, fontOf, minPx);
+  measure.font = fontOf(px);
+  if (measure.measureText(src).width <= maxW) return { px, text: src };
+  let s = src;
+  while (s.length > 1 && measure.measureText(`${s}…`).width > maxW) s = s.slice(0, -1);
+  return { px, text: `${s}…` };
+}
+
 export async function generateNewspaperImage({ article, game, teamName, photo }) {
   const measure = document.createElement('canvas').getContext('2d');
 
@@ -125,8 +137,10 @@ export async function generateNewspaperImage({ article, game, teamName, photo })
   // ---- マストヘッド「(チーム名) 速報！」を幅に合わせて自動縮小(右上ロゴぶんを避ける) ----
   const logoSize = 54;
   const mastMaxW = CW - 2 * (logoSize + 18);
-  const mastText = `${teamName} 速報！`;
-  const mastFs = fitFont(measure, mastText, mastMaxW, 58, (px) => SANS(px), 28);
+  // 題字も最小サイズで溢れる場合があるため、必要なら省略して枠内に収める
+  const mast = fitText(measure, `${teamName} 速報！`, mastMaxW, 58, (px) => SANS(px), 28);
+  const mastText = mast.text;
+  const mastFs = mast.px;
   const mastH = mastFs + 12;
 
   // ---- 見出し・リード(常に全幅) ----
@@ -221,9 +235,11 @@ export async function generateNewspaperImage({ article, game, teamName, photo })
   y += tableH + 8;
   const rlabel = game.myScore > game.oppScore ? '勝利' : game.myScore < game.oppScore ? '敗北' : '引き分け';
   ctx.textAlign = 'center';
-  ctx.font = HEAD_FONT(18);
   ctx.fillStyle = '#141414';
-  ctx.fillText(`${teamName} ${game.myScore}-${game.oppScore} ${game.opponent || '対戦相手'}　—　${rlabel}`, W / 2, y + 18);
+  // 長いチーム名でも紙面の外に出ないよう、幅に合わせて縮小→必要なら省略する
+  const resultFit = fitText(measure, `${teamName} ${game.myScore}-${game.oppScore} ${game.opponent || '対戦相手'}　—　${rlabel}`, CW, 18, HEAD_FONT, 12);
+  ctx.font = HEAD_FONT(resultFit.px);
+  ctx.fillText(resultFit.text, W / 2, y + 18);
   ctx.textAlign = 'left';
   y += 22 + 20;
 
@@ -237,8 +253,9 @@ export async function generateNewspaperImage({ article, game, teamName, photo })
     ctx.drawImage(photo, M, y, CW, bannerH);
     let cy = y + bannerH + 6;
     ctx.fillStyle = '#555';
-    ctx.font = BODY_FONT(15);
-    ctx.fillText(`▲ ${teamName} vs ${game.opponent || '対戦相手'}（${game.date}）`, M, cy + 14);
+    const capFit = fitText(measure, `▲ ${teamName} vs ${game.opponent || '対戦相手'}（${game.date}）`, CW, 15, BODY_FONT, 11);
+    ctx.font = BODY_FONT(capFit.px);
+    ctx.fillText(capFit.text, M, cy + 14);
     ctx.fillStyle = '#141414';
     cy += CAPTION_H + 12;
     drawBody(cy);
@@ -247,8 +264,9 @@ export async function generateNewspaperImage({ article, game, teamName, photo })
     const px = M + leftColW + GAP;
     ctx.drawImage(photo, px, y, photoW, photoH);
     ctx.fillStyle = '#555';
-    ctx.font = BODY_FONT(13);
-    ctx.fillText(`▲ ${teamName} vs ${game.opponent || '対戦相手'}`, px, y + photoH + 14);
+    const capFit = fitText(measure, `▲ ${teamName} vs ${game.opponent || '対戦相手'}`, photoW, 13, BODY_FONT, 10);
+    ctx.font = BODY_FONT(capFit.px);
+    ctx.fillText(capFit.text, px, y + photoH + 14);
     ctx.fillStyle = '#141414';
     drawBody(y); // 本文は写真の左に回り込み、写真より下は全幅
     y += mediaH + 12;
@@ -286,7 +304,12 @@ function drawBoxScore(ctx, measure, x, y, w, rowH, innings, box, game, teamName)
   const oppName = game.opponent || '対戦相手';
   const innN = innings.length;
   const cols = innN + 3; // + R H E
-  const teamColW = 150;
+  // チーム名の列幅は名前の長さに合わせて広げる(長い名前でも小さくなりすぎないように)。
+  // 表全体の幅は変えないので、広げすぎるとイニング欄が潰れる。上限を設けて配分を守る。
+  const NAME_FS = 17;
+  measure.font = HEAD_FONT(NAME_FS);
+  const longest = Math.max(measure.measureText(teamName).width, measure.measureText(oppName).width);
+  const teamColW = Math.round(Math.min(w * 0.28, Math.max(150, longest + 20)));
   const cellW = (w - teamColW) / cols;
   const tableH = rowH * 3;
   const rheX = x + teamColW + innN * cellW;
@@ -324,9 +347,9 @@ function drawBoxScore(ctx, measure, x, y, w, rowH, innings, box, game, teamName)
     const row = rows[r];
     const ry = y + rowH * (r + 1) + rowH / 2;
     ctx.textAlign = 'left';
-    const nameFs = fitFont(measure, row.name, teamColW - 16, 17, HEAD_FONT, 11);
-    ctx.font = HEAD_FONT(nameFs);
-    ctx.fillText(row.name, x + 10, ry);
+    const fitName = fitText(measure, row.name, teamColW - 16, NAME_FS, HEAD_FONT, 11);
+    ctx.font = HEAD_FONT(fitName.px);
+    ctx.fillText(fitName.text, x + 10, ry);
     ctx.textAlign = 'center';
     ctx.font = SANS(16, 600);
     for (let i = 0; i < innN; i++) ctx.fillText(String(row.inn[i]), cx(i), ry);

@@ -130,7 +130,7 @@ export default function ScoreSheetView({ game, onClose }) {
             <span>{game.date} / {game.status === 'finished' ? t('ss.finished') : t('score.logInning', { inning: game.inning, half: t(game.isTop ? 'half.top' : 'half.bottom') })}</span>
           </div>
 
-          <table className="ss-table">
+          <table className="ss-table ss-line">
             <thead>
               <tr>
                 <th></th>
@@ -140,14 +140,14 @@ export default function ScoreSheetView({ game, onClose }) {
             </thead>
             <tbody>
               <tr>
-                <td className="ss-team">{game.isHome ? oppName : teamName}</td>
+                <td className="ss-team" title={game.isHome ? oppName : teamName}>{game.isHome ? oppName : teamName}</td>
                 {box.innings.map((i) => <td key={i.inning}>{i.played ? (game.isHome ? i.opp : i.my) : ''}</td>)}
                 <td><b>{game.isHome ? box.opp.r : box.my.r}</b></td>
                 <td>{game.isHome ? box.opp.h : box.my.h}</td>
                 <td>{game.isHome ? box.opp.e : box.my.e}</td>
               </tr>
               <tr>
-                <td className="ss-team">{game.isHome ? teamName : oppName}</td>
+                <td className="ss-team" title={game.isHome ? teamName : oppName}>{game.isHome ? teamName : oppName}</td>
                 {box.innings.map((i) => <td key={i.inning}>{i.played ? (game.isHome ? i.my : i.opp) : ''}</td>)}
                 <td><b>{game.isHome ? box.my.r : box.opp.r}</b></td>
                 <td>{game.isHome ? box.my.h : box.opp.h}</td>
@@ -175,7 +175,7 @@ export default function ScoreSheetView({ game, onClose }) {
                       {pr.fromOrder != null && <span className="ss-move" title={t('box.fromOrder', { n: pr.fromOrder })}>←{pr.fromOrder}</span>}
                       {pr.toOrder != null && <span className="ss-move" title={t('box.toOrder', { n: pr.toOrder })}>→{pr.toOrder}</span>}
                     </td>
-                    <td className="ss-name">{nameOf(pr.playerId)}</td>
+                    <td className="ss-name" title={nameOf(pr.playerId)}>{nameOf(pr.playerId)}</td>
                     {innings.map((i) => (
                       <td key={i}>
                         {(pr.byInning[i] || []).map((c, ci) => (
@@ -206,7 +206,7 @@ export default function ScoreSheetView({ game, onClose }) {
               <tbody>
                 {records.map((pr) => (
                   <tr key={pr.id}>
-                    <td className="ss-name">{nameOf(pr.playerId)}</td>
+                    <td className="ss-name" title={nameOf(pr.playerId)}>{nameOf(pr.playerId)}</td>
                     <td>{formatIP(pr.outsRecorded)}</td>
                     <td>{pr.runs}</td>
                     <td>{pr.earnedRuns}</td>
