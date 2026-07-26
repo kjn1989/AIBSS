@@ -339,36 +339,42 @@ function NLCorrectionCard({ game }) {
     let im = produceRegex(); // まず端末内で解釈(常に土台にする)
     // 実際にAI解釈まで届いたのかを毎回はっきり示す(キーの有無だけでは分からないため)
     let mode = !apiKey ? 'nokey' : !navigator.onLine ? 'offline' : 'local';
+    let detail = '';
     if (apiKey && navigator.onLine) {
       setBusy(true);
       try {
         const r = await interpretCorrection({ apiKey, text, ...buildContext() });
-        if (r && r.error) mode = 'error';
+        if (r && r.error) { mode = 'error'; detail = r.error; } // 原因(キー/上限/通信)を持ち帰る
         else if (r && r.ops) { im = mergeIm(aiOpsToIntermediate(r.ops), im); mode = 'ai'; } // AIを重ねて統合
-        else mode = 'error';
-      } catch { mode = 'error'; } // AI失敗→端末内解釈のまま
+        else { mode = 'error'; detail = t('gp.nlAiNoResponse'); }
+      } catch (e) { mode = 'error'; detail = e?.message || ''; } // AI失敗→端末内解釈のまま
       setBusy(false);
     }
-    resolveAndApply(im, mode);
+    resolveAndApply(im, mode, detail);
   };
 
   // 解釈経路の注記。うまくいかなかったとき、AIまで届いたのかを切り分けられるようにする。
-  const modeNote = (mode) => ({
-    ai: t('gp.nlModeAi'), error: t('gp.nlModeError'),
-    nokey: t('gp.nlModeNoKey'), offline: t('gp.nlModeOffline'),
-  }[mode] || '');
+  // 失敗時はGeminiが返した理由(HTTP 429=無料枠の上限、400=キー不正 など)もそのまま見せる。
+  const modeNote = (mode, detail = '') => {
+    const base = { ai: t('gp.nlModeAi'), error: t('gp.nlModeError'), nokey: t('gp.nlModeNoKey'), offline: t('gp.nlModeOffline') }[mode] || '';
+    return mode === 'error' && detail ? `${base}${t('gp.nlAiReason', { reason: detail })}` : base;
+  };
 
-  const resolveAndApply = (im, mode = 'local') => {
+  const resolveAndApply = (im, mode = 'local', detail = '') => {
     const { reassigns, resultCorrs, posCorrs = [], aligns = [] } = im;
     let subs = im.subs;
     // 守備陣形の申告(◯回の守備は…): 既に出場中の選手なら守備位置の変更、
     // 出場していない選手ならその位置への交代として扱う。
     const alignAppl = [];
     const alignUnresolved = [];
+    const alreadyOk = []; // 既にその守備位置(黙って捨てると別のエラーが出て紛らわしいので記録する)
     for (const al of aligns) {
       const slot = (game.lineup || []).find((l) => l.playerId === al.playerId);
       if (slot) {
-        if (slot.position === al.position) continue; // 既にその位置
+        if (slot.position === al.position) {
+          alreadyOk.push(`${slot.order}${t('gp.nlOrderSuffix')} ${al.playerName || nameOf(al.playerId)}（${posFull(al.position, lang)}）`);
+          continue;
+        }
         alignAppl.push({ ...al, order: slot.order, from: slot.position || null });
       } else {
         // 出場していない=交代。その位置の現在の守備者と入れ替える(交代の解決へ回す)
@@ -393,7 +399,10 @@ function NLCorrectionCard({ game }) {
         if (p) { hit = { order: slot.order, from: p.posCode || null, isStarter: p.isStarter }; break; }
       }
       if (!hit) { posUnresolved.push(pc.playerName || nameOf(pc.playerId)); continue; }
-      if (hit.from === pc.position) continue; // 既に正しい
+      if (hit.from === pc.position) { // 既に正しい(無言で捨てず伝える)
+        alreadyOk.push(`${hit.order}${t('gp.nlOrderSuffix')} ${pc.playerName || nameOf(pc.playerId)}（${posFull(pc.position, lang)}）`);
+        continue;
+      }
       posAppl.push({ ...pc, order: hit.order, from: hit.from });
     }
     // 明示的な交代(守備/投手/代打…)。連鎖(A→B→C)は入った選手が打順を引き継ぐ。
@@ -463,7 +472,9 @@ function NLCorrectionCard({ game }) {
 
     const totalOps = subAppl.length + synthSubs.length + reAppl.length + resAppl.length + posAppl.length + alignAppl.length;
     if (!totalOps) {
-      const note = modeNote(mode); // どの経路で解釈したかを添える(AI未接続かの切り分け用)
+      const note = modeNote(mode, detail); // どの経路で解釈したかを添える(AI未接続かの切り分け用)
+      // 指定どおりに既になっている場合は「エラー」ではないので、そう伝える
+      if (alreadyOk.length) { setMsg({ kind: 'ok', text: t('gp.nlAlreadyOk', { list: alreadyOk.join('、') }) + note }); return; }
       if (alignUnresolved.length) { setMsg({ kind: 'err', text: t('gp.nlPosNotStarter', { name: alignUnresolved.join('、') }) + note }); return; }
       if (posUnresolved.length) { setMsg({ kind: 'err', text: t('gp.nlPosNotStarter', { name: posUnresolved.join('、') }) + note }); return; }
       if (subUnresolved.length) { setMsg({ kind: 'err', text: t('gp.nlSubNoOrder', { name: subUnresolved.join('、') }) + note }); return; }
@@ -510,7 +521,7 @@ function NLCorrectionCard({ game }) {
     if (posUnresolved.length) notes.push(t('gp.nlPosNotStarterShort', { names: posUnresolved.join('、') }));
     if (subUnresolved.length) notes.push(t('gp.nlSubNoOrderShort', { names: subUnresolved.join('、') }));
     if (reUnresolved.length) notes.push(t('gp.nlReNotFoundShort', { innings: reUnresolved.join('、') }));
-    setMsg({ kind: 'ok', text: t('gp.nlDoneOps', { n: totalOps }) + (hasPitcherChange ? t('gp.nlPitchRecalc') : '') + notes.join('') + modeNote(mode) });
+    setMsg({ kind: 'ok', text: t('gp.nlDoneOps', { n: totalOps }) + (hasPitcherChange ? t('gp.nlPitchRecalc') : '') + notes.join('') + modeNote(mode, detail) });
     setText('');
   };
 
