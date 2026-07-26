@@ -970,6 +970,22 @@ export function reducer(state, action) {
       return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
     }
 
+    // ===== 先発守備位置の訂正(スタメン入力ミスの是正。交代ではないので回を伴わない) =====
+    // startingLineup の守備位置を直し、その打順に今もその選手が居るなら現lineupも合わせる。
+    // 交代で入った選手が就いた位置(subログのposition)は交代の記録なので触らない。
+    case 'FIX_STARTING_POSITION': {
+      const g = deep(state.games[action.gameId]);
+      const { playerId, position } = action;
+      if (!playerId || !position) return state;
+      const st = (g.startingLineup || []).find((l) => l.playerId === playerId);
+      if (!st) return state;
+      st.position = position;
+      const slot = (g.lineup || []).find((l) => l.order === st.order);
+      if (slot && slot.playerId === playerId) slot.position = position;
+      g.updatedAt = Date.now();
+      return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
+    }
+
     // ===== 打者の付け替え(リエントリー等で打者の帰属がズレた打席を、正しい選手へ) =====
     // 打順スロット(order)はそのままに、その打席の選手(playerId)だけを差し替える。
     // AtBatレコード・打席ログ・(直後にあれば)打者自身の得点ログを一括で付け替え、成績を再計算。

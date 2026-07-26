@@ -3,7 +3,7 @@ import { useStore, usePlayerName, useT } from '../state/store.jsx';
 import { RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES, resultCategory, multiOutLabel, outTypeLabel } from '../lib/model.js';
 import { playLabel } from '../lib/voiceParser.js';
 import { computeBoxScore } from '../lib/boxscore.js';
-import { parseBatterCorrection, findTargetAtBat, parseSubstitutions, parseBatterReassignments, parseResultCorrections } from '../lib/correctionParser.js';
+import { parseBatterCorrection, findTargetAtBat, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections } from '../lib/correctionParser.js';
 import { posFull } from '../lib/lineupBox.js';
 import { interpretCorrection } from '../lib/gemini.js';
 import Sheet from './Sheet.jsx';
@@ -263,11 +263,15 @@ function NLCorrectionCard({ game }) {
 
   // AIの操作配列 → 中間表現(regexパスと同形 { subs, reassigns, resultCorrs })
   const aiOpsToIntermediate = (ops) => {
-    const subs = []; const reassigns = []; const resultCorrs = [];
+    const subs = []; const reassigns = []; const resultCorrs = []; const posCorrs = [];
     const num = (v) => (v == null || v === 'null' || v === '' ? null : Number(v)); // AIの文字列数値に備える
     for (const op of ops || []) {
       const inning = num(op.inning);
-      if (op.type === 'reassign' && inning) {
+      if (op.type === 'position') {
+        // 先発守備位置の訂正(回を伴わない)
+        const pid = idByName(op.player);
+        if (pid && clean(op.position)) posCorrs.push({ playerId: pid, playerName: op.player, position: clean(op.position) });
+      } else if (op.type === 'reassign' && inning) {
         const newId = idByName(op.to);
         if (newId) reassigns.push({ inning, ordinal: num(op.ordinal), targetId: idByName(op.from), targetName: op.from, newId, newName: op.to });
       } else if (op.type === 'substitution' && inning) {
@@ -283,14 +287,15 @@ function NLCorrectionCard({ game }) {
         } });
       }
     }
-    return { subs, reassigns, resultCorrs };
+    return { subs, reassigns, resultCorrs, posCorrs };
   };
   const produceRegex = () => ({
     subs: parseSubstitutions(text, state.players),
     reassigns: parseBatterReassignments(text, state.players),
     resultCorrs: parseResultCorrections(text),
+    posCorrs: parsePositionCorrections(text, state.players),
   });
-  const isEmpty = (im) => !(im.subs.length || im.reassigns.length || im.resultCorrs.length);
+  const isEmpty = (im) => !(im.subs.length || im.reassigns.length || im.resultCorrs.length || im.posCorrs.length);
 
   // AI解釈と端末内解釈を統合(片方の取りこぼしをもう片方で補完)。重複は除去。
   const mergeIm = (a, b) => {
@@ -307,6 +312,7 @@ function NLCorrectionCard({ game }) {
       subs: uniq([...(a.subs || []), ...(b.subs || [])], (s) => `${s.inning}|${s.inId}|${s.position || ''}`),
       reassigns: uniq([...(a.reassigns || []), ...(b.reassigns || [])], (r) => `${r.inning}|${r.newId}`),
       resultCorrs: uniq([...(a.resultCorrs || []), ...(b.resultCorrs || [])], (rc) => `${rc.inning}|${rc.patch.result}`),
+      posCorrs: uniq([...(a.posCorrs || []), ...(b.posCorrs || [])], (pc) => `${pc.playerId}`),
     };
   };
 
@@ -326,7 +332,16 @@ function NLCorrectionCard({ game }) {
   };
 
   const resolveAndApply = (im) => {
-    const { subs, reassigns, resultCorrs } = im;
+    const { subs, reassigns, resultCorrs, posCorrs = [] } = im;
+    // 先発守備位置の訂正: スタメンに居る選手のみ対象(交代で入った選手は交代の記録が正)
+    const posAppl = [];
+    const posUnresolved = [];
+    for (const pc of posCorrs) {
+      const st = (game.startingLineup || []).find((l) => l.playerId === pc.playerId);
+      if (!st) { posUnresolved.push(pc.playerName || nameOf(pc.playerId)); continue; }
+      if (st.position === pc.position) continue; // 既に正しい
+      posAppl.push({ ...pc, order: st.order, from: st.position || null });
+    }
     // 明示的な交代(守備/投手/代打…)。連鎖(A→B→C)は入った選手が打順を引き継ぐ。
     const orderCache = new Map();
     const resolveOrder = (pid) => (orderCache.has(pid) ? orderCache.get(pid) : orderOf(pid));
@@ -392,8 +407,9 @@ function NLCorrectionCard({ game }) {
       if (logId) resAppl.push({ ...rc, logId });
     }
 
-    const totalOps = subAppl.length + synthSubs.length + reAppl.length + resAppl.length;
+    const totalOps = subAppl.length + synthSubs.length + reAppl.length + resAppl.length + posAppl.length;
     if (!totalOps) {
+      if (posUnresolved.length) { setMsg({ kind: 'err', text: t('gp.nlPosNotStarter', { name: posUnresolved.join('、') }) }); return; }
       if (subUnresolved.length) { setMsg({ kind: 'err', text: t('gp.nlSubNoOrder', { name: subUnresolved.join('、') }) }); return; }
       if (reUnresolved.length) { setMsg({ kind: 'err', text: t('gp.nlReAllNotFound', { innings: reUnresolved.join('、') }) }); return; }
       const single = parseBatterCorrection(text, state.players);
@@ -406,6 +422,10 @@ function NLCorrectionCard({ game }) {
 
     const subLabel = (s) => t('gp.nlSubItem', { inning: s.inning, out: s.outName, in: s.inName, pos: s.position ? posFull(s.position, lang) : t('gp.nlSubNoPos') });
     const lines = [
+      ...posAppl.map((pc) => t('gp.nlPosItem', {
+        order: pc.order, name: pc.playerName || nameOf(pc.playerId),
+        from: pc.from ? posFull(pc.from, lang) : '—', to: posFull(pc.position, lang),
+      })),
       ...subAppl.map(subLabel),
       ...synthSubs.map(subLabel),
       ...reAppl.map((r) => t('gp.nlReItem', { inning: r.inning, name: r.newName })),
@@ -417,6 +437,7 @@ function NLCorrectionCard({ game }) {
       const kindLabel = { ph: t('box.rolePh'), pr: t('box.rolePr'), def: t('gp.subDef') }[s.subKind] || t('gp.subDef');
       dispatch({ type: 'RETRO_SUBSTITUTE', gameId: game.id, order: s.order, outId: s.outId, inId: s.inId, position: s.position, subKind: s.subKind, inning: s.inning, afterOppOrder: s.afterOppOrder ?? null, label: `${kindLabel}: ${nameOf(s.inId)} (${s.order}番 ${nameOf(s.outId)}に代わり)` });
     };
+    posAppl.forEach((pc) => dispatch({ type: 'FIX_STARTING_POSITION', gameId: game.id, playerId: pc.playerId, position: pc.position }));
     synthSubs.forEach(doSub);
     subAppl.forEach(doSub);
     reAppl.forEach((r) => dispatch({ type: 'REASSIGN_ATBAT', gameId: game.id, logId: r.logId, newPlayerId: r.newId }));
@@ -425,6 +446,7 @@ function NLCorrectionCard({ game }) {
     if (hasPitcherChange) dispatch({ type: 'RECOMPUTE_PITCHING', gameId: game.id });
 
     const notes = [];
+    if (posUnresolved.length) notes.push(t('gp.nlPosNotStarterShort', { names: posUnresolved.join('、') }));
     if (subUnresolved.length) notes.push(t('gp.nlSubNoOrderShort', { names: subUnresolved.join('、') }));
     if (reUnresolved.length) notes.push(t('gp.nlReNotFoundShort', { innings: reUnresolved.join('、') }));
     setMsg({ kind: 'ok', text: t('gp.nlDoneOps', { n: totalOps }) + (hasPitcherChange ? t('gp.nlPitchRecalc') : '') + notes.join('') });
