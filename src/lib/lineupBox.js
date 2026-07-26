@@ -119,7 +119,7 @@ export function buildLineupRows(game) {
     }
   }
 
-  return [...byOrder.keys()].sort((a, b) => a - b).map((order) => ({
+  const rows = [...byOrder.keys()].sort((a, b) => a - b).map((order) => ({
     order,
     players: byOrder.get(order).map((e, i) => {
       const kind = e.marks[0]?.kind || 'def';
@@ -133,9 +133,34 @@ export function buildLineupRows(game) {
         role: isStarter ? 'start' : kind,   // start / ph(代打) / pr(代走) / def(守備)
         inning: e.inning ?? null,           // 交代で入った回(先発はnull)
         posCode,                            // 守備位置コード(投捕一二三遊左中右/DH) or null
+        fromOrder: null,                    // 別の打順から移ってきた場合その打順(継続出場)
+        toOrder: null,                      // このあと別の打順へ移る場合その打順
       };
     }),
   }));
+
+  // 同じ選手が別の打順スロットに現れる=「途中出場」ではなく「出場を続けたまま打順が移った」
+  // (守備位置の入れ替えを伴う交代でよく起きる)。そのままだと新しいスロット側が
+  // 途中出場に見えてしまうため、移動元/移動先の打順番号を付けて系譜を辿れるようにする。
+  const byPlayer = new Map(); // playerId -> [{ order, inning, p }]
+  for (const row of rows) {
+    for (const p of row.players) {
+      if (!byPlayer.has(p.playerId)) byPlayer.set(p.playerId, []);
+      byPlayer.get(p.playerId).push({ order: row.order, inning: p.inning, p });
+    }
+  }
+  for (const list of byPlayer.values()) {
+    if (list.length < 2) continue;
+    const seq = [...list].sort((a, b) => (a.inning ?? -1) - (b.inning ?? -1));
+    for (let i = 0; i < seq.length; i++) {
+      const prev = seq[i - 1];
+      const next = seq[i + 1];
+      // 同一スロットへの再登場(リエントリー・再登板)は打順移動ではないので付けない
+      if (prev && prev.order !== seq[i].order) seq[i].p.fromOrder = prev.order;
+      if (next && next.order !== seq[i].order) seq[i].p.toOrder = next.order;
+    }
+  }
+  return rows;
 }
 
 // スロット(打順)内の各登場行に、その打順の打席・盗塁を1つずつ割り当てる。

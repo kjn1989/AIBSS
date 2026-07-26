@@ -256,6 +256,46 @@ test('buildLineupRows/roleTag: 先発はバッジ無し・交代は回と役割�
   assert.equal(slot6.players[1].posCode, '投');
 });
 
+test('buildLineupRows: 打順を移った選手は fromOrder/toOrder が付き、途中出場と区別できる', () => {
+  // 8番 平川(先発三塁) が5回からレフトへ。9番の奥田と入れ替わり、8番には茂木が入る。
+  const game = {
+    startingLineup: [
+      { order: 8, playerId: 'hirakawa', position: '三' },
+      { order: 9, playerId: 'okuda', position: '左' },
+    ],
+    lineup: [{ order: 8, playerId: 'mogi', position: '三' }, { order: 9, playerId: 'hirakawa', position: '左' }],
+    playLogs: [
+      { kind: 'sub', inning: 5, payload: { order: 8, in: 'mogi', out: 'hirakawa', kind: 'def', position: '三' } },
+      { kind: 'sub', inning: 5, payload: { order: 9, in: 'hirakawa', out: 'okuda', kind: 'def', position: '左' } },
+    ],
+    atBats: [],
+  };
+  const rows = buildLineupRows(game);
+  const slot8 = rows.find((r) => r.order === 8);
+  const slot9 = rows.find((r) => r.order === 9);
+  const hira8 = slot8.players.find((p) => p.playerId === 'hirakawa');
+  const hira9 = slot9.players.find((p) => p.playerId === 'hirakawa');
+  assert.equal(hira8.toOrder, 9);   // 8番の平川は「9番へ」移る
+  assert.equal(hira9.fromOrder, 8); // 9番の平川は「8番より」= 途中出場ではない
+  assert.equal(hira9.posCode, '左');
+  // 本当に途中から出た選手には移動の印を付けない
+  const mogi = slot8.players.find((p) => p.playerId === 'mogi');
+  assert.equal(mogi.fromOrder, null);
+  assert.equal(mogi.toOrder, null);
+});
+
+test('buildLineupRows: 同じ打順への再登板(リエントリー)は打順移動として扱わない', () => {
+  const game = {
+    startingLineup: [{ order: 6, playerId: 'takashima', position: '投' }],
+    playLogs: [
+      { kind: 'sub', inning: 3, payload: { order: 6, in: 'udagawa', out: 'takashima', kind: 'def', position: '投' } },
+      { kind: 'sub', inning: 7, payload: { order: 6, in: 'takashima', out: 'udagawa', kind: 'def', position: '投' } },
+    ],
+  };
+  const slot6 = buildLineupRows(game).find((r) => r.order === 6);
+  assert.ok(slot6.players.every((p) => p.fromOrder === null && p.toOrder === null));
+});
+
 test('resolveStarters: startingLineup が無い過去試合でも交代のoutから先発と守備位置を復元', () => {
   // 7番: 清水(先発) → 5回に中島が代打。startingLineup は保存されていない。
   const game = {
