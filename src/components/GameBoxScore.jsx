@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useStore, usePlayerName, useT } from '../state/store.jsx';
-import { RESULTS } from '../lib/model.js';
+import { RESULTS, formatIP } from '../lib/model.js';
 import { buildLineupRows, roleTag, posFull, assignAtBatsByPlayer } from '../lib/lineupBox.js';
-import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppNameOf, oppHasName } from '../lib/oppBox.js';
+import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf, oppHasName } from '../lib/oppBox.js';
 import Sheet from './Sheet.jsx';
 
 // 1登場ぶんの打席群(+盗塁数)から表示用の打撃ラインを作る。
@@ -160,8 +160,46 @@ function OppTree({ game }) {
           </div>
         )}
       </div>
+      <OppPitching game={game} onEdit={setEditing} />
       {editing && <OppNameSheet game={game} letter={editing} onClose={() => setEditing(null)} />}
     </>
+  );
+}
+
+// 相手投手のその試合の成績。球数は記録済み、それ以外は自軍の打席から逆算している。
+function OppPitching({ game, onEdit }) {
+  const t = useT();
+  const rows = oppPitchingStats(game).filter((r) => r.bf > 0 || r.pitches > 0);
+  if (!rows.length) return null;
+  return (
+    <div className="opp-pit">
+      <div className="section-title">{t('box.oppPitchTitle')}</div>
+      <table className="split-table opp-pit-table">
+          <thead>
+            <tr>
+              <th className="sp-lbl">{t('ss.pitcher')}</th>
+              <th>{t('ss.ip')}</th><th>{t('ss.runs')}</th><th>{t('ss.pHits')}</th>
+              <th>{t('ss.bbhbp')}</th><th>{t('ss.k')}</th><th>{t('ss.pitches')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.letter}>
+                <td className="sp-lbl">
+                  <button className="opp-name-btn" onClick={() => onEdit(r.letter)}>{oppNameOf(game, r.letter)} <span aria-hidden>✎</span></button>
+                </td>
+                <td>{formatIP(r.outs)}</td>
+                <td>{r.runs}</td>
+                <td>{r.h}</td>
+                <td>{r.bb + r.hbp}</td>
+                <td>{r.k}</td>
+                <td>{r.pitches || '-'}</td>
+              </tr>
+            ))}
+          </tbody>
+      </table>
+      <p className="small dim" style={{ marginBottom: 0 }}>{t('box.oppPitchNote')}</p>
+    </div>
   );
 }
 

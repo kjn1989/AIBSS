@@ -1049,6 +1049,16 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 .bx-slot { display: grid; grid-template-columns: 24px 1fr; gap: 8px; align-items: start; }
 .bx-ord { font-weight: 800; color: var(--text-dim); text-align: center; padding-top: 11px; font-size: 15px; font-variant-numeric: tabular-nums; }
 .bx-players { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+/* 相手投手のその試合の成績(球数は記録済み、他は自軍の打席から逆算) */
+.opp-pit { margin-top: 14px; }
+.opp-pit-table td, .opp-pit-table th { padding: 6px 3px; }
+.opp-pit-table .sp-lbl { max-width: 110px; overflow: hidden; text-overflow: ellipsis; }
+.opp-name-btn {
+  min-height: 30px; padding: 2px 6px; background: transparent; border: none;
+  color: var(--text); font-weight: 800; font-size: 13px;
+}
+.opp-name-btn span { color: var(--text-dim); font-weight: 400; }
+
 /* スコアシート: 表の上に出すチーム名(自軍と相手の2枚を続けて出すため) */
 .ss-team-head {
   font-size: 12px; font-weight: 800; margin: 10px 0 4px;

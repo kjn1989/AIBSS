@@ -10,7 +10,7 @@ import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfi
 import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parseInningRange, isExplicitSubText } from '../src/lib/correctionParser.js';
 import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarters, findPositionIssues } from '../src/lib/lineupBox.js';
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
-import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppNameOf, oppLettersInGame } from '../src/lib/oppBox.js';
+import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf, oppLettersInGame } from '../src/lib/oppBox.js';
 import { remapPlayerInGame, fillPlayerGaps } from '../src/lib/mergePlayers.js';
 import { computeBoxScore } from '../src/lib/boxscore.js';
 import { rebuildBatters, findDuplicateAtBats, findOrderBreaks, canRebuildOrders } from '../src/lib/battersRebuild.js';
@@ -237,6 +237,66 @@ test('oppLettersInGame: 打順に出た記号と登板した記号をまとめ�
   const list = oppLettersInGame(OPP_GAME);
   assert.equal(list.includes('E') && list.includes('J') && list.includes('K'), true);
   assert.equal(new Set(list).size, list.length); // 重複なし
+});
+
+test('oppPitchingStats: 相手投手の成績を、球数の記録と自軍の打席から組み立てる', () => {
+  const g = {
+    isHome: false, // 自軍は先攻(表が自軍の攻撃)
+    oppPitcherLetter: 'K',
+    oppPitchers: { A: { pitches: 45 }, K: { pitches: 30 } },
+    playLogs: [
+      { kind: 'atbat', inning: 1, isTop: true, payload: { result: 'single', outsOnPlay: 0, runs: 0 } },
+      { kind: 'atbat', inning: 1, isTop: true, payload: { result: 'so', outsOnPlay: 1, runs: 0 } },
+      { kind: 'runner', inning: 1, isTop: true, payload: { outs: 1 } }, // 盗塁死もアウトに数える
+      { kind: 'atbat', inning: 2, isTop: true, payload: { result: 'hr', outsOnPlay: 0, runs: 2 } },
+      { kind: 'atbat', inning: 2, isTop: true, payload: { result: 'out', outsOnPlay: 1, runs: 0 } },
+      { kind: 'opppitcher', inning: 3, payload: { in: 'K', out: 'A' } },
+      { kind: 'atbat', inning: 3, isTop: true, payload: { result: 'bb', outsOnPlay: 0, runs: 0 } },
+      { kind: 'atbat', inning: 3, isTop: true, payload: { result: 'out', outsOnPlay: 2, runs: 0 } },
+      // 相手の攻撃中の走塁アウトは、相手投手のアウトには数えない
+      { kind: 'runner', inning: 3, isTop: false, payload: { outs: 1 } },
+    ],
+  };
+  const rows = oppPitchingStats(g);
+  assert.deepEqual(rows.map((r) => r.letter), ['A', 'K']);
+  const a = rows[0];
+  // 1回・2回とも完了しているので3アウトずつに照合される(記録漏れの補完)
+  assert.equal(a.outs, 6);
+  assert.equal(a.h, 2);      // 単打 + 本塁打
+  assert.equal(a.hr, 1);
+  assert.equal(a.k, 1);
+  assert.equal(a.runs, 2);
+  assert.equal(a.pitches, 45); // 球数は入力時の記録から
+  const k = rows[1];
+  assert.equal(k.outs, 3); // 3回も完了扱いで3アウトに照合
+  assert.equal(k.bb, 1);
+  assert.equal(k.pitches, 30);
+});
+test('oppPitchingStats: 完了した回は3アウトで照合し、記録漏れを補う', () => {
+  const g = {
+    isHome: false, status: 'finished', myScore: 0, oppScore: 1,
+    oppPitcherLetter: 'A', oppPitchers: { A: { pitches: 50 } },
+    playLogs: [
+      // 1回: アウトが1つしか記録されていない(走塁アウトのouts欠落を想定)
+      { kind: 'atbat', inning: 1, isTop: true, payload: { result: 'out', outsOnPlay: 1 } },
+      // 2回: 3アウトぶん記録済み
+      { kind: 'atbat', inning: 2, isTop: true, payload: { result: 'out', outsOnPlay: 1 } },
+      { kind: 'atbat', inning: 2, isTop: true, payload: { result: 'out', outsOnPlay: 1 } },
+      { kind: 'atbat', inning: 2, isTop: true, payload: { result: 'so', outsOnPlay: 1 } },
+      { kind: 'defense', inning: 2, isTop: false, payload: { letter: 'B', result: 'out', outsOnPlay: 1 } },
+    ],
+  };
+  // 1回は2アウトぶん補われ、合計 3 + 3 = 6アウト = 2.0回
+  assert.equal(oppPitchingStats(g)[0].outs, 6);
+});
+test('oppPitchingStats: 継投が無ければ現在の投手が先発として1人だけ出る', () => {
+  const g = {
+    isHome: false, oppPitcherLetter: 'A', oppPitchers: { A: { pitches: 88 } },
+    playLogs: [{ kind: 'atbat', inning: 1, isTop: true, payload: { result: 'out', outsOnPlay: 1 } }],
+  };
+  const rows = oppPitchingStats(g);
+  assert.equal(rows.length, 1);
+  assert.deepEqual([rows[0].letter, rows[0].outs, rows[0].pitches], ['A', 1, 88]);
 });
 
 test('parseInningRange: 「3-6回」「3回から6回」などの回の範囲を読む', () => {
