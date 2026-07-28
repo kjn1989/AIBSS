@@ -68,6 +68,16 @@ export function connectCloud({ configText, teamCode, onGames, onPlayers, onStatu
       async pushPlayer(player) {
         await setDoc(doc(db, 'teams', teamCode, 'players', player.id), sanitize(player));
       },
+      // 削除はドキュメントを消さず「削除済みの印」を残す(officialCloud.js と同じ理由。
+      // 行ごと消すと、その項目を持っている別端末が次回起動時に再アップロードして復活する)
+      async deleteGame(id) {
+        const now = Date.now();
+        await setDoc(doc(db, 'teams', teamCode, 'games', id), { id, deleted: true, deletedAt: now, updatedAt: now });
+      },
+      async deletePlayer(id) {
+        const now = Date.now();
+        await setDoc(doc(db, 'teams', teamCode, 'players', id), { id, deleted: true, deletedAt: now, updatedAt: now });
+      },
       teardown() {
         unsubGames();
         unsubPlayers();
