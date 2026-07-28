@@ -6,6 +6,7 @@ import { computeBoxScore } from '../lib/boxscore.js';
 import { parseBatterCorrection, findTargetAtBat, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment, isExplicitSubText } from '../lib/correctionParser.js';
 import { posFull, buildLineupRows, findPositionIssues, alignmentByInning } from '../lib/lineupBox.js';
 import { findDuplicateAtBats, canRebuildOrders, findOrderBreaks } from '../lib/battersRebuild.js';
+import { oppNameOf } from '../lib/oppBox.js';
 import { interpretCorrection } from '../lib/gemini.js';
 import Sheet from './Sheet.jsx';
 import FullscreenView from './FullscreenView.jsx';
@@ -36,10 +37,11 @@ function CountDots({ balls, strikes, outsBefore }) {
 }
 
 // 打席系プレイ(kind: atbat/defense)の1件カード
-function PlayCard({ log, nameOf, numberOf, onEdit, edition, lang, t }) {
+function PlayCard({ log, nameOf, numberOf, onEdit, edition, lang, t, oppName }) {
   const p = log.payload || {};
   const isDefense = log.kind === 'defense';
-  const name = isDefense ? p.letter : nameOf(p.playerId);
+  // 相手打者は記号(A〜)で記録されるが、名前を入れてあればそちらを見せる
+  const name = isDefense ? (oppName ? oppName(p.letter) : p.letter) : nameOf(p.playerId);
   const number = isDefense ? null : numberOf(p.playerId);
   const category = resultCategory(p.result);
   const label = playLabel(p.result, p.direction, p.outType, p.soType, edition, lang);
@@ -857,6 +859,7 @@ export function GameProgressContent({ game, editable = false, showLinescore = tr
                     log={row.log}
                     nameOf={nameOf}
                     numberOf={numberOf}
+                    oppName={(letter) => oppNameOf(game, letter)}
                     edition={state.settings.edition}
                     lang={lang}
                     t={t}

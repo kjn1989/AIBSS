@@ -184,6 +184,9 @@ export function newGame({ opponent = '', isHome = false, date = null, season = '
     // 左右別スタッツ用: 相手投手・相手打者の投打(記号ごと)。任意。'R'|'L'|'S'
     oppPitcherHands: {}, // { [letter]: 'R'|'L' } 自軍打者の対左右投手splitに使う
     oppBatterHands: {},  // { [letter]: 'R'|'L'|'S' } 自軍投手の対左右打者splitに使う
+    // 相手選手の名前(任意)。{ [letter]: '田中' }。未入力の記号は A/B/… のまま表示する。
+    // 相手は毎試合変わるため選手マスタには入れず、この試合だけの情報として持つ。
+    oppNames: {},
     atBats: [], // AtBat[]
     playLogs: [], // PlayLog[]
     pitchingRecords: [], // PitchingRecord[]

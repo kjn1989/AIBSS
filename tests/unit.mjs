@@ -10,6 +10,7 @@ import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfi
 import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parseInningRange, isExplicitSubText } from '../src/lib/correctionParser.js';
 import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarters, findPositionIssues } from '../src/lib/lineupBox.js';
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
+import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppNameOf, oppLettersInGame } from '../src/lib/oppBox.js';
 import { remapPlayerInGame, fillPlayerGaps } from '../src/lib/mergePlayers.js';
 import { computeBoxScore } from '../src/lib/boxscore.js';
 import { rebuildBatters, findDuplicateAtBats, findOrderBreaks, canRebuildOrders } from '../src/lib/battersRebuild.js';
@@ -182,6 +183,60 @@ test('parseDefensiveAlignment: 「2回から山城はキャッチャーです」
   // 打席結果の記述は守備位置として拾わない
   assert.equal(parseDefensiveAlignment('1回 中島 レフト前ヒット', PS).length, 0);
   assert.equal(parseDefensiveAlignment('7回表の中島は中犠飛です', PS).length, 0);
+});
+
+// ---- 相手チームの記録(記号A〜Tで記録された打席を打順ツリーへ) ----
+const OPP_GAME = {
+  oppLineup: 'ABCDEFGHI'.split('').map((letter, i) => ({ order: i + 1, letter: i === 4 ? 'J' : letter, position: '' })),
+  oppPitcherLetter: 'K',
+  oppNames: { A: '佐々木' },
+  playLogs: [
+    { kind: 'defense', inning: 1, payload: { letter: 'A', order: 1, result: 'single', runs: 0 } },
+    { kind: 'defense', inning: 1, payload: { letter: 'B', order: 2, result: 'so', runs: 0 } },
+    { kind: 'defense', inning: 3, payload: { letter: 'A', order: 1, result: 'hr', runs: 2 } },
+    { kind: 'defense', inning: 3, payload: { letter: 'A', order: 1, result: 'bb', runs: 0 } },
+    { kind: 'oppsub', inning: 5, payload: { order: 5, in: 'J', out: 'E' } },
+    { kind: 'defense', inning: 6, payload: { letter: 'J', order: 5, result: 'double', runs: 1 } },
+    { kind: 'opppitcher', inning: 4, payload: { in: 'K', out: 'A' } },
+  ],
+};
+
+test('buildOppLineupRows: 相手も自軍と同じ打順ツリーの形にする(先発は交代ログのoutから復元)', () => {
+  const rows = buildOppLineupRows(OPP_GAME);
+  assert.equal(rows.length, 9);
+  assert.deepEqual(rows[0].players.map((p) => p.letter), ['A']);
+  // 5番は E が先発で、5回に J が入った
+  assert.deepEqual(rows[4].players.map((p) => p.letter), ['E', 'J']);
+  assert.equal(rows[4].players[0].isStarter, true);
+  assert.equal(rows[4].players[1].isStarter, false);
+  assert.equal(rows[4].players[1].inning, 5);
+});
+
+test('oppBattingByLetter: 守備ログからその試合の相手打撃成績を出す', () => {
+  const m = oppBattingByLetter(OPP_GAME);
+  // A: 単打・本塁打・四球 → 3打席 2打数 1安打 1本 2打点(その打席の得点)
+  assert.deepEqual(m.get('A'), { pa: 3, ab: 2, h: 2, rbi: 2, hr: 1 });
+  assert.deepEqual(m.get('B'), { pa: 1, ab: 1, h: 0, rbi: 0, hr: 0 });
+  assert.deepEqual(m.get('J'), { pa: 1, ab: 1, h: 1, rbi: 1, hr: 0 });
+  assert.equal(m.has('C'), false); // 打席が無い記号は出てこない
+});
+
+test('oppPitcherLetters: 先発(最初の交代のout)と継投した記号を並べる', () => {
+  assert.deepEqual(oppPitcherLetters(OPP_GAME), ['A', 'K']);
+  // 交代が無ければ現在の投手だけ
+  assert.deepEqual(oppPitcherLetters({ oppPitcherLetter: 'A', playLogs: [] }), ['A']);
+});
+
+test('oppNameOf: 名前が入っていればその名前、無ければ記号のまま', () => {
+  assert.equal(oppNameOf(OPP_GAME, 'A'), '佐々木');
+  assert.equal(oppNameOf(OPP_GAME, 'B'), 'B');
+  assert.equal(oppNameOf({}, 'C'), 'C');
+});
+
+test('oppLettersInGame: 打順に出た記号と登板した記号をまとめて返す', () => {
+  const list = oppLettersInGame(OPP_GAME);
+  assert.equal(list.includes('E') && list.includes('J') && list.includes('K'), true);
+  assert.equal(new Set(list).size, list.length); // 重複なし
 });
 
 test('parseInningRange: 「3-6回」「3回から6回」などの回の範囲を読む', () => {

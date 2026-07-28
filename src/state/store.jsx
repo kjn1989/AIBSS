@@ -708,6 +708,18 @@ export function reducer(state, action) {
       g.updatedAt = Date.now();
       return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
     }
+    // 相手選手の名前(任意)。記号(A〜T)のままでも記録は成立するが、分かる範囲で
+    // 実名を入れられるようにする。相手は毎試合変わるので、選手マスタではなく試合に持つ。
+    case 'SET_OPP_NAME': {
+      const g = deep(state.games[action.gameId]);
+      if (!action.letter) return state;
+      const names = { ...(g.oppNames || {}) };
+      const name = (action.name || '').trim();
+      if (name) names[action.letter] = name; else delete names[action.letter];
+      g.oppNames = names;
+      g.updatedAt = Date.now(); // クラウド同期(後勝ち)に載せるため必ず進める
+      return { ...state, games: { ...state.games, [g.id]: g } };
+    }
     case 'OPP_SET_BATTER_INDEX': {
       const g = deep(state.games[action.gameId]);
       g.oppBatterIndex = action.index;
