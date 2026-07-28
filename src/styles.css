@@ -1049,6 +1049,12 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 .bx-slot { display: grid; grid-template-columns: 24px 1fr; gap: 8px; align-items: start; }
 .bx-ord { font-weight: 800; color: var(--text-dim); text-align: center; padding-top: 11px; font-size: 15px; font-variant-numeric: tabular-nums; }
 .bx-players { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+/* スコアシート: 表の上に出すチーム名(自軍と相手の2枚を続けて出すため) */
+.ss-team-head {
+  font-size: 12px; font-weight: 800; margin: 10px 0 4px;
+  padding-left: 2px; border-left: 3px solid var(--accent-2);
+}
+
 /* 自軍/相手の切り替え(iOS/Android標準のセグメントコントロール風) */
 .seg-control {
   display: flex; gap: 3px; padding: 3px; margin: 0 0 12px;
@@ -1204,6 +1210,10 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
   .scoresheet-root .ss-table { font-size: 12px; margin-bottom: 14px; }
   .scoresheet-root .ss-table th, .scoresheet-root .ss-table td { border-color: #000; color: #000; padding: 5px 4px; }
   .scoresheet-root .ss-title span, .scoresheet-root .ss-footer, .scoresheet-root .ss-table th { color: #333; }
+  /* 2チーム分を続けて印刷するので、表がページ途中で割れないようにする */
+  .scoresheet-root .ss-team-head { color: #000; border-left-color: #000; break-after: avoid; page-break-after: avoid; }
+  .scoresheet-root .ss-table { break-inside: auto; }
+  .scoresheet-root .ss-table tr { break-inside: avoid; page-break-inside: avoid; }
   /* 列幅の固定配分は印刷でも維持する(用紙幅に必ず収め、はみ出しを作らない)。
      A4は横に余裕があるので、名前が省略されることは実質なくなる。 */
   .ss-matrix, .ss-table.ss-line { font-size: 12px; }

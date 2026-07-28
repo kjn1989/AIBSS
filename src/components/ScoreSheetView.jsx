@@ -3,6 +3,7 @@ import { useStore, usePlayerName, useT } from '../state/store.jsx';
 import { RESULTS, DIRECTIONS, formatIP, resultCategory, multiOutLabel } from '../lib/model.js';
 import { computeBoxScore } from '../lib/boxscore.js';
 import { buildLineupRows, assignAtBatsByPlayer } from '../lib/lineupBox.js';
+import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppNameOf } from '../lib/oppBox.js';
 import FullscreenView from './FullscreenView.jsx';
 
 // 打席結果の超短縮表記(スコアシートのセル用): 例「中安」「遊ゴ」「左本」「四球」/ 英語は "LF1B" 等。
@@ -62,7 +63,8 @@ export default function ScoreSheetView({ game, onClose }) {
   // イニング列は線分スコアと同じ「実際に行われた回」に揃える(見出しと中身のズレも防ぐ)。
   // 打席が記録されている回が線分スコアより先まである場合はそこまで伸ばす。
   const lastAb = game.atBats.reduce((m, ab) => Math.max(m, ab.snapshot?.inning || 0), 0);
-  const lastInning = Math.max(box.innings.length, lastAb, 1);
+  const lastDef = (game.playLogs || []).reduce((m, l) => (l.kind === 'defense' ? Math.max(m, Number(l.inning) || 0) : m), 0);
+  const lastInning = Math.max(box.innings.length, lastAb, lastDef, 1);
   const innings = Array.from({ length: lastInning }, (_, i) => i + 1);
 
   // 打順スロットごとに、出場選手を「登場順」で各自1行に分ける(伝統的なスコアブック方式)。
@@ -119,6 +121,36 @@ export default function ScoreSheetView({ game, onClose }) {
 
   const records = [...game.pitchingRecords].sort((a, b) => a.appearanceOrder - b.appearanceOrder);
 
+  // ---- 相手チーム: 記号(A〜T)で記録された打席を、同じ打順マトリクスに組む ----
+  // 相手の打席は 'defense' ログに全部残っているので、自軍と同じ形で並べられる。
+  const oppPitchers = oppPitcherLetters(game);
+  const oppCells = new Map(); // letter -> { [inning]: [cell] }
+  for (const l of game.playLogs || []) {
+    if (l.kind !== 'defense') continue;
+    const p = l.payload || {};
+    if (!p.letter || !RESULTS[p.result]) continue;
+    const inn = Number(l.inning) || 1;
+    const m = oppCells.get(p.letter) || {};
+    (m[inn] = m[inn] || []).push({
+      txt: shortLabel(p, edition, lang, t),
+      cat: resultCategory(p.result),
+      multi: multiOutLabel(p.outsOnPlay || 0),
+    });
+    oppCells.set(p.letter, m);
+  }
+  const oppStats = oppBattingByLetter(game);
+  const oppSlots = buildOppLineupRows(game).map((row) => ({
+    order: row.order,
+    playerRows: row.players.map((p) => ({
+      letter: p.letter,
+      // 守備位置は相手側では記録していないため、投手と途中出場だけ印を付ける
+      notation: oppPitchers.includes(p.letter) ? t('ss.oppP') : (p.isStarter ? '' : t('ss.oppSub')),
+      byInning: oppCells.get(p.letter) || {},
+      totals: oppStats.get(p.letter) || null,
+    })),
+  })).filter((s) => s.playerRows.length);
+  const hasOpp = oppCells.size > 0;
+
   return (
     <FullscreenView>
       <header className="fullscreen-header no-print">
@@ -159,6 +191,7 @@ export default function ScoreSheetView({ game, onClose }) {
             </tbody>
           </table>
 
+          {slots.length > 0 && hasOpp && <div className="ss-team-head">{teamName}</div>}
           {slots.length > 0 && (
             <table className="ss-table ss-matrix">
               <thead>
@@ -199,6 +232,46 @@ export default function ScoreSheetView({ game, onClose }) {
             </table>
           )}
 
+          {/* 相手チームの打席マトリクス(記号のままでも、名前を入れていればその名前で) */}
+          {hasOpp && oppSlots.length > 0 && (
+            <>
+              <div className="ss-team-head">{oppName}</div>
+              <table className="ss-table ss-matrix">
+                <thead>
+                  <tr>
+                    <th>{t('ss.order')}</th><th>{t('box.pos')}</th><th className="ss-name">{t('stats.player')}</th>
+                    {innings.map((i) => <th key={i}>{i}</th>)}
+                    <th>{t('ss.ab')}</th><th>{t('ss.hits')}</th><th>{t('ss.rbi')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {oppSlots.map((s) => s.playerRows.map((pr, ri) => (
+                    <tr key={`opp-${s.order}-${pr.letter}-${ri}`} className={ri > 0 ? 'ss-sub' : ''}>
+                      <td>{ri === 0 ? s.order : ''}</td>
+                      <td className="ss-pos">{pr.notation}</td>
+                      <td className="ss-name" title={oppNameOf(game, pr.letter)}>{oppNameOf(game, pr.letter)}</td>
+                      {innings.map((i) => (
+                        <td key={i}>
+                          {(pr.byInning[i] || []).map((c, ci) => (
+                            <React.Fragment key={ci}>
+                              {ci > 0 && <span className="ss-sep">/</span>}
+                              <span className={`ss-cell ${c.cat}`}>{c.txt}{c.multi ? <b className="ss-mp" title={c.multi}>⚡</b> : ''}</span>
+                            </React.Fragment>
+                          ))}
+                        </td>
+                      ))}
+                      <td>{pr.totals ? pr.totals.ab : ''}</td>
+                      <td>{pr.totals ? pr.totals.h : ''}</td>
+                      <td>{pr.totals ? pr.totals.rbi : ''}</td>
+                    </tr>
+                  )))}
+                </tbody>
+              </table>
+            </>
+          )}
+
+          {/* 2チーム分を並べたときは、投手成績がどちらのものか分かるように名前を添える */}
+          {records.length > 0 && hasOpp && <div className="ss-team-head">{teamName}</div>}
           {records.length > 0 && (
             <table className="ss-table">
               <thead>
