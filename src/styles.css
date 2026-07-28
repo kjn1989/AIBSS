@@ -1049,7 +1049,27 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 .bx-slot { display: grid; grid-template-columns: 24px 1fr; gap: 8px; align-items: start; }
 .bx-ord { font-weight: 800; color: var(--text-dim); text-align: center; padding-top: 11px; font-size: 15px; font-variant-numeric: tabular-nums; }
 .bx-players { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+/* 自軍/相手の切り替え(iOS/Android標準のセグメントコントロール風) */
+.seg-control {
+  display: flex; gap: 3px; padding: 3px; margin: 0 0 12px;
+  background: var(--bg-3); border: 1px solid var(--border); border-radius: 999px;
+}
+.seg-control button {
+  flex: 1 1 0; min-width: 0; min-height: 38px; padding: 6px 10px;
+  background: transparent; border: none; border-radius: 999px;
+  color: var(--text-dim); font-size: 14px; font-weight: 800;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  transition: background .15s ease, color .15s ease;
+}
+.seg-control button.on {
+  background: var(--accent-2); color: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
 .bx-card { background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; padding: 9px 12px; }
+/* 相手選手のカードは名前を編集できるボタン。押せることが分かるように鉛筆を添える */
+.bx-card.opp { display: block; width: 100%; text-align: left; }
+.bx-card.opp .bx-edit { margin-left: auto; color: var(--text-dim); font-size: 13px; }
 /* 交代選手: L字コネクタで打順に紐づけ、先発と区別 */
 .bx-card.sub { position: relative; margin-left: 16px; background: var(--bg-3); }
 .bx-card.sub::before {

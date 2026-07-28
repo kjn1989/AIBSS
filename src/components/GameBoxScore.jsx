@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useStore, usePlayerName, useT } from '../state/store.jsx';
 import { RESULTS } from '../lib/model.js';
 import { buildLineupRows, roleTag, posFull, assignAtBatsByPlayer } from '../lib/lineupBox.js';
+import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppNameOf, oppHasName } from '../lib/oppBox.js';
+import Sheet from './Sheet.jsx';
 
 // 1登場ぶんの打席群(+盗塁数)から表示用の打撃ラインを作る。
 // aggregateBatting と同じ判定基準(打数・安打・本塁打)を打席サブセットに適用する。
@@ -23,7 +25,33 @@ function lineFromBucket(atBats, sb) {
 // 引き算のデザイン: 先発はバッジ無しでシンプルに。交代で入った選手にだけ「回」と役割
 // (代打/代走/守備/救援)のバッジを付け、L字コネクタで打順に紐づけて系譜を可視化する。
 // 成績はカード内2段構造(上段=選手情報 / 下段右寄せ=成績)でスマホ幅でも崩れない。
+//
+// 自軍/相手をセグメントコントロールで切り替える。相手も同じツリー形式で見せる
+// (自軍の投手記録をつけている時点で、相手の打席結果はすべて記録されているため)。
 export default function GameBoxScore({ game }) {
+  const { state } = useStore();
+  const t = useT();
+  const [team, setTeam] = useState('mine'); // 'mine' | 'opp'
+  const myName = state.settings.teamName || t('box.myTeam');
+  const oppName = game.opponent || t('restab.opponentFallback');
+  const hasOpp = (game.playLogs || []).some((l) => l.kind === 'defense');
+
+  return (
+    <div className="card">
+      <div className="section-title" style={{ marginTop: 0 }}>{t('box.title')}</div>
+      {hasOpp && (
+        <div className="seg-control" role="tablist" aria-label={t('box.teamSwitch')}>
+          <button role="tab" aria-selected={team === 'mine'} className={team === 'mine' ? 'on' : ''} onClick={() => setTeam('mine')}>{myName}</button>
+          <button role="tab" aria-selected={team === 'opp'} className={team === 'opp' ? 'on' : ''} onClick={() => setTeam('opp')}>{oppName}</button>
+        </div>
+      )}
+      {team === 'mine' ? <MyTree game={game} /> : <OppTree game={game} />}
+    </div>
+  );
+}
+
+// ---- 自軍: 打順ツリー × 成績(通算成績のある登録選手) ----
+function MyTree({ game }) {
   const { state } = useStore();
   const t = useT();
   const lang = state.settings.lang || 'ja';
@@ -36,18 +64,9 @@ export default function GameBoxScore({ game }) {
   const assigned = assignAtBatsByPlayer(rows, (game.atBats || []).filter((ab) => ab.result), sbLogs);
 
   const roleLabel = { ph: t('box.rolePh'), pr: t('box.rolePr'), def: t('box.roleDef'), relief: t('box.roleRelief') };
-  const statLine = (s) => {
-    if (!s || (!s.pa && !s.sb)) return null;
-    const parts = [t('box.abN', { n: s.ab }), t('box.hN', { n: s.h })];
-    if (s.rbi) parts.push(t('box.rbiN', { n: s.rbi }));
-    if (s.hr) parts.push(t('box.hrN', { n: s.hr }));
-    if (s.sb) parts.push(t('box.sbN', { n: s.sb }));
-    return parts.join(' ');
-  };
 
   return (
-    <div className="card">
-      <div className="section-title" style={{ marginTop: 0 }}>{t('box.title')}</div>
+    <>
       <p className="small dim" style={{ marginTop: 0 }}>{t('box.desc2')}</p>
       <div className="bx-tree">
         {rows.map((slot) => (
@@ -59,7 +78,7 @@ export default function GameBoxScore({ game }) {
                 const bucket = assigned.get(p) || { atBats: [], sb: 0, primary: true, primaryOrder: slot.order };
                 // 集約先でないカードは、成績の代わりに「◯番に記載」と案内する
                 const sl = bucket.primary
-                  ? statLine(lineFromBucket(bucket.atBats, bucket.sb))
+                  ? statLine(lineFromBucket(bucket.atBats, bucket.sb), t)
                   : t('box.statsInOrder', { n: bucket.primaryOrder });
                 return (
                   <div className={`bx-card${i > 0 ? ' sub' : ''}`} key={`${p.playerId}-${i}`}>
@@ -81,6 +100,106 @@ export default function GameBoxScore({ game }) {
           </div>
         ))}
       </div>
-    </div>
+    </>
   );
+}
+
+// ---- 相手: 同じ打順ツリー × その試合の成績 ----
+// 相手選手は記号(A〜B…)で記録されている。タップで実名に書き換えられる。
+function OppTree({ game }) {
+  const t = useT();
+  const [editing, setEditing] = useState(null); // 編集中の記号
+  const rows = buildOppLineupRows(game);
+  const stats = oppBattingByLetter(game);
+  const pitchers = oppPitcherLetters(game);
+  if (!rows.length) return null;
+
+  const card = (p, i, key) => {
+    const s = stats.get(p.letter);
+    const named = oppHasName(game, p.letter);
+    return (
+      <button className={`bx-card opp${i > 0 ? ' sub' : ''}`} key={key} onClick={() => setEditing(p.letter)}>
+        <div className="bx-top">
+          {p.inning != null && <span className="bx-inn">{t('box.inningN', { n: p.inning })}</span>}
+          {/* 相手の交代は種別(代打/守備)まで記録していないため、中立に「途中出場」とする */}
+          {!p.isStarter && <span className="bx-role def">{t('box.oppSub')}</span>}
+          {pitchers.includes(p.letter) && <span className="bx-pos">{t('box.oppPitcher')}</span>}
+          <span className="bx-name">
+            {oppNameOf(game, p.letter)}
+            {named && <span className="bx-num">{p.letter}</span>}
+          </span>
+          <span className="bx-edit" aria-hidden>✎</span>
+        </div>
+        <div className="bx-bottom">{statLine(s, t) || t('box.noPa')}</div>
+      </button>
+    );
+  };
+
+  // 打順に出てこない投手(打順外の継投)は下に別枠で出す
+  const inTree = new Set(rows.flatMap((r) => r.players.map((p) => p.letter)));
+  const extraPitchers = pitchers.filter((l) => !inTree.has(l));
+
+  return (
+    <>
+      <p className="small dim" style={{ marginTop: 0 }}>{t('box.oppDesc')}</p>
+      <div className="bx-tree">
+        {rows.map((slot) => (
+          <div className="bx-slot" key={slot.order}>
+            <div className="bx-ord">{slot.order}</div>
+            <div className="bx-players">
+              {slot.players.map((p, i) => card(p, i, `${p.letter}-${i}`))}
+            </div>
+          </div>
+        ))}
+        {extraPitchers.length > 0 && (
+          <div className="bx-slot">
+            <div className="bx-ord">{t('box.oppPitcher')}</div>
+            <div className="bx-players">
+              {extraPitchers.map((letter, i) => card({ letter, inning: null, isStarter: true }, 0, `p-${letter}-${i}`))}
+            </div>
+          </div>
+        )}
+      </div>
+      {editing && <OppNameSheet game={game} letter={editing} onClose={() => setEditing(null)} />}
+    </>
+  );
+}
+
+// 相手選手の名前を書き換えるシート。開いたらすぐ入力でき、Enter か「保存」で閉じる。
+function OppNameSheet({ game, letter, onClose }) {
+  const { dispatch } = useStore();
+  const t = useT();
+  const [name, setName] = useState((game.oppNames || {})[letter] || '');
+  const save = () => {
+    dispatch({ type: 'SET_OPP_NAME', gameId: game.id, letter, name });
+    onClose();
+  };
+  return (
+    <Sheet title={t('box.oppNameTitle', { letter })} onClose={onClose}>
+      <p className="small dim" style={{ marginTop: 0 }}>{t('box.oppNameHint')}</p>
+      <input
+        autoFocus
+        value={name}
+        placeholder={t('box.oppNamePlaceholder', { letter })}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter') save(); }}
+        style={{ width: '100%' }}
+        aria-label={t('box.oppNameTitle', { letter })}
+      />
+      <div className="sheet-actions">
+        <button className="ghost" onClick={onClose}>{t('action.cancel')}</button>
+        <button className="primary" onClick={save}>{t('action.save')}</button>
+      </div>
+    </Sheet>
+  );
+}
+
+// 「2打数1安打」のような1行。打席がまだ無ければ null。
+function statLine(s, t) {
+  if (!s || (!s.pa && !s.sb)) return null;
+  const parts = [t('box.abN', { n: s.ab }), t('box.hN', { n: s.h })];
+  if (s.rbi) parts.push(t('box.rbiN', { n: s.rbi }));
+  if (s.hr) parts.push(t('box.hrN', { n: s.hr }));
+  if (s.sb) parts.push(t('box.sbN', { n: s.sb }));
+  return parts.join(' ');
 }
