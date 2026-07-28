@@ -143,8 +143,8 @@ export default function ScoreSheetView({ game, onClose }) {
     order: row.order,
     playerRows: row.players.map((p) => ({
       letter: p.letter,
-      // 守備位置は相手側では記録していないため、投手と途中出場だけ印を付ける
-      notation: oppPitchers.includes(p.letter) ? t('ss.oppP') : (p.isStarter ? '' : t('ss.oppSub')),
+      // 守備位置は任意入力。未入力なら投手/途中出場の印だけ付ける
+      notation: p.posCode || (oppPitchers.includes(p.letter) ? t('ss.oppP') : (p.isStarter ? '' : t('ss.oppSub'))),
       byInning: oppCells.get(p.letter) || {},
       totals: oppStats.get(p.letter) || null,
     })),

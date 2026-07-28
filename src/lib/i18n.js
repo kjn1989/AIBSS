@@ -186,6 +186,8 @@ export const MESSAGES = {
     'order.nextBatter': '次打者',
     'order.reentry': '再出場',
     'order.change': '交代',
+    'order.oppHint': '相手選手は記号(A〜T)で記録しています。名前をタップすると実際の名前に、右のプルダウンで守備位置を入れられます。どちらも任意です。',
+    'order.oppPosAria': '相手{order}番の守備位置',
     'order.rowHint': '行をタップで代打・代走・守備交代。守備位置はその場で変更できます。',
     'order.retiredPlayers': '退いた選手',
 
@@ -1011,6 +1013,8 @@ export const MESSAGES = {
     'order.nextBatter': 'Next up',
     'order.reentry': 're-entry',
     'order.change': 'Sub',
+    'order.oppHint': 'Opponents are tracked by letter (A-T). Tap a name to enter the real one, and use the dropdown for a position. Both are optional.',
+    'order.oppPosAria': 'Position for opponent #{order}',
     'order.rowHint': 'Tap a row for pinch hit / run / defensive sub. Positions can be changed inline.',
     'order.retiredPlayers': 'Removed Players',
 

@@ -11,6 +11,8 @@ import VoiceControl from './VoiceControl.jsx';
 import { SubstituteSheet } from './OrderTab.jsx';
 import HighlightSheet from './HighlightSheet.jsx';
 import DefenseCheckView from './DefenseCheckView.jsx';
+import { OppSubstituteSheet } from './OppOrderCard.jsx';
+import { oppNameOf, oppPositionOf, oppHasName } from '../lib/oppBox.js';
 import GameProgressView from './GameProgressView.jsx';
 import { POSITIONS, OPP_LETTERS, resultCategory, multiOutLabel, positionLabel } from '../lib/model.js';
 import { playLabel } from '../lib/voiceParser.js';
@@ -261,7 +263,11 @@ function OppBatterSheet({ game, onClose, onPinchHitter }) {
       {game.oppLineup.map((slot, i) => (
         <div className="row" key={slot.order}>
           <span className="rank-badge">{slot.order}</span>
-          <span className="grow">{slot.letter}</span>
+          <span className="grow">
+            {oppNameOf(game, slot.letter)}
+            {oppHasName(game, slot.letter) && <span className="dim small"> {slot.letter}</span>}
+            {oppPositionOf(game, slot.letter) && <span className="dim small"> {oppPositionOf(game, slot.letter)}</span>}
+          </span>
           <button
             className={`small ${i === game.oppBatterIndex ? 'primary' : ''}`}
             onClick={() => {
@@ -273,74 +279,6 @@ function OppBatterSheet({ game, onClose, onPinchHitter }) {
           </button>
         </div>
       ))}
-    </Sheet>
-  );
-}
-
-// ---- 相手選手交代シート(代打・代走・守備交代。実名の代わりにA〜Tの記号を使う) ----
-function OppSubstituteSheet({ game, slot, onClose, initialKind = 'ph' }) {
-  const { dispatch } = useStore();
-  const t = useT();
-  const [kind, setKind] = useState(initialKind); // ph=代打 pr=代走 def=守備交代
-  const [letter, setLetter] = useState('');
-
-  const inLineup = new Set(game.oppLineup.map((l) => l.letter));
-  const candidates = OPP_LETTERS.filter((l) => !inLineup.has(l));
-  const isRetired = letter && game.oppRetiredLetters.includes(letter);
-  const kindLabel = t(`order.sub.${kind}`);
-
-  const runnerBase = [1, 2, 3].find((b) => game.runners[b]?.letter === slot.letter);
-
-  return (
-    <Sheet title={t('score.oppSubTitle', { order: slot.order, letter: slot.letter })} onClose={onClose}>
-      <div className="grid3">
-        {['ph', 'pr', 'def'].map((k) => (
-          <button key={k} className={kind === k ? 'primary' : ''} onClick={() => setKind(k)}>
-            {t(`order.sub.${k}`)}
-          </button>
-        ))}
-      </div>
-
-      {kind === 'pr' && !runnerBase && (
-        <div className="warn-box mt8">{t('order.sub.prNoRunner')}</div>
-      )}
-
-      <div className="section-title">{t('order.sub.playerIn')}</div>
-      <select value={letter} onChange={(e) => setLetter(e.target.value)}>
-        <option value="">{t('score.selectLetter')}</option>
-        {candidates.map((l) => (
-          <option key={l} value={l}>
-            {l}{game.oppRetiredLetters.includes(l) ? t('order.sub.usedMark') : ''}
-          </option>
-        ))}
-      </select>
-
-      {isRetired && (
-        <div className="warn-box">
-          {t('order.sub.retiredWarn', { name: letter })}
-        </div>
-      )}
-
-      <div className="sheet-actions">
-        <button className="ghost" onClick={onClose}>{t('action.cancel')}</button>
-        <button
-          className="primary"
-          disabled={!letter}
-          onClick={() => {
-            dispatch({
-              type: 'OPP_SUBSTITUTE',
-              gameId: game.id,
-              order: slot.order,
-              letter,
-              asRunner: kind === 'pr',
-              label: t('score.oppSubLog', { kind: kindLabel, letter, order: slot.order, outLetter: slot.letter }),
-            });
-            onClose();
-          }}
-        >
-          {t('order.sub.enter', { kind: kindLabel })}
-        </button>
-      </div>
     </Sheet>
   );
 }
@@ -700,7 +638,7 @@ export default function ScoreTab() {
               >
                 <option value="">{t('score.selectPitcher')}</option>
                 {OPP_LETTERS.map((l) => (
-                  <option key={l} value={l}>{l}</option>
+                  <option key={l} value={l}>{oppHasName(game, l) ? `${oppNameOf(game, l)} (${l})` : l}</option>
                 ))}
               </select>
               {game.oppPitcherLetter && <OppHandToggle game={game} which="pitcher" letter={game.oppPitcherLetter} />}
@@ -715,7 +653,12 @@ export default function ScoreTab() {
             {oppBatter ? <span className="rank-badge">{oppBatter.order}</span> : null}
             <div className="sit-batter">
               {oppBatter
-                ? <div className="sit-main"><span className="nm">{oppBatter.letter}</span></div>
+                ? (
+                  <div className="sit-main">
+                    <span className="nm">{oppNameOf(game, oppBatter.letter)}</span>
+                    {oppPositionOf(game, oppBatter.letter) && <span className="pos">{oppPositionOf(game, oppBatter.letter)}</span>}
+                  </div>
+                )
                 : <div className="sit-eye">{t('score.oppBatterMeta', { order: '-' })}</div>}
             </div>
             {oppBatter && <OppHandToggle game={game} which="batter" letter={oppBatter.letter} allowSwitch />}
