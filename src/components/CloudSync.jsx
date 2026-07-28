@@ -134,6 +134,10 @@ export default function CloudSync() {
     const t = setTimeout(async () => {
       const conn = connRef.current;
       if (!conn) return;
+      // 初回の全取得が終わるまで送らない。先に送ると、他端末が消した項目を
+      // 「手元にある」という理由だけで再アップロードして復活させてしまう。
+      if (conn.ready && (await conn.ready) !== true) return;
+      if (connRef.current !== conn) return; // 待っている間に接続が張り替わったら中止
       try {
         for (const g of Object.values(state.games)) {
           if (g.id.startsWith('demo-')) continue; // デモデータは共有しない

@@ -939,6 +939,20 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 
 /* ---- 代打後の守備位置確認(フィールド図) ----
    ○の中に守備位置、その下に選手名。ひと目で「誰がどこ」が分かる形にする。 */
+/* AIスコア修正の聞き返し(足りない情報をその場で詰める) */
+.ask-box {
+  border: 1px solid var(--accent-2); border-radius: 12px;
+  background: rgba(31, 111, 235, 0.10); padding: 10px 12px;
+}
+.ask-item { margin: 8px 0; }
+.ask-q { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+.ask-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ask-chip {
+  min-height: 34px; padding: 4px 12px; border-radius: 999px; font-size: 13px; font-weight: 700;
+  background: var(--bg-3); border: 1px solid var(--border); color: var(--text);
+}
+.ask-chip.skip { color: var(--text-dim); }
+
 .dc-field { max-width: 460px; margin: 0 auto; }
 .dc-hint { text-align: center; margin: 8px 0 12px; }
 .dc-spot {

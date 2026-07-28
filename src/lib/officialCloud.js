@@ -263,9 +263,11 @@ export function connectOfficial({ teamId, onGames, onPlayers, onCrew, onStatus }
     if (error) throw error;
     cb?.((data || []).map((r) => r.data));
   };
-  Promise.all([load('team_games', onGames), load('team_players', onPlayers), load('team_crew', onCrew)])
-    .then(() => onStatus?.('on'))
-    .catch(() => onStatus?.('error'));
+  // 初回の全取得が終わるまで push しない。終わる前に送ると、他端末が消した項目を
+  // 「まだ手元にある」という理由だけで復活させてしまう(削除の取り消し合戦になる)。
+  const ready = Promise.all([load('team_games', onGames), load('team_players', onPlayers), load('team_crew', onCrew)])
+    .then(() => { onStatus?.('on'); return true; })
+    .catch(() => { onStatus?.('error'); return false; });
 
   const onRow = (cb) => (payload) => {
     const row = payload.new;
@@ -287,12 +289,20 @@ export function connectOfficial({ teamId, onGames, onPlayers, onCrew, onStatus }
     });
     if (error) throw error;
   };
+  // 削除は行を消さず「削除済みの印(トゥームストーン)」を残す。
+  // 行ごと消すと、その項目をまだ手元に持っている別の端末が次回起動時に
+  // 「クラウドに無い＝未送信」と判断して再アップロードし、削除が何度でも復活する。
+  // 印を残せば、どの端末も「これは消された」と分かるため復活しない。
   const del = (table) => async (id) => {
-    const { error } = await sb.from(table).delete().eq('team_id', teamId).eq('id', id);
+    const now = Date.now();
+    const { error } = await sb.from(table).upsert({
+      team_id: teamId, id, data: { id, deleted: true, deletedAt: now, updatedAt: now }, updated_at: now,
+    });
     if (error) throw error;
   };
   return {
     teamId,
+    ready,
     pushGame: push('team_games'),
     pushPlayer: push('team_players'),
     pushCrew: push('team_crew'),

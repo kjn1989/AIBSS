@@ -322,23 +322,40 @@ export function reducer(state, action) {
       const delG = new Set(pd.games || []);
       const delP = new Set(pd.players || []);
       const delC = new Set(pd.crew || []);
+      // クラウド上の「削除済みの印」。誰かが消した項目は、こちらに残っていても消す
+      // (これが無いと、消した端末以外が持ち続け、次の起動で再アップロードして復活する)。
+      const dead = (r) => !!(r && r.deleted);
       const games = { ...state.games };
       for (const g of action.games || []) {
         if (delG.has(g.id)) continue; // 削除待ちは無視
         const local = games[g.id];
+        if (dead(g)) {
+          // 削除より後に手元で更新していた場合だけ残す(その更新が再送されて復活する)
+          if (!local || (g.deletedAt || 0) >= (local.updatedAt || 0)) delete games[g.id];
+          continue;
+        }
         if (!local || (g.updatedAt || 0) >= (local.updatedAt || 0)) games[g.id] = ensureOppFields(g);
       }
       const pmap = new Map(state.players.map((p) => [p.id, p]));
-      for (const p of action.players || []) { if (!delP.has(p.id)) pmap.set(p.id, p); }
+      for (const p of action.players || []) {
+        if (delP.has(p.id)) continue;
+        if (dead(p)) pmap.delete(p.id);
+        else pmap.set(p.id, p);
+      }
       const players = [...pmap.values()].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
       // 参加メンバー(公式クラウドではcrewコレクション)も同様にidマージ
       let members = state.members || [];
       if (action.crew) {
         const mmap = new Map(members.map((m) => [m.id, m]));
-        for (const m of action.crew) { if (!delC.has(m.id)) mmap.set(m.id, m); }
+        for (const m of action.crew) {
+          if (delC.has(m.id)) continue;
+          if (dead(m)) mmap.delete(m.id);
+          else mmap.set(m.id, m);
+        }
         members = [...mmap.values()].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
       }
-      return { ...state, games, players, members };
+      const currentGameId = state.currentGameId && !games[state.currentGameId] ? null : state.currentGameId;
+      return { ...state, games, players, members, currentGameId };
     }
     // CloudSyncがクラウド削除に成功したらトゥームストーンから外す
     case 'CLEAR_PENDING_DELETE': {
@@ -1134,7 +1151,9 @@ export function reducer(state, action) {
       g.playLogs = g.playLogs.filter((l) => !(l.kind === 'position' && touched.has(l.payload?.order) && Number(l.inning) === Number(inning)));
       const insert = (payload) => {
         const log = newPlayLog({ gameId: g.id, inning, isTop: !!g.isHome, kind: 'position', text: '', payload });
-        const at = g.playLogs.findIndex((l) => (l.inning || 0) >= inning);
+        // その回の最後に置く。回の先頭に入れると、同じ回の交代より前に評価され、
+        // まだ枠に居ない選手への位置指定として無視されてしまう。
+        const at = g.playLogs.findIndex((l) => (l.inning || 0) > inning);
         if (at < 0) g.playLogs.push(log); else g.playLogs.splice(at, 0, log);
       };
       // 守備は1人1か所。その位置に居た選手は、空いた位置(移る選手が居た位置)へ移す。
