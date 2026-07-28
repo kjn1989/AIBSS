@@ -234,6 +234,7 @@ function NLCorrectionCard({ game }) {
   const nameOf = usePlayerName();
   const [text, setText] = useState('');
   const [msg, setMsg] = useState(null); // { kind:'ok'|'err', text }
+  const [asks, setAsks] = useState([]); // 聞き返し: [{ id, text, options:[{label, sentence}] }]
   const [busy, setBusy] = useState(false);
   // 付け替えの重ねがけで壊れた打席の検出(同じ回に2打順で打席 / 打順の並びのズレ)
   const dupAtBats = findDuplicateAtBats(game);
@@ -357,17 +358,18 @@ function NLCorrectionCard({ game }) {
     // 実際にAI解釈まで届いたのかを毎回はっきり示す(キーの有無だけでは分からないため)
     let mode = !apiKey ? 'nokey' : !navigator.onLine ? 'offline' : 'local';
     let detail = '';
+    let questions = []; // AIからの確認(足りない情報・判断がつかない点)
     if (apiKey && navigator.onLine) {
       setBusy(true);
       try {
         const r = await interpretCorrection({ apiKey, text, ...buildContext() });
         if (r && r.error) { mode = 'error'; detail = r.error; } // 原因(キー/上限/通信)を持ち帰る
-        else if (r && r.ops) { im = mergeIm(aiOpsToIntermediate(r.ops), im); mode = 'ai'; } // AIを重ねて統合
+        else if (r && r.ops) { im = mergeIm(aiOpsToIntermediate(r.ops), im); mode = 'ai'; questions = r.questions || []; } // AIを重ねて統合
         else { mode = 'error'; detail = t('gp.nlAiNoResponse'); }
       } catch (e) { mode = 'error'; detail = e?.message || ''; } // AI失敗→端末内解釈のまま
       setBusy(false);
     }
-    resolveAndApply(im, mode, detail);
+    resolveAndApply(im, mode, detail, questions);
   };
 
   // 解釈経路の注記。うまくいかなかったとき、AIまで届いたのかを切り分けられるようにする。
@@ -380,7 +382,8 @@ function NLCorrectionCard({ game }) {
     return `${base}${t('gp.nlAiReason', { reason: detail })}${hint}`;
   };
 
-  const resolveAndApply = (im, mode = 'local', detail = '') => {
+  const resolveAndApply = (im, mode = 'local', detail = '', aiQuestions = []) => {
+    setAsks([]);
     const { reassigns, resultCorrs, posCorrs = [], aligns = [] } = im;
     let subs = im.subs;
     // 守備陣形の申告(◯回の守備は…): 既に出場中の選手なら守備位置の変更、
@@ -555,6 +558,7 @@ function NLCorrectionCard({ game }) {
     const totalOps = subAppl.length + synthSubs.length + reAppl.length + resAppl.length + posAppl.length + alignAppl.length;
     if (!totalOps) {
       const note = modeNote(mode, detail); // どの経路で解釈したかを添える(AI未接続かの切り分け用)
+      setAsks(buildAsks({ alignMap, aiQuestions })); // 決められなかった点はその場で聞き返す
       // 指定どおりに既になっている場合は「エラー」ではないので、そう伝える
       if (alreadyOk.length) { setMsg({ kind: 'ok', text: t('gp.nlAlreadyOk', { list: alreadyOk.join('、') }) + note }); return; }
       if (alignOffField.length) { setMsg({ kind: 'err', text: t('gp.nlAlignOffField', { list: alignOffField.join('、') }) + note }); return; }
@@ -613,7 +617,49 @@ function NLCorrectionCard({ game }) {
     if (subUnresolved.length) notes.push(t('gp.nlSubNoOrderShort', { names: subUnresolved.join('、') }));
     if (reUnresolved.length) notes.push(t('gp.nlReNotFoundShort', { innings: reUnresolved.join('、') }));
     setMsg({ kind: 'ok', text: t('gp.nlDoneOps', { n: totalOps }) + (hasPitcherChange ? t('gp.nlPitchRecalc') : '') + notes.join('') + modeNote(mode, detail) });
+    setAsks(buildAsks({ subAppl, alignAppl, alignMap, aiQuestions }));
     setText('');
+  };
+
+  // ---- 聞き返し(足りない情報・こちらの気づきを、その場で確認する) ----
+  // 反映はしたが決めきれていない点を、タップで答えられる形にして返す。
+  // 選んだ答えは修正文として入力欄に入るので、押して確定するだけで詰められる。
+  const FIELD_POS = ['投', '捕', '一', '二', '三', '遊', '左', '中', '右'];
+  const buildAsks = ({ subAppl = [], alignAppl = [], alignMap, aiQuestions = [] }) => {
+    const out = [];
+    const add = (a) => { if (out.length < 4) out.push({ id: `${out.length}-${a.text}`, ...a }); };
+    // AIが「これだけでは決められない」と返してきた確認
+    for (const q of aiQuestions) {
+      if (!q?.text) continue;
+      add({ text: q.text, options: (q.options || []).filter(Boolean).slice(0, 6).map((o) => ({ label: o, sentence: o })) });
+    }
+    // 交代を記録したが守備位置が分からない → どこに入ったか
+    for (const s of subAppl) {
+      if (s.position) continue;
+      const name = s.inName || nameOf(s.inId);
+      add({
+        text: t('gp.askSubPos', { name, inning: s.inning }),
+        options: [
+          ...FIELD_POS.map((p) => ({ label: posFull(p, lang), sentence: t('gp.askSubPosSentence', { inning: s.inning, name, pos: posFull(p, lang) }) })),
+        ],
+      });
+    }
+    // 守備位置を入れ替えた → 空いた位置に入ったのが誰か、念のため確認する
+    for (const al of alignAppl) {
+      if (!al.from || al.from === al.position) continue;
+      const held = (alignMap.get(al.inning) || []).filter((x) => x.position === al.position && x.playerId !== al.playerId);
+      if (!held.length) continue;
+      const moved = nameOf(held[0].playerId);
+      const others = (game.lineup || [])
+        .filter((l) => l.playerId && l.playerId !== al.playerId && l.playerId !== held[0].playerId)
+        .slice(0, 5)
+        .map((l) => ({
+          label: nameOf(l.playerId),
+          sentence: t('gp.askSwapSentence', { inning: al.inning, name: nameOf(l.playerId), pos: posFull(al.from, lang) }),
+        }));
+      add({ text: t('gp.askSwap', { inning: al.inning, moved, pos: posFull(al.from, lang) }), options: others });
+    }
+    return out;
   };
 
   return (
@@ -677,12 +723,51 @@ function NLCorrectionCard({ game }) {
               range: inningRange(m), pos: posFull(m.position, lang),
             })),
           ].join(' ')}
+          {/* 不在の位置は「誰が入ったか」をその場で選べるようにする */}
+          {posIssues.missing.slice(0, 2).map((m) => (
+            <div className="ask-item" key={`${m.position}${m.from}`}>
+              <div className="ask-q">💬 {t('gp.askWhoPlays', { range: inningRange(m), pos: posFull(m.position, lang) })}</div>
+              <div className="ask-chips">
+                {(game.lineup || []).filter((l) => l.playerId).slice(0, 9).map((l) => (
+                  <button
+                    key={l.order} className="ask-chip"
+                    onClick={() => setText(t('gp.askWhoPlaysSentence', {
+                      range: m.from === m.to ? `${m.from}回` : `${m.from}〜${m.to}回`,
+                      name: nameOf(l.playerId), pos: posFull(m.position, lang),
+                    }))}
+                  >
+                    {nameOf(l.playerId)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
           <div className="small dim mt8">{t('gp.nlPosFixHint')}</div>
         </div>
       )}
       {msg && (msg.kind === 'ok'
         ? <div className="small mt8" style={{ color: 'var(--green)', fontWeight: 700 }}>✅ {msg.text}</div>
         : <div className="warn-box mt8">⚠️ {msg.text}</div>
+      )}
+      {/* 聞き返し: 足りない情報・こちらの気づきを、その場で選んで詰められるようにする */}
+      {asks.length > 0 && (
+        <div className="ask-box mt8">
+          <div className="small dim">{t('gp.askTitle')}</div>
+          {asks.map((a) => (
+            <div className="ask-item" key={a.id}>
+              <div className="ask-q">💬 {a.text}</div>
+              <div className="ask-chips">
+                {a.options.map((o) => (
+                  <button key={o.label} className="ask-chip" onClick={() => { setText(o.sentence); setAsks(asks.filter((x) => x.id !== a.id)); }}>
+                    {o.label}
+                  </button>
+                ))}
+                <button className="ask-chip skip" onClick={() => setAsks(asks.filter((x) => x.id !== a.id))}>{t('gp.askSkip')}</button>
+              </div>
+            </div>
+          ))}
+          <div className="small dim">{t('gp.askHint')}</div>
+        </div>
       )}
     </div>
   );
