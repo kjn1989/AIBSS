@@ -3,7 +3,7 @@ import { useStore, usePlayerName, useT } from '../state/store.jsx';
 import { RESULTS, DIRECTIONS, formatIP, resultCategory, multiOutLabel } from '../lib/model.js';
 import { computeBoxScore } from '../lib/boxscore.js';
 import { buildLineupRows, assignAtBatsByPlayer } from '../lib/lineupBox.js';
-import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppNameOf } from '../lib/oppBox.js';
+import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf } from '../lib/oppBox.js';
 import FullscreenView from './FullscreenView.jsx';
 
 // 打席結果の超短縮表記(スコアシートのセル用): 例「中安」「遊ゴ」「左本」「四球」/ 英語は "LF1B" 等。
@@ -150,6 +150,8 @@ export default function ScoreSheetView({ game, onClose }) {
     })),
   })).filter((s) => s.playerRows.length);
   const hasOpp = oppCells.size > 0;
+  // 相手投手: 球数は記録済み、その他は自軍の打席から逆算(自責点は追えないので出さない)
+  const oppPit = oppPitchingStats(game).filter((r) => r.bf > 0 || r.pitches > 0);
 
   return (
     <FullscreenView>
@@ -295,6 +297,32 @@ export default function ScoreSheetView({ game, onClose }) {
                 ))}
               </tbody>
             </table>
+          )}
+
+          {oppPit.length > 0 && (
+            <>
+              <div className="ss-team-head">{oppName}</div>
+              <table className="ss-table">
+                <thead>
+                  <tr>
+                    <th>{t('ss.pitcher')}</th><th>{t('ss.ip')}</th><th>{t('ss.runs')}</th><th>{t('ss.pHits')}</th><th>{t('ss.bbhbp')}</th><th>{t('ss.k')}</th><th>{t('ss.pitches')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {oppPit.map((r) => (
+                    <tr key={r.letter}>
+                      <td className="ss-name" title={oppNameOf(game, r.letter)}>{oppNameOf(game, r.letter)}</td>
+                      <td>{formatIP(r.outs)}</td>
+                      <td>{r.runs}</td>
+                      <td>{r.h}</td>
+                      <td>{r.bb + r.hbp}</td>
+                      <td>{r.k}</td>
+                      <td>{r.pitches || '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
           )}
 
           <div className="ss-footer">{t('ss.footer')}</div>
