@@ -4,6 +4,7 @@ import { POSITIONS, positionLabel } from '../lib/model.js';
 import { canWriteCloud } from '../lib/officialCloud.js';
 import Sheet from './Sheet.jsx';
 import LineupWizard from './LineupWizard.jsx';
+import OppOrderCard, { OppSubstituteSheet } from './OppOrderCard.jsx';
 import HeadCoachView from './HeadCoachView.jsx';
 
 // ---- 交代シート(代打・代走・守備交代) ----
@@ -97,6 +98,8 @@ export default function OrderTab() {
   const game = useCurrentGame();
   const nameOf = usePlayerName();
   const [subSlot, setSubSlot] = useState(null);
+  const [oppSlot, setOppSlot] = useState(null); // 相手の交代シート
+  const [team, setTeam] = useState('mine'); // 'mine' | 'opp'
   const [coachOpen, setCoachOpen] = useState(false);
   // AIスタメン提案は「草野球」エディション限定の機能
   const aiCoachEnabled = state.settings.edition === '草野球';
@@ -141,8 +144,28 @@ export default function OrderTab() {
     dispatch({ type: 'SET_LINEUP', gameId: game.id, lineup: [] });
   };
 
+  const teamName = state.settings.teamName || t('box.myTeam');
+  const oppName = game.opponent || t('restab.opponentFallback');
+  const seg = (
+    <div className="seg-control" role="tablist" aria-label={t('box.teamSwitch')}>
+      <button role="tab" aria-selected={team === 'mine'} className={team === 'mine' ? 'on' : ''} onClick={() => setTeam('mine')}>{teamName}</button>
+      <button role="tab" aria-selected={team === 'opp'} className={team === 'opp' ? 'on' : ''} onClick={() => setTeam('opp')}>{oppName}</button>
+    </div>
+  );
+
+  if (team === 'opp') {
+    return (
+      <div>
+        {seg}
+        <OppOrderCard game={game} onSubstitute={setOppSlot} />
+        {oppSlot && <OppSubstituteSheet game={game} slot={oppSlot} initialKind="def" onClose={() => setOppSlot(null)} />}
+      </div>
+    );
+  }
+
   return (
     <div>
+      {seg}
       <div className="card">
         <div className="flex" style={{ marginBottom: 8 }}>
           <h2 className="grow" style={{ marginBottom: 0 }}>

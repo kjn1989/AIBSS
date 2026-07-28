@@ -16,6 +16,14 @@ export function oppNameOf(game, letter) {
   return (game?.oppNames && game.oppNames[letter]) || letter;
 }
 
+// 記号→守備位置(未指定なら null)。相手の守備位置は任意入力。
+export function oppPositionOf(game, letter) {
+  if (!letter) return null;
+  return (game?.oppPositions && game.oppPositions[letter])
+    || (game?.oppLineup || []).find((l) => l.letter === letter)?.position
+    || null;
+}
+
 // 名前が入っているかどうか(仮の記号のままかの判定に使う)
 export function oppHasName(game, letter) {
   return !!(game?.oppNames && game.oppNames[letter]);
@@ -36,14 +44,14 @@ export function buildOppLineupRows(game) {
   for (const slot of lineup) {
     const mine = subs.filter((s) => s.payload.order === slot.order);
     const starter = mine[0]?.payload?.out || slot.letter;
-    const players = [{ letter: starter, inning: null, isStarter: true, posCode: null }];
+    const players = [{ letter: starter, inning: null, isStarter: true, posCode: oppPositionOf(game, starter) }];
     for (const s of mine) {
       if (s.payload.in === players[players.length - 1].letter) continue; // 同じ記号の重複記録は畳む
-      players.push({ letter: s.payload.in, inning: innOf(s) || null, isStarter: false, posCode: null });
+      players.push({ letter: s.payload.in, inning: innOf(s) || null, isStarter: false, posCode: oppPositionOf(game, s.payload.in) });
     }
     // 現在の記号がツリーに出てこない(交代ログが無い)場合は末尾に足す
     if (!players.some((p) => p.letter === slot.letter)) {
-      players.push({ letter: slot.letter, inning: null, isStarter: false, posCode: null });
+      players.push({ letter: slot.letter, inning: null, isStarter: false, posCode: oppPositionOf(game, slot.letter) });
     }
     rows.push({ order: slot.order, players });
   }

@@ -187,6 +187,8 @@ export function newGame({ opponent = '', isHome = false, date = null, season = '
     // 相手選手の名前(任意)。{ [letter]: '田中' }。未入力の記号は A/B/… のまま表示する。
     // 相手は毎試合変わるため選手マスタには入れず、この試合だけの情報として持つ。
     oppNames: {},
+    // 相手選手の守備位置(任意)。{ [letter]: '投'|'捕'|… }。分かる範囲で入れられる。
+    oppPositions: {},
     atBats: [], // AtBat[]
     playLogs: [], // PlayLog[]
     pitchingRecords: [], // PitchingRecord[]

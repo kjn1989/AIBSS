@@ -107,7 +107,9 @@ function MyTree({ game }) {
 // ---- 相手: 同じ打順ツリー × その試合の成績 ----
 // 相手選手は記号(A〜B…)で記録されている。タップで実名に書き換えられる。
 function OppTree({ game }) {
+  const { state } = useStore();
   const t = useT();
+  const lang = state.settings.lang || 'ja';
   const [editing, setEditing] = useState(null); // 編集中の記号
   const rows = buildOppLineupRows(game);
   const stats = oppBattingByLetter(game);
@@ -123,7 +125,9 @@ function OppTree({ game }) {
           {p.inning != null && <span className="bx-inn">{t('box.inningN', { n: p.inning })}</span>}
           {/* 相手の交代は種別(代打/守備)まで記録していないため、中立に「途中出場」とする */}
           {!p.isStarter && <span className="bx-role def">{t('box.oppSub')}</span>}
-          {pitchers.includes(p.letter) && <span className="bx-pos">{t('box.oppPitcher')}</span>}
+          {p.posCode
+            ? <span className="bx-pos">{posFull(p.posCode, lang)}</span>
+            : pitchers.includes(p.letter) && <span className="bx-pos">{t('box.oppPitcher')}</span>}
           <span className="bx-name">
             {oppNameOf(game, p.letter)}
             {named && <span className="bx-num">{p.letter}</span>}

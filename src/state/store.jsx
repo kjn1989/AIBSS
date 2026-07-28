@@ -720,6 +720,22 @@ export function reducer(state, action) {
       g.updatedAt = Date.now(); // クラウド同期(後勝ち)に載せるため必ず進める
       return { ...state, games: { ...state.games, [g.id]: g } };
     }
+    // 相手選手の守備位置(任意)。記号ごとに持つので、打順が入れ替わっても付いて回る。
+    case 'SET_OPP_POSITION': {
+      const g = deep(state.games[action.gameId]);
+      if (!action.letter) return state;
+      const pos = { ...(g.oppPositions || {}) };
+      if (action.position) pos[action.letter] = action.position; else delete pos[action.letter];
+      // 守備は1人1か所。同じ位置に居た相手選手からは外す(自軍と同じ考え方)
+      if (action.position && UNIQUE_POSITIONS.has(action.position)) {
+        for (const [l, p] of Object.entries(pos)) if (l !== action.letter && p === action.position) delete pos[l];
+      }
+      g.oppPositions = pos;
+      const slot = (g.oppLineup || []).find((l) => l.letter === action.letter);
+      if (slot) slot.position = action.position || '';
+      g.updatedAt = Date.now();
+      return { ...state, games: { ...state.games, [g.id]: g } };
+    }
     case 'OPP_SET_BATTER_INDEX': {
       const g = deep(state.games[action.gameId]);
       g.oppBatterIndex = action.index;
