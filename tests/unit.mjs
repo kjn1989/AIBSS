@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { proposeMoves, judgeAdvance, batterDestOptions } from '../src/lib/plays.js';
 import { gameEndCheck, initialPresetIdFor, describeRules } from '../src/lib/rules.js';
-import { aggregateBatting, battingMetrics, pitchingMetrics, titleLeaders } from '../src/lib/stats.js';
+import { aggregateBatting, aggregatePitching, battingMetrics, pitchingMetrics, titleLeaders, DETAIL_METRICS, detailRanking } from '../src/lib/stats.js';
 import { translate } from '../src/lib/i18n.js';
 import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, parseDirectionOnly } from '../src/lib/voiceParser.js';
 import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parseInningRange, isExplicitSubText } from '../src/lib/correctionParser.js';
@@ -297,6 +297,71 @@ test('oppPitchingStats: 継投が無ければ現在の投手が先発として1�
   const rows = oppPitchingStats(g);
   assert.equal(rows.length, 1);
   assert.deepEqual([rows[0].letter, rows[0].outs, rows[0].pitches], ['A', 1, 88]);
+});
+
+// ---- 対左右のスタッツ(相手投手・相手打者の左右を入れてある打席だけを母数にする) ----
+const HAND_GAMES = [{
+  atBats: [
+    { playerId: 'b1', result: 'single', vsHand: 'L' },
+    { playerId: 'b1', result: 'out', vsHand: 'L' },
+    { playerId: 'b1', result: 'out', vsHand: 'R' },
+    { playerId: 'b1', result: 'bb', vsHand: 'L' }, // 四球は打数に入らない
+    { playerId: 'b1', result: 'double' },          // 左右未入力は母数に入れない
+  ],
+  playLogs: [
+    { kind: 'defense', payload: { pitcherId: 'p1', batterHand: 'L', result: 'single' } },
+    { kind: 'defense', payload: { pitcherId: 'p1', batterHand: 'L', result: 'out' } },
+    { kind: 'defense', payload: { pitcherId: 'p1', batterHand: 'L', result: 'so' } },
+    { kind: 'defense', payload: { pitcherId: 'p1', batterHand: 'R', result: 'out' } },
+    { kind: 'defense', payload: { pitcherId: 'p1', batterHand: 'L', result: 'bb' } }, // 被打数に入らない
+    { kind: 'defense', payload: { pitcherId: 'p1', batterHand: 'S', result: 'single' } }, // 両打は対象外
+    { kind: 'defense', payload: { pitcherId: 'p1', result: 'single' } }, // 左右未入力は対象外
+  ],
+  pitchingRecords: [{ playerId: 'p1', outsRecorded: 21, earnedRuns: 2, hitsAllowed: 6, walks: 2, hitByPitch: 0, strikeouts: 7, pitches: 84, abFaced: 24 }],
+}];
+
+test('battingMetrics: 対左投手打率は左右を入力した打席だけを母数にする', () => {
+  const b = aggregateBatting(HAND_GAMES).b1;
+  assert.deepEqual(b.vsL, { ab: 2, h: 1 }); // 四球は打数外
+  assert.deepEqual(b.vsR, { ab: 1, h: 0 });
+  const m = battingMetrics(b);
+  assert.equal(m.baVsL, 0.5);
+  assert.equal(m.baVsR, 0);
+  // 未入力の二塁打は通算打率には入るが、対左右には入らない
+  assert.equal(b.ab, 4);
+});
+
+test('pitchingMetrics: 対左打者被打率・奪三振率・球数/回', () => {
+  const p = aggregatePitching(HAND_GAMES).p1;
+  assert.deepEqual(p.vsL, { ab: 3, h: 1 }); // 単打/凡打/三振が被打数、四球は除く
+  assert.deepEqual(p.vsR, { ab: 1, h: 0 });
+  const m = pitchingMetrics(p);
+  assert.equal(m.obaVsL.toFixed(3), '0.333');
+  assert.equal(m.obaVsR, 0);
+  assert.equal(m.k7, 7 / 7 * 7);        // 7奪三振 / 7回 * 7
+  assert.equal(m.pip, 84 / 7);          // 84球 / 7回
+});
+
+test('battingMetrics: 長打率と四球率', () => {
+  const b = aggregateBatting(HAND_GAMES).b1;
+  const m = battingMetrics(b);
+  assert.equal(m.slg, (1 + 2) / 4);     // 単打1 + 二塁打2 塁打 / 4打数
+  assert.equal(m.bbRate, 1 / 5);        // 四死球1 / 5打席
+});
+
+test('DETAIL_METRICS: 追加した指標がランキングに出せる(母数0なら除外)', () => {
+  const bat = aggregateBatting(HAND_GAMES);
+  const pit = aggregatePitching(HAND_GAMES);
+  for (const key of ['baVsL', 'slg', 'bbRate', 'obaVsL', 'k7', 'pip']) {
+    const def = DETAIL_METRICS.find((m) => m.key === key);
+    assert.ok(def, `${key} が定義されていない`);
+    const rows = detailRanking(def, bat, pit);
+    assert.equal(rows.length, 1, `${key} の行が作れない`);
+    assert.ok(rows[0].detail.length > 0);
+  }
+  // 対左の打席が無い選手はランキングに出さない
+  const empty = detailRanking(DETAIL_METRICS.find((m) => m.key === 'baVsL'), { x: aggregateBatting([{ atBats: [{ playerId: 'x', result: 'single' }] }]).x }, {});
+  assert.equal(empty.length, 0);
 });
 
 test('parseInningRange: 「3-6回」「3回から6回」などの回の範囲を読む', () => {
