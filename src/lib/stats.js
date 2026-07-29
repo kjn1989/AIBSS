@@ -21,6 +21,8 @@ export function aggregateBatting(games) {
         totalPitches: 0,
         clutch: 0,
         firstPitchSwings: 0, firstPitchHits: 0,
+        // 対左右投手(相手投手の左右を入力してある打席だけが対象)
+        vsL: { ab: 0, h: 0 }, vsR: { ab: 0, h: 0 },
       };
     }
     return map[pid];
@@ -51,6 +53,10 @@ export function aggregateBatting(games) {
       if (ab.result === 'interference') s.interference += 1;
       if (ab.result === 'error') s.error += 1;
       s.rbi += ab.rbi || 0;
+
+      // 対左右投手: vsHand が入っている打席だけ数える(未入力は母数に入れない)
+      const vs = ab.vsHand === 'L' ? s.vsL : ab.vsHand === 'R' ? s.vsR : null;
+      if (vs && def.ab) { vs.ab += 1; if (def.hit) vs.h += 1; }
 
       // RISP: 打席開始時に走者二塁or三塁
       const snap = ab.snapshot || {};
@@ -108,11 +114,25 @@ export function aggregatePitching(games) {
         outsRecorded: 0, runs: 0, earnedRuns: 0, hitsAllowed: 0,
         walks: 0, hitByPitch: 0, strikeouts: 0, pitches: 0, abFaced: 0,
         wins: 0, saves: 0, holds: 0, games: 0,
+        // 対左右打者(相手打者の左右を入力してある打席だけが対象)
+        vsL: { ab: 0, h: 0 }, vsR: { ab: 0, h: 0 },
       };
     }
     return map[pid];
   };
   for (const g of games) {
+    // 対左右打者: 守備ログ(相手の打席)から、そのとき投げていた投手へ振り分ける
+    for (const log of g.playLogs || []) {
+      if (log.kind !== 'defense') continue;
+      const p = log.payload || {};
+      const vsKey = p.batterHand === 'L' ? 'vsL' : p.batterHand === 'R' ? 'vsR' : null;
+      if (!p.pitcherId || !vsKey) continue;
+      const def = RESULTS[p.result];
+      if (!def || !def.ab) continue;
+      const s = get(p.pitcherId);
+      s[vsKey].ab += 1;
+      if (def.hit) s[vsKey].h += 1;
+    }
     for (const pr of g.pitchingRecords || []) {
       const s = get(pr.playerId);
       s.games += 1;
@@ -224,7 +244,10 @@ export function battingMetrics(s) {
   const ppa = div(s.totalPitches, s.pa); // 5. P/PA
   const clutch = s.clutch; // 6. クラッチ打数(カウント)
   const fhit = div(s.firstPitchHits, s.firstPitchSwings); // 7. 初球安打率
-  return { ba, risp, obp, slg, ops, adv, ppa, clutch, fhit };
+  const baVsL = div(s.vsL?.h, s.vsL?.ab); // 対左投手打率
+  const baVsR = div(s.vsR?.h, s.vsR?.ab); // 対右投手打率
+  const bbRate = div(s.bb + s.hbp, s.pa); // 四球率(選球眼)
+  return { ba, risp, obp, slg, ops, adv, ppa, clutch, fhit, baVsL, baVsR, bbRate };
 }
 
 // ---- 投手メトリクス ----
@@ -237,7 +260,11 @@ export function pitchingMetrics(s) {
   const kbbDisplay = s.walks > 0 ? fmt2(kbb) : s.strikeouts > 0 ? `${s.strikeouts} (与四球0)` : '-';
   const kbbSort = s.walks > 0 ? kbb : s.strikeouts > 0 ? s.strikeouts : -1;
   const oba = div(s.hitsAllowed, s.abFaced); // 被打率 = 被安打 ÷ 被打数
-  return { ip, era7, whip, kbb, kbbDisplay, kbbSort, oba };
+  const obaVsL = div(s.vsL?.h, s.vsL?.ab); // 対左打者被打率
+  const obaVsR = div(s.vsR?.h, s.vsR?.ab); // 対右打者被打率
+  const k7 = ip > 0 ? (s.strikeouts / ip) * 7 : null; // 奪三振率(7回換算)
+  const pip = ip > 0 ? s.pitches / ip : null; // 1イニングあたりの球数
+  return { ip, era7, whip, kbb, kbbDisplay, kbbSort, oba, obaVsL, obaVsR, k7, pip };
 }
 
 // ---- 詳細ランキングのメトリクス定義 ----
@@ -248,6 +275,7 @@ const JA_UNITS = {
   bbhbp: '四死球', ha: '被安打', bb: '与四球', k: '奪三振', abFaced: '被打数', success: '成功',
   chances: '機会', obp: '出塁率', slg: '長打率', firstPitch: '(初球打ち)',
   clutchDesc: '先制・同点・逆転・勝ち越し打の合計',
+  vsR: '対右', vsL: '対左', tb: '塁打', kUnit: '奪三振', ipShort: '回', pitchesShort: '球', noData: '未入力',
 };
 const jaTr = (key) => JA_UNITS[key];
 
@@ -301,6 +329,26 @@ export const DETAIL_METRICS = [
     qualify: (s) => s.firstPitchSwings > 0,
   },
   {
+    // 相手投手の左右を入力してある打席だけが母数。未入力の打席は数えない。
+    key: 'baVsL', label: '対左投手打率', en: 'AVG vs LHP', type: 'bat', higherBetter: true,
+    value: (m) => m.baVsL, format: fmtAvg,
+    detail: (s, m, tr = jaTr) => `${s.vsL.h}${tr('hits')}/${s.vsL.ab}${tr('ab')}`
+      + `  ${tr('vsR')} ${s.vsR.ab ? fmtAvg(m.baVsR) : tr('noData')}`,
+    qualify: (s) => (s.vsL?.ab || 0) > 0,
+  },
+  {
+    key: 'slg', label: '長打率', en: 'SLG', type: 'bat', higherBetter: true,
+    value: (m) => m.slg, format: fmtAvg,
+    detail: (s, m, tr = jaTr) => `${s.tb}${tr('tb')}/${s.ab}${tr('ab')}`,
+    qualify: (s) => s.ab > 0,
+  },
+  {
+    key: 'bbRate', label: '四球率(選球眼)', en: 'BB% (plate discipline)', type: 'bat', higherBetter: true,
+    value: (m) => m.bbRate, format: fmtPct,
+    detail: (s, m, tr = jaTr) => `${tr('bbhbp')}${s.bb + s.hbp}/${s.pa}${tr('pa')}`,
+    qualify: (s) => s.pa > 0,
+  },
+  {
     key: 'era7', label: '防御率 (7回換算)', en: 'ERA (7-inn)', type: 'pit', higherBetter: false,
     value: (m) => m.era7, format: fmt2,
     detail: (s, m, tr = jaTr) => `${tr('er')}${s.earnedRuns}/${formatIP(s.outsRecorded)}${tr('ipUnit')}`,
@@ -323,6 +371,26 @@ export const DETAIL_METRICS = [
     value: (m) => m.oba, format: fmtAvg,
     detail: (s, m, tr = jaTr) => `${tr('ha')}${s.hitsAllowed}/${tr('abFaced')}${s.abFaced}`,
     qualify: (s) => s.abFaced > 0,
+  },
+  {
+    // 相手打者の左右を入力してある打席だけが母数。未入力の打席は数えない。
+    key: 'obaVsL', label: '対左打者被打率', en: 'OBA vs LHB', type: 'pit', higherBetter: false,
+    value: (m) => m.obaVsL, format: fmtAvg,
+    detail: (s, m, tr = jaTr) => `${s.vsL.h}${tr('ha')}/${s.vsL.ab}${tr('abFaced')}`
+      + `  ${tr('vsR')} ${s.vsR.ab ? fmtAvg(m.obaVsR) : tr('noData')}`,
+    qualify: (s) => (s.vsL?.ab || 0) > 0,
+  },
+  {
+    key: 'k7', label: '奪三振率 (7回換算)', en: 'K/7', type: 'pit', higherBetter: true,
+    value: (m) => m.k7, format: fmt2,
+    detail: (s, m, tr = jaTr) => `${s.strikeouts}${tr('kUnit')}/${(s.outsRecorded / 3).toFixed(1)}${tr('ipShort')}`,
+    qualify: (s) => s.outsRecorded > 0,
+  },
+  {
+    key: 'pip', label: '球数/回', en: 'P/IP', type: 'pit', higherBetter: false,
+    value: (m) => m.pip, format: fmt2,
+    detail: (s, m, tr = jaTr) => `${s.pitches}${tr('pitchesShort')}/${(s.outsRecorded / 3).toFixed(1)}${tr('ipShort')}`,
+    qualify: (s) => s.outsRecorded > 0 && s.pitches > 0,
   },
   {
     key: 'holds', label: 'ホールド', en: 'Holds', type: 'pit', higherBetter: true,

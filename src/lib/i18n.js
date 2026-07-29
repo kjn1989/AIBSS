@@ -217,6 +217,8 @@ export const MESSAGES = {
     'stat.ha': '被安打', 'stat.bb': '与四球', 'stat.k': '奪三振', 'stat.abFaced': '被打数',
     'stat.success': '成功', 'stat.chances': '機会', 'stat.obp': '出塁率', 'stat.slg': '長打率',
     'stat.firstPitch': '(初球打ち)', 'stat.clutchDesc': '先制・同点・逆転・勝ち越し打の合計',
+    'stat.vsR': '対右', 'stat.vsL': '対左', 'stat.tb': '塁打', 'stat.kUnit': '奪三振',
+    'stat.ipShort': '回', 'stat.pitchesShort': '球', 'stat.noData': '未入力',
 
     // 試合結果タブ
     'restab.importTitle': '過去の試合を取り込む',
@@ -1043,6 +1045,8 @@ export const MESSAGES = {
     'stat.ha': 'H', 'stat.bb': 'BB', 'stat.k': 'K', 'stat.abFaced': 'AB',
     'stat.success': 'succ', 'stat.chances': 'opp', 'stat.obp': 'OBP', 'stat.slg': 'SLG',
     'stat.firstPitch': ' (1st-pitch)', 'stat.clutchDesc': 'Total of go-ahead / tying / lead-changing hits',
+    'stat.vsR': 'vs R', 'stat.vsL': 'vs L', 'stat.tb': 'TB', 'stat.kUnit': 'K',
+    'stat.ipShort': 'ip', 'stat.pitchesShort': 'P', 'stat.noData': 'n/a',
 
     'restab.importTitle': 'Import Past Games',
     'restab.importDesc': 'Bring paper scorebooks or records from other apps into your stats via a CSV template.',
