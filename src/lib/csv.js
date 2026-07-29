@@ -48,7 +48,7 @@ export function pitchingCSV(games, nameOf) {
     rows.push([
       nameOf(s.playerId), s.games, formatIP(s.outsRecorded), s.pitches, s.runs, s.earnedRuns,
       s.hitsAllowed, s.abFaced, s.walks, s.hitByPitch, s.strikeouts, s.wins, s.saves, s.holds,
-      m.era7 === null ? '-' : m.era7.toFixed(2), fmtAvg(m.oba),
+      m.era === null ? '-' : m.era.toFixed(2), fmtAvg(m.oba),
       m.whip === null ? '-' : m.whip.toFixed(2), m.kbbDisplay,
     ]);
   }

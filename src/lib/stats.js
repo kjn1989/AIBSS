@@ -251,9 +251,10 @@ export function battingMetrics(s) {
 }
 
 // ---- 投手メトリクス ----
-export function pitchingMetrics(s) {
+// basis = 防御率・奪三振率を「何回ぶんに換算するか」。7回制/9回制で分母が変わるため引数にする。
+export function pitchingMetrics(s, basis = 7) {
   const ip = s.outsRecorded / 3;
-  const era7 = ip > 0 ? (s.earnedRuns / ip) * 7 : null; // 8. 防御率(7回換算)
+  const era = ip > 0 ? (s.earnedRuns / ip) * basis : null; // 8. 防御率(basis回換算)
   const whip = ip > 0 ? (s.hitsAllowed + s.walks + s.hitByPitch) / ip : null; // 9. WHIP(被安打+与四死球)
   // 10. K/BB: 与四球0のときは奪三振数を表示し注記
   const kbb = s.walks > 0 ? s.strikeouts / s.walks : null;
@@ -262,9 +263,9 @@ export function pitchingMetrics(s) {
   const oba = div(s.hitsAllowed, s.abFaced); // 被打率 = 被安打 ÷ 被打数
   const obaVsL = div(s.vsL?.h, s.vsL?.ab); // 対左打者被打率
   const obaVsR = div(s.vsR?.h, s.vsR?.ab); // 対右打者被打率
-  const k7 = ip > 0 ? (s.strikeouts / ip) * 7 : null; // 奪三振率(7回換算)
+  const k7 = ip > 0 ? (s.strikeouts / ip) * basis : null; // 奪三振率(basis回換算)
   const pip = ip > 0 ? s.pitches / ip : null; // 1イニングあたりの球数
-  return { ip, era7, whip, kbb, kbbDisplay, kbbSort, oba, obaVsL, obaVsR, k7, pip };
+  return { ip, era, basis, whip, kbb, kbbDisplay, kbbSort, oba, obaVsL, obaVsR, k7, pip };
 }
 
 // ---- 詳細ランキングのメトリクス定義 ----
@@ -349,8 +350,8 @@ export const DETAIL_METRICS = [
     qualify: (s) => s.pa > 0,
   },
   {
-    key: 'era7', label: '防御率 (7回換算)', en: 'ERA (7-inn)', type: 'pit', higherBetter: false,
-    value: (m) => m.era7, format: fmt2,
+    key: 'era7', label: '防御率', en: 'ERA', type: 'pit', higherBetter: false, perInning: true,
+    value: (m) => m.era, format: fmt2,
     detail: (s, m, tr = jaTr) => `${tr('er')}${s.earnedRuns}/${formatIP(s.outsRecorded)}${tr('ipUnit')}`,
     qualify: (s) => s.outsRecorded > 0,
   },
@@ -381,7 +382,7 @@ export const DETAIL_METRICS = [
     qualify: (s) => (s.vsL?.ab || 0) > 0,
   },
   {
-    key: 'k7', label: '奪三振率 (7回換算)', en: 'K/7', type: 'pit', higherBetter: true,
+    key: 'k7', label: '奪三振率', en: 'K rate', type: 'pit', higherBetter: true, perInning: true,
     value: (m) => m.k7, format: fmt2,
     detail: (s, m, tr = jaTr) => `${s.strikeouts}${tr('kUnit')}/${(s.outsRecorded / 3).toFixed(1)}${tr('ipShort')}`,
     qualify: (s) => s.outsRecorded > 0,
@@ -407,12 +408,12 @@ export const DETAIL_METRICS = [
 ];
 
 // 指定メトリクスのランキング行を作る。tr(key) を渡すと内訳の単位語を翻訳する(未指定は日本語)。
-export function detailRanking(metricDef, battingMap, pitchingMap, tr) {
+export function detailRanking(metricDef, battingMap, pitchingMap, tr, basis = 7) {
   const src = metricDef.type === 'bat' ? battingMap : pitchingMap;
   const rows = [];
   for (const s of Object.values(src)) {
     if (!metricDef.qualify(s)) continue;
-    const m = metricDef.type === 'bat' ? battingMetrics(s) : pitchingMetrics(s);
+    const m = metricDef.type === 'bat' ? battingMetrics(s) : pitchingMetrics(s, basis);
     const v = metricDef.value(m, s);
     if (v === null || v === undefined) continue;
     rows.push({
@@ -464,7 +465,7 @@ export function buildStatsSummary(batting, pitching, m, pm) {
     parts.push(`打率${fmtAvg(m.ba)} 本塁打${batting.hr} 打点${batting.rbi} OPS${m.ops === null ? '-' : m.ops.toFixed(3)}`);
   }
   if (pitching && (pitching.outsRecorded > 0 || pitching.games > 0) && pm) {
-    parts.push(`防御率${pm.era7 === null ? '-' : pm.era7.toFixed(2)} 奪三振${pitching.strikeouts} WHIP${pm.whip === null ? '-' : pm.whip.toFixed(2)}`);
+    parts.push(`防御率${pm.era === null ? '-' : pm.era.toFixed(2)} 奪三振${pitching.strikeouts} WHIP${pm.whip === null ? '-' : pm.whip.toFixed(2)}`);
   }
   return parts.join(' / ');
 }
@@ -524,6 +525,18 @@ export function pitchingSplits(games) {
     }
   }
   return map;
+}
+
+// 防御率・奪三振率の「基準イニング」の既定値。
+// 試合に保存されているルール(innings)の最頻値を使い、無ければ7回制とみなす。
+export function defaultInningBasis(games = []) {
+  const count = {};
+  for (const g of games) {
+    const n = g?.rules?.innings;
+    if (n) count[n] = (count[n] || 0) + 1;
+  }
+  const top = Object.entries(count).sort((a, b) => b[1] - a[1])[0];
+  return top ? Number(top[0]) : 7;
 }
 
 // 打率などの表示用: 割り算(分母0はnull)

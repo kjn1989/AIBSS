@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { proposeMoves, judgeAdvance, batterDestOptions } from '../src/lib/plays.js';
 import { gameEndCheck, initialPresetIdFor, describeRules } from '../src/lib/rules.js';
-import { aggregateBatting, aggregatePitching, battingMetrics, pitchingMetrics, titleLeaders, DETAIL_METRICS, detailRanking } from '../src/lib/stats.js';
+import { aggregateBatting, aggregatePitching, battingMetrics, pitchingMetrics, titleLeaders, DETAIL_METRICS, detailRanking, defaultInningBasis } from '../src/lib/stats.js';
 import { translate } from '../src/lib/i18n.js';
 import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, parseDirectionOnly } from '../src/lib/voiceParser.js';
 import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parseInningRange, isExplicitSubText } from '../src/lib/correctionParser.js';
@@ -362,6 +362,32 @@ test('DETAIL_METRICS: 追加した指標がランキングに出せる(母数0�
   // 対左の打席が無い選手はランキングに出さない
   const empty = detailRanking(DETAIL_METRICS.find((m) => m.key === 'baVsL'), { x: aggregateBatting([{ atBats: [{ playerId: 'x', result: 'single' }] }]).x }, {});
   assert.equal(empty.length, 0);
+});
+
+test('pitchingMetrics: 基準イニングで防御率・奪三振率が変わる', () => {
+  const s = { outsRecorded: 21, earnedRuns: 2, hitsAllowed: 6, walks: 2, hitByPitch: 0, strikeouts: 7, pitches: 84, abFaced: 24 };
+  const m7 = pitchingMetrics(s, 7);
+  const m9 = pitchingMetrics(s, 9);
+  assert.equal(m7.era, 2);            // 自責2 / 7回 * 7
+  assert.equal(m9.era.toFixed(2), '2.57'); // 同じ内容でも9回換算だと増える
+  assert.equal(m7.k7, 7);
+  assert.equal(m9.k7, 9);
+  assert.equal(m7.basis, 7);
+  // 既定は7回換算(引数なし)
+  assert.equal(pitchingMetrics(s).era, 2);
+});
+test('defaultInningBasis: 試合のルールから基準イニングの既定値を決める', () => {
+  assert.equal(defaultInningBasis([{ rules: { innings: 9 } }, { rules: { innings: 9 } }, { rules: { innings: 7 } }]), 9);
+  assert.equal(defaultInningBasis([{ rules: { innings: 6 } }]), 6);
+  assert.equal(defaultInningBasis([{ rules: null }, {}]), 7); // ルール未設定は7回制とみなす
+  assert.equal(defaultInningBasis([]), 7);
+});
+test('detailRanking: 基準イニングがランキングの値に反映される', () => {
+  const pit = { p1: { playerId: 'p1', outsRecorded: 21, earnedRuns: 2, hitsAllowed: 6, walks: 2, hitByPitch: 0, strikeouts: 7, pitches: 84, abFaced: 24, vsL: { ab: 0, h: 0 }, vsR: { ab: 0, h: 0 } } };
+  const def = DETAIL_METRICS.find((m) => m.key === 'k7');
+  assert.equal(def.perInning, true);
+  assert.equal(detailRanking(def, {}, pit, undefined, 7)[0].display, '7.00');
+  assert.equal(detailRanking(def, {}, pit, undefined, 9)[0].display, '9.00');
 });
 
 test('parseInningRange: 「3-6回」「3回から6回」などの回の範囲を読む', () => {
@@ -1072,9 +1098,9 @@ test('battingMetrics: 打率・出塁率の分母定義', () => {
   assert.equal(met2.obp, 1); // 出塁率は四球を含む
 });
 
-test('pitchingMetrics: 防御率は7回換算', () => {
+test('pitchingMetrics: 防御率は既定で7回換算', () => {
   const met = pitchingMetrics({ outsRecorded: 21, earnedRuns: 2, hitsAllowed: 5, walks: 2, hitByPitch: 0, strikeouts: 6, abFaced: 25 });
-  assert.equal(met.era7, 2); // 自責2/7回 → 7回換算2.00
+  assert.equal(met.era, 2); // 自責2/7回 → 7回換算2.00
   assert.equal(met.whip, 1);
 });
 
