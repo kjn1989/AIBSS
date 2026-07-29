@@ -40,7 +40,7 @@ function findTopPitcher(pitching, nameOf) {
     ...pick,
     name: nameOf(pick.playerId),
     tag: win ? '勝利投手' : save ? 'セーブ' : '好投',
-    line: `${formatIP(pick.outsRecorded)}回 ${pick.strikeouts}奪三振 自責${pick.earnedRuns} (防御率${m.era7 === null ? '-' : m.era7.toFixed(2)})`,
+    line: `${formatIP(pick.outsRecorded)}回 ${pick.strikeouts}奪三振 自責${pick.earnedRuns} (防御率${m.era === null ? '-' : m.era.toFixed(2)})`,
   };
 }
 

@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useStore, usePlayerName, useT } from '../state/store.jsx';
-import { aggregateBatting, aggregatePitching, pitchingMetrics, DETAIL_METRICS, detailRanking, battingMetrics, fmtAvg, mLabel } from '../lib/stats.js';
+import { aggregateBatting, aggregatePitching, pitchingMetrics, DETAIL_METRICS, detailRanking, battingMetrics, fmtAvg, mLabel, defaultInningBasis } from '../lib/stats.js';
 import { formatIP } from '../lib/model.js';
 import GameScopeToggle, { scopedGames } from './GameScopeToggle.jsx';
 import PlayerView from './PlayerView.jsx';
@@ -17,13 +17,20 @@ export default function StatsTab() {
   const [scope, setScope] = useState({ scope: 'season', gameId: null });
   const [metricKey, setMetricKey] = useState('ba');
   const [playerId, setPlayerId] = useState(null); // 選手個人ページ
+  // 防御率・奪三振率の基準イニング。既定は試合のルール(7回制/9回制)から。
+  // 全体設定にはせず、その指標を見ている画面でその場で切り替えられるようにする。
+  const [basis, setBasis] = useState(null);
 
   const games = scopedGames(state, scope);
+  const autoBasis = useMemo(() => defaultInningBasis(games), [games]);
+  const inningBasis = basis ?? autoBasis;
+  // 選べる基準: 7回・9回 + そのチームの実際の回数(学童6回など)
+  const basisOptions = [...new Set([7, 9, autoBasis])].sort((a, b) => a - b);
   const batting = useMemo(() => aggregateBatting(games), [games]);
   const pitching = useMemo(() => aggregatePitching(games), [games]);
 
   const metric = DETAIL_METRICS.find((m) => m.key === metricKey);
-  const rows = useMemo(() => detailRanking(metric, batting, pitching, statTr), [metric, batting, pitching, lang]);
+  const rows = useMemo(() => detailRanking(metric, batting, pitching, statTr, inningBasis), [metric, batting, pitching, lang, inningBasis]);
 
   const batMetrics = DETAIL_METRICS.filter((m) => m.type === 'bat');
   const pitMetrics = DETAIL_METRICS.filter((m) => m.type === 'pit');
@@ -54,6 +61,23 @@ export default function StatsTab() {
 
       <div className="card mt16">
         <h2>{t('stats.ranking', { label: mLabel(metric, lang) })} {metric.higherBetter ? '' : t('stats.lowerBetter')}</h2>
+        {/* 回数換算の指標だけ、ここで基準イニングを選べる(7回制/9回制で意味が変わるため) */}
+        {metric.perInning && (
+          <div className="basis-pick">
+            <span className="small dim">{t('stats.basis')}</span>
+            <div className="seg-control mini" role="tablist" aria-label={t('stats.basis')}>
+              {basisOptions.map((n) => (
+                <button
+                  key={n} role="tab" aria-selected={inningBasis === n}
+                  className={inningBasis === n ? 'on' : ''}
+                  onClick={() => setBasis(n)}
+                >
+                  {t('stats.basisN', { n })}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {rows.length === 0 ? (
           <div className="dim small">{t('stats.noData')}</div>
         ) : (
@@ -160,7 +184,7 @@ function PitchingSummaryTable({ pitching, nameOf, onOpenPlayer }) {
                 <tr key={s.playerId} onClick={() => onOpenPlayer?.(s.playerId)} role="button">
                   <td style={{ color: 'var(--accent)', fontWeight: 700 }}>{nameOf(s.playerId)}</td>
                   <td className="num">{formatIP(s.outsRecorded)}</td>
-                  <td className="num">{m.era7 === null ? '-' : m.era7.toFixed(2)}</td>
+                  <td className="num">{m.era === null ? '-' : m.era.toFixed(2)}</td>
                   <td className="num">{m.oba === null ? '-' : m.oba.toFixed(3).replace(/^0\./, '.')}</td>
                   <td className="num">{m.whip === null ? '-' : m.whip.toFixed(2)}</td>
                   <td className="num">{s.strikeouts}</td>

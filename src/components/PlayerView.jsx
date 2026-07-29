@@ -101,7 +101,7 @@ export default function PlayerView({ playerId, games, onClose }) {
             <h2>{t('pv.pitching')}</h2>
             <div className="player-stat-grid">
               <div><div className="dim small">{t('pv.ip')}</div><b>{formatIP(pitching.outsRecorded)}</b></div>
-              <div><div className="dim small">{t('pv.era')}</div><b>{pm.era7 === null ? '-' : pm.era7.toFixed(2)}</b></div>
+              <div><div className="dim small">{t('pv.era')}</div><b>{pm.era === null ? '-' : pm.era.toFixed(2)}</b></div>
               <div><div className="dim small">{t('pv.k')}</div><b>{pitching.strikeouts}</b></div>
               <div><div className="dim small">{t('pv.whip')}</div><b>{pm.whip === null ? '-' : pm.whip.toFixed(2)}</b></div>
               <div><div className="dim small">{t('pv.wsh')}</div><b>{pitching.wins}/{pitching.saves}/{pitching.holds}</b></div>

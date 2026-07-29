@@ -194,6 +194,8 @@ export const MESSAGES = {
     // 成績タブ
     'stats.battingMetrics': '打者メトリクス',
     'stats.pitchingMetrics': '投手メトリクス',
+    'stats.basis': '基準',
+    'stats.basisN': '{n}回',
     'stats.ranking': '{label} ランキング',
     'stats.lowerBetter': '(小さいほど上位)',
     'stats.noData': '対象データがありません(分母0の選手は「-」扱いで除外)。',
@@ -1023,6 +1025,8 @@ export const MESSAGES = {
 
     'stats.battingMetrics': 'Batting Metrics',
     'stats.pitchingMetrics': 'Pitching Metrics',
+    'stats.basis': 'Basis',
+    'stats.basisN': '{n} inn',
     'stats.ranking': '{label} Ranking',
     'stats.lowerBetter': '(lower is better)',
     'stats.noData': 'No qualifying data (players with a 0 denominator are shown as “-” and excluded).',
