@@ -54,27 +54,20 @@ function OppHandToggle({ game, which, letter, allowSwitch = false, compact = fal
   const opts = allowSwitch ? ['R', 'L', 'S'] : ['R', 'L'];
   const set = (h) => dispatch({ type: 'SET_OPP_HAND', gameId: game.id, which, letter, hand: cur === h ? '' : h });
   const label = which === 'pitcher' ? t('score.handP') : t('score.handB');
-  // compact: 打者名を出す幅を確保するため、1つのボタンで「未設定→右→左→両」と切り替える。
-  // (3つ並べると390px幅で名前の枠が0pxまで潰れてしまう)
-  if (compact) {
-    const cycle = ['', ...opts];
-    const next = cycle[(cycle.indexOf(cur) + 1) % cycle.length];
-    return (
-      <button
-        className={`hl-btn hand-cycle${cur ? ' on' : ''}`}
-        title={t('score.handCycle', { label })}
-        aria-label={t('score.handCycle', { label })}
-        onClick={(e) => { e.stopPropagation(); dispatch({ type: 'SET_OPP_HAND', gameId: game.id, which, letter, hand: next }); }}
-      >
-        {label}{cur ? t(`hand.${cur}`) : '—'}
-      </button>
-    );
-  }
+  // compact: 打者名の幅を確保するため「打」の見出しを省いて詰める。
+  // 選択式(3つ並べ)は初見でも分かるので形は変えない。
   return (
-    <div className="hand-inline">
-      <span className="small dim">{label}</span>
+    <div className={`hand-inline${compact ? ' tight' : ''}`}>
+      {!compact && <span className="small dim">{label}</span>}
       {opts.map((h) => (
-        <button key={h} className={`hl-btn ${cur === h ? 'on' : ''}`} onClick={(e) => { e.stopPropagation(); set(h); }}>{t(`hand.${h}`)}</button>
+        <button
+          key={h}
+          className={`hl-btn ${cur === h ? 'on' : ''}`}
+          aria-label={t('score.handPick', { label, hand: t(`hand.${h}`) })}
+          onClick={(e) => { e.stopPropagation(); set(h); }}
+        >
+          {t(`hand.${h}`)}
+        </button>
       ))}
     </div>
   );
