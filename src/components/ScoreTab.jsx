@@ -46,16 +46,33 @@ function AtBatHistory({ items, edition, lang }) {
 
 // ---- 相手投手/相手打者の左右を任意入力する小さなトグル(左右別スタッツ用) ----
 // 記号(letter)ごとに R/L(打者は両=S)を game に保存。空=未設定は集計対象外。
-function OppHandToggle({ game, which, letter, allowSwitch = false }) {
+function OppHandToggle({ game, which, letter, allowSwitch = false, compact = false }) {
   const { dispatch } = useStore();
   const t = useT();
   if (!letter) return null;
   const cur = (which === 'pitcher' ? game.oppPitcherHands : game.oppBatterHands)?.[letter] || '';
   const opts = allowSwitch ? ['R', 'L', 'S'] : ['R', 'L'];
   const set = (h) => dispatch({ type: 'SET_OPP_HAND', gameId: game.id, which, letter, hand: cur === h ? '' : h });
+  const label = which === 'pitcher' ? t('score.handP') : t('score.handB');
+  // compact: 打者名を出す幅を確保するため、1つのボタンで「未設定→右→左→両」と切り替える。
+  // (3つ並べると390px幅で名前の枠が0pxまで潰れてしまう)
+  if (compact) {
+    const cycle = ['', ...opts];
+    const next = cycle[(cycle.indexOf(cur) + 1) % cycle.length];
+    return (
+      <button
+        className={`hl-btn hand-cycle${cur ? ' on' : ''}`}
+        title={t('score.handCycle', { label })}
+        aria-label={t('score.handCycle', { label })}
+        onClick={(e) => { e.stopPropagation(); dispatch({ type: 'SET_OPP_HAND', gameId: game.id, which, letter, hand: next }); }}
+      >
+        {label}{cur ? t(`hand.${cur}`) : '—'}
+      </button>
+    );
+  }
   return (
     <div className="hand-inline">
-      <span className="small dim">{which === 'pitcher' ? t('score.handP') : t('score.handB')}</span>
+      <span className="small dim">{label}</span>
       {opts.map((h) => (
         <button key={h} className={`hl-btn ${cur === h ? 'on' : ''}`} onClick={(e) => { e.stopPropagation(); set(h); }}>{t(`hand.${h}`)}</button>
       ))}
@@ -661,7 +678,7 @@ export default function ScoreTab() {
                 )
                 : <div className="sit-eye">{t('score.oppBatterMeta', { order: '-' })}</div>}
             </div>
-            {oppBatter && <OppHandToggle game={game} which="batter" letter={oppBatter.letter} allowSwitch />}
+            {oppBatter && <OppHandToggle game={game} which="batter" letter={oppBatter.letter} allowSwitch compact />}
             {oppBatter && <button className="pill blue sit-changebtn" onClick={() => setSheet({ kind: 'oppBatter' })}>{t('score.oppChange')}</button>}
           </div>
           {oppBatter && (

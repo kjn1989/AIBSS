@@ -371,8 +371,9 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 
 /* 状況カード: 小型ダイヤ + 打者 + 展開トグルを横並び */
 .sit-card { padding: 10px 12px; }
-.sit-row { display: flex; align-items: center; gap: 12px; }
-.sit-batter { flex: 1; min-width: 26px; }
+.sit-row { display: flex; align-items: center; gap: 8px; }
+/* 打者名の枠。周りに詰められて幅0になると名前が消えるため、下限を確保する */
+.sit-batter { flex: 1 1 auto; min-width: 44px; }
 .sit-eye { font-size: 9px; font-weight: 800; letter-spacing: .12em; color: var(--text-dim); margin: 0 0 3px 1px; }
 .sit-eye b { color: var(--gold); font-weight: 900; }
 .sit-main { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; overflow: visible; min-width: 0; }
@@ -416,6 +417,12 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .scoretab .hand-inline { margin: 0; gap: 3px; flex: none; }
 .scoretab .hand-inline .small { font-size: 9.5px; }
 .scoretab .hand-inline .hl-btn { min-height: 24px; padding: 2px 5px; font-size: 11px; }
+/* 相手打者の左右: 1ボタンで巡回(名前を出す幅を確保するための省スペース版) */
+.scoretab .hand-cycle {
+  flex: none; min-height: 28px; min-width: 38px; padding: 2px 6px;
+  font-size: 11px; font-weight: 800; letter-spacing: -.02em;
+}
+.scoretab .hand-cycle.on { background: var(--bg-3); border-color: var(--accent); color: var(--accent); }
 /* LEDボードの詰め */
 .scoretab .led-board { padding: 2px 9px; }
 .scoretab .led-pcpair { margin-top: 3px; padding-top: 3px; }
