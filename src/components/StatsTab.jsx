@@ -6,6 +6,7 @@ import GameScopeToggle, { scopedGames } from './GameScopeToggle.jsx';
 import PlayerView from './PlayerView.jsx';
 import MemberSection from './MemberSection.jsx';
 import TitleCards from './TitleCards.jsx';
+import MatchupCard from './MatchupCard.jsx';
 
 // 成績・詳細ランキング(10大メトリクス) + 投手成績(旧「投手」タブを統合)
 export default function StatsTab() {
@@ -107,6 +108,7 @@ export default function StatsTab() {
 
       <BattingSummaryTable batting={batting} nameOf={nameOf} onOpenPlayer={setPlayerId} />
       <PitchingSummaryTable pitching={pitching} nameOf={nameOf} onOpenPlayer={setPlayerId} />
+      <MatchupCard games={games} onOpenPlayer={setPlayerId} />
       <p className="small dim" style={{ textAlign: 'center', marginBottom: 12 }}>
         {t('stats.tapHint')}
       </p>
