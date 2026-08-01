@@ -530,6 +530,10 @@ export const MESSAGES = {
     'set.dl': '⬇ DL',
     'set.shareBtn': '📤 共有',
     'set.noExportGames': '出力対象の試合がありません。',
+    'set.buildTitle': 'アプリのバージョン',
+    'set.buildOf': 'ビルド {sha}（{time} UTC）',
+    'set.buildReload': '最新に更新',
+    'set.buildHint': '「直したのに反映されない」ときはここを確認してください。数字が変わらない場合は、まだ新しいビルドが端末に届いていません。「最新に更新」でキャッシュを消して読み込み直します。',
     'set.dataMgmt': 'データ管理',
     'set.dataMgmtDesc': 'データはこの端末のブラウザ内(localStorage)に自動保存され、オフラインでも完全動作します。クラウド共有を有効にすると、同じチームコードを設定した全員の端末とリアルタイム同期します。',
 
@@ -1354,6 +1358,10 @@ export const MESSAGES = {
     'set.dl': '⬇ DL',
     'set.shareBtn': '📤 Share',
     'set.noExportGames': 'No games to export.',
+    'set.buildTitle': 'App version',
+    'set.buildOf': 'Build {sha} ({time} UTC)',
+    'set.buildReload': 'Update to latest',
+    'set.buildHint': 'Check here when a fix does not seem to apply. If the id has not changed, the new build has not reached this device yet. “Update to latest” clears the cache and reloads.',
     'set.dataMgmt': 'Data Management',
     'set.dataMgmtDesc': 'Data is auto-saved in this device’s browser (localStorage) and works fully offline. Enable cloud sharing to sync in real time with everyone who set the same team code.',
 

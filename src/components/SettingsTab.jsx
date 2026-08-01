@@ -256,6 +256,38 @@ export default function SettingsTab() {
           {t('set.dataMgmtDesc')}
         </p>
       </div>
+
+      <BuildInfoCard />
+    </div>
+  );
+}
+
+// 動いているビルドの識別子。「直したのに反映されない」ときに、
+// 端末が新しいビルドを読めているかをその場で確認できるようにする。
+function BuildInfoCard() {
+  const t = useT();
+  const info = typeof __BUILD_INFO__ === 'undefined' ? { sha: 'dev', time: '' } : __BUILD_INFO__;
+  const reload = async () => {
+    try {
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((r) => r.unregister()));
+      }
+      if (window.caches) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      }
+    } catch { /* 失敗しても再読込は試す */ }
+    window.location.reload();
+  };
+  return (
+    <div className="card">
+      <div className="section-title" style={{ marginTop: 0 }}>{t('set.buildTitle')}</div>
+      <div className="row">
+        <span className="grow small dim">{t('set.buildOf', { sha: info.sha, time: info.time })}</span>
+        <button className="small" onClick={reload}>{t('set.buildReload')}</button>
+      </div>
+      <p className="small dim" style={{ marginBottom: 0 }}>{t('set.buildHint')}</p>
     </div>
   );
 }
