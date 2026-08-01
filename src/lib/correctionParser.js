@@ -458,3 +458,25 @@ export function findTargetAtBat(game, parsed) {
   if (candidates.length > 1) return { ok: false, reason: 'ambiguous', matches: candidates };
   return { ok: true, log: candidates[0] };
 }
+
+// この試合に出ている選手IDの集合を作る。
+// (同名の二重登録がある名簿から「本人」を選び直すために使う)
+export function inGamePlayerIds(game) {
+  return new Set([
+    ...(game?.lineup || []).map((l) => l.playerId),
+    ...(game?.startingLineup || []).map((l) => l.playerId),
+    ...(game?.atBats || []).map((a) => a.playerId),
+    ...(game?.playLogs || []).flatMap((l) => [l.payload?.playerId, l.payload?.in, l.payload?.out]),
+  ].filter(Boolean));
+}
+
+// 同名で二重登録された選手を1人に畳む。この試合に出ている方を優先する。
+// 出ていない方のIDを掴むと、その回の打席が見つからず修正が黙って捨てられるため。
+export function preferInGamePlayers(players, inThisGame) {
+  const byName = new Map();
+  for (const p of players || []) {
+    const cur = byName.get(p.name);
+    if (!cur || (!inThisGame.has(cur.id) && inThisGame.has(p.id))) byName.set(p.name, p);
+  }
+  return [...byName.values()];
+}

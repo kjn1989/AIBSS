@@ -3,7 +3,7 @@ import { useStore, usePlayerName, useT } from '../state/store.jsx';
 import { RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES, resultCategory, multiOutLabel, outTypeLabel } from '../lib/model.js';
 import { playLabel } from '../lib/voiceParser.js';
 import { computeBoxScore } from '../lib/boxscore.js';
-import { parseBatterCorrection, findTargetAtBat, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parseSlotBatters, parseAtBatDeletions, isExplicitSubText } from '../lib/correctionParser.js';
+import { parseBatterCorrection, findTargetAtBat, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parseSlotBatters, parseAtBatDeletions, isExplicitSubText, inGamePlayerIds, preferInGamePlayers } from '../lib/correctionParser.js';
 import { posFull, buildLineupRows, findPositionIssues, alignmentByInning } from '../lib/lineupBox.js';
 import { findDuplicateAtBats, canRebuildOrders, findOrderBreaks } from '../lib/battersRebuild.js';
 import { oppNameOf } from '../lib/oppBox.js';
@@ -270,17 +270,15 @@ function NLCorrectionCard({ game }) {
   });
   // 同名で二重登録された選手がいる場合、この試合に既に出ている方を優先して選ぶ
   // (別レコードを掴むと「同じ人」と繋がらず、打順移動や成績が分断されるため)。
-  const inThisGame = new Set([
-    ...(game.lineup || []).map((l) => l.playerId),
-    ...(game.startingLineup || []).map((l) => l.playerId),
-    ...(game.atBats || []).map((a) => a.playerId),
-    ...(game.playLogs || []).flatMap((l) => [l.payload?.playerId, l.payload?.in, l.payload?.out]),
-  ].filter(Boolean));
+  const inThisGame = inGamePlayerIds(game);
   const idByName = (nm) => {
     const matches = state.players.filter((p) => p.name === nm);
     return (matches.find((p) => inThisGame.has(p.id)) || matches[0])?.id || null;
   };
   const clean = (v) => (v && v !== 'null' ? v : null);
+  // 端末内の解析に渡す名簿。同名が二重登録されている場合、この試合に出ている方を選ぶ。
+  // (出ていない方のIDを掴むと、その回の打席が見つからず修正が黙って捨てられる)
+  const parsePlayers = preferInGamePlayers(state.players, inThisGame);
 
   // AIの操作配列 → 中間表現(regexパスと同形 { subs, reassigns, resultCorrs })
   const aiOpsToIntermediate = (ops) => {
@@ -315,13 +313,13 @@ function NLCorrectionCard({ game }) {
     return { subs, reassigns, resultCorrs, posCorrs, aligns };
   };
   const produceRegex = () => ({
-    subs: parseSubstitutions(text, state.players),
-    reassigns: parseBatterReassignments(text, state.players),
-    resultCorrs: parseResultCorrections(text, state.players),
-    posCorrs: parsePositionCorrections(text, state.players),
-    aligns: parseDefensiveAlignment(text, state.players),
-    slotBatters: parseSlotBatters(text, state.players),
-    deletions: parseAtBatDeletions(text, state.players),
+    subs: parseSubstitutions(text, parsePlayers),
+    reassigns: parseBatterReassignments(text, parsePlayers),
+    resultCorrs: parseResultCorrections(text, parsePlayers),
+    posCorrs: parsePositionCorrections(text, parsePlayers),
+    aligns: parseDefensiveAlignment(text, parsePlayers),
+    slotBatters: parseSlotBatters(text, parsePlayers),
+    deletions: parseAtBatDeletions(text, parsePlayers),
   });
   const isEmpty = (im) => !(im.subs.length || im.reassigns.length || im.resultCorrs.length || im.posCorrs.length || im.aligns.length || (im.slotBatters || []).length || (im.deletions || []).length);
 
@@ -608,6 +606,13 @@ function NLCorrectionCard({ game }) {
       if (rc.batterId) {
         const l = (game.playLogs || []).find((x) => x.kind === 'atbat'
           && Number(x.inning) === Number(rc.inning) && x.payload?.playerId === rc.batterId);
+        if (l) logId = l.id;
+      }
+      // IDで見つからないときは同名の選手すべてで探す(二重登録が残っている試合の救済)
+      if (!logId && rc.batterName) {
+        const sameName = new Set(state.players.filter((p) => p.name === rc.batterName).map((p) => p.id));
+        const l = (game.playLogs || []).find((x) => x.kind === 'atbat'
+          && Number(x.inning) === Number(rc.inning) && sameName.has(x.payload?.playerId));
         if (l) logId = l.id;
       }
       if (!logId) logId = inningToLog.get(rc.inning);
