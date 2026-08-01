@@ -7,6 +7,7 @@ import StatsTab from './components/StatsTab.jsx';
 import ResultTab from './components/ResultTab.jsx';
 import SettingsTab from './components/SettingsTab.jsx';
 import CloudSync from './components/CloudSync.jsx';
+import PersistWarning from './components/PersistWarning.jsx';
 import UndoSnackbar from './components/UndoSnackbar.jsx';
 import { decodeConfig } from './components/WatchView.jsx';
 import { officialAvailable, currentUserAsync, loginWithPassword, joinByInvite } from './lib/officialCloud.js';
@@ -113,6 +114,7 @@ export default function App() {
   return (
     <div className="app" data-edition={state.settings.edition || '草野球'}>
       <CloudSync />
+      <PersistWarning />
       {officialJoin.token && (
         <div className="invite-overlay">
           <div className="invite-card">
