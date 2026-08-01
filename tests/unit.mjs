@@ -11,7 +11,7 @@ import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstit
 import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarters, findPositionIssues } from '../src/lib/lineupBox.js';
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
 import { newGame } from '../src/lib/model.js';
-import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf, oppLettersInGame } from '../src/lib/oppBox.js';
+import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf, oppLettersInGame, oppBaserunning } from '../src/lib/oppBox.js';
 import { remapPlayerInGame, fillPlayerGaps } from '../src/lib/mergePlayers.js';
 import { computeBoxScore } from '../src/lib/boxscore.js';
 import { buildMatchups, opponentSummaries, oppPitcherByAtBat, oppPlayerKey, normalizeName } from '../src/lib/matchup.js';
@@ -1313,4 +1313,21 @@ test('normalizeName / opponentSummaries: 表記ゆれを吸収してチーム別
   ]);
   assert.equal(rows.length, 1);
   assert.deepEqual([rows[0].games, rows[0].win, rows[0].lose, rows[0].rs, rows[0].ra], [2, 1, 1, 11, 9]);
+});
+
+test('oppBaserunning: 相手の盗塁・盗塁死を走者の記号ごとに数える', () => {
+  // 相手走者は letter で識別する。自軍走者(playerId側)は混ざらない。
+  const g = { playLogs: [
+    { id: 'a', kind: 'sb', isTop: false, text: '盗塁', payload: { letter: 'C', playerId: null } },
+    { id: 'b', kind: 'sb', isTop: false, text: '盗塁', payload: { letter: 'C', playerId: null } },
+    { id: 'c', kind: 'runner', isTop: false, text: '盗塁死', payload: { letter: 'C', playerId: null } },
+    { id: 'd', kind: 'sb', isTop: false, text: '盗塁', payload: { letter: 'A', playerId: null } },
+    { id: 'e', kind: 'sb', isTop: true, text: '盗塁', payload: { letter: null, playerId: 'p1' } }, // 自軍
+    { id: 'f', kind: 'runner', isTop: false, text: '暴投', payload: { letter: 'A', playerId: null } }, // 盗塁ではない
+  ] };
+  const rows = oppBaserunning(g);
+  assert.deepEqual(rows.map((r) => [r.letter, r.sb, r.cs, r.att]), [['C', 2, 1, 3], ['A', 1, 0, 1]]);
+  assert.equal(rows[0].rate.toFixed(3), '0.667');
+  // 走塁の記録が無い相手は行そのものが出ない(0と「記録なし」を混同しないため)
+  assert.deepEqual(oppBaserunning({ playLogs: [] }), []);
 });

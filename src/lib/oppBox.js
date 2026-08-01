@@ -177,3 +177,25 @@ export function oppLettersInGame(game) {
   for (const l of oppPitcherLetters(game)) if (!out.includes(l)) out.push(l);
   return out;
 }
+
+// 相手の走塁(盗塁・盗塁死)を記号ごとに集計する。
+// 走者イベントのログには、自軍走者なら playerId、相手走者なら letter が入る。
+// 相手の攻撃はビジター/ホームで半回が変わるため、isTop ではなく letter の有無で見分ける。
+export function oppBaserunning(game) {
+  const map = new Map();
+  const get = (letter) => {
+    if (!map.has(letter)) map.set(letter, { letter, sb: 0, cs: 0, att: 0, rate: null });
+    return map.get(letter);
+  };
+  for (const l of game?.playLogs || []) {
+    const letter = l.payload?.letter;
+    if (!letter) continue; // 自軍の走者(playerId側)はここでは扱わない
+    if (l.kind === 'sb') get(letter).sb += 1;
+    else if (l.kind === 'runner' && l.text === '盗塁死') get(letter).cs += 1;
+  }
+  for (const s of map.values()) {
+    s.att = s.sb + s.cs;
+    s.rate = s.att > 0 ? s.sb / s.att : null; // 企図0は「-」表示にして0%と区別する
+  }
+  return [...map.values()].sort((a, b) => b.att - a.att || a.letter.localeCompare(b.letter));
+}
