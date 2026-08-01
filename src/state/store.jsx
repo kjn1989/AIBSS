@@ -139,16 +139,46 @@ function ensureOppFields(g) {
   return out;
 }
 
+// 保存の失敗(localStorageの容量超過など)を画面へ伝えるための購読口。
+// 黙って保存をやめるのが一番危ない: 画面は動き続けるのに記録だけが残らず、
+// リロードした瞬間にその試合が消える。必ず知らせて書き出しを促す。
+let persistState = { ok: true, error: null, at: 0 };
+const persistSubs = new Set();
+export function subscribePersistStatus(fn) {
+  persistSubs.add(fn);
+  fn(persistState);
+  return () => persistSubs.delete(fn);
+}
+function setPersistStatus(next) {
+  if (next.ok === persistState.ok && next.error === persistState.error) return;
+  persistState = { ...next, at: Date.now() };
+  for (const fn of persistSubs) { try { fn(persistState); } catch { /* 購読側の失敗は無視 */ } }
+}
+export function getPersistStatus() { return persistState; }
+
 export function persist(state) {
+  let json;
+  let key;
   try {
     const out = {};
     for (const k of PERSIST_KEYS) out[k] = state[k];
-    const json = JSON.stringify(out);
-    const key = currentStorageKey();
+    json = JSON.stringify(out);
+    key = currentStorageKey();
+  } catch (e) {
+    setPersistStatus({ ok: false, error: 'serialize' });
+    return;
+  }
+  // IndexedDB を先に書く。localStorage は 5MB 前後で頭打ちになるが IDB は桁違いに
+  // 余裕があるため、先に書いておけば容量超過でも記録そのものは残る。
+  // (以前は setItem が先で、容量超過の例外でミラーまで到達していなかった)
+  idbSave(key, json);
+  try {
     localStorage.setItem(key, json);
-    idbSave(key, json); // IndexedDBミラー(非同期・失敗は無視。データ消失対策の二重化)
-  } catch {
-    /* 容量超過等は無視(次回保存で回復) */
+    setPersistStatus({ ok: true, error: null });
+  } catch (e) {
+    // 容量超過。IDB には書けているので即座に失うわけではないが、
+    // 二重化が崩れた状態なので利用者に知らせる。
+    setPersistStatus({ ok: false, error: e?.name === 'QuotaExceededError' || /quota/i.test(e?.message || '') ? 'quota' : 'unknown' });
   }
 }
 
