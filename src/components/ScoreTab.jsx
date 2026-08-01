@@ -106,12 +106,22 @@ function customFromRules(rules) {
 }
 
 // ルール選択UI(プリセット選択+カスタム入力+説明)。作成時・変更時で共用。
-function RulePicker({ presetId, custom, edition, onPresetChange, setCustom }) {
+function RulePicker({ presetId, custom, edition, onPresetChange, setCustom, allowReentry, setAllowReentry }) {
   const t = useT();
   const { state } = useStore();
   const lang = state.settings.lang || 'ja';
   return (
     <>
+      {setAllowReentry && (
+        <>
+          <label className="small dim" style={{ display: 'block' }}>{t('score.reentry')}</label>
+          <div className="toggle-row" style={{ marginBottom: 10 }}>
+            <button className={!allowReentry ? 'active' : ''} onClick={() => setAllowReentry(false)}>{t('score.reentryOff')}</button>
+            <button className={allowReentry ? 'active' : ''} onClick={() => setAllowReentry(true)}>{t('score.reentryOn')}</button>
+          </div>
+          <p className="small dim" style={{ marginTop: -4 }}>{t('score.reentryHint')}</p>
+        </>
+      )}
       <label className="small dim" style={{ display: 'block' }}>{t('score.rules')}</label>
       <select value={presetId} onChange={(e) => onPresetChange(e.target.value)}>
         {RULE_PRESETS.map((p) => (
@@ -167,6 +177,8 @@ function GameSetup() {
   // ルール選択: 前回の選択を記憶(ただしエディションが一致する場合のみ)。初回はエディションの既定プリセット
   const [presetId, setPresetId] = useState(initialPresetIdFor(state.settings.lastRulePresetId, edition));
   const [custom, setCustom] = useState(EMPTY_CUSTOM);
+  // リエントリー(再出場)を認める試合か。前回の選択を初期値にする
+  const [allowReentry, setAllowReentry] = useState(!!state.settings.lastAllowReentry);
   const ongoing = Object.values(state.games).filter((g) => g.status === 'ongoing' && !g.id.startsWith('demo-'));
   // 既存試合で使われたシーズン名(サジェスト用)
   const knownSeasons = [...new Set(Object.values(state.games).map((g) => g.season).filter(Boolean))];
@@ -178,8 +190,9 @@ function GameSetup() {
   };
 
   const startGame = () => {
-    dispatch({ type: 'CREATE_GAME', payload: { opponent, isHome, season: season.trim(), rules: resolveRulesFrom(presetId, custom) } });
-    dispatch({ type: 'UPDATE_SETTINGS', patch: { lastRulePresetId: presetId } });
+    dispatch({ type: 'CREATE_GAME', payload: { opponent, isHome, season: season.trim(), rules: resolveRulesFrom(presetId, custom), allowReentry } });
+    // 次の試合でも同じ設定から始められるよう、選択を覚えておく
+    dispatch({ type: 'UPDATE_SETTINGS', patch: { lastRulePresetId: presetId, lastAllowReentry: allowReentry } });
   };
 
   return (
@@ -205,7 +218,11 @@ function GameSetup() {
           <button className={isHome ? 'active' : ''} onClick={() => setIsHome(true)}>{t('gamesetup.second')}</button>
         </div>
 
-        <RulePicker presetId={presetId} custom={custom} edition={edition} onPresetChange={onPresetChange} setCustom={setCustom} />
+        <RulePicker
+          presetId={presetId} custom={custom} edition={edition}
+          onPresetChange={onPresetChange} setCustom={setCustom}
+          allowReentry={allowReentry} setAllowReentry={setAllowReentry}
+        />
 
         <button className="primary" style={{ width: '100%' }} onClick={startGame}>
           {t('gamesetup.start')}

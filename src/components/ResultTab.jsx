@@ -154,6 +154,18 @@ export default function ResultTab() {
               value={game.opponent || ''}
               onChange={(e) => dispatch({ type: 'UPDATE_GAME_META', id: game.id, patch: { opponent: e.target.value } })}
             />
+            <label className="small dim mt8" style={{ display: 'block' }}>{t('score.reentry')}</label>
+            <div className="toggle-row" style={{ marginBottom: 4 }}>
+              <button
+                className={!game.allowReentry ? 'active' : ''}
+                onClick={() => dispatch({ type: 'UPDATE_GAME_META', id: game.id, patch: { allowReentry: false } })}
+              >{t('score.reentryOff')}</button>
+              <button
+                className={game.allowReentry ? 'active' : ''}
+                onClick={() => dispatch({ type: 'UPDATE_GAME_META', id: game.id, patch: { allowReentry: true } })}
+              >{t('score.reentryOn')}</button>
+            </div>
+            <p className="small dim" style={{ marginTop: 0 }}>{t('score.reentryHint')}</p>
             <label className="small dim mt8" style={{ display: 'block' }}>{t('restab.date')}</label>
             <input
               type="date"
