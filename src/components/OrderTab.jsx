@@ -20,7 +20,8 @@ export function SubstituteSheet({ game, slot, onClose, initialKind = 'ph' }) {
 
   const inLineup = new Set(game.lineup.map((l) => l.playerId));
   const candidates = state.players.filter((p) => !inLineup.has(p.id));
-  const isRetired = playerId && game.retiredPlayerIds.includes(playerId);
+  // リエントリーを認めている試合では、再出場は正常なので警告しない
+  const isRetired = playerId && game.retiredPlayerIds.includes(playerId) && !game.allowReentry;
   const kindLabel = t(`order.sub.${kind}`);
 
   const runnerBase = [1, 2, 3].find((b) => game.runners[b]?.playerId === slot.playerId);

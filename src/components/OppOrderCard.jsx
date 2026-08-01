@@ -89,7 +89,8 @@ export function OppSubstituteSheet({ game, slot, onClose, initialKind = 'ph' }) 
 
   const inLineup = new Set(game.oppLineup.map((l) => l.letter));
   const candidates = OPP_LETTERS.filter((l) => !inLineup.has(l));
-  const isRetired = letter && game.oppRetiredLetters.includes(letter);
+  // リエントリーを認めている試合では、再出場は正常なので警告しない
+  const isRetired = letter && game.oppRetiredLetters.includes(letter) && !game.allowReentry;
   const kindLabel = t(`order.sub.${kind}`);
 
   const runnerBase = [1, 2, 3].find((b) => game.runners[b]?.letter === slot.letter);

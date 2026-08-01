@@ -10,6 +10,7 @@ import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfi
 import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parseInningRange, parseSlotBatters, isExplicitSubText } from '../src/lib/correctionParser.js';
 import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarters, findPositionIssues } from '../src/lib/lineupBox.js';
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
+import { newGame } from '../src/lib/model.js';
 import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf, oppLettersInGame } from '../src/lib/oppBox.js';
 import { remapPlayerInGame, fillPlayerGaps } from '../src/lib/mergePlayers.js';
 import { computeBoxScore } from '../src/lib/boxscore.js';
@@ -388,6 +389,11 @@ test('detailRanking: 基準イニングがランキングの値に反映され�
   assert.equal(def.perInning, true);
   assert.equal(detailRanking(def, {}, pit, undefined, 7)[0].display, '7.00');
   assert.equal(detailRanking(def, {}, pit, undefined, 9)[0].display, '9.00');
+});
+
+test('newGame: リエントリー可否は試合ごとに持ち、既定は「なし」', () => {
+  assert.equal(newGame({}).allowReentry, false);
+  assert.equal(newGame({ allowReentry: true }).allowReentry, true);
 });
 
 test('parseSlotBatters: 打順を指定した打者の訂正(「7回の8番は奥田です」)', () => {
