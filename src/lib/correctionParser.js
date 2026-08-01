@@ -350,8 +350,35 @@ export function parseSlotBatters(rawText, players = []) {
 const DIR_CHAR = { 投: 'P', 捕: 'C', 一: '1B', 二: '2B', 三: '3B', 遊: 'SS', 左: 'LF', 中: 'CF', 右: 'RF' };
 function directionFromShort(phrase) {
   // 方向の1文字＋結果語が続く形だけを見る(「中島」のような名前に引っかからないように)
-  const m = phrase.match(/([投捕一二三遊左中右])\s*(?:犠飛|犠打|飛|ゴ|直|安|本|塁打|[23２３])/);
+  const m = phrase.match(SHORT_RESULT_RE);
   return m ? DIR_CHAR[m[1]] : null;
+}
+
+// スコアシートと同じ短縮表記(中安・中2・三飛・遊ゴ…)を打席結果として読む。
+// 画面に出ている表記をそのまま打ち返せるようにするためのもの。
+// 「犠飛」は「飛」より先に判定する(順序に意味がある)。
+const SHORT_RESULT_RE = /([投捕一二三遊左中右])\s*(犠飛|犠打|塁打|[23２３]|安|本|飛|ゴ|直|エ|失)/;
+const SHORT_RESULT_MAP = {
+  安: { result: 'single' },
+  本: { result: 'hr' },
+  飛: { result: 'out', outType: 'fly' },
+  ゴ: { result: 'out', outType: 'ground' },
+  直: { result: 'out', outType: 'liner' },
+  犠飛: { result: 'sacFly' },
+  犠打: { result: 'sacBunt' },
+  エ: { result: 'error' },
+  失: { result: 'error' },
+  2: { result: 'double' }, '２': { result: 'double' },
+  3: { result: 'triple' }, '３': { result: 'triple' },
+  塁打: { result: 'double' },
+};
+
+export function parseShortResult(phrase) {
+  const m = (phrase || '').match(SHORT_RESULT_RE);
+  if (!m) return null;
+  const def = SHORT_RESULT_MAP[m[2]];
+  if (!def) return null;
+  return { ...def, direction: DIR_CHAR[m[1]] || null };
 }
 
 // 打席結果の修正を解釈する。
@@ -364,34 +391,45 @@ function directionFromShort(phrase) {
 export function parseResultCorrections(rawText, players = []) {
   const out = [];
   let lastInning = null;
+  let lastBatter = null; // 「山城は3回に中2、4回に中安」のように後半で名前が省かれる形に備える
   for (const seg of splitSentences(rawText)) {
-    const innM = seg.match(/(\d+)\s*回/);
-    if (innM) lastInning = parseInt(innM[1], 10);
-    const inning = lastInning;
-    if (inning == null) continue;
     if (!/でなく|ではなく|でした|です/.test(seg)) continue;
-    const parts = seg.split(/でなく|ではなく/);
-    const phrase = parts.length > 1 ? parts.slice(1).join('') : seg;
-    // 打席結果を表す語が無い文は打撃の話ではない。音声パーサは守備位置ワード
-    // (「キャッチャー」等)だけでも安打を返すため、ここで足切りしないと
-    // 「3-6回は山城だけですキャッチャー」が「捕手ヒット」に化ける。
-    if (!RESULT_WORDS.test(phrase) && !/[投捕一二三遊左中右]\s*(?:飛|ゴ|直|安|本|塁打)/.test(phrase)) continue;
-    const top = (parseUtterance(phrase) || []).find((c) => c.kind === 'play' && c.result);
-    if (!top) continue;
-    const rbiM = phrase.match(/(\d+)\s*点/);
-    const hit = findNameHits(seg, players)[0] || null; // 対象打者(「◯回の△△は…」の△△)
-    out.push({
-      inning,
-      batterId: hit?.id || null,
-      batterName: hit?.name || null,
-      patch: {
-        result: top.result,
-        direction: top.direction || directionFromShort(phrase),
-        outType: top.result === 'out' ? (top.outType || 'ground') : null,
-        soType: top.result === 'so' ? (top.soType || 'swinging') : null,
-        ...(rbiM ? { rbi: parseInt(rbiM[1], 10) } : {}),
-      },
-    });
+    const segHit = findNameHits(seg, players)[0] || null;
+    if (segHit) lastBatter = segHit;
+
+    // 「AでなくB」は文全体で1件(読点で切ると訂正前の結果まで拾ってしまう)
+    const marker = /でなく|ではなく/.test(seg);
+    // それ以外は「◯回に△△、□回に◇◇」を読点で分け、1文で複数の打席を直せるようにする
+    const clauses = marker ? [seg] : seg.split(/[、,]/).map((c) => c.trim()).filter(Boolean);
+
+    for (const clause of clauses) {
+      const innM = clause.match(/(\d+)\s*回/);
+      if (innM) lastInning = parseInt(innM[1], 10);
+      const inning = lastInning;
+      if (inning == null) continue;
+      const parts = clause.split(/でなく|ではなく/);
+      const phrase = parts.length > 1 ? parts.slice(1).join('') : clause;
+      // 打席結果を表す語も短縮表記(中安・三飛…)も無い文は打撃の話ではない
+      const short = parseShortResult(phrase);
+      if (!RESULT_WORDS.test(phrase) && !short) continue;
+      const top = (parseUtterance(phrase) || []).find((c) => c.kind === 'play' && c.result);
+      if (!top && !short) continue;
+      const rbiM = phrase.match(/(\d+)\s*点/);
+      const hit = findNameHits(clause, players)[0] || lastBatter; // 節に名前が無ければ文の打者を継ぐ
+      const result = top?.result || short.result;
+      out.push({
+        inning,
+        batterId: hit?.id || null,
+        batterName: hit?.name || null,
+        patch: {
+          result,
+          direction: top?.direction || directionFromShort(phrase) || short?.direction || null,
+          outType: result === 'out' ? (top?.outType || short?.outType || 'ground') : null,
+          soType: result === 'so' ? (top?.soType || 'swinging') : null,
+          ...(rbiM ? { rbi: parseInt(rbiM[1], 10) } : {}),
+        },
+      });
+    }
   }
   return out;
 }
