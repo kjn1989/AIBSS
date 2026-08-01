@@ -3,7 +3,7 @@ import { useStore, usePlayerName, useT } from '../state/store.jsx';
 import { RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES, resultCategory, multiOutLabel, outTypeLabel } from '../lib/model.js';
 import { playLabel } from '../lib/voiceParser.js';
 import { computeBoxScore } from '../lib/boxscore.js';
-import { parseBatterCorrection, findTargetAtBat, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parseSlotBatters, isExplicitSubText } from '../lib/correctionParser.js';
+import { parseBatterCorrection, findTargetAtBat, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parseSlotBatters, parseAtBatDeletions, isExplicitSubText } from '../lib/correctionParser.js';
 import { posFull, buildLineupRows, findPositionIssues, alignmentByInning } from '../lib/lineupBox.js';
 import { findDuplicateAtBats, canRebuildOrders, findOrderBreaks } from '../lib/battersRebuild.js';
 import { oppNameOf } from '../lib/oppBox.js';
@@ -321,8 +321,9 @@ function NLCorrectionCard({ game }) {
     posCorrs: parsePositionCorrections(text, state.players),
     aligns: parseDefensiveAlignment(text, state.players),
     slotBatters: parseSlotBatters(text, state.players),
+    deletions: parseAtBatDeletions(text, state.players),
   });
-  const isEmpty = (im) => !(im.subs.length || im.reassigns.length || im.resultCorrs.length || im.posCorrs.length || im.aligns.length || (im.slotBatters || []).length);
+  const isEmpty = (im) => !(im.subs.length || im.reassigns.length || im.resultCorrs.length || im.posCorrs.length || im.aligns.length || (im.slotBatters || []).length || (im.deletions || []).length);
 
   // AI解釈と端末内解釈を統合(片方の取りこぼしをもう片方で補完)。重複は除去。
   const mergeIm = (a, b) => {
@@ -342,6 +343,7 @@ function NLCorrectionCard({ game }) {
       posCorrs: uniq([...(a.posCorrs || []), ...(b.posCorrs || [])], (pc) => `${pc.playerId}`),
       // 同じ回・同じ選手の位置指定は1つにまとめ、範囲は広い方(AIと端末内で食い違うことがある)を採る
       slotBatters: uniq([...(a.slotBatters || []), ...(b.slotBatters || [])], (x) => `${x.inning}|${x.order}`),
+      deletions: uniq([...(a.deletions || []), ...(b.deletions || [])], (x) => `${x.inning}|${x.playerId || ''}|${x.order || ''}|${x.ordinal || ''}`),
       aligns: (() => {
         const m = new Map();
         for (const al of [...(a.aligns || []), ...(b.aligns || [])]) {
@@ -388,7 +390,7 @@ function NLCorrectionCard({ game }) {
 
   const resolveAndApply = (im, mode = 'local', detail = '', aiQuestions = []) => {
     setAsks([]);
-    const { reassigns, resultCorrs, posCorrs = [], aligns = [], slotBatters = [] } = im;
+    const { reassigns, resultCorrs, posCorrs = [], aligns = [], slotBatters = [], deletions = [] } = im;
     let subs = im.subs;
     // 守備陣形の申告(◯回の守備は…): 既に出場中の選手なら守備位置の変更、
     // 出場していない選手ならその位置への交代として扱う。
@@ -545,6 +547,24 @@ function NLCorrectionCard({ game }) {
       slotAppl.push({ ...sb, logId: logs[0].id });
     }
 
+    // 打席の取り消し(スコアシートのマスを空欄にする)。打順が繰り上がって、
+    // 実際には回ってこなかった打席が記録されている場合に使う。
+    const delAppl = [];
+    const delUnresolved = [];
+    for (const d of deletions) {
+      const logs = (game.playLogs || []).filter((l) => l.kind === 'atbat' && Number(l.inning) === Number(d.inning));
+      let cand = logs;
+      if (d.playerId) cand = logs.filter((l) => l.payload?.playerId === d.playerId);
+      else if (d.order != null) cand = logs.filter((l) => l.payload?.order === d.order);
+      if (d.ordinal) cand = cand[d.ordinal - 1] ? [cand[d.ordinal - 1]] : [];
+      const who = d.playerName || (d.order != null ? `${d.order}${t('gp.nlOrderSuffix')}` : '');
+      if (cand.length !== 1) {
+        delUnresolved.push(t('gp.nlDelMiss', { inning: d.inning, who, n: cand.length }));
+        continue;
+      }
+      delAppl.push({ ...d, logId: cand[0].id, who, label: cand[0].text });
+    }
+
     // 複数回の打者付け替えを、対象の打席ログへ解決
     const reAppl = [];
     const inningToLog = new Map();
@@ -586,12 +606,13 @@ function NLCorrectionCard({ game }) {
       if (logId) resAppl.push({ ...rc, logId });
     }
 
-    const totalOps = subAppl.length + synthSubs.length + reAppl.length + resAppl.length + posAppl.length + alignAppl.length + slotAppl.length;
+    const totalOps = subAppl.length + synthSubs.length + reAppl.length + resAppl.length + posAppl.length + alignAppl.length + slotAppl.length + delAppl.length;
     if (!totalOps) {
       const note = modeNote(mode, detail); // どの経路で解釈したかを添える(AI未接続かの切り分け用)
       setAsks(buildAsks({ alignMap, aiQuestions })); // 決められなかった点はその場で聞き返す
       // 指定どおりに既になっている場合は「エラー」ではないので、そう伝える
       if (alreadyOk.length) { setMsg({ kind: 'ok', text: t('gp.nlAlreadyOk', { list: alreadyOk.join('、') }) + note }); return; }
+      if (delUnresolved.length) { setMsg({ kind: 'err', text: t('gp.nlDelNone', { list: delUnresolved.join('、') }) + note }); return; }
       if (slotUnresolved.length) { setMsg({ kind: 'err', text: t('gp.nlSlotBatterNone', { list: slotUnresolved.join('、') }) + note }); return; }
       if (alignUnresolved.length) { setMsg({ kind: 'err', text: t('gp.nlPosNotStarter', { name: alignUnresolved.join('、') }) + note }); return; }
       if (posUnresolved.length) { setMsg({ kind: 'err', text: t('gp.nlPosNotStarter', { name: posUnresolved.join('、') }) + note }); return; }
@@ -617,6 +638,7 @@ function NLCorrectionCard({ game }) {
       })),
       ...subAppl.map(subLabel),
       ...synthSubs.map(subLabel),
+      ...delAppl.map((d) => t('gp.nlDelItem', { inning: d.inning, who: d.who })),
       ...slotAppl.map((sb) => t('gp.nlSlotBatterItem', { inning: sb.inning, order: sb.order, name: sb.playerName || nameOf(sb.playerId) })),
       ...reAppl.map((r) => t('gp.nlReItem', { inning: r.inning, name: r.newName })),
       ...resAppl.map((rc) => t('gp.nlResItem', {
@@ -638,6 +660,7 @@ function NLCorrectionCard({ game }) {
     alignAppl.forEach((al) => (al.innings || [al.inning]).forEach((inn) => dispatch({
       type: 'RETRO_POSITION', gameId: game.id, order: al.order, playerId: al.playerId, position: al.position, inning: inn,
     })));
+    delAppl.forEach((d) => dispatch({ type: 'DELETE_PLAY_LOG', gameId: game.id, logId: d.logId }));
     slotAppl.forEach((sb) => dispatch({ type: 'REASSIGN_ATBAT', gameId: game.id, logId: sb.logId, newPlayerId: sb.playerId }));
     reAppl.forEach((r) => dispatch({ type: 'REASSIGN_ATBAT', gameId: game.id, logId: r.logId, newPlayerId: r.newId }));
     resAppl.forEach((rc) => dispatch({ type: 'EDIT_PLAY_LOG', gameId: game.id, logId: rc.logId, patch: rc.patch }));

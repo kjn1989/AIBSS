@@ -285,6 +285,36 @@ export function parseBatterReassignments(rawText, players = []) {
   return out;
 }
 
+// 打席そのものを取り消す(スコアシートのマスを空欄にする)指示を解釈する。
+// 例:「7回の平川の打席は空欄にしてください」「7回の8番の打席を削除」
+// 打順が繰り上がって、実際には回ってこなかった打席が記録されている場合に使う。
+// 「空欄/削除/取り消し」等の語を必須にして、通常の訂正と取り違えないようにする。
+const DELETE_WORDS = /空欄|空白|削除|消して|消す|取り消|取消|無しに|なしに|打席なし|回ってい?ない|回らなかった/;
+
+export function parseAtBatDeletions(rawText, players = []) {
+  const out = [];
+  let lastInning = null;
+  for (const seg of splitSentences(rawText)) {
+    const innM = seg.match(/(\d+)\s*回/);
+    if (innM) lastInning = parseInt(innM[1], 10);
+    const inning = lastInning;
+    if (inning == null) continue;
+    if (!DELETE_WORDS.test(seg)) continue;
+    const hits = findNameHits(seg, players);
+    const ordM = seg.match(/第\s*(\d+)\s*打席/);
+    const slotM = seg.match(/(\d+)\s*番/);
+    if (!hits.length && !ordM && !slotM) continue; // 誰の打席か分からないものは扱わない
+    out.push({
+      inning,
+      playerId: hits[0]?.id || null,
+      playerName: hits[0]?.name || null,
+      ordinal: ordM ? parseInt(ordM[1], 10) : null,
+      order: slotM ? parseInt(slotM[1], 10) : null,
+    });
+  }
+  return out;
+}
+
 // 打順を指定した打者の訂正。
 // 例:「7回の8番は奥田です」「7回、8番は奥田」→ その回のその打順の打席を奥田のものにする。
 // 打順が繰り上がった(9番の選手が8番に入った)ような、名前だけでは指せない訂正に使う。
