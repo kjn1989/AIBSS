@@ -7,7 +7,7 @@ import { gameEndCheck, initialPresetIdFor, describeRules } from '../src/lib/rule
 import { aggregateBatting, aggregatePitching, battingMetrics, pitchingMetrics, titleLeaders, DETAIL_METRICS, detailRanking, defaultInningBasis } from '../src/lib/stats.js';
 import { translate } from '../src/lib/i18n.js';
 import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, parseDirectionOnly } from '../src/lib/voiceParser.js';
-import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parseInningRange, isExplicitSubText } from '../src/lib/correctionParser.js';
+import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parseInningRange, parseSlotBatters, isExplicitSubText } from '../src/lib/correctionParser.js';
 import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarters, findPositionIssues } from '../src/lib/lineupBox.js';
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
 import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf, oppLettersInGame } from '../src/lib/oppBox.js';
@@ -388,6 +388,27 @@ test('detailRanking: 基準イニングがランキングの値に反映され�
   assert.equal(def.perInning, true);
   assert.equal(detailRanking(def, {}, pit, undefined, 7)[0].display, '7.00');
   assert.equal(detailRanking(def, {}, pit, undefined, 9)[0].display, '9.00');
+});
+
+test('parseSlotBatters: 打順を指定した打者の訂正(「7回の8番は奥田です」)', () => {
+  const PS = [{ id: 'o', name: '奥田' }, { id: 'h', name: '平川' }, { id: 'm', name: '松田' }];
+  assert.deepEqual(
+    parseSlotBatters('7回の8番は奥田です', PS).map((r) => [r.inning, r.order, r.playerId]),
+    [[7, 8, 'o']],
+  );
+  // 打順より後ろの名前を採る(「8番は平川でなく奥田」でも奥田)
+  assert.deepEqual(
+    parseSlotBatters('7回、8番は平川ではなく奥田', PS).map((r) => r.playerId),
+    ['o'],
+  );
+  // 交代文・守備位置の申告は他のパーサーの担当なので拾わない
+  assert.deepEqual(parseSlotBatters('2回に6番の平川が奥田と交代', PS), []);
+  assert.deepEqual(parseSlotBatters('2-5回の一塁は松田です', PS), []);
+  // 打順が無い文、選手名が無い文は対象外
+  assert.deepEqual(parseSlotBatters('7回は奥田です', PS), []);
+  assert.deepEqual(parseSlotBatters('7回の8番は不明', PS), []);
+  // 打順は1〜9のみ
+  assert.deepEqual(parseSlotBatters('7回の12番は奥田です', PS), []);
 });
 
 test('parseInningRange: 「3-6回」「3回から6回」などの回の範囲を読む', () => {
