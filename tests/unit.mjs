@@ -7,7 +7,7 @@ import { gameEndCheck, initialPresetIdFor, describeRules } from '../src/lib/rule
 import { aggregateBatting, aggregatePitching, battingMetrics, pitchingMetrics, titleLeaders, DETAIL_METRICS, detailRanking, defaultInningBasis } from '../src/lib/stats.js';
 import { translate } from '../src/lib/i18n.js';
 import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, parseDirectionOnly } from '../src/lib/voiceParser.js';
-import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parseInningRange, parseSlotBatters, parseAtBatDeletions, parseShortResult, isExplicitSubText } from '../src/lib/correctionParser.js';
+import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parseInningRange, parseSlotBatters, parseAtBatDeletions, parseShortResult, isExplicitSubText, inGamePlayerIds, preferInGamePlayers } from '../src/lib/correctionParser.js';
 import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarters, findPositionIssues } from '../src/lib/lineupBox.js';
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
 import { newGame } from '../src/lib/model.js';
@@ -413,6 +413,29 @@ test('parseResultCorrections: 1文に複数の打席(「山城は3回に中2、4
   // 方向・アウトの種類も短縮表記から取れる
   assert.equal(rs[0].patch.direction, 'CF');
   assert.deepEqual([rs[3].patch.direction, rs[3].patch.outType], ['3B', 'fly']);
+});
+
+test('preferInGamePlayers: 同名の二重登録は「その試合に出ている方」を掴む', () => {
+  // 実際に起きていた不具合: 記録0件の重複登録が名簿の先に並んでいると、
+  // 解析がそのIDを掴んでしまい、該当打席が見つからず修正が黙って捨てられていた。
+  const players = [
+    { id: 'dupY', name: '山城' }, { id: 'dupM', name: '松田' },
+    { id: 'y', name: '山城' }, { id: 'm', name: '松田' },
+  ];
+  const game = {
+    lineup: [{ order: 3, playerId: 'y' }, { order: 4, playerId: 'm' }],
+    startingLineup: [], atBats: [], playLogs: [],
+  };
+  const inGame = inGamePlayerIds(game);
+  assert.deepEqual([...inGame].sort(), ['m', 'y']);
+  const ps = preferInGamePlayers(players, inGame);
+  assert.deepEqual(ps.map((p) => p.id).sort(), ['m', 'y']); // 同名は1人に畳まれる
+  const rs = parseResultCorrections('山城は3回に中2、4回に中安です。松田が3回に中飛、4回に三飛です。修正してください。', ps);
+  assert.deepEqual(rs.map((r) => [r.inning, r.batterId, r.patch.result]), [
+    [3, 'y', 'double'], [4, 'y', 'single'], [3, 'm', 'out'], [4, 'm', 'out'],
+  ]);
+  // 重複登録が無い名簿でも壊れない
+  assert.equal(preferInGamePlayers([{ id: 'a', name: '佐藤' }], new Set()).length, 1);
 });
 
 test('parseAtBatDeletions: 打席の取り消し(「7回の平川の打席は空欄に」)', () => {
