@@ -14,6 +14,7 @@ import { newGame } from '../src/lib/model.js';
 import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf, oppLettersInGame } from '../src/lib/oppBox.js';
 import { remapPlayerInGame, fillPlayerGaps } from '../src/lib/mergePlayers.js';
 import { computeBoxScore } from '../src/lib/boxscore.js';
+import { buildMatchups, opponentSummaries, oppPitcherByAtBat, oppPlayerKey, normalizeName } from '../src/lib/matchup.js';
 import { rebuildBatters, findDuplicateAtBats, findOrderBreaks, canRebuildOrders } from '../src/lib/battersRebuild.js';
 
 test('parseDirectionOnly: 方向のみの発話は方向、結果語を含めばnull(言い直し扱い)', () => {
@@ -1251,4 +1252,65 @@ test('translate: 言語別の解決とjaフォールバック', () => {
   assert.equal(translate('en', 'tab.home'), 'Home');
   assert.equal(translate('xx', 'tab.home'), 'ホーム'); // 未知言語はjaへ
   assert.equal(translate('en', 'no.such.key'), 'no.such.key'); // 未定義キーはキー名を返す
+});
+
+// ---- 対戦成績(マッチアップ) ----
+// 相手選手は試合ごとの記号で記録しているため、記号ではなく
+// 「相手チーム名 + 相手選手名」で同一人物を辿れることを確かめる。
+const mtGame = (id, opponent, oppNames, logs, oppPitcherLetter = 'A') => ({
+  id, opponent, oppNames, oppPitcherLetter, status: 'finished', isHome: false,
+  myScore: 5, oppScore: 3, playLogs: logs.map((l, i) => ({ id: `${id}-${i}`, ...l })),
+});
+
+test('oppPitcherByAtBat: 継投をまたいで、その打席の相手投手を割り出す', () => {
+  const g = mtGame('g', 'X', { A: '田中', C: '鈴木' }, [
+    { inning: 1, isTop: true, kind: 'atbat', payload: { playerId: 'p1', result: 'single' } },
+    { inning: 5, isTop: true, kind: 'opppitcher', payload: { in: 'C', out: 'A' } },
+    { inning: 5, isTop: true, kind: 'atbat', payload: { playerId: 'p1', result: 'double' } },
+  ]);
+  const m = oppPitcherByAtBat(g);
+  assert.equal(m.get('g-0'), 'A'); // 交代前は先発
+  assert.equal(m.get('g-2'), 'C'); // 交代後は継投した投手
+});
+
+test('buildMatchups: 記号が試合ごとに変わっても、名前で同一人物として積み上がる', () => {
+  // 1試合目: 田中=A で登板 / 2試合目: 同じ田中が B で登板。チーム名には表記ゆれがある。
+  const g1 = mtGame('g1', '上智大学女子野球部 Mamues', { A: '田中', B: '佐藤' }, [
+    { inning: 1, isTop: true, kind: 'atbat', payload: { playerId: 'p1', result: 'single' } },
+    { inning: 1, isTop: false, kind: 'defense', payload: { pitcherId: 'q1', letter: 'B', result: 'hr', runs: 1 } },
+  ]);
+  const g2 = mtGame('g2', '上智大学女子野球部Mamues', { B: '田中', A: '佐藤' }, [
+    { inning: 2, isTop: true, kind: 'atbat', payload: { playerId: 'p1', result: 'out' } },
+    { inning: 2, isTop: false, kind: 'defense', payload: { pitcherId: 'q1', letter: 'A', result: 'single' } },
+  ], 'B');
+
+  const { batting, pitching } = buildMatchups([g1, g2]);
+  const vsTanaka = batting.find((r) => r.myPlayerId === 'p1' && r.oppName === '田中');
+  assert.ok(vsTanaka, '田中との対戦がまとまっている');
+  assert.deepEqual([vsTanaka.ab, vsTanaka.h, vsTanaka.games], [2, 1, 2]); // 2試合ぶんが1行に
+  assert.equal(vsTanaka.avg.toFixed(3), '0.500');
+
+  const vsSato = pitching.find((r) => r.myPlayerId === 'q1' && r.oppName === '佐藤');
+  assert.deepEqual([vsSato.ab, vsSato.h, vsSato.hr, vsSato.games], [2, 2, 1, 2]);
+});
+
+test('buildMatchups: 名前が入っていない相手は通算に数えない', () => {
+  const g = mtGame('g', 'X', {}, [
+    { inning: 1, isTop: true, kind: 'atbat', payload: { playerId: 'p1', result: 'single' } },
+    { inning: 1, isTop: false, kind: 'defense', payload: { pitcherId: 'q1', letter: 'B', result: 'single' } },
+  ]);
+  const { batting, pitching } = buildMatchups([g]);
+  assert.deepEqual([batting.length, pitching.length], [0, 0]);
+  assert.equal(oppPlayerKey(g, 'A'), null);
+});
+
+test('normalizeName / opponentSummaries: 表記ゆれを吸収してチーム別成績にまとめる', () => {
+  assert.equal(normalizeName('上智大学女子野球部 Mamues'), normalizeName('上智大学女子野球部Ｍamues'));
+  const rows = opponentSummaries([
+    { id: 'a', opponent: '上智 Mamues', status: 'finished', myScore: 9, oppScore: 4 },
+    { id: 'b', opponent: '上智Mamues', status: 'finished', myScore: 2, oppScore: 5 },
+    { id: 'c', opponent: '上智Mamues', status: 'inprogress', myScore: 0, oppScore: 0 }, // 未了は除外
+  ]);
+  assert.equal(rows.length, 1);
+  assert.deepEqual([rows[0].games, rows[0].win, rows[0].lose, rows[0].rs, rows[0].ra], [2, 1, 1, 11, 9]);
 });
