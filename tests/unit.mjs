@@ -415,6 +415,24 @@ test('parseResultCorrections: 1文に複数の打席(「山城は3回に中2、4
   assert.deepEqual([rs[3].patch.direction, rs[3].patch.outType], ['3B', 'fly']);
 });
 
+test('parseResultCorrections: 打点の訂正(「7回の中犠飛は打点1に修正」)', () => {
+  const PS = [{ id: 'n', name: '中島' }, { id: 's', name: '清水' }];
+  // 結果と打点を一緒に指定した場合
+  assert.deepEqual(
+    parseResultCorrections('中島の7回の中犠飛は打点1に修正してください', PS)
+      .map((r) => [r.inning, r.batterId, r.patch.result, r.patch.rbi]),
+    [[7, 'n', 'sacFly', 1]],
+  );
+  // 打点だけの訂正は結果に触れない(patch に result を入れない)
+  const only = parseResultCorrections('中島の7回は打点1に修正してください', PS);
+  assert.deepEqual(only.map((r) => [r.inning, r.batterId, r.patch.rbi]), [[7, 'n', 1]]);
+  assert.equal(only[0].patch.result, undefined);
+  // 「打点なし」は0として読む
+  assert.equal(parseResultCorrections('7回の中島は打点なしに修正', PS)[0].patch.rbi, 0);
+  // 「〜に修正してください」を合図に加えても、守備位置の訂正は結果修正にしない
+  assert.deepEqual(parseResultCorrections('6-7回のライトは清水に修正してください', PS), []);
+});
+
 test('parseBatterReassignments: 複数回をまとめた付け替え(「5回の三振と7回の中犠飛は中島に」)', () => {
   const PS = [{ id: 's', name: '清水' }, { id: 'n', name: '中島' }];
   const rs = parseBatterReassignments('清水の5回の三振と7回の中犠飛は、中島に付け替えてください', PS);

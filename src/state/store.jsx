@@ -1058,18 +1058,25 @@ export function reducer(state, action) {
       const g = deep(state.games[action.gameId]);
       const log = g.playLogs.find((l) => l.id === action.logId);
       if (!log) return state;
-      const p = action.patch; // { result, direction, outType, soType, rbi, runs }
-      const label = (p.result === 'so' && SO_TYPES[p.soType]) || RESULTS[p.result]?.label || p.result;
-      const dir = DIRECTIONS[p.direction] || '';
+      const p = action.patch; // { result, direction, outType, soType, rbi, runs } ※未指定の項目は現状維持
+      // 「打点だけ直す」のような部分的な修正で、指定の無い項目まで消さないようにする
+      const cur = log.payload || {};
+      const pick = (k) => (p[k] !== undefined ? p[k] : cur[k]);
+      const result = pick('result');
+      const direction = pick('direction');
+      const outType = result === 'out' ? (pick('outType') || 'ground') : null;
+      const soType = result === 'so' ? (pick('soType') || 'swinging') : null;
+      const label = (result === 'so' && SO_TYPES[soType]) || RESULTS[result]?.label || result;
+      const dir = DIRECTIONS[direction] || '';
       // その打撃で入った得点。打席を入れ替えるときは打点と一緒に移す必要がある
       const newRuns = p.runs !== undefined ? p.runs : log.payload.runs;
       if (log.kind === 'atbat') {
         const ab = g.atBats.find((a) => a.id === log.payload.atBatId);
         if (ab) {
-          ab.result = p.result;
-          ab.direction = p.direction || null;
-          ab.outType = p.result === 'out' ? p.outType || 'ground' : null;
-          ab.soType = p.result === 'so' ? p.soType || 'swinging' : null;
+          ab.result = result;
+          ab.direction = direction || null;
+          ab.outType = outType;
+          ab.soType = soType;
           if (p.rbi !== undefined) ab.rbi = p.rbi;
         }
         const name = playerNameOf(state, log.payload.playerId);
@@ -1080,10 +1087,10 @@ export function reducer(state, action) {
       }
       log.payload = {
         ...log.payload,
-        result: p.result,
-        direction: p.direction || null,
-        outType: p.result === 'out' ? p.outType || 'ground' : null,
-        soType: p.result === 'so' ? p.soType || 'swinging' : null,
+        result,
+        direction: direction || null,
+        outType,
+        soType,
         ...(p.rbi !== undefined ? { rbi: p.rbi } : {}),
         ...(p.runs !== undefined ? { runs: p.runs } : {}),
       };
