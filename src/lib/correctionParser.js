@@ -51,6 +51,19 @@ const POSITION_WORDS = {
 const SUB_KEYWORDS = /交代|代わっ|代わり|代え|入れ替|負傷|退場|退い|下げ|リエントリー|再出場|入っ/;
 // 打席結果を表す語。守備位置の話か打席の話かを見分けるのに使う
 // (音声パーサは曖昧な文でも安打を返すため、キーワードの有無で判定する)。
+// 「◯◯につけて」「△△に付け替えて」= 記録済みの打席を別の選手のものにする言い回し
+const ATTACH_WORDS = /付けて|つけて|付け替|つけ替|付け直|つけ直|移して|移動|のものに/;
+// SUB_KEYWORDS のうち、交代であることが明確な語(「入っ」は「◯◯に入っている記録」の
+// ような書き方でも当たってしまうため、弱い語として除いてある)
+const STRONG_SUB_KEYWORDS = /交代|代わっ|代わり|代え|入れ替|負傷|退場|退い|下げ|リエントリー|再出場/;
+
+// 「平川に入っている左飛を奥田につけて」= 記録済みの打席を別の選手に付け替える指示。
+// 「入っ」を交代語と読むと実在しない交代を作ってしまうので、交代の解釈から外す。
+function isReassignPhrase(text) {
+  if (!ATTACH_WORDS.test(text)) return false;
+  if (STRONG_SUB_KEYWORDS.test(text)) return false;
+  return RESULT_WORDS.test(text) || SHORT_RESULT_RE.test(text);
+}
 const RESULT_WORDS = /安打|単打|ヒット|ゴロ|フライ|ライナー|三振|四球|死球|デッドボール|本塁打|ホームラン|二塁打|三塁打|ツーベース|スリーベース|犠飛|犠打|犠牲|エラー|失策|併殺|ゲッツー|打点|適時打|タイムリー|出塁|盗塁|振り逃げ|空振り|見逃し|凡退|バント|打席|打撃/;
 
 // 「3-6回」「3〜6回」「3回から6回」のような回の範囲を読む。
@@ -73,7 +86,7 @@ export function isExplicitSubText(rawText, names = []) {
   const list = names.filter(Boolean);
   if (!list.length) return false;
   for (const seg of splitSentences(rawText)) {
-    if (!SUB_KEYWORDS.test(seg)) continue;
+    if (!SUB_KEYWORDS.test(seg) || isReassignPhrase(seg)) continue;
     if (list.every((n) => seg.includes(n))) return true;
   }
   return false;
@@ -179,6 +192,8 @@ export function parseSubstitution(rawText, players = []) {
   }
   const pitcherCtx = /投げ|登板|マウンド/.test(text); // 「◯回は△△が投げた」等
   if (!position && pitcherCtx) position = '投';
+  // 「◯◯に入っている左飛を△△につけて」は打席の付け替え(parseBatterReassignments の担当)
+  if (isReassignPhrase(text)) return { ok: false, reason: 'notSub' };
   const hasSubKw = SUB_KEYWORDS.test(text) || pitcherCtx;
   if (!hasSubKw && !position) return { ok: false, reason: 'notSub' }; // 交代ではなさそう→打者付け替えへ
   // 「◯回の守備はショート茂木、サード入交、セカンド宇田川」のように守備位置が複数並ぶ文は
@@ -264,9 +279,17 @@ export function parseBatterCorrection(rawText, players = []) {
 // 各文で「打撃/打席」を含み、回番号(複数可)と2名(先=対象/後=付け替え先)を拾う。
 export function parseBatterReassignments(rawText, players = []) {
   const out = [];
+  let lastInning = null;
   for (const seg of splitSentences(rawText)) {
-    if (!/打撃|打席/.test(seg)) continue;
-    const innings = [...seg.matchAll(/(\d+)\s*回/g)].map((m) => parseInt(m[1], 10));
+    // 「(結果)を◯◯につけて」型は、打席・打撃の語が無くても付け替えの指示。
+    // ただし結果の語(または短縮表記)と2人以上の名前を伴うときだけ拾い、
+    // 「打点をつけて」のような別の指示を巻き込まないようにする。
+    const attach = ATTACH_WORDS.test(seg) && (RESULT_WORDS.test(seg) || SHORT_RESULT_RE.test(seg));
+    if (!/打撃|打席/.test(seg) && !attach) continue;
+    const inningsHere = [...seg.matchAll(/(\d+)\s*回/g)].map((m) => parseInt(m[1], 10));
+    if (inningsHere.length) lastInning = inningsHere[inningsHere.length - 1];
+    // 回の指定が無い文は、直前の文の回を引き継ぐ(「7回の◯◯は空席で。左飛を△△に」)
+    const innings = inningsHere.length ? inningsHere : (lastInning != null ? [lastInning] : []);
     if (!innings.length) continue;
     const hits = findNameHits(seg, players);
     const newHit = hits[hits.length - 1];
@@ -289,7 +312,7 @@ export function parseBatterReassignments(rawText, players = []) {
 // 例:「7回の平川の打席は空欄にしてください」「7回の8番の打席を削除」
 // 打順が繰り上がって、実際には回ってこなかった打席が記録されている場合に使う。
 // 「空欄/削除/取り消し」等の語を必須にして、通常の訂正と取り違えないようにする。
-const DELETE_WORDS = /空欄|空白|削除|消して|消す|取り消|取消|無しに|なしに|打席なし|回ってい?ない|回らなかった/;
+const DELETE_WORDS = /空欄|空白|空席|削除|消して|消す|取り消|取消|無しに|なしに|打席なし|回ってい?ない|回らなかった/;
 
 export function parseAtBatDeletions(rawText, players = []) {
   const out = [];
