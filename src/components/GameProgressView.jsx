@@ -588,24 +588,23 @@ function NLCorrectionCard({ game }) {
       if (found.ok) { reAppl.push({ ...r, logId: found.log.id }); inningToLog.set(r.inning, found.log.id); }
       else reUnresolved.push(`${r.inning}回${r.targetName ? `(${r.targetName})` : ''}`);
     }
-    // 付け替えから「代打/代走」の交代も合成し、出場選手ツリーに反映(以降の回も自動付け替え)
+    // まだ出場していない選手へ付け替えるときだけ、表示する場所として代打を合成する。
+    // 打席の付け替えは「誰が打ったか」の訂正であって、守備の入れ替えではない。
+    // 既に出ている選手にまで代打を作ると、
+    //  - その回以降その打順の守備が入ってきた選手のものになり、別途直したはずの
+    //    守備位置(「6-7回のライトは清水」など)を上書きする
+    //  - その選手が別の打順に入っている記録が「1人が2つの打順」の解消として
+    //    取り消され、他の回の打席まで元の選手に巻き戻る
+    // という広い範囲の壊れ方をする。
     const synthSubs = [];
     const seenPair = new Set();
     for (const r of reAppl) {
-      if (!r.targetId) continue;
+      if (!r.targetId || inThisGame.has(r.newId)) continue;
       const key = `${r.targetId}>${r.newId}`;
       if (seenPair.has(key)) continue;
       seenPair.add(key);
       const order = resolveOrder(r.targetId);
       if (order == null) continue;
-      // 既にその打順へ入る交代が記録済みなら、代打を作らない。
-      // 打席の付け替えは「誰が打ったか」の訂正であって、守備の入れ替えではない。
-      // ここで代打を作ると、その回以降その打順の守備が入ってきた選手のものになり、
-      // 別途直したはずの守備位置(例「6-7回のライトは清水」)まで上書きしてしまう。
-      // 出場ツリーに居ない選手のときだけ、表示する場所を作るために合成する。
-      const already = (game.playLogs || []).some((l) => l.kind === 'sub'
-        && l.payload?.in === r.newId && l.payload?.order === order);
-      if (already) continue;
       const innings = reAppl.filter((x) => x.targetId === r.targetId && x.newId === r.newId).map((x) => x.inning);
       synthSubs.push({ outId: r.targetId, outName: r.targetName, inId: r.newId, inName: r.newName, inning: Math.min(...innings), subKind: /代走/.test(text) ? 'pr' : 'ph', position: null, order });
     }
