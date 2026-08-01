@@ -285,6 +285,36 @@ export function parseBatterReassignments(rawText, players = []) {
   return out;
 }
 
+// 打順を指定した打者の訂正。
+// 例:「7回の8番は奥田です」「7回、8番は奥田」→ その回のその打順の打席を奥田のものにする。
+// 打順が繰り上がった(9番の選手が8番に入った)ような、名前だけでは指せない訂正に使う。
+// 交代文・守備位置の申告は別のパーサーの担当なので除外する。
+export function parseSlotBatters(rawText, players = []) {
+  const out = [];
+  let lastInning = null;
+  for (const seg of splitSentences(rawText)) {
+    if (/交代|代わ|替わ/.test(seg)) continue; // 交代は parseSubstitutions
+    if (findPositionHits(seg).length) continue; // 守備位置の話は parseDefensiveAlignment
+    const innM = seg.match(/(\d+)\s*回/);
+    if (innM) lastInning = parseInt(innM[1], 10);
+    const inning = lastInning;
+    if (inning == null) continue;
+    const ordM = seg.match(/(\d+)\s*番/);
+    if (!ordM) continue;
+    const order = parseInt(ordM[1], 10);
+    if (!(order >= 1 && order <= 9)) continue;
+    const hits = findNameHits(seg, players);
+    if (!hits.length) continue;
+    // 「8番は平川ではなく奥田」— 訂正マーカーがあればそれ以降の名前を優先する
+    const marker = seg.match(/正しく|本当|実際|ではなく|でなく/);
+    const after = marker ? hits.filter((h) => h.index > marker.index) : [];
+    // 無ければ「8番は奥田」の形とみなし、打順より後ろの名前(無ければ最後の名前)を採る
+    const hit = after[0] || hits.find((h) => h.index > ordM.index) || hits[hits.length - 1];
+    out.push({ inning, order, playerId: hit.id, playerName: hit.name });
+  }
+  return out;
+}
+
 // 短縮表記(中犠飛・右飛・遊ゴ…)の先頭1文字から打球方向を取る。
 // 音声パーサは「センター犠牲フライ」等の言い方が前提で、短縮表記の方向を拾えないため補う。
 const DIR_CHAR = { 投: 'P', 捕: 'C', 一: '1B', 二: '2B', 三: '3B', 遊: 'SS', 左: 'LF', 中: 'CF', 右: 'RF' };

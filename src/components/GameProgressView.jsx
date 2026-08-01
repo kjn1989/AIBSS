@@ -3,7 +3,7 @@ import { useStore, usePlayerName, useT } from '../state/store.jsx';
 import { RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES, resultCategory, multiOutLabel, outTypeLabel } from '../lib/model.js';
 import { playLabel } from '../lib/voiceParser.js';
 import { computeBoxScore } from '../lib/boxscore.js';
-import { parseBatterCorrection, findTargetAtBat, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment, isExplicitSubText } from '../lib/correctionParser.js';
+import { parseBatterCorrection, findTargetAtBat, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parseSlotBatters, isExplicitSubText } from '../lib/correctionParser.js';
 import { posFull, buildLineupRows, findPositionIssues, alignmentByInning } from '../lib/lineupBox.js';
 import { findDuplicateAtBats, canRebuildOrders, findOrderBreaks } from '../lib/battersRebuild.js';
 import { oppNameOf } from '../lib/oppBox.js';
@@ -320,8 +320,9 @@ function NLCorrectionCard({ game }) {
     resultCorrs: parseResultCorrections(text, state.players),
     posCorrs: parsePositionCorrections(text, state.players),
     aligns: parseDefensiveAlignment(text, state.players),
+    slotBatters: parseSlotBatters(text, state.players),
   });
-  const isEmpty = (im) => !(im.subs.length || im.reassigns.length || im.resultCorrs.length || im.posCorrs.length || im.aligns.length);
+  const isEmpty = (im) => !(im.subs.length || im.reassigns.length || im.resultCorrs.length || im.posCorrs.length || im.aligns.length || (im.slotBatters || []).length);
 
   // AI解釈と端末内解釈を統合(片方の取りこぼしをもう片方で補完)。重複は除去。
   const mergeIm = (a, b) => {
@@ -340,6 +341,7 @@ function NLCorrectionCard({ game }) {
       resultCorrs: uniq([...(a.resultCorrs || []), ...(b.resultCorrs || [])], (rc) => `${rc.inning}|${rc.patch.result}`),
       posCorrs: uniq([...(a.posCorrs || []), ...(b.posCorrs || [])], (pc) => `${pc.playerId}`),
       // 同じ回・同じ選手の位置指定は1つにまとめ、範囲は広い方(AIと端末内で食い違うことがある)を採る
+      slotBatters: uniq([...(a.slotBatters || []), ...(b.slotBatters || [])], (x) => `${x.inning}|${x.order}`),
       aligns: (() => {
         const m = new Map();
         for (const al of [...(a.aligns || []), ...(b.aligns || [])]) {
@@ -386,7 +388,7 @@ function NLCorrectionCard({ game }) {
 
   const resolveAndApply = (im, mode = 'local', detail = '', aiQuestions = []) => {
     setAsks([]);
-    const { reassigns, resultCorrs, posCorrs = [], aligns = [] } = im;
+    const { reassigns, resultCorrs, posCorrs = [], aligns = [], slotBatters = [] } = im;
     let subs = im.subs;
     // 守備陣形の申告(◯回の守備は…): 既に出場中の選手なら守備位置の変更、
     // 出場していない選手ならその位置への交代として扱う。
@@ -528,6 +530,21 @@ function NLCorrectionCard({ game }) {
       if (s && s.order !== al.order) { al.order = s.order; al.from = s.position || al.from; }
     }
 
+    // 打順を指定した打者の訂正(「7回の8番は奥田」)。打順が繰り上がった場合など、
+    // 名前では指せない打席をピンポイントで直す。
+    const slotAppl = [];
+    const slotUnresolved = [];
+    for (const sb of slotBatters) {
+      const logs = (game.playLogs || []).filter((l) => l.kind === 'atbat'
+        && Number(l.inning) === Number(sb.inning) && l.payload?.order === sb.order);
+      if (!logs.length) { slotUnresolved.push(t('gp.nlSlotBatterMiss', { inning: sb.inning, order: sb.order })); continue; }
+      if (logs[0].payload?.playerId === sb.playerId) {
+        alreadyOk.push(`${sb.order}${t('gp.nlOrderSuffix')} ${sb.playerName || nameOf(sb.playerId)}`);
+        continue;
+      }
+      slotAppl.push({ ...sb, logId: logs[0].id });
+    }
+
     // 複数回の打者付け替えを、対象の打席ログへ解決
     const reAppl = [];
     const inningToLog = new Map();
@@ -569,12 +586,13 @@ function NLCorrectionCard({ game }) {
       if (logId) resAppl.push({ ...rc, logId });
     }
 
-    const totalOps = subAppl.length + synthSubs.length + reAppl.length + resAppl.length + posAppl.length + alignAppl.length;
+    const totalOps = subAppl.length + synthSubs.length + reAppl.length + resAppl.length + posAppl.length + alignAppl.length + slotAppl.length;
     if (!totalOps) {
       const note = modeNote(mode, detail); // どの経路で解釈したかを添える(AI未接続かの切り分け用)
       setAsks(buildAsks({ alignMap, aiQuestions })); // 決められなかった点はその場で聞き返す
       // 指定どおりに既になっている場合は「エラー」ではないので、そう伝える
       if (alreadyOk.length) { setMsg({ kind: 'ok', text: t('gp.nlAlreadyOk', { list: alreadyOk.join('、') }) + note }); return; }
+      if (slotUnresolved.length) { setMsg({ kind: 'err', text: t('gp.nlSlotBatterNone', { list: slotUnresolved.join('、') }) + note }); return; }
       if (alignUnresolved.length) { setMsg({ kind: 'err', text: t('gp.nlPosNotStarter', { name: alignUnresolved.join('、') }) + note }); return; }
       if (posUnresolved.length) { setMsg({ kind: 'err', text: t('gp.nlPosNotStarter', { name: posUnresolved.join('、') }) + note }); return; }
       if (subUnresolved.length) { setMsg({ kind: 'err', text: t('gp.nlSubNoOrder', { name: subUnresolved.join('、') }) + note }); return; }
@@ -599,6 +617,7 @@ function NLCorrectionCard({ game }) {
       })),
       ...subAppl.map(subLabel),
       ...synthSubs.map(subLabel),
+      ...slotAppl.map((sb) => t('gp.nlSlotBatterItem', { inning: sb.inning, order: sb.order, name: sb.playerName || nameOf(sb.playerId) })),
       ...reAppl.map((r) => t('gp.nlReItem', { inning: r.inning, name: r.newName })),
       ...resAppl.map((rc) => t('gp.nlResItem', {
         inning: rc.inning,
@@ -619,6 +638,7 @@ function NLCorrectionCard({ game }) {
     alignAppl.forEach((al) => (al.innings || [al.inning]).forEach((inn) => dispatch({
       type: 'RETRO_POSITION', gameId: game.id, order: al.order, playerId: al.playerId, position: al.position, inning: inn,
     })));
+    slotAppl.forEach((sb) => dispatch({ type: 'REASSIGN_ATBAT', gameId: game.id, logId: sb.logId, newPlayerId: sb.playerId }));
     reAppl.forEach((r) => dispatch({ type: 'REASSIGN_ATBAT', gameId: game.id, logId: r.logId, newPlayerId: r.newId }));
     resAppl.forEach((rc) => dispatch({ type: 'EDIT_PLAY_LOG', gameId: game.id, logId: rc.logId, patch: rc.patch }));
     const hasPitcherChange = subAppl.some((s) => s.position === '投');
