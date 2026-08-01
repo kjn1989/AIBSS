@@ -683,12 +683,17 @@ function NLCorrectionCard({ game }) {
       ...delAppl.map((d) => t('gp.nlDelItem', { inning: d.inning, who: d.who })),
       ...slotAppl.map((sb) => t('gp.nlSlotBatterItem', { inning: sb.inning, order: sb.order, name: sb.playerName || nameOf(sb.playerId) })),
       ...reAppl.map((r) => t('gp.nlReItem', { inning: r.inning, name: r.newName })),
-      ...resAppl.map((rc) => t('gp.nlResItem', {
-        inning: rc.inning,
-        who: rc.batterId ? ` ${rc.batterName || nameOf(rc.batterId)}` : '',
-        label: playLabel(rc.patch.result, rc.patch.direction, rc.patch.outType, rc.patch.soType, state.settings.edition, lang)
-          + (rc.patch.rbi !== undefined ? t('gp.nlResRbi', { n: rc.patch.rbi }) : ''),
-      })),
+      ...resAppl.map((rc) => {
+        const who = rc.batterId ? ` ${rc.batterName || nameOf(rc.batterId)}` : '';
+        // 打点だけの修正は、打席結果を書かずに打点だけを示す
+        if (rc.patch.result === undefined) return t('gp.nlResRbiItem', { inning: rc.inning, who, n: rc.patch.rbi });
+        return t('gp.nlResItem', {
+          inning: rc.inning,
+          who,
+          label: playLabel(rc.patch.result, rc.patch.direction, rc.patch.outType, rc.patch.soType, state.settings.edition, lang)
+            + (rc.patch.rbi !== undefined ? t('gp.nlResRbi', { n: rc.patch.rbi }) : ''),
+        });
+      }),
     ];
     if (!window.confirm(t('gp.nlConfirmOps', { list: lines.join('\n') }))) return;
 

@@ -411,12 +411,23 @@ export function parseShortResult(phrase) {
 //     →[{ inning:7, batterId:'中島', … }, { inning:7, batterId:'宇田川', … }]
 // 「ではなく/でなく」以降を正しい結果とみなし、音声パーサで結果種別・方向を得る。
 // 回が省略された文は直前の回を引き継ぐ。対象打者名があれば拾い、どの打席かの特定に使う。
+// 打点の指定を読む。「打点1」「打点は2」「1打点」「(センター犠飛)で1点」に対応。
+// 「打点」と書かれていれば数字の前後どちらでも拾う(言い回しが人によって違うため)。
+function parseRbi(phrase) {
+  const m = phrase.match(/打点\s*(?:は|を|が|に)?\s*(\d+)/)
+    || phrase.match(/(\d+)\s*打点/)
+    || phrase.match(/(\d+)\s*点/);
+  if (m) return parseInt(m[1], 10);
+  return /打点\s*(?:は|を|が|に)?\s*(?:なし|無し|ゼロ|0)/.test(phrase) ? 0 : null;
+}
+
 export function parseResultCorrections(rawText, players = []) {
   const out = [];
   let lastInning = null;
   let lastBatter = null; // 「山城は3回に中2、4回に中安」のように後半で名前が省かれる形に備える
   for (const seg of splitSentences(rawText)) {
-    if (!/でなく|ではなく|でした|です/.test(seg)) continue;
+    // 「〜です/でした」に加え、「〜に修正/訂正/変更してください」も訂正の合図として扱う
+    if (!/でなく|ではなく|でした|です|修正|訂正|変更|直して|なおして/.test(seg)) continue;
     const segHit = findNameHits(seg, players)[0] || null;
     if (segHit) lastBatter = segHit;
 
@@ -436,8 +447,14 @@ export function parseResultCorrections(rawText, players = []) {
       const short = parseShortResult(phrase);
       if (!RESULT_WORDS.test(phrase) && !short) continue;
       const top = (parseUtterance(phrase) || []).find((c) => c.kind === 'play' && c.result);
-      if (!top && !short) continue;
-      const rbiM = phrase.match(/(\d+)\s*点/);
+      const rbi = parseRbi(phrase);
+      // 打点だけの訂正(「7回の中犠飛は打点1に修正」)は、結果に触れず打点だけ直す
+      if (!top && !short) {
+        if (rbi == null) continue;
+        const only = findNameHits(clause, players)[0] || lastBatter;
+        out.push({ inning, batterId: only?.id || null, batterName: only?.name || null, patch: { rbi } });
+        continue;
+      }
       const hit = findNameHits(clause, players)[0] || lastBatter; // 節に名前が無ければ文の打者を継ぐ
       const result = top?.result || short.result;
       out.push({
@@ -449,7 +466,7 @@ export function parseResultCorrections(rawText, players = []) {
           direction: top?.direction || directionFromShort(phrase) || short?.direction || null,
           outType: result === 'out' ? (top?.outType || short?.outType || 'ground') : null,
           soType: result === 'so' ? (top?.soType || 'swinging') : null,
-          ...(rbiM ? { rbi: parseInt(rbiM[1], 10) } : {}),
+          ...(rbi != null ? { rbi } : {}),
         },
       });
     }
