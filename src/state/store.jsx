@@ -826,11 +826,15 @@ export function reducer(state, action) {
       const g = deep(state.games[action.gameId]);
       ensurePending(g); // スナップショットは打席開始時のまま保持
       const outsBefore = g.outs;
-      // 適用後は runners が書き換わるため、動いた走者のIDを塁ごとに先に控える
-      const idsByFrom = {};
+      // 適用後は runners が書き換わるため、動いた走者を塁ごとに先に控える。
+      // 自軍の走者は選手ID、相手の走者は記号(A〜T)で識別する。記号を残しておかないと
+      // 「相手の誰が走ったか」が消えてしまい、盗塁を選手ごとに積み上げられない。
+      const whoByFrom = {};
       for (const mv of action.moves || []) {
-        idsByFrom[mv.from] = state.games[action.gameId].runners?.[mv.from]?.playerId || null;
+        const r = state.games[action.gameId].runners?.[mv.from];
+        whoByFrom[mv.from] = { playerId: r?.playerId || null, letter: r?.letter || null };
       }
+      const whoOf = (from) => ({ playerId: whoByFrom[from]?.playerId ?? null, letter: whoByFrom[from]?.letter ?? null });
       applyRunnerMoves(g, action.moves, { eventKind: action.event, erChoices: action.erChoices });
       // 守備時: 走塁アウト(盗塁死・牽制死等)も投手のアウト数に加算
       if (!isMyTeamBatting(g) && g.currentPitcherId && g.outs > outsBefore) {
@@ -847,7 +851,7 @@ export function reducer(state, action) {
           g.playLogs.push(newPlayLog({
             gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'sb',
             text: safe.length > 1 ? '盗塁(重盗)' : '盗塁',
-            payload: { moves: [mv], playerId: idsByFrom[mv.from] },
+            payload: { moves: [mv], ...whoOf(mv.from) },
           }));
         }
         // 重盗などで刺された走者がいれば、そのアウトを別ログに残す(成功ログと混ざらないように)
@@ -856,14 +860,14 @@ export function reducer(state, action) {
           g.playLogs.push(newPlayLog({
             gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'runner',
             text: labels.cs,
-            payload: { moves: caught, playerId: idsByFrom[caught[0].from] ?? null, outs: outsDelta },
+            payload: { moves: caught, ...whoOf(caught[0].from), outs: outsDelta },
           }));
         }
       } else {
         g.playLogs.push(newPlayLog({
           gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'runner',
           text: labels[action.event] || '走者イベント',
-          payload: { moves: action.moves, playerId: idsByFrom[action.moves?.[0]?.from] ?? null, outs: outsDelta },
+          payload: { moves: action.moves, ...whoOf(action.moves?.[0]?.from), outs: outsDelta },
         }));
       }
       if (g.outs >= 3) changeHalf(g);
