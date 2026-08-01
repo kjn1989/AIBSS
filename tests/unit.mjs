@@ -7,7 +7,7 @@ import { gameEndCheck, initialPresetIdFor, describeRules } from '../src/lib/rule
 import { aggregateBatting, aggregatePitching, battingMetrics, pitchingMetrics, titleLeaders, DETAIL_METRICS, detailRanking, defaultInningBasis } from '../src/lib/stats.js';
 import { translate } from '../src/lib/i18n.js';
 import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, parseDirectionOnly } from '../src/lib/voiceParser.js';
-import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parseInningRange, parseSlotBatters, parseAtBatDeletions, isExplicitSubText } from '../src/lib/correctionParser.js';
+import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parseInningRange, parseSlotBatters, parseAtBatDeletions, parseShortResult, isExplicitSubText } from '../src/lib/correctionParser.js';
 import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarters, findPositionIssues } from '../src/lib/lineupBox.js';
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
 import { newGame } from '../src/lib/model.js';
@@ -389,6 +389,30 @@ test('detailRanking: 基準イニングがランキングの値に反映され�
   assert.equal(def.perInning, true);
   assert.equal(detailRanking(def, {}, pit, undefined, 7)[0].display, '7.00');
   assert.equal(detailRanking(def, {}, pit, undefined, 9)[0].display, '9.00');
+});
+
+test('parseShortResult: スコアシートの短縮表記を打席結果として読む', () => {
+  assert.deepEqual(parseShortResult('中2'), { result: 'double', direction: 'CF' });
+  assert.deepEqual(parseShortResult('中安'), { result: 'single', direction: 'CF' });
+  assert.deepEqual(parseShortResult('三飛'), { result: 'out', outType: 'fly', direction: '3B' });
+  assert.deepEqual(parseShortResult('遊ゴ'), { result: 'out', outType: 'ground', direction: 'SS' });
+  assert.deepEqual(parseShortResult('左本'), { result: 'hr', direction: 'LF' });
+  assert.deepEqual(parseShortResult('中犠飛'), { result: 'sacFly', direction: 'CF' });
+  // 選手名や位置の文言に引っかからない
+  assert.equal(parseShortResult('中島は'), null);
+  assert.equal(parseShortResult('一塁は松田です'), null);
+});
+
+test('parseResultCorrections: 1文に複数の打席(「山城は3回に中2、4回に中安です」)', () => {
+  const PS = [{ id: 'y', name: '山城' }, { id: 'm', name: '松田' }];
+  const rs = parseResultCorrections('山城は3回に中2、4回に中安です。松田が3回に中飛、4回に三飛です。', PS);
+  assert.equal(rs.length, 4);
+  assert.deepEqual(rs.map((r) => [r.inning, r.batterId, r.patch.result]), [
+    [3, 'y', 'double'], [4, 'y', 'single'], [3, 'm', 'out'], [4, 'm', 'out'],
+  ]);
+  // 方向・アウトの種類も短縮表記から取れる
+  assert.equal(rs[0].patch.direction, 'CF');
+  assert.deepEqual([rs[3].patch.direction, rs[3].patch.outType], ['3B', 'fly']);
 });
 
 test('parseAtBatDeletions: 打席の取り消し(「7回の平川の打席は空欄に」)', () => {
