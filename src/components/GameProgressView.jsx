@@ -339,8 +339,16 @@ function NLCorrectionCard({ game }) {
     return {
       subs: uniq([...(a.subs || []), ...(b.subs || [])], (s) => `${s.inning}|${s.inId}|${s.position || ''}`),
       reassigns: uniq([...(a.reassigns || []), ...(b.reassigns || [])], (r) => `${r.inning}|${r.newId}`),
-      // 同じ回に別の打者が同じ結果、ということもあるので打者も鍵に含める
-      resultCorrs: uniq([...(a.resultCorrs || []), ...(b.resultCorrs || [])], (rc) => `${rc.inning}|${rc.batterId || ''}|${rc.patch.result}`),
+      // 同じ回・同じ打者への結果指示は1つにまとめる。
+      // AI(a)と端末内(b)で食い違ったときは端末内を優先する。端末内はスコアシートの
+      // 短縮表記(中2・三飛…)をそのまま読むため、この形の文では取り違えが起きにくい。
+      resultCorrs: (() => {
+        const m = new Map();
+        for (const rc of [...(a.resultCorrs || []), ...(b.resultCorrs || [])]) {
+          m.set(`${rc.inning}|${rc.batterId || ''}`, rc); // 後から入れる b が勝つ
+        }
+        return [...m.values()];
+      })(),
       posCorrs: uniq([...(a.posCorrs || []), ...(b.posCorrs || [])], (pc) => `${pc.playerId}`),
       // 同じ回・同じ選手の位置指定は1つにまとめ、範囲は広い方(AIと端末内で食い違うことがある)を採る
       slotBatters: uniq([...(a.slotBatters || []), ...(b.slotBatters || [])], (x) => `${x.inning}|${x.order}`),
