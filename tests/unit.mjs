@@ -7,7 +7,7 @@ import { gameEndCheck, initialPresetIdFor, describeRules } from '../src/lib/rule
 import { aggregateBatting, aggregatePitching, battingMetrics, pitchingMetrics, titleLeaders, DETAIL_METRICS, detailRanking, defaultInningBasis } from '../src/lib/stats.js';
 import { translate } from '../src/lib/i18n.js';
 import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, parseDirectionOnly } from '../src/lib/voiceParser.js';
-import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parseInningRange, parseSlotBatters, isExplicitSubText } from '../src/lib/correctionParser.js';
+import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parseInningRange, parseSlotBatters, parseAtBatDeletions, isExplicitSubText } from '../src/lib/correctionParser.js';
 import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarters, findPositionIssues } from '../src/lib/lineupBox.js';
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
 import { newGame } from '../src/lib/model.js';
@@ -389,6 +389,22 @@ test('detailRanking: 基準イニングがランキングの値に反映され�
   assert.equal(def.perInning, true);
   assert.equal(detailRanking(def, {}, pit, undefined, 7)[0].display, '7.00');
   assert.equal(detailRanking(def, {}, pit, undefined, 9)[0].display, '9.00');
+});
+
+test('parseAtBatDeletions: 打席の取り消し(「7回の平川の打席は空欄に」)', () => {
+  const PS = [{ id: 'h', name: '平川' }, { id: 'o', name: '奥田' }];
+  assert.deepEqual(
+    parseAtBatDeletions('7回の平川の打席は空欄にしてください', PS).map((d) => [d.inning, d.playerId]),
+    [[7, 'h']],
+  );
+  // 打順や「第◯打席」でも指せる
+  assert.deepEqual(parseAtBatDeletions('7回の8番の打席を削除', PS).map((d) => [d.inning, d.order]), [[7, 8]]);
+  assert.equal(parseAtBatDeletions('7回の平川の第2打席を消してください', PS)[0].ordinal, 2);
+  // 取り消しの語が無い文は対象外(通常の訂正と取り違えない)
+  assert.deepEqual(parseAtBatDeletions('7回の8番は奥田です', PS), []);
+  assert.deepEqual(parseAtBatDeletions('7回の平川は四球です', PS), []);
+  // 誰の打席か分からないものは扱わない
+  assert.deepEqual(parseAtBatDeletions('7回は空欄にしてください', PS), []);
 });
 
 test('newGame: リエントリー可否は試合ごとに持ち、既定は「なし」', () => {
