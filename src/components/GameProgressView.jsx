@@ -558,7 +558,11 @@ function NLCorrectionCard({ game }) {
     // 実際には回ってこなかった打席が記録されている場合に使う。
     const delAppl = [];
     const delUnresolved = [];
-    for (const d of deletions) {
+    // 「◯◯の打席は空席で、その左飛を△△につけて」のように、同じ回・同じ選手の打席が
+    // 付け替え対象にもなっている場合は削除しない。付け替えれば元のマスは空くので、
+    // 先に消すと付け替える打席そのものが無くなってしまう。
+    const movedAway = new Set(reassigns.filter((r) => r.targetId).map((r) => `${Number(r.inning)}|${r.targetId}`));
+    for (const d of deletions.filter((d) => !(d.playerId && movedAway.has(`${Number(d.inning)}|${d.playerId}`)))) {
       const logs = (game.playLogs || []).filter((l) => l.kind === 'atbat' && Number(l.inning) === Number(d.inning));
       let cand = logs;
       if (d.playerId) cand = logs.filter((l) => l.payload?.playerId === d.playerId);
@@ -594,6 +598,12 @@ function NLCorrectionCard({ game }) {
       seenPair.add(key);
       const order = resolveOrder(r.targetId);
       if (order == null) continue;
+      // 既にその打順へ入る交代が記録済みなら、代打を重ねて作らない
+      // (打順が繰り上がった選手は既に出場ツリーに居るので、二重行の原因になる)
+      const already = (game.playLogs || []).some((l) => l.kind === 'sub'
+        && l.payload?.in === r.newId && l.payload?.order === order
+        && Number(l.inning) <= Number(r.inning));
+      if (already) continue;
       const innings = reAppl.filter((x) => x.targetId === r.targetId && x.newId === r.newId).map((x) => x.inning);
       synthSubs.push({ outId: r.targetId, outName: r.targetName, inId: r.newId, inName: r.newName, inning: Math.min(...innings), subKind: /代走/.test(text) ? 'pr' : 'ph', position: null, order });
     }

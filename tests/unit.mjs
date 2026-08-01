@@ -415,6 +415,22 @@ test('parseResultCorrections: 1文に複数の打席(「山城は3回に中2、4
   assert.deepEqual([rs[3].patch.direction, rs[3].patch.outType], ['3B', 'fly']);
 });
 
+test('parseBatterReassignments: 「◯◯に入っている左飛を△△につけて」を付け替えとして読む', () => {
+  const PS = [{ id: 'h', name: '平川' }, { id: 'o', name: '奥田' }];
+  const T = '7回の平川は空席で、平川に入っている左飛を奥田につけてください';
+  assert.deepEqual(
+    parseBatterReassignments(T, PS).map((r) => [r.inning, r.targetId, r.newId]),
+    [[7, 'h', 'o']],
+  );
+  // 「平川に入っている」の「入っ」を交代語と読んで実在しない交代を作らない
+  assert.deepEqual(parseSubstitutions(T, PS), []);
+  assert.equal(isExplicitSubText(T, ['平川', '奥田']), false);
+  // 「空席」も打席の取り消し語として拾う(付け替えと重なる場合は呼び出し側で除外)
+  assert.deepEqual(parseAtBatDeletions(T, PS).map((d) => [d.inning, d.playerId]), [[7, 'h']]);
+  // 本物の交代文は今までどおり交代として読む
+  assert.equal(parseSubstitutions('7回、平川に代わって奥田がサード', PS).length, 1);
+});
+
 test('preferInGamePlayers: 同名の二重登録は「その試合に出ている方」を掴む', () => {
   // 実際に起きていた不具合: 記録0件の重複登録が名簿の先に並んでいると、
   // 解析がそのIDを掴んでしまい、該当打席が見つからず修正が黙って捨てられていた。
