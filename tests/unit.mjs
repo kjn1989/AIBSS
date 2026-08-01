@@ -415,6 +415,12 @@ test('parseResultCorrections: 1文に複数の打席(「山城は3回に中2、4
   assert.deepEqual([rs[3].patch.direction, rs[3].patch.outType], ['3B', 'fly']);
 });
 
+test('parseBatterReassignments: 複数回をまとめた付け替え(「5回の三振と7回の中犠飛は中島に」)', () => {
+  const PS = [{ id: 's', name: '清水' }, { id: 'n', name: '中島' }];
+  const rs = parseBatterReassignments('清水の5回の三振と7回の中犠飛は、中島に付け替えてください', PS);
+  assert.deepEqual(rs.map((r) => [r.inning, r.targetId, r.newId]), [[5, 's', 'n'], [7, 's', 'n']]);
+});
+
 test('parseBatterReassignments: 「◯◯に入っている左飛を△△につけて」を付け替えとして読む', () => {
   const PS = [{ id: 'h', name: '平川' }, { id: 'o', name: '奥田' }];
   const T = '7回の平川は空席で、平川に入っている左飛を奥田につけてください';

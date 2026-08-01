@@ -598,11 +598,13 @@ function NLCorrectionCard({ game }) {
       seenPair.add(key);
       const order = resolveOrder(r.targetId);
       if (order == null) continue;
-      // 既にその打順へ入る交代が記録済みなら、代打を重ねて作らない
-      // (打順が繰り上がった選手は既に出場ツリーに居るので、二重行の原因になる)
+      // 既にその打順へ入る交代が記録済みなら、代打を作らない。
+      // 打席の付け替えは「誰が打ったか」の訂正であって、守備の入れ替えではない。
+      // ここで代打を作ると、その回以降その打順の守備が入ってきた選手のものになり、
+      // 別途直したはずの守備位置(例「6-7回のライトは清水」)まで上書きしてしまう。
+      // 出場ツリーに居ない選手のときだけ、表示する場所を作るために合成する。
       const already = (game.playLogs || []).some((l) => l.kind === 'sub'
-        && l.payload?.in === r.newId && l.payload?.order === order
-        && Number(l.inning) <= Number(r.inning));
+        && l.payload?.in === r.newId && l.payload?.order === order);
       if (already) continue;
       const innings = reAppl.filter((x) => x.targetId === r.targetId && x.newId === r.newId).map((x) => x.inning);
       synthSubs.push({ outId: r.targetId, outName: r.targetName, inId: r.newId, inName: r.newName, inning: Math.min(...innings), subKind: /代走/.test(text) ? 'pr' : 'ph', position: null, order });

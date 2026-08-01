@@ -1219,8 +1219,13 @@ export function reducer(state, action) {
         g.playLogs = g.playLogs.filter((l) => !stale.includes(l));
         for (const sl of stale) undoSubLog(g, sl, (id) => playerNameOf(state, id));
       }
+      // 交代が起きた半回を決める。g.isTop は「今どの半回か」なので、過去の回を直す
+      // 事後交代にそのまま使うと、ビジターの代打が「◯回裏」に記録されてしまう。
+      // 代打・代走は自チームの攻撃中、守備交代は自チームの守備中に起きる。
+      const battingTop = !g.isHome; // ビジターは表に攻撃
       const subLog = newPlayLog({
-        gameId: g.id, inning, isTop: g.isTop, kind: 'sub',
+        gameId: g.id, inning, kind: 'sub',
+        isTop: (subKind === 'ph' || subKind === 'pr') ? battingTop : !battingTop,
         text: action.label || '選手交代',
         payload: { order, in: inId, out: outId, kind: subKind || 'def', position: position || null },
       });
