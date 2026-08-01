@@ -1058,9 +1058,11 @@ export function reducer(state, action) {
       const g = deep(state.games[action.gameId]);
       const log = g.playLogs.find((l) => l.id === action.logId);
       if (!log) return state;
-      const p = action.patch; // { result, direction, outType, soType, rbi }
+      const p = action.patch; // { result, direction, outType, soType, rbi, runs }
       const label = (p.result === 'so' && SO_TYPES[p.soType]) || RESULTS[p.result]?.label || p.result;
       const dir = DIRECTIONS[p.direction] || '';
+      // その打撃で入った得点。打席を入れ替えるときは打点と一緒に移す必要がある
+      const newRuns = p.runs !== undefined ? p.runs : log.payload.runs;
       if (log.kind === 'atbat') {
         const ab = g.atBats.find((a) => a.id === log.payload.atBatId);
         if (ab) {
@@ -1071,10 +1073,10 @@ export function reducer(state, action) {
           if (p.rbi !== undefined) ab.rbi = p.rbi;
         }
         const name = playerNameOf(state, log.payload.playerId);
-        log.text = `${name} ${dir}${label}` + (log.payload.runs ? ` (${log.payload.runs}点)` : '');
+        log.text = `${name} ${dir}${label}` + (newRuns ? ` (${newRuns}点)` : '');
       } else if (log.kind === 'defense') {
         log.text = `相手打者${log.payload.letter}(${log.payload.order}番): ${dir}${label}` +
-          (log.payload.runs ? ` (${log.payload.runs}失点)` : '');
+          (newRuns ? ` (${newRuns}失点)` : '');
       }
       log.payload = {
         ...log.payload,
@@ -1083,6 +1085,7 @@ export function reducer(state, action) {
         outType: p.result === 'out' ? p.outType || 'ground' : null,
         soType: p.result === 'so' ? p.soType || 'swinging' : null,
         ...(p.rbi !== undefined ? { rbi: p.rbi } : {}),
+        ...(p.runs !== undefined ? { runs: p.runs } : {}),
       };
       g.updatedAt = Date.now();
       return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };

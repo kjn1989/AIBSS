@@ -606,6 +606,22 @@ function NLCorrectionCard({ game }) {
       if (!logId) { const logs = (game.playLogs || []).filter((l) => l.kind === 'atbat' && l.inning === rc.inning); if (logs.length === 1) logId = logs[0].id; }
       if (logId) resAppl.push({ ...rc, logId });
     }
+    // 同じ回で2つの打席の結果が入れ替わる指示のときは、打点とその打席で入った得点も
+    // 一緒に入れ替える。打点は「その打撃が生んだもの」なので、結果だけ移すと
+    // 凡打に打点が残るような食い違いが出る。
+    const logById = new Map((game.playLogs || []).map((l) => [l.id, l]));
+    for (const a of resAppl) {
+      for (const b of resAppl) {
+        if (a === b || Number(a.inning) !== Number(b.inning) || a.logId === b.logId) continue;
+        const la = logById.get(a.logId);
+        const lb = logById.get(b.logId);
+        if (!la || !lb) continue;
+        const swapped = a.patch.result === lb.payload?.result && b.patch.result === la.payload?.result;
+        if (!swapped) continue;
+        if (a.patch.rbi === undefined) a.patch.rbi = lb.payload?.rbi || 0;
+        if (a.patch.runs === undefined) a.patch.runs = lb.payload?.runs || 0;
+      }
+    }
 
     const totalOps = subAppl.length + synthSubs.length + reAppl.length + resAppl.length + posAppl.length + alignAppl.length + slotAppl.length + delAppl.length;
     if (!totalOps) {
@@ -645,7 +661,8 @@ function NLCorrectionCard({ game }) {
       ...resAppl.map((rc) => t('gp.nlResItem', {
         inning: rc.inning,
         who: rc.batterId ? ` ${rc.batterName || nameOf(rc.batterId)}` : '',
-        label: playLabel(rc.patch.result, rc.patch.direction, rc.patch.outType, rc.patch.soType, state.settings.edition, lang),
+        label: playLabel(rc.patch.result, rc.patch.direction, rc.patch.outType, rc.patch.soType, state.settings.edition, lang)
+          + (rc.patch.rbi !== undefined ? t('gp.nlResRbi', { n: rc.patch.rbi }) : ''),
       })),
     ];
     if (!window.confirm(t('gp.nlConfirmOps', { list: lines.join('\n') }))) return;
