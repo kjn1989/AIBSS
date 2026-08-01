@@ -416,7 +416,7 @@ function NLCorrectionCard({ game }) {
 
     const alignAppl = [];
     const alignUnresolved = [];
-    const alignOffField = []; // その回の守備に出ていない選手の位置指定
+    const alignReentry = []; // 記録に出ていない選手を「その回から出場」として入れ直したもの
     const alreadyOk = []; // 既にその守備位置(黙って捨てると別のエラーが出て紛らわしいので記録する)
     for (const al of aligns) {
       // 既に出場している選手は「自分の打順のまま守備位置だけ変更」。
@@ -425,10 +425,21 @@ function NLCorrectionCard({ game }) {
       const own = slotOfPlayer(al.playerId);
       if (own) {
         const to = Math.max(Number(al.toInning) || al.inning, al.inning);
-        // その回の守備に居ない選手の位置は動かせない(交代の記録が先に必要)
+        // その回の記録に出ていない選手を指定された場合、「その回から出場していた」という
+        // 訂正とみなし、自分の打順への再出場として記録する。
+        // (記録が誤っているから直したいのに、記録を理由に拒否すると行き止まりになる)
         const onField = (inn) => (alignMap.get(inn) || []).some((x) => x.playerId === al.playerId);
         if (alignMap.has(al.inning) && !onField(al.inning) && !onField(to)) {
-          alignOffField.push(t('gp.nlAlignOffFieldItem', { name: al.playerName || nameOf(al.playerId), inning: al.inning }));
+          const occupant = (alignMap.get(al.inning) || []).find((x) => x.order === own.order)
+            || (game.lineup || []).find((l) => l.order === own.order) || null;
+          subs = [...subs, {
+            inning: al.inning, order: own.order,
+            outId: occupant?.playerId || null,
+            outName: occupant?.playerId ? nameOf(occupant.playerId) : null,
+            inId: al.playerId, inName: al.playerName || nameOf(al.playerId),
+            position: al.position, subKind: 'def', afterOppOrder: null,
+          }];
+          alignReentry.push(t('gp.nlAlignReentryItem', { name: al.playerName || nameOf(al.playerId), inning: al.inning }));
           continue;
         }
         const innings = inningsToFix(al.playerId, al.position, al.inning, to);
@@ -491,7 +502,8 @@ function NLCorrectionCard({ game }) {
       || (game.lineup || []).find((l) => l.position === '投')?.playerId || null;
     const orderedSubs = [...subs].sort((a, b) => a.inning - b.inning); // 回順(同回は挿入順維持=安定ソート)
     for (let s of orderedSubs) {
-      let order = resolveOrder(s.outId);
+      // 呼び出し側が打順を決めている場合(守備位置の訂正から作った再出場)はそれを優先
+      let order = s.order != null ? s.order : resolveOrder(s.outId);
       // 投手交代で退く側が未特定なら、直前の投手を退く側にする
       if (order == null && s.position === '投' && curPitcher && curPitcher !== s.inId) {
         const o = resolveOrder(curPitcher);
@@ -563,7 +575,6 @@ function NLCorrectionCard({ game }) {
       setAsks(buildAsks({ alignMap, aiQuestions })); // 決められなかった点はその場で聞き返す
       // 指定どおりに既になっている場合は「エラー」ではないので、そう伝える
       if (alreadyOk.length) { setMsg({ kind: 'ok', text: t('gp.nlAlreadyOk', { list: alreadyOk.join('、') }) + note }); return; }
-      if (alignOffField.length) { setMsg({ kind: 'err', text: t('gp.nlAlignOffField', { list: alignOffField.join('、') }) + note }); return; }
       if (alignUnresolved.length) { setMsg({ kind: 'err', text: t('gp.nlPosNotStarter', { name: alignUnresolved.join('、') }) + note }); return; }
       if (posUnresolved.length) { setMsg({ kind: 'err', text: t('gp.nlPosNotStarter', { name: posUnresolved.join('、') }) + note }); return; }
       if (subUnresolved.length) { setMsg({ kind: 'err', text: t('gp.nlSubNoOrder', { name: subUnresolved.join('、') }) + note }); return; }
@@ -614,7 +625,7 @@ function NLCorrectionCard({ game }) {
     if (hasPitcherChange) dispatch({ type: 'RECOMPUTE_PITCHING', gameId: game.id });
 
     const notes = [];
-    if (alignOffField.length) notes.push(t('gp.nlAlignOffFieldShort', { list: alignOffField.join('、') }));
+    if (alignReentry.length) notes.push(t('gp.nlAlignReentry', { list: alignReentry.join('、') }));
     if (posUnresolved.length) notes.push(t('gp.nlPosNotStarterShort', { names: posUnresolved.join('、') }));
     if (subUnresolved.length) notes.push(t('gp.nlSubNoOrderShort', { names: subUnresolved.join('、') }));
     if (reUnresolved.length) notes.push(t('gp.nlReNotFoundShort', { innings: reUnresolved.join('、') }));
