@@ -6,6 +6,7 @@ import PitchCounter from './PitchCounter.jsx';
 import ResultPad from './ResultPad.jsx';
 import PlaySheet from './PlaySheet.jsx';
 import RunnerEventSheet from './RunnerEventSheet.jsx';
+import { opponentTeams, lastOppRoster, normalizeName } from '../lib/matchup.js';
 import Sheet from './Sheet.jsx';
 import VoiceControl from './VoiceControl.jsx';
 import { SubstituteSheet } from './OrderTab.jsx';
@@ -182,6 +183,12 @@ function GameSetup() {
   const ongoing = Object.values(state.games).filter((g) => g.status === 'ongoing' && !g.id.startsWith('demo-'));
   // 既存試合で使われたシーズン名(サジェスト用)
   const knownSeasons = [...new Set(Object.values(state.games).map((g) => g.season).filter(Boolean))];
+  // 過去の対戦相手。自由入力の表記ゆれで対戦成績が分断されるので、入口で選ばせる
+  const allGames = Object.values(state.games);
+  const pastOpponents = opponentTeams(allGames);
+  const recall = lastOppRoster(allGames, opponent);
+  const [carryOver, setCarryOver] = useState(true);
+  const matched = pastOpponents.find((o) => o.key === normalizeName(opponent));
 
   const onPresetChange = (id) => {
     setPresetId(id);
@@ -190,7 +197,15 @@ function GameSetup() {
   };
 
   const startGame = () => {
-    dispatch({ type: 'CREATE_GAME', payload: { opponent, isHome, season: season.trim(), rules: resolveRulesFrom(presetId, custom), allowReentry } });
+    dispatch({
+      type: 'CREATE_GAME',
+      payload: {
+        // 表記ゆれを入口で止める: 過去に対戦した相手なら、その書き方に揃える
+        opponent: matched ? matched.name : opponent.trim(),
+        isHome, season: season.trim(), rules: resolveRulesFrom(presetId, custom), allowReentry,
+        oppRoster: carryOver && recall ? recall : null,
+      },
+    });
     // 次の試合でも同じ設定から始められるよう、選択を覚えておく
     dispatch({ type: 'UPDATE_SETTINGS', patch: { lastRulePresetId: presetId, lastAllowReentry: allowReentry } });
   };
@@ -201,6 +216,31 @@ function GameSetup() {
         <h2>{t('gamesetup.title')}</h2>
         <label className="small dim">{t('gamesetup.opponent')}</label>
         <input value={opponent} onChange={(e) => setOpponent(e.target.value)} placeholder={t('gamesetup.opponent.placeholder')} />
+        {pastOpponents.length > 0 && !matched && (
+          <div className="opp-chips">
+            <span className="small dim">{t('opp.recent')}</span>
+            {pastOpponents.slice(0, 6).map((o) => (
+              <button key={o.key} className="small ghost" onClick={() => setOpponent(o.name)}>{o.name}</button>
+            ))}
+          </div>
+        )}
+        {matched && (
+          <div className="opp-recall">
+            <b>{t('opp.known', { name: matched.name, n: matched.games + 1 })}</b>
+            {recall ? (
+              <label className="opp-recall-row">
+                <input type="checkbox" checked={carryOver} onChange={(e) => setCarryOver(e.target.checked)} />
+                <span>
+                  {t('opp.recall', { date: recall.fromDate })}
+                  <i>
+                    {recall.namedCount > 0 ? t('opp.recallNames', { n: recall.namedCount }) : t('opp.recallNone')}
+                  </i>
+                </span>
+              </label>
+            ) : null}
+            {recall && carryOver && <p className="small dim" style={{ margin: '6px 0 0' }}>{t('opp.recallHint')}</p>}
+          </div>
+        )}
         <label className="small dim mt8" style={{ display: 'block' }}>{t('gamesetup.season')}</label>
         <input
           value={season}
