@@ -15,7 +15,8 @@ import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingS
 import { remapPlayerInGame, fillPlayerGaps } from '../src/lib/mergePlayers.js';
 import { computeBoxScore } from '../src/lib/boxscore.js';
 import { buildMatchups, opponentSummaries, oppPitcherByAtBat, oppPlayerKey, normalizeName } from '../src/lib/matchup.js';
-import { yearOfDate, yearOfGame, yearsInGames, tenureByPlayer, playedInYear, isArchived, yearLabel, currentYear, resolveYear, scopedGames } from '../src/lib/year.js';
+import { yearOfDate, yearOfGame, yearsInGames, tenureByPlayer, playedInYear, isArchived, yearLabel, currentYear, resolveYear, scopedGames,
+  gradeOf, entryYearFromGrade, willGraduate, sortByGrade, usesGrade, defaultSchoolType, maxGradeOf } from '../src/lib/year.js';
 
 import { rebuildBatters, findDuplicateAtBats, findOrderBreaks, canRebuildOrders } from '../src/lib/battersRebuild.js';
 
@@ -1414,4 +1415,46 @@ test('scopedGames: 年度スコープは既定でも「その年度だけ」に�
   assert.deepEqual(scopedGames(state, { scope: 'game', gameId: 'c' }).map((g) => g.id), ['c']);
   // 記録が1件も無いときだけ全件(空表示になるより素直)
   assert.equal(resolveYear([], { scope: 'year' }, 4), null);
+});
+
+// ---- 学年(入学年度から導出) ----
+test('gradeOf / entryYearFromGrade: 学年は保存せず入学年度から導く', () => {
+  const p = { entryYear: 2024 };
+  assert.equal(gradeOf(p, 2024), 1);
+  assert.equal(gradeOf(p, 2026), 3); // 年度が進めば学年も上がる(名簿の書き換え不要)
+  assert.equal(gradeOf(p, 2023), 0); // 入学前
+  assert.equal(gradeOf({}, 2026), null); // 未設定
+  // 入力は「学年」、保存は「入学年度」
+  assert.equal(entryYearFromGrade(1, 2026), 2026);
+  assert.equal(entryYearFromGrade(3, 2026), 2024);
+  assert.equal(entryYearFromGrade('', 2026), null);
+});
+
+test('willGraduate: 最終学年に達していれば、その年度で卒業', () => {
+  const high = maxGradeOf('high'); // 高校3年
+  assert.equal(high, 3);
+  assert.equal(willGraduate({ entryYear: 2024 }, 2026, high), true);  // 3年
+  assert.equal(willGraduate({ entryYear: 2025 }, 2026, high), false); // 2年
+  assert.equal(willGraduate({}, 2026, high), false); // 学年未設定は自動判定しない
+  assert.equal(maxGradeOf('elementary'), 6);
+  assert.equal(maxGradeOf('university'), 4);
+});
+
+test('usesGrade / defaultSchoolType: 草野球では学年を使わない', () => {
+  assert.equal(usesGrade('草野球'), false);
+  assert.equal(usesGrade('ブカツ(中高大)'), true);
+  assert.equal(usesGrade('少年野球'), true);
+  assert.equal(defaultSchoolType('草野球'), null);
+  assert.equal(defaultSchoolType('少年野球'), 'elementary');
+  assert.equal(defaultSchoolType('ブカツ(中高大)'), 'high');
+});
+
+test('sortByGrade: 上級生から並び、未設定は末尾', () => {
+  const ps = [
+    { id: 'a', name: '1年', entryYear: 2026, number: '9' },
+    { id: 'b', name: '未設定', number: '1' },
+    { id: 'c', name: '3年', entryYear: 2024, number: '5' },
+    { id: 'd', name: '3年若番', entryYear: 2024, number: '2' },
+  ];
+  assert.deepEqual(sortByGrade(ps, 2026).map((p) => p.name), ['3年若番', '3年', '1年', '未設定']);
 });
