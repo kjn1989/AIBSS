@@ -106,6 +106,9 @@ export function newPlayer(name, number = '', opts = {}) {
     scoutPhoto: '', // 顔写真(256px JPEGのdataURL)。空なら頭文字を表示。
     // 卒業・退部でのアーカイブ。削除ではなく「名簿の前面から外す」だけで、記録は残る。
     // 在籍期間は出場した試合から導出するので保存しない(lib/year.js の tenureByPlayer)。
+    // 入学年度。学年は「年度 − 入学年度 + 1」で導出する(学年を保存すると毎年書き換えが要る)。
+    // ブカツ・少年野球でのみ使う。未設定なら学年は「未設定」扱い。
+    entryYear: opts.entryYear ?? null,
     archivedAt: null,   // アーカイブした日時 | null=現役
     archivedYear: null, // どの年度の終わりで抜けたか
     archiveNote: '',    // '卒業' | '退部' | '移籍' など(任意)

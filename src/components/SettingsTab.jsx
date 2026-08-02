@@ -5,7 +5,10 @@ import { encodeWatchLink, encodeInviteLink } from './WatchView.jsx';
 import QRCode from './QRCode.jsx';
 import { battingCSV, pitchingCSV, playLogCSV, atBatCSV, downloadCSV, shareCSV } from '../lib/csv.js';
 import { EDITIONS, HAND_LABEL, editionLabel } from '../lib/model.js';
-import { isArchived, tenureByPlayer, currentYear, DEFAULT_YEAR_START_MONTH } from '../lib/year.js';
+import {
+  isArchived, tenureByPlayer, currentYear, DEFAULT_YEAR_START_MONTH,
+  usesGrade, defaultSchoolType, maxGradeOf, gradeOf, entryYearFromGrade, sortByGrade, SCHOOL_TYPES,
+} from '../lib/year.js';
 import EditionText from './EditionText.jsx';
 import { listProfiles, getActiveProfileId, addProfile, switchActiveProfile, deleteProfile, listOrphanedProfiles, restoreProfile } from '../lib/profiles.js';
 import OfficialCloudCard from './OfficialCloudCard.jsx';
@@ -127,14 +130,49 @@ export default function SettingsTab() {
   const [newThrows, setNewThrows] = useState('');
   const [newBats, setNewBats] = useState('');
   const [showGeminiHelp, setShowGeminiHelp] = useState(false);
+  const [newGrade, setNewGrade] = useState('');
+  const [rosterSort, setRosterSort] = useState('grade');
+  // 学年はブカツ・少年野球でのみ使う。草野球では欄ごと出さない
+  const gradeOn = usesGrade(state.settings.edition);
+  const startMonth = state.settings.yearStartMonth || DEFAULT_YEAR_START_MONTH;
+  const thisYear = currentYear(startMonth);
+  const schoolType = state.settings.schoolType || defaultSchoolType(state.settings.edition);
+  const maxGrade = maxGradeOf(schoolType) || 6;
+
+  // 名簿の並び。学年順のときは学年ごとの見出しを差し込む(どこで区切れるか分かるように)
+  const rosterRows = (() => {
+    const active = state.players.filter((p) => !isArchived(p));
+    let rows = active;
+    if (gradeOn && rosterSort === 'grade') rows = sortByGrade(active, thisYear);
+    else if (rosterSort === 'number') {
+      const num = (p) => { const n = parseInt(p.number, 10); return Number.isFinite(n) ? n : Infinity; };
+      rows = [...active].sort((a, b) => num(a) - num(b));
+    }
+    const showHeads = gradeOn && rosterSort === 'grade';
+    let prev;
+    return rows.map((p, i) => {
+      const g = gradeOf(p, thisYear);
+      let head = null;
+      if (showHeads && (i === 0 || g !== prev)) {
+        head = { grade: g, n: rows.filter((x) => gradeOf(x, thisYear) === g).length, entry: p.entryYear };
+      }
+      prev = g;
+      return { p, head };
+    });
+  })();
 
   const addPlayer = () => {
     if (!newName.trim()) return;
-    dispatch({ type: 'ADD_PLAYER', name: newName.trim(), number: newNumber.trim(), throws: newThrows, bats: newBats });
+    // 入力は「学年」で受け、保存は入学年度に変換する(学年は毎年変わるが入学年度は変わらない)
+    dispatch({
+      type: 'ADD_PLAYER', name: newName.trim(), number: newNumber.trim(), throws: newThrows, bats: newBats,
+      entryYear: gradeOn ? entryYearFromGrade(newGrade, thisYear) : null,
+    });
     setNewName('');
     setNewNumber('');
     setNewThrows('');
     setNewBats('');
+    setNewGrade('');
   };
 
   return (
@@ -169,6 +207,18 @@ export default function SettingsTab() {
           placeholder={t('app.teamFallback')}
         />
         <label className="small dim mt8" style={{ display: 'block' }}>{t('set.edition')}</label>
+        {gradeOn && (
+          <div className="mt12">
+            <label className="small dim" style={{ display: 'block', marginBottom: 4 }}>{t('grade.school')}</label>
+            <select
+              value={schoolType || ''}
+              onChange={(e) => dispatch({ type: 'UPDATE_SETTINGS', patch: { schoolType: e.target.value } })}
+            >
+              {SCHOOL_TYPES.map((st) => <option key={st.id} value={st.id}>{t(`school.${st.id}`)}</option>)}
+            </select>
+            <p className="small dim" style={{ marginTop: 4 }}>{t('grade.schoolHint')}</p>
+          </div>
+        )}
         <div className="toggle-row editions">
           {EDITIONS.map((ed) => (
             <button
@@ -203,9 +253,41 @@ export default function SettingsTab() {
           </select>
           <span className="small dim grow" style={{ textAlign: 'right' }}>{t('set.handHint')}</span>
         </div>
+        {gradeOn && (
+          <>
+            <div className="flex mt8">
+              <label className="small dim" style={{ width: 28 }}>{t('grade.label')}</label>
+              <select style={{ width: 84 }} value={newGrade} onChange={(e) => setNewGrade(e.target.value)}>
+                <option value="">—</option>
+                {Array.from({ length: maxGrade }, (_, i) => i + 1).map((g) => (
+                  <option key={g} value={g}>{t('grade.nth', { n: g })}</option>
+                ))}
+              </select>
+              {newGrade && (
+                <span className="small grow" style={{ color: 'var(--accent)' }}>
+                  {t('grade.entryHint', { y: entryYearFromGrade(newGrade, thisYear) })}
+                </span>
+              )}
+            </div>
+          </>
+        )}
+        {gradeOn && (
+          <div className="lens-row mt8">
+            {[['grade', 'grade.sortGrade'], ['number', 'grade.sortNumber'], ['added', 'grade.sortAdded']].map(([k, key]) => (
+              <button key={k} className={rosterSort === k ? 'on' : ''} onClick={() => setRosterSort(k)}>{t(key)}</button>
+            ))}
+          </div>
+        )}
         <div className="mt12">
-          {state.players.filter((p) => !isArchived(p)).map((p) => (
-            <div className="row" key={p.id}>
+          {rosterRows.map(({ p, head }) => (
+            <React.Fragment key={p.id}>
+              {head && (
+                <div className="grade-head">
+                  <b>{head.grade == null ? t('grade.unset') : t('grade.nth', { n: head.grade })}</b>
+                  {head.grade != null && <span>{t('grade.count', { n: head.n, y: head.entry })}</span>}
+                </div>
+              )}
+            <div className="row">
               <input
                 className="num-edit"
                 value={p.number || ''}
@@ -215,24 +297,30 @@ export default function SettingsTab() {
                 maxLength={3}
                 aria-label={t('set.number')}
               />
-              <span className="grow">{p.name}</span>
-              <label className="small dim">{t('set.throwShort')}</label>
-              <select className="hand-select" value={p.throws || ''} onChange={(e) => dispatch({ type: 'UPDATE_PLAYER', id: p.id, patch: { throws: e.target.value } })}>
+              <span className="grow player-name">{p.name}</span>
+              <select
+                className="hand-select" aria-label={t('set.throwShort')} title={t('set.throwShort')}
+                value={p.throws || ''} onChange={(e) => dispatch({ type: 'UPDATE_PLAYER', id: p.id, patch: { throws: e.target.value } })}
+              >
                 <option value="">—</option><option value="R">{t('hand.R')}</option><option value="L">{t('hand.L')}</option>
               </select>
-              <label className="small dim">{t('set.batShort')}</label>
-              <select className="hand-select" value={p.bats || ''} onChange={(e) => dispatch({ type: 'UPDATE_PLAYER', id: p.id, patch: { bats: e.target.value } })}>
+              <select
+                className="hand-select" aria-label={t('set.batShort')} title={t('set.batShort')}
+                value={p.bats || ''} onChange={(e) => dispatch({ type: 'UPDATE_PLAYER', id: p.id, patch: { bats: e.target.value } })}
+              >
                 <option value="">—</option><option value="R">{t('hand.R')}</option><option value="L">{t('hand.L')}</option><option value="S">{t('hand.S')}</option>
               </select>
               <button
-                className="small ghost"
+                className="small ghost icon-btn"
                 title={t('archive.hint')}
-                onClick={() => dispatch({ type: 'ARCHIVE_PLAYERS', ids: [p.id], year: currentYear(state.settings.yearStartMonth || DEFAULT_YEAR_START_MONTH) })}
+                aria-label={t('archive.action')}
+                onClick={() => dispatch({ type: 'ARCHIVE_PLAYERS', ids: [p.id], year: thisYear })}
               >
-                {t('archive.action')}
+                📥
               </button>
               <button className="small danger ghost" onClick={() => dispatch({ type: 'DELETE_PLAYER', id: p.id })}>{t('action.delete')}</button>
             </div>
+            </React.Fragment>
           ))}
           {state.players.filter((p) => !isArchived(p)).length === 0 && <div className="dim small mt8">{t('set.noPlayers')}</div>}
         </div>

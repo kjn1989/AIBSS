@@ -134,3 +134,72 @@ export function scopedGames(state, value) {
   if (value.season) return all.filter((g) => g.season === value.season);
   return all;
 }
+
+// ============================================================
+// 学年(ブカツ・少年野球)
+//
+// 学年そのものは保存しない。保存するのは入学年度(player.entryYear)で、
+// 学年は見ている年度から導出する。学年を持つと毎年4月に名簿全体が
+// 間違いになるが、入学年度なら一度入れたら二度と変わらない。
+//   学年 = 年度 − 入学年度 + 1
+// 過去の年度を見れば、そのときの学年が出る。
+//
+// 入力は「学年」で受け、保存時に入学年度へ変換する(人間には自然な入力、
+// データには不変の値)。
+// ============================================================
+
+export const SCHOOL_TYPES = [
+  { id: 'elementary', maxGrade: 6 },
+  { id: 'junior', maxGrade: 3 },
+  { id: 'high', maxGrade: 3 },
+  { id: 'university', maxGrade: 4 },
+];
+
+// 学年を使うエディションか。草野球は使わない(欄ごと出さない)。
+export function usesGrade(edition) {
+  return edition === '少年野球' || edition === 'ブカツ(中高大)';
+}
+
+// エディションから学校区分の既定。ブカツは中高大が混ざるので設定で選ばせる。
+export function defaultSchoolType(edition) {
+  if (edition === '少年野球') return 'elementary';
+  if (edition === 'ブカツ(中高大)') return 'high';
+  return null;
+}
+
+export function maxGradeOf(schoolType) {
+  return SCHOOL_TYPES.find((s) => s.id === schoolType)?.maxGrade ?? null;
+}
+
+// その年度の学年。入学年度が未設定なら null(「学年 未設定」として扱う)。
+export function gradeOf(player, year) {
+  const entry = player?.entryYear;
+  if (entry == null || entry === '' || year == null) return null;
+  return year - Number(entry) + 1;
+}
+
+// 「◯年」と入力された学年を、保存用の入学年度へ変換する。
+export function entryYearFromGrade(grade, year) {
+  if (grade == null || grade === '' || year == null) return null;
+  return year - Number(grade) + 1;
+}
+
+// その年度を終えたら卒業か(学年が最終学年に達しているか)。
+// 年度の締めで卒業予定者を自動で選ぶのに使う。
+export function willGraduate(player, year, maxGrade) {
+  const g = gradeOf(player, year);
+  return g != null && maxGrade != null && g >= maxGrade;
+}
+
+// 学年順に並べる。未設定は末尾へ。同学年内は背番号順(数値優先)。
+export function sortByGrade(players = [], year) {
+  const key = (p) => {
+    const g = gradeOf(p, year);
+    return g == null ? Infinity : -g; // 上級生を先に
+  };
+  const num = (p) => {
+    const n = parseInt(p.number, 10);
+    return Number.isFinite(n) ? n : Infinity;
+  };
+  return [...players].sort((a, b) => key(a) - key(b) || num(a) - num(b) || (a.createdAt || 0) - (b.createdAt || 0));
+}

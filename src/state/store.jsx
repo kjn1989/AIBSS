@@ -50,6 +50,7 @@ export const initialState = {
     maskAiNames: true, // AI送信前に選手名を「選手」に伏せる(メモ変換・音声解釈に適用。既定ON)
     lastBackupAt: null, // 最後にJSONバックアップを保存した時刻(データ消失対策のリマインド用)
     yearStartMonth: 4, // 年度の開始月。日本の年度に合わせて4月始まりが既定(1=暦年 / 9=北米式)
+    schoolType: null, // 'elementary'|'junior'|'high'|'university'。最終学年(卒業の判定)を決める。草野球はnull
     officialTeamId: null, // 公式クラウド(lib/officialCloud.js)のチームID。null=未接続
     officialRole: null, // 公式クラウドでの自分のロール(owner/scorer/viewer)。CloudSyncが接続時に更新
   },
@@ -446,7 +447,9 @@ export function reducer(state, action) {
 
     // ===== 選手 =====
     case 'ADD_PLAYER': {
-      const p = newPlayer(action.name, action.number || '', { throws: action.throws || '', bats: action.bats || '' });
+      const p = newPlayer(action.name, action.number || '', {
+        throws: action.throws || '', bats: action.bats || '', entryYear: action.entryYear ?? null,
+      });
       return { ...state, players: [...state.players, p] };
     }
     case 'UPDATE_PLAYER': {

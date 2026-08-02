@@ -802,7 +802,8 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 .pill.sac { color: var(--purple); border-color: var(--purple); }
 .pill.intf { color: var(--gold); border-color: var(--gold); }
 .pill.multiout { color: var(--gold); border-color: var(--gold); background: rgba(227,179,65,0.14); font-weight: 800; }
-.hand-select { width: 52px; padding: 4px 2px; font-size: 12px; }
+/* 名簿の行は要素が多く、選手名が潰れやすい。左右のセレクトは値が1文字なので詰める */
+.hand-select { width: 44px; padding: 4px 1px; font-size: 12px; }
 /* 選手一覧の背番号: 登録後もタップ→入力で変更できる編集フィールド */
 .num-edit {
   width: 46px; flex: 0 0 auto; text-align: center; padding: 4px 2px;
@@ -1364,3 +1365,24 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
   display: block; font-family: ui-monospace, Menlo, monospace;
   font-size: 9.5px; font-weight: 400; color: var(--text-dim); margin-top: 1px;
 }
+
+/* 名簿の学年見出し(ブカツ・少年野球)。どこで学年が切り替わるかを示す */
+.grade-head {
+  display: flex; align-items: baseline; gap: 7px;
+  margin: 12px 0 3px; padding-bottom: 3px; border-bottom: 1px solid var(--border);
+}
+.grade-head b { font-size: 12.5px; font-weight: 800; color: var(--accent); }
+.grade-head span { font-size: 10px; color: var(--text-dim); font-family: ui-monospace, Menlo, monospace; }
+/* 小さな並べ替えトグル(名簿・引き出しの中で使う) */
+.lens-row { display: flex; gap: 2px; padding: 2px; background: var(--bg-3); border-radius: 7px; }
+.lens-row button {
+  flex: 1; min-height: 28px; background: transparent; border: none; border-radius: 5px;
+  color: var(--text-dim); font-size: 11.5px; font-weight: 800; font-family: inherit;
+}
+.lens-row button.on { background: var(--bg-2); color: var(--text); box-shadow: 0 1px 3px rgba(0, 0, 0, .4); }
+
+/* 名簿の行に並ぶ小さなアイコンボタン(アーカイブ等)。
+   文字のままだと390px幅で行が折れて選手名が縦に潰れるため、記号にして幅を返す */
+.icon-btn { min-width: 34px; padding: 4px 6px; font-size: 15px; line-height: 1; }
+/* 名簿の選手名。行の要素が増えても縦に潰れないよう、折り返さず省略する */
+.player-name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
