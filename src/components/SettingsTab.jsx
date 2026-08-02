@@ -265,8 +265,7 @@ export default function SettingsTab() {
     }
     const showHeads = gradeOn && rosterSort === 'grade';
     let prev;
-    // 見出しが出ないとき(背番号順・登録順)は、行の中に学年を書く。
-    // 見出しが出るときは重複するので書かない。ラベルは1か所に1回だけ。
+    // 学年は行の中で直せるようにする(見出しは区切りで、直す手段ではない)。
     return rows.map((p, i) => {
       const g = gradeOf(p, thisYear);
       let head = null;
@@ -274,7 +273,7 @@ export default function SettingsTab() {
         head = { grade: g, n: rows.filter((x) => gradeOf(x, thisYear) === g).length, entry: p.entryYear };
       }
       prev = g;
-      return { p, head, grade: showHeads ? undefined : g };
+      return { p, head, grade: g };
     });
   })();
 
@@ -382,40 +381,45 @@ export default function SettingsTab() {
 
       <div className="card">
         <h2>{t('set.players', { n: state.players.filter((p) => !isArchived(p)).length })}</h2>
-        <div className="flex">
-          <input className="grow" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={t('set.playerName')} />
-          <input style={{ width: 70 }} value={newNumber} onChange={(e) => setNewNumber(e.target.value)} placeholder={t('set.number')} inputMode="numeric" />
-          <button className="primary" onClick={addPlayer}>{t('action.add')}</button>
+        {/* 追加フォームは1つの枠にまとめ、確定ボタンを最後に置く。
+            以前は「追加」が1行目にあったので、下の 投/打/学年 がフォームの一部に
+            見えず、一覧の絞り込みだと誤解されていた */}
+        <div className="add-form">
+          <div className="add-form-title">{t('set.addPlayer')}</div>
+          <div className="flex">
+            <input className="grow" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={t('set.playerName')} />
+            <input style={{ width: 70 }} value={newNumber} onChange={(e) => setNewNumber(e.target.value)} placeholder={t('set.number')} inputMode="numeric" />
+          </div>
+          <div className="flex mt8">
+            <label className="small dim" style={{ width: 28 }}>{t('set.throwShort')}</label>
+            <select style={{ width: 62 }} value={newThrows} onChange={(e) => setNewThrows(e.target.value)}>
+              <option value="">—</option><option value="R">{t('hand.R')}</option><option value="L">{t('hand.L')}</option>
+            </select>
+            <label className="small dim" style={{ width: 28, marginLeft: 4 }}>{t('set.batShort')}</label>
+            <select style={{ width: 62 }} value={newBats} onChange={(e) => setNewBats(e.target.value)}>
+              <option value="">—</option><option value="R">{t('hand.R')}</option><option value="L">{t('hand.L')}</option><option value="S">{t('hand.S')}</option>
+            </select>
+            {gradeOn ? (
+              <>
+                <label className="small dim" style={{ width: 28, marginLeft: 4 }}>{t('grade.label')}</label>
+                <select className="grow" value={newGrade} onChange={(e) => setNewGrade(e.target.value)}>
+                  <option value="">—</option>
+                  {Array.from({ length: maxGrade }, (_, i) => i + 1).map((g) => (
+                    <option key={g} value={g}>{t('grade.nth', { n: g })}</option>
+                  ))}
+                </select>
+              </>
+            ) : (
+              <span className="small dim grow" style={{ textAlign: 'right' }}>{t('set.handHint')}</span>
+            )}
+          </div>
+          {gradeOn && newGrade && (
+            <p className="small mt8" style={{ color: 'var(--accent)', margin: '8px 0 0' }}>
+              {t('grade.entryHint', { y: entryYearFromGrade(newGrade, thisYear) })}
+            </p>
+          )}
+          <button className="primary mt8" style={{ width: '100%' }} onClick={addPlayer}>{t('action.add')}</button>
         </div>
-        <div className="flex mt8">
-          <label className="small dim" style={{ width: 28 }}>{t('set.throwShort')}</label>
-          <select style={{ width: 68 }} value={newThrows} onChange={(e) => setNewThrows(e.target.value)}>
-            <option value="">—</option><option value="R">{t('hand.R')}</option><option value="L">{t('hand.L')}</option>
-          </select>
-          <label className="small dim" style={{ width: 28, marginLeft: 8 }}>{t('set.batShort')}</label>
-          <select style={{ width: 68 }} value={newBats} onChange={(e) => setNewBats(e.target.value)}>
-            <option value="">—</option><option value="R">{t('hand.R')}</option><option value="L">{t('hand.L')}</option><option value="S">{t('hand.S')}</option>
-          </select>
-          <span className="small dim grow" style={{ textAlign: 'right' }}>{t('set.handHint')}</span>
-        </div>
-        {gradeOn && (
-          <>
-            <div className="flex mt8">
-              <label className="small dim" style={{ width: 28 }}>{t('grade.label')}</label>
-              <select style={{ width: 84 }} value={newGrade} onChange={(e) => setNewGrade(e.target.value)}>
-                <option value="">—</option>
-                {Array.from({ length: maxGrade }, (_, i) => i + 1).map((g) => (
-                  <option key={g} value={g}>{t('grade.nth', { n: g })}</option>
-                ))}
-              </select>
-              {newGrade && (
-                <span className="small grow" style={{ color: 'var(--accent)' }}>
-                  {t('grade.entryHint', { y: entryYearFromGrade(newGrade, thisYear) })}
-                </span>
-              )}
-            </div>
-          </>
-        )}
         <TeamRoleRow />
         {gradeOn && (
           <div className="lens-row mt8">
@@ -449,10 +453,24 @@ export default function SettingsTab() {
               />
               <span className="grow player-cell">
                 <span className="player-name">{p.name}</span>
-                {gradeOn && grade !== undefined && (
-                  <span className="player-grade">
-                    {grade == null ? t('grade.unset') : t('grade.nth', { n: grade })}
-                  </span>
+                {gradeOn && (
+                  // 学年は登録時にしか決められず、あとから直せなかった。
+                  // 入れ違いや入力漏れを直す手段が無いと名簿が信用できなくなる
+                  <select
+                    className="grade-select"
+                    aria-label={t('grade.label')}
+                    value={grade == null ? '' : grade}
+                    onChange={(e) => dispatch({
+                      type: 'UPDATE_PLAYER', id: p.id,
+                      patch: { entryYear: entryYearFromGrade(e.target.value, thisYear) },
+                    })}
+                  >
+                    {/* 行の中では幅を取れないので短い言い方にする(見出しは「学年 未設定」) */}
+                    <option value="">{t('grade.unsetShort')}</option>
+                    {Array.from({ length: maxGrade }, (_, i) => i + 1).map((g) => (
+                      <option key={g} value={g}>{t('grade.nth', { n: g })}</option>
+                    ))}
+                  </select>
                 )}
               </span>
               <select
