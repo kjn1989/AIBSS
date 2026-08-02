@@ -1462,3 +1462,23 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 .opp-recall-row i {
   display: block; font-style: normal; font-size: 10.5px; color: var(--text-dim); margin-top: 1px;
 }
+
+/* ---- 相手選手名の聞き出し(試合直後・成績が見えている場所で) ---- */
+.oppname-card { border-color: var(--accent-2); background: rgba(31, 111, 235, .07); }
+.oppname-head { display: flex; align-items: center; gap: 8px; min-height: 32px; }
+.oppname-head b { flex: 1; font-size: 14px; color: var(--accent); }
+.oppname-head span { color: var(--text-dim); font-size: 12px; }
+.oppname-row {
+  display: flex; align-items: center; gap: 8px; padding: 7px 0;
+  border-bottom: 1px solid rgba(48, 54, 61, .5);
+}
+.oppname-row:last-child { border-bottom: none; }
+.oppname-tag {
+  flex: 0 0 46px; font-family: ui-monospace, Menlo, monospace; font-size: 11px;
+  font-weight: 800; color: var(--text-dim);
+}
+.oppname-stat {
+  flex: 0 0 96px; font-size: 10.5px; color: var(--text-dim); line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+}
+.oppname-row input { flex: 1; min-width: 0; font-size: 13px; padding: 6px 8px; }
