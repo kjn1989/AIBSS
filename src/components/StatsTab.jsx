@@ -8,8 +8,8 @@ import PlayerView from './PlayerView.jsx';
 import MemberSection from './MemberSection.jsx';
 import TitleCards from './TitleCards.jsx';
 import MatchupCard from './MatchupCard.jsx';
-import OppBatteryCard from './OppBatteryCard.jsx';
-import OppOffenseCard from './OppOffenseCard.jsx';
+import BatteryCard from './BatteryCard.jsx';
+import OffenseCard from './OffenseCard.jsx';
 
 // 成績・詳細ランキング(10大メトリクス) + 投手成績(旧「投手」タブを統合)
 export default function StatsTab() {
@@ -123,8 +123,8 @@ export default function StatsTab() {
       <BattingSummaryTable batting={batting} nameOf={nameOf} onOpenPlayer={setPlayerId} tenureOf={tenureOf} />
       <PitchingSummaryTable pitching={pitching} nameOf={nameOf} onOpenPlayer={setPlayerId} tenureOf={tenureOf} />
       <MatchupCard games={games} onOpenPlayer={setPlayerId} />
-      <OppBatteryCard games={games} />
-      <OppOffenseCard games={games} />
+      <BatteryCard games={games} />
+      <OffenseCard games={games} />
       <p className="small dim" style={{ textAlign: 'center', marginBottom: 12 }}>
         {t('stats.tapHint')}
       </p>

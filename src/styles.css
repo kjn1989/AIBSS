@@ -1511,6 +1511,12 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 .bx-more { float: right; color: var(--accent); font-size: 10px; font-weight: 700; }
 .opv-callout.good { background: rgba(63, 185, 80, .1); border-color: rgba(63, 185, 80, .35); }
 
+/* 相手/自軍 の切り替えと、対戦相手の絞り込みを1行に収める。
+   相手が1チームだけのときはセグメントだけが残る */
+.scout-side { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.scout-side .seg-control { margin: 0; flex: 0 0 auto; width: auto; }
+.scout-side select { flex: 1 1 auto; min-width: 0; margin: 0; }
+
 /* 数字を3つだけ大きく見せる小さなタイル(相手の機動力など、まず結論を見る画面用) */
 .kpi3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
 .kpi {
