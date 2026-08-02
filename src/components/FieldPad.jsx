@@ -20,14 +20,17 @@ import {
 //   - 押した点にボールが落ちてくる。0.5秒見せてから畳む。
 //     自分の押した点を一度も見ないまま次に進むのが、いちばん分かりにくかった
 //   - 押したまま指を動かすと追いかけてくる。位置そのものがデータだと伝わる
-//   - 初回だけ図の上に説明を重ねる
+//   - 各試合の最初の打席だけ、図の上に説明を重ねる
 //
 // 縮尺は実際の球場に合わせ、フェンスの外にスタンドを描く。
 // 柵が図の外周だと本塁打を押す場所が無かった。詳しくは battedBall.js。
 // ============================================================
 
 const OUTFIELD = ['LF', 'CF', 'RF'];
-const HINT_KEY = 'bbscorer.hint.fieldpad.v1';
+// 説明を最後に出した試合のID。試合が変われば、その試合の最初の打席でまた出す。
+// 一度きりにすると、久しぶりの試合や交代した記録係には届かない。
+// 一方で毎打席出すとただの邪魔になるので、1試合1回にする。
+const HINT_KEY = 'bbscorer.hint.fieldpad.game';
 
 // 深さ(フェンスまでを1)→ パッド幅に対する円の直径(%)
 const dia = (d) => d * PAD_FENCE * 200;
@@ -37,16 +40,20 @@ const topOf = (d) => ballToPadPoint(0, d).fy * 100;
 export function resetFieldPadHint() {
   try { localStorage.removeItem(HINT_KEY); } catch { /* 使えなくても支障はない */ }
 }
-function hintSeen() {
-  try { return localStorage.getItem(HINT_KEY) === '1'; } catch { return true; }
+function hintSeenInGame(gameId) {
+  if (!gameId) return true; // 試合が分からないときは出さない(取り込み画面等)
+  try { return localStorage.getItem(HINT_KEY) === String(gameId); } catch { return true; }
+}
+function markHintSeen(gameId) {
+  try { localStorage.setItem(HINT_KEY, String(gameId || '')); } catch { /* 出し続けても害はない */ }
 }
 
-export default function FieldPad({ value, point, onChange, onDone, outfieldOnly = false }) {
+export default function FieldPad({ value, point, onChange, onDone, outfieldOnly = false, gameId }) {
   const t = useT();
   const ref = useRef(null);
   const timer = useRef(null);
   const [dragging, setDragging] = useState(false);
-  const [coach, setCoach] = useState(() => !hintSeen());
+  const [coach, setCoach] = useState(() => !hintSeenInGame(gameId));
   const keys = Object.keys(DIRECTIONS).filter((k) => (outfieldOnly ? OUTFIELD.includes(k) : true));
 
   const commit = (fx, fy) => {
@@ -177,7 +184,7 @@ export default function FieldPad({ value, point, onChange, onDone, outfieldOnly 
                 type="button"
                 onClick={() => {
                   setCoach(false);
-                  try { localStorage.setItem(HINT_KEY, '1'); } catch { /* 出し続けても害はない */ }
+                  markHintSeen(gameId);
                 }}
               >
                 {t('padHint.ok')}
