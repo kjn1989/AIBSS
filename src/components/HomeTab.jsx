@@ -1,5 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useStore, useT } from '../state/store.jsx';
+import { currentYear, yearLabel, DEFAULT_YEAR_START_MONTH } from '../lib/year.js';
+import { yearSummary } from '../lib/yearArchive.js';
+import YearCloseView from './YearCloseView.jsx';
 
 // ホーム: 「いま何をすればいいか」が一目で分かる入口に徹する。
 // - 進行中の試合があれば最優先で「試合に戻る」
@@ -9,6 +12,7 @@ import { useStore, useT } from '../state/store.jsx';
 export default function HomeTab({ onNavigate }) {
   const { state, dispatch } = useStore();
   const t = useT();
+  const [closingYear, setClosingYear] = useState(null);
   const games = Object.values(state.games);
   const ongoing = games
     .filter((g) => g.status === 'ongoing')
@@ -19,12 +23,38 @@ export default function HomeTab({ onNavigate }) {
   const firstRun = state.players.length === 0 && games.length === 0;
   const live = ongoing[0];
 
+  // 年度が変わり、前年度に記録があって、まだ締めていなければ案内を出す。
+  // 卒業フラグを立てる場所を「年に一度必ず通る所」に固定するための導線。
+  const startMonth = state.settings.yearStartMonth || DEFAULT_YEAR_START_MONTH;
+  const thisYear = currentYear(startMonth);
+  const prevYear = thisYear - 1;
+  const prevSummary = yearSummary(state.games, prevYear, startMonth);
+  const showClose = prevSummary.games > 0
+    && (state.settings.lastClosedYear ?? -1) < prevYear
+    && state.settings.dismissedCloseYear !== prevYear;
+
   let w = 0, l = 0, d = 0;
   for (const g of finished) {
     if (g.myScore > g.oppScore) w += 1;
     else if (g.myScore < g.oppScore) l += 1;
     else d += 1;
   }
+
+  const closeBanner = showClose && (
+    <div className="year-banner">
+      <b>{t('yc.banner', { year: yearLabel(prevYear, state.settings.lang || 'ja', startMonth) })}</b>
+      <p>{t('yc.bannerDesc', {
+        n: prevSummary.games, w: prevSummary.win, l: prevSummary.lose,
+        next: yearLabel(thisYear, state.settings.lang || 'ja', startMonth),
+      })}</p>
+      <div className="flex">
+        <button className="primary grow" onClick={() => setClosingYear(prevYear)}>{t('yc.open')}</button>
+        <button className="grow" onClick={() => dispatch({ type: 'UPDATE_SETTINGS', patch: { dismissedCloseYear: prevYear } })}>
+          {t('yc.dismiss')}
+        </button>
+      </div>
+    </div>
+  );
 
   const resultPill = (g) =>
     g.myScore > g.oppScore ? <span className="pill green">{t('home.w')}</span>
@@ -38,6 +68,8 @@ export default function HomeTab({ onNavigate }) {
 
   return (
     <div>
+      {closeBanner}
+      {closingYear != null && <YearCloseView year={closingYear} onClose={() => setClosingYear(null)} />}
       {/* 最優先アクション: 試合に戻る or 試合を始める */}
       {live ? (
         <div className="card" style={{ borderColor: 'var(--accent)' }}>

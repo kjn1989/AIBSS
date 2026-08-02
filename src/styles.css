@@ -1400,3 +1400,52 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 .role-opts { display: flex; flex-wrap: wrap; gap: 6px; }
 .num-edit.cap { background: var(--accent-2); border-color: var(--accent-2); color: #fff; }
 .num-edit.vice { border-color: var(--accent); color: var(--accent); }
+
+/* ---- 年度を締める ---- */
+.year-banner {
+  background: rgba(31, 111, 235, .12); border: 1px solid var(--accent-2);
+  border-radius: 12px; padding: 12px; margin-bottom: 12px;
+}
+.year-banner b { display: block; font-size: 14px; font-weight: 800; color: var(--accent); margin-bottom: 3px; }
+.year-banner p { margin: 0 0 10px; font-size: 12px; color: var(--text-dim); line-height: 1.6; }
+.yc-card { max-height: 88vh; overflow-y: auto; }
+.yc-head { display: flex; align-items: center; margin-bottom: 6px; }
+.yc-step { margin-left: auto; font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: var(--text-dim); }
+.yc-sub { font-size: 15px; margin: 8px 0 3px; }
+.yc-auto {
+  background: rgba(63, 185, 80, .1); border: 1px solid rgba(63, 185, 80, .32);
+  border-radius: 9px; padding: 10px 11px; margin: 10px 0; font-size: 12px; line-height: 1.6;
+}
+.yc-auto b { color: var(--green); display: block; }
+.yc-auto span { color: var(--text-dim); }
+.yc-row {
+  display: flex; align-items: center; gap: 10px; padding: 9px 0;
+  border-bottom: 1px solid rgba(48, 54, 61, .5); min-height: 44px;
+}
+.yc-row:last-child { border-bottom: none; }
+.yc-chk {
+  width: 20px; height: 20px; flex: 0 0 20px; border-radius: 6px;
+  border: 1.6px solid var(--border); position: relative;
+}
+.yc-chk.on { background: var(--accent-2); border-color: var(--accent-2); }
+.yc-chk.on::after {
+  content: '✓'; position: absolute; inset: 0; color: #fff; font-size: 13px; font-weight: 900;
+  display: flex; align-items: center; justify-content: center;
+}
+.yc-name { flex: 1; min-width: 0; }
+.yc-name b { font-size: 13.5px; }
+.yc-name i {
+  display: block; font-style: normal; font-size: 10px; color: var(--text-dim);
+  font-family: ui-monospace, Menlo, monospace;
+}
+.yc-file { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid rgba(48, 54, 61, .5); }
+.yc-file i { font-style: normal; font-size: 19px; }
+.yc-file b { display: block; font-size: 12.5px; font-family: ui-monospace, Menlo, monospace; }
+.yc-file small { font-size: 10.5px; color: var(--text-dim); }
+.yc-sum { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0; }
+.yc-sum div { background: var(--bg-3); border-radius: 10px; padding: 10px 6px; text-align: center; }
+.yc-sum b { display: block; font-family: ui-monospace, Menlo, monospace; font-size: 18px; font-weight: 800; }
+.yc-sum span { font-size: 10px; color: var(--text-dim); }
+.wide { width: 100%; }
+/* 理由のセレクトは既定だと行幅を全部取り、選手名が1文字ずつ折り返される */
+.yc-row select { flex: 0 0 92px; width: 92px; min-width: 0; font-size: 12px; padding: 5px 4px; }
