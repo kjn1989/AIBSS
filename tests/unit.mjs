@@ -14,7 +14,7 @@ import { newGame } from '../src/lib/model.js';
 import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf, oppLettersInGame, oppBaserunning } from '../src/lib/oppBox.js';
 import { remapPlayerInGame, fillPlayerGaps } from '../src/lib/mergePlayers.js';
 import { computeBoxScore } from '../src/lib/boxscore.js';
-import { buildMatchups, opponentSummaries, oppPitcherByAtBat, oppPlayerKey, normalizeName, opponentTeams, lastOppRoster } from '../src/lib/matchup.js';
+import { buildMatchups, opponentSummaries, oppPitcherByAtBat, oppPlayerKey, normalizeName, opponentTeams, lastOppRoster, oppPlayerAtBats } from '../src/lib/matchup.js';
 import { yearOfDate, yearOfGame, yearsInGames, tenureByPlayer, playedInYear, isArchived, yearLabel, currentYear, resolveYear, scopedGames,
   gradeOf, entryYearFromGrade, willGraduate, sortByGrade, usesGrade, defaultSchoolType, maxGradeOf,
   defaultYearStartMonth, schoolYearAtSeasonEnd, currentSchoolYear, labelOfYear } from '../src/lib/year.js';
@@ -1592,4 +1592,34 @@ test('代の呼び名はチームごとに上書きできる(「第75期」「�
   // 設定からそのまま呼べる形
   assert.equal(labelOfYear(2025, { lang: 'ja', yearStartMonth: 8, yearLabels: custom }), '第75期');
   assert.equal(labelOfYear(2025, { lang: 'ja', yearStartMonth: 8 }), '2026年度チーム');
+});
+
+test('oppPlayerAtBats: 相手ひとりの打球を試合をまたいで集める(引っ張りは左右で反転)', () => {
+  const mk = (id, letter, dir, result, outType) => ({ id, kind: 'defense', inning: 1, isTop: false,
+    payload: { letter, direction: dir, result, outType } });
+  const g1 = {
+    id: 'g1', opponent: '上智', oppNames: { A: '佐藤' }, oppBatterHands: { A: 'L' }, // 左打者
+    playLogs: [mk('a', 'A', 'RF', 'single', null), mk('b', 'A', 'CF', 'out', 'fly'), mk('c', 'A', 'LF', 'out', 'ground')],
+  };
+  // 別の試合では記号が変わっている(記号は試合ごとの識別子)
+  const g2 = {
+    id: 'g2', opponent: '上智', oppNames: { C: '佐藤' }, oppBatterHands: { C: 'L' },
+    playLogs: [mk('d', 'C', '1B', 'double', null), { id: 'e', kind: 'sb', payload: { letter: 'C' } }],
+  };
+  const r = oppPlayerAtBats([g1, g2], '上智|佐藤');
+  assert.equal(r.name, '佐藤');
+  assert.equal(r.games, 2);              // 記号が変わっても同じ人として繋がる
+  assert.equal(r.atBats.length, 4);
+  assert.equal(r.sb, 1);
+  // 左打者なので右方向(RF/1B)が引っ張り、左方向(LF)が逆方向
+  assert.deepEqual([r.dir.pull, r.dir.center, r.dir.oppo], [2, 1, 1]);
+  assert.deepEqual([r.kind.fly, r.kind.ground], [1, 1]);
+  // SprayChart がそのまま読める形になっている
+  assert.deepEqual(Object.keys(r.atBats[0]).sort(), ['direction', 'id', 'outType', 'result']);
+  // 右打者なら引っ張りと逆方向が入れ替わる
+  const gR = { ...g1, oppBatterHands: { A: 'R' } };
+  const rR = oppPlayerAtBats([gR], '上智|佐藤');
+  assert.deepEqual([rR.dir.pull, rR.dir.oppo], [1, 1]);
+  // 該当なしは null
+  assert.equal(oppPlayerAtBats([g1], '上智|居ない'), null);
 });

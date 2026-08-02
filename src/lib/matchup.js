@@ -215,3 +215,60 @@ export function lastOppRoster(games = [], teamName) {
     oppPitcherLetter: g.oppPitcherLetter || 'A',
   };
 }
+
+// 相手選手ひとりの打席を、試合をまたいで集める。
+// 打球方向(direction)は相手の打席にも記録されているので、守備シフトの判断材料になる。
+// oppKey は oppPlayerKey が返す「チーム名|選手名」。
+export function oppPlayerAtBats(games = [], oppKey) {
+  if (!oppKey) return null;
+  const atBats = [];
+  let name = '';
+  let team = '';
+  let hand = '';
+  const kind = { ground: 0, fly: 0, line: 0 }; // ゴロ/フライ/ライナーの別
+  const dir = { pull: 0, center: 0, oppo: 0 };
+  let sb = 0; let cs = 0; let sacBunt = 0;
+  const gameIds = new Set();
+
+  for (const g of games) {
+    // その試合で、この選手に当たる記号を先に割り出す
+    const letters = new Set();
+    for (const l of g.playLogs || []) {
+      const lt = l.payload?.letter;
+      if (lt && oppPlayerKey(g, lt) === oppKey) letters.add(lt);
+    }
+    for (const lt of Object.keys(g.oppNames || {})) {
+      if (oppPlayerKey(g, lt) === oppKey) letters.add(lt);
+    }
+    if (!letters.size) continue;
+    team = g.opponent || team;
+    for (const lt of letters) {
+      name = name || (g.oppNames || {})[lt] || '';
+      hand = hand || (g.oppBatterHands || {})[lt] || '';
+    }
+
+    for (const l of g.playLogs || []) {
+      const p = l.payload || {};
+      if (!p.letter || !letters.has(p.letter)) continue;
+      if (l.kind === 'defense') {
+        gameIds.add(g.id);
+        // SprayChart がそのまま読める形に揃える(自軍の打席と同じ描画を使う)
+        atBats.push({ id: l.id, direction: p.direction || null, result: p.result, outType: p.outType || null });
+        if (p.outType && kind[p.outType] != null) kind[p.outType] += 1;
+        if (p.result === 'sacBunt') sacBunt += 1;
+        // 引っ張り/逆方向は打者の左右で入れ替わる。左打者は右方向が引っ張り
+        const d = p.direction;
+        if (d) {
+          const rightSide = d === 'RF' || d === '1B' || d === '2B';
+          const leftSide = d === 'LF' || d === '3B' || d === 'SS';
+          if (d === 'CF' || d === 'P' || d === 'C') dir.center += 1;
+          else if ((hand === 'L' && rightSide) || (hand !== 'L' && leftSide)) dir.pull += 1;
+          else if (rightSide || leftSide) dir.oppo += 1;
+        }
+      } else if (l.kind === 'sb') sb += 1;
+      else if (l.kind === 'runner' && l.text === '盗塁死') cs += 1;
+    }
+  }
+  if (!atBats.length && !sb && !cs) return null;
+  return { oppKey, name, team, hand, atBats, kind, dir, sb, cs, sacBunt, games: gameIds.size };
+}
