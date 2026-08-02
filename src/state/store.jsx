@@ -18,6 +18,7 @@ const UNIQUE_POSITIONS = new Set(['投', '捕', '一', '二', '三', '遊', '左
 import { remapPlayerInGame, fillPlayerGaps } from '../lib/mergePlayers.js';
 import { rebuildBatters } from '../lib/battersRebuild.js';
 import { idbSave } from '../lib/durableStore.js';
+import { saveGames, loadGames, pruneGames, gameIndex, stubGamesFromIndex } from '../lib/gameStore.js';
 import { translate, DEFAULT_LANG } from '../lib/i18n.js';
 import { getActiveProfileId, profileStorageKey, listProfiles, updateProfileMeta } from '../lib/profiles.js';
 
@@ -37,6 +38,11 @@ export const initialState = {
   members: [], // Member[] 参加メンバー(マネージャー/応援等。試合には出ないが参加回数を記録)
   games: {}, // { [gameId]: Game }
   currentGameId: null,
+  // 試合を IndexedDB から読み終えたか。既定は false。
+  // 「新規チームだから true」にすると、iOSのストレージ自動削除などで localStorage
+  // だけが消えた端末が新規扱いになり、IndexedDB に残っている試合を prune で失う。
+  // 必ず一度読みに行き、空だと確認できてから true にする。
+  gamesHydrated: false,
   settings: {
     teamName: 'マイチーム',
     lang: DEFAULT_LANG, // 表示言語 'ja' | 'en'。保存済みログは記録時の言語のまま残す。
@@ -65,7 +71,9 @@ export const initialState = {
   lastDeleted: null, // 誤削除の復元用: { kind:'player'|'game'|'member', label, item, idx? }。数秒だけ保持
 };
 
-const PERSIST_KEYS = ['players', 'members', 'games', 'currentGameId', 'settings', 'demoLoaded', 'pendingDeletes'];
+// localStorage に置く軽い状態。games はここに含めない(1試合100KBあり、50試合で上限に当たる)。
+// 試合そのものは IndexedDB に1件ずつ保存し、localStorage には索引だけを置く。
+const PERSIST_KEYS = ['players', 'members', 'currentGameId', 'settings', 'demoLoaded', 'pendingDeletes'];
 
 // トゥームストーンにidを追加(重複排除)
 function addTomb(pd, bucket, ids) {
@@ -86,6 +94,19 @@ function loadPersisted() {
   } catch {
     return null;
   }
+}
+
+// 試合の読み込み。旧形式(localStorage に games を丸ごと持っていた頃)のデータは
+// そのまま使えるので、移行のために保存内容をそのまま返す。
+// 索引しか無ければ、ログ抜きの仮データを作って先に描画し、IDB の読み出しを待つ。
+function initialGames(saved) {
+  if (saved?.games && Object.keys(saved.games).length) {
+    return { games: saved.games, hydrated: true }; // 旧形式 → 次の保存でIDBへ移る
+  }
+  // 索引が空でも「試合が無い」とは限らない。iOSのストレージ自動削除などで
+  // localStorage だけが消え、IndexedDB には残っている場合がある。
+  // 必ず一度は IndexedDB を読みに行き、それまでは未読込(hydrated=false)として扱う。
+  return { games: stubGamesFromIndex(saved?.gameIndex || []), hydrated: false };
 }
 
 // 旧バージョンのセーブデータに後から追加されたフィールドの既定値を補う
@@ -158,18 +179,29 @@ function setPersistStatus(next) {
 }
 export function getPersistStatus() { return persistState; }
 
+// 試合ごとに「最後に書いた updatedAt」を覚えておき、変わったものだけ IDB へ書く
+const writtenAt = new Map();
+
 export function persist(state) {
   let json;
   let key;
   try {
     const out = {};
     for (const k of PERSIST_KEYS) out[k] = state[k];
+    // 試合の索引(ログを含まない一覧)。起動直後の描画に使う
+    out.gameIndex = gameIndex(state.games);
     json = JSON.stringify(out);
     key = currentStorageKey();
   } catch (e) {
     setPersistStatus({ ok: false, error: 'serialize' });
     return;
   }
+  // 試合の本体は IndexedDB へ(容量に余裕がある。localStorage は索引だけ)
+  // 読み込みが済むまでは削除の反映(prune)をしない。索引が欠けている状態で消すと、
+  // IndexedDB にだけ残っている試合を失う。
+  saveGames(key, state.games, writtenAt).then((n) => {
+    if (n >= 0 && state.gamesHydrated) pruneGames(key, Object.keys(state.games || {}));
+  });
   // IndexedDB を先に書く。localStorage は 5MB 前後で頭打ちになるが IDB は桁違いに
   // 余裕があるため、先に書いておけば容量超過でも記録そのものは残る。
   // (以前は setItem が先で、容量超過の例外でミラーまで到達していなかった)
@@ -426,6 +458,21 @@ export function reducer(state, action) {
     }
     case 'DISMISS_DELETED':
       return { ...state, lastDeleted: null };
+    // IndexedDB から読み出した試合を state へ流し込む。
+    // 起動直後は索引から作った仮データ(_stub)しか無いので、それを本体に置き換える。
+    // 読み込み中に編集された試合(_stub が外れているもの)は上書きしない。
+    case 'HYDRATE_GAMES': {
+      // 読み出しに失敗したとき(ok=false)は hydrated を立てない。
+      // 立ててしまうと、次の保存で「state に無い試合」として IndexedDB 側が
+      // 消される。読めないときは何もしないのが安全。
+      if (!action.ok) return state;
+      const games = { ...state.games };
+      for (const [id, g] of Object.entries(action.games || {})) {
+        if (games[id] && !games[id]._stub) continue; // 既に手元のほうが新しい
+        games[id] = ensureOppFields(g);
+      }
+      return { ...state, games, gamesHydrated: true };
+    }
     case 'UPDATE_SETTINGS':
       return { ...state, settings: { ...state.settings, ...action.patch } };
 
@@ -1526,13 +1573,13 @@ export function StoreProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, initialState, (init) => {
     const saved = loadPersisted();
     if (saved) {
-      const games = Object.fromEntries(
-        Object.entries(saved.games || {}).map(([id, g]) => [id, ensureOppFields(g)])
-      );
+      const { games: g0, hydrated } = initialGames(saved);
+      const games = Object.fromEntries(Object.entries(g0).map(([id, g]) => [id, ensureOppFields(g)]));
       // 設定は既定値とマージする(保存後に追加された設定キーの欠落を補う)。旧エディション表記も正規化
       const settings = { ...init.settings, ...(saved.settings || {}) };
       settings.edition = normalizeEdition(settings.edition) || init.settings.edition;
-      return { ...init, ...saved, settings, games };
+      const { gameIndex: _idx, games: _g, ...rest } = saved;
+      return { ...init, ...rest, settings, games, gamesHydrated: hydrated };
     }
     // 新規チーム(まだデータ未保存): チーム切り替え/招待参加で決まったメタ情報を反映
     const meta = listProfiles().find((p) => p.id === getActiveProfileId());
@@ -1550,6 +1597,17 @@ export function StoreProvider({ children }) {
     }
     return init;
   });
+
+  // 起動直後は localStorage の索引だけで描き、試合の本体は IndexedDB から追いかけて読む。
+  // 索引があるのでホームや試合一覧はすぐ出る(白画面にならない)。
+  useEffect(() => {
+    if (state.gamesHydrated) return;
+    let alive = true;
+    loadGames(currentStorageKey()).then((games) => {
+      if (alive) dispatch({ type: 'HYDRATE_GAMES', games: games || {}, ok: games !== null });
+    });
+    return () => { alive = false; };
+  }, [state.gamesHydrated]);
 
   // 永続化(変更のたび、軽くデバウンス)
   const timer = useRef(null);
