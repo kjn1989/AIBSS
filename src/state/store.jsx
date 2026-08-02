@@ -181,6 +181,7 @@ export function getPersistStatus() { return persistState; }
 
 // 試合ごとに「最後に書いた updatedAt」を覚えておき、変わったものだけ IDB へ書く
 const writtenAt = new Map();
+let lastGameCount = -1; // 試合が減ったときだけ prune を走らせるための目印
 
 export function persist(state) {
   let json;
@@ -199,8 +200,13 @@ export function persist(state) {
   // 試合の本体は IndexedDB へ(容量に余裕がある。localStorage は索引だけ)
   // 読み込みが済むまでは削除の反映(prune)をしない。索引が欠けている状態で消すと、
   // IndexedDB にだけ残っている試合を失う。
+  // また prune は全キーの走査を伴うので、試合が実際に減ったときだけ走らせる。
+  // 試合中は 150ms ごとに保存が走るため、毎回走査すると無駄が積み上がる。
+  const ids = Object.keys(state.games || {});
+  const shrank = ids.length < lastGameCount;
+  lastGameCount = ids.length;
   saveGames(key, state.games, writtenAt).then((n) => {
-    if (n >= 0 && state.gamesHydrated) pruneGames(key, Object.keys(state.games || {}));
+    if (n >= 0 && state.gamesHydrated && shrank) pruneGames(key, ids);
   });
   // IndexedDB を先に書く。localStorage は 5MB 前後で頭打ちになるが IDB は桁違いに
   // 余裕があるため、先に書いておけば容量超過でも記録そのものは残る。
