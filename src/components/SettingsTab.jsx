@@ -265,6 +265,8 @@ export default function SettingsTab() {
     }
     const showHeads = gradeOn && rosterSort === 'grade';
     let prev;
+    // 見出しが出ないとき(背番号順・登録順)は、行の中に学年を書く。
+    // 見出しが出るときは重複するので書かない。ラベルは1か所に1回だけ。
     return rows.map((p, i) => {
       const g = gradeOf(p, thisYear);
       let head = null;
@@ -272,7 +274,7 @@ export default function SettingsTab() {
         head = { grade: g, n: rows.filter((x) => gradeOf(x, thisYear) === g).length, entry: p.entryYear };
       }
       prev = g;
-      return { p, head };
+      return { p, head, grade: showHeads ? undefined : g };
     });
   })();
 
@@ -423,7 +425,10 @@ export default function SettingsTab() {
           </div>
         )}
         <div className="mt12">
-          {rosterRows.map(({ p, head }) => (
+          {/* 行のいちばん左が背番号だと分かるように書く。すぐ上に「学年」の見出しが
+              出るので、丸の数字が学年に見えてしまっていた */}
+          {rosterRows.length > 0 && <div className="roster-legend">{t('set.rosterLegend')}</div>}
+          {rosterRows.map(({ p, head, grade }) => (
             <React.Fragment key={p.id}>
               {head && (
                 <div className="grade-head">
@@ -442,7 +447,14 @@ export default function SettingsTab() {
                 maxLength={3}
                 aria-label={t('set.number')}
               />
-              <span className="grow player-name">{p.name}</span>
+              <span className="grow player-cell">
+                <span className="player-name">{p.name}</span>
+                {gradeOn && grade !== undefined && (
+                  <span className="player-grade">
+                    {grade == null ? t('grade.unset') : t('grade.nth', { n: grade })}
+                  </span>
+                )}
+              </span>
               <select
                 className="hand-select" aria-label={t('set.throwShort')} title={t('set.throwShort')}
                 value={p.throws || ''} onChange={(e) => dispatch({ type: 'UPDATE_PLAYER', id: p.id, patch: { throws: e.target.value } })}
