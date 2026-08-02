@@ -6,8 +6,9 @@ import QRCode from './QRCode.jsx';
 import { battingCSV, pitchingCSV, playLogCSV, atBatCSV, downloadCSV, shareCSV } from '../lib/csv.js';
 import { EDITIONS, HAND_LABEL, editionLabel } from '../lib/model.js';
 import {
-  isArchived, tenureByPlayer, currentYear, DEFAULT_YEAR_START_MONTH,
-  usesGrade, defaultSchoolType, maxGradeOf, gradeOf, entryYearFromGrade, sortByGrade, SCHOOL_TYPES,
+  isArchived, tenureByPlayer, currentYear, currentSchoolYear, DEFAULT_YEAR_START_MONTH,
+  usesGrade, defaultSchoolType, defaultYearStartMonth, maxGradeOf, gradeOf, entryYearFromGrade,
+  sortByGrade, SCHOOL_TYPES,
 } from '../lib/year.js';
 import EditionText from './EditionText.jsx';
 import { listProfiles, getActiveProfileId, addProfile, switchActiveProfile, deleteProfile, listOrphanedProfiles, restoreProfile } from '../lib/profiles.js';
@@ -188,7 +189,8 @@ export default function SettingsTab() {
   // 学年はブカツ・少年野球でのみ使う。草野球では欄ごと出さない
   const gradeOn = usesGrade(state.settings.edition);
   const startMonth = state.settings.yearStartMonth || DEFAULT_YEAR_START_MONTH;
-  const thisYear = currentYear(startMonth);
+  // 学年は学校の年度(4月始まり)で数える。チームの代(中学・高校は9月始まり)とは別軸
+  const thisYear = currentSchoolYear();
   const schoolType = state.settings.schoolType || defaultSchoolType(state.settings.edition);
   const maxGrade = maxGradeOf(schoolType) || 6;
 
@@ -265,7 +267,14 @@ export default function SettingsTab() {
             <label className="small dim" style={{ display: 'block', marginBottom: 4 }}>{t('grade.school')}</label>
             <select
               value={schoolType || ''}
-              onChange={(e) => dispatch({ type: 'UPDATE_SETTINGS', patch: { schoolType: e.target.value } })}
+              onChange={(e) => dispatch({
+                type: 'UPDATE_SETTINGS',
+                patch: {
+                  schoolType: e.target.value,
+                  // 中学・高校は夏の大会で代が替わるので、代の開始月も合わせる
+                  yearStartMonth: defaultYearStartMonth(state.settings.edition, e.target.value),
+                },
+              })}
             >
               {SCHOOL_TYPES.map((st) => <option key={st.id} value={st.id}>{t(`school.${st.id}`)}</option>)}
             </select>
