@@ -1483,6 +1483,16 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
   border-radius: 12px; padding: 12px; margin-bottom: 12px;
 }
 .add-form-title { font-size: 11.5px; font-weight: 700; color: var(--text-dim); margin-bottom: 8px; }
+
+/* 学年をまとめて設定するシート。1人1タップで付けられるよう数字だけのボタンにする */
+.grade-bulk-row { gap: 8px; }
+.grade-pick { display: flex; gap: 4px; flex: 0 0 auto; }
+.grade-pick button {
+  min-width: 30px; min-height: 36px; margin: 0; padding: 4px 2px;
+  font-size: 12.5px; font-weight: 700; border-radius: 8px;
+}
+.grade-pick button.on { background: var(--accent-2); border-color: var(--accent-2); color: #fff; }
+.grade-pick button.none { color: var(--text-dim); }
 .add-form button.primary { min-height: 44px; }
 
 /* 主将・副主将。名簿の行に選択UIを足すと選手名が潰れるため、設定はここ1か所に集約し、

@@ -156,6 +156,65 @@ function ArchivedPlayers() {
   );
 }
 
+// ============================================================
+// 学年をまとめて設定
+//
+// 1人ずつ直せるようにはしたが、名簿を作った直後は全員が未設定になる。
+// 10人20人を1行ずつ開いて選ぶのは現実的でないので、まとめて付ける道を用意する。
+// 押した瞬間に保存する(まとめて設定しておいて保存を押し忘れる事故を作らない)。
+// ============================================================
+function GradeBulkSheet({ onClose }) {
+  const { state, dispatch } = useStore();
+  const t = useT();
+  const thisYear = currentSchoolYear();
+  const maxGrade = maxGradeOf(state.settings.schoolType || defaultSchoolType(state.settings.edition)) || 6;
+  // 未設定を先頭に出す。やることが上から順に並ぶようにする
+  const rows = useMemo(() => {
+    const active = state.players.filter((p) => !isArchived(p));
+    return [...active].sort((a, b) => {
+      const ga = gradeOf(a, thisYear);
+      const gb = gradeOf(b, thisYear);
+      if (ga == null && gb != null) return -1;
+      if (gb == null && ga != null) return 1;
+      return (ga || 0) - (gb || 0);
+    });
+  }, [state.players, thisYear]);
+  const unset = rows.filter((p) => gradeOf(p, thisYear) == null).length;
+
+  const set = (p, grade) => dispatch({
+    type: 'UPDATE_PLAYER', id: p.id,
+    patch: { entryYear: entryYearFromGrade(grade, thisYear) },
+  });
+
+  return (
+    <Sheet title={t('grade.bulkTitle')} onClose={onClose}>
+      <p className="small dim" style={{ margin: '0 0 12px' }}>{t('grade.bulkNote')}</p>
+      {rows.map((p) => {
+        const g = gradeOf(p, thisYear);
+        return (
+          <div className="row grade-bulk-row" key={p.id}>
+            <span className="grow player-name">{p.name}</span>
+            <span className="grade-pick">
+              {/* 「なし」は現在値でも光らせない。色が付いているのは「決めた行」だけにして、
+                  残りの作業が一目で分かるようにする */}
+              <button className="none" onClick={() => set(p, '')}>{t('grade.none')}</button>
+              {Array.from({ length: maxGrade }, (_, i) => i + 1).map((n) => (
+                <button key={n} className={g === n ? 'on' : ''} onClick={() => set(p, n)}>{n}</button>
+              ))}
+            </span>
+          </div>
+        );
+      })}
+      {rows.length === 0 && <div className="dim small">{t('set.noPlayers')}</div>}
+      <div className="sheet-actions">
+        <button className="primary" onClick={onClose}>
+          {unset > 0 ? t('grade.bulkRemain', { n: unset }) : t('action.close')}
+        </button>
+      </div>
+    </Sheet>
+  );
+}
+
 // 打球パッドの初回説明を、もう一度出せるようにする。
 // 「どこでも押せる」は一度見れば分かるが、あとから入った人には見せたい。
 function PadHintCard() {
@@ -246,6 +305,7 @@ export default function SettingsTab() {
   const [showGeminiHelp, setShowGeminiHelp] = useState(false);
   const [newGrade, setNewGrade] = useState('');
   const [rosterSort, setRosterSort] = useState('grade');
+  const [gradeBulk, setGradeBulk] = useState(false);
   // 学年はブカツ・少年野球でのみ使う。草野球では欄ごと出さない
   const gradeOn = usesGrade(state.settings.edition);
   const startMonth = state.settings.yearStartMonth || DEFAULT_YEAR_START_MONTH;
@@ -276,6 +336,11 @@ export default function SettingsTab() {
       return { p, head, grade: g };
     });
   })();
+
+  // 学年が未設定の人数。名簿を作った直後は全員がここに入る
+  const unsetGrades = gradeOn
+    ? state.players.filter((p) => !isArchived(p) && gradeOf(p, thisYear) == null).length
+    : 0;
 
   const addPlayer = () => {
     if (!newName.trim()) return;
@@ -422,11 +487,17 @@ export default function SettingsTab() {
         </div>
         <TeamRoleRow />
         {gradeOn && (
+          <>
+          <button className="small ghost mt8" style={{ width: '100%' }} onClick={() => setGradeBulk(true)}>
+            {t('grade.bulkOpen')}
+            {unsetGrades > 0 && <span className="dim"> ({t('grade.bulkUnset', { n: unsetGrades })})</span>}
+          </button>
           <div className="lens-row mt8">
             {[['grade', 'grade.sortGrade'], ['number', 'grade.sortNumber'], ['added', 'grade.sortAdded']].map(([k, key]) => (
               <button key={k} className={rosterSort === k ? 'on' : ''} onClick={() => setRosterSort(k)}>{t(key)}</button>
             ))}
           </div>
+          </>
         )}
         <div className="mt12">
           {/* 行のいちばん左が背番号だと分かるように書く。すぐ上に「学年」の見出しが
@@ -498,6 +569,7 @@ export default function SettingsTab() {
             </React.Fragment>
           ))}
           {state.players.filter((p) => !isArchived(p)).length === 0 && <div className="dim small mt8">{t('set.noPlayers')}</div>}
+          {gradeBulk && <GradeBulkSheet onClose={() => setGradeBulk(false)} />}
         </div>
         <ArchivedPlayers />
       </div>
