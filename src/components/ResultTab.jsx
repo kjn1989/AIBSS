@@ -4,6 +4,7 @@ import { computeHighlights, highlightShareText } from '../lib/highlights.js';
 import { shareHighlightImage } from '../lib/shareImage.js';
 import { GameProgressContent, LinescoreTable } from './GameProgressView.jsx';
 import GameBoxScore from './GameBoxScore.jsx';
+import OppNamePrompt from './OppNamePrompt.jsx';
 import { PitchingGameManagement } from './PitchingTab.jsx';
 import ScoreSheetView from './ScoreSheetView.jsx';
 import NewspaperView from './NewspaperView.jsx';
@@ -210,6 +211,8 @@ export default function ResultTab() {
         {t('restab.makeNewspaper')}
       </button>
 
+      {/* 成績が目の前にあるこの場所で、相手選手名を聞く(入力の動機が最大になる場所) */}
+      <OppNamePrompt game={game} />
       <GameBoxScore game={game} />
 
       <div className="section-title">{t('restab.progress')}</div>
