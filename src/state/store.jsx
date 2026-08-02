@@ -49,6 +49,7 @@ export const initialState = {
     geminiApiKey: '', // AI選手名鑑のスカウト寸評生成(任意)
     maskAiNames: true, // AI送信前に選手名を「選手」に伏せる(メモ変換・音声解釈に適用。既定ON)
     lastBackupAt: null, // 最後にJSONバックアップを保存した時刻(データ消失対策のリマインド用)
+    yearStartMonth: 4, // 年度の開始月。日本の年度に合わせて4月始まりが既定(1=暦年 / 9=北米式)
     officialTeamId: null, // 公式クラウド(lib/officialCloud.js)のチームID。null=未接続
     officialRole: null, // 公式クラウドでの自分のロール(owner/scorer/viewer)。CloudSyncが接続時に更新
   },
@@ -450,6 +451,28 @@ export function reducer(state, action) {
     }
     case 'UPDATE_PLAYER': {
       const players = state.players.map((p) => (p.id === action.id ? { ...p, ...action.patch } : p));
+      return { ...state, players };
+    }
+    // ===== 選手のアーカイブ(卒業・退部) =====
+    // 削除ではない。記録は1件も失わず、名簿の前面とオーダー編成の候補から外れるだけ。
+    // 通算成績には引き続き含まれ(チームの歴史)、年度スコープでは自動的に外れる。
+    // ids で複数人をまとめて処理できる(年度の締めで使う)。
+    case 'ARCHIVE_PLAYERS': {
+      const ids = new Set(action.ids || (action.id ? [action.id] : []));
+      if (!ids.size) return state;
+      const at = Date.now();
+      const players = state.players.map((p) => (ids.has(p.id)
+        ? { ...p, archivedAt: at, archivedYear: action.year ?? null, archiveNote: action.note || '' }
+        : p));
+      return { ...state, players };
+    }
+    // アーカイブから戻す(付け間違い・出戻り)。1タップで元に戻せることが誤操作の備えになる。
+    case 'UNARCHIVE_PLAYERS': {
+      const ids = new Set(action.ids || (action.id ? [action.id] : []));
+      if (!ids.size) return state;
+      const players = state.players.map((p) => (ids.has(p.id)
+        ? { ...p, archivedAt: null, archivedYear: null, archiveNote: '' }
+        : p));
       return { ...state, players };
     }
     // ===== 同名で二重登録された選手の統合 =====

@@ -104,6 +104,11 @@ export function newPlayer(name, number = '', opts = {}) {
     scoutCatchphrase: '',
     scoutReport: '',
     scoutPhoto: '', // 顔写真(256px JPEGのdataURL)。空なら頭文字を表示。
+    // 卒業・退部でのアーカイブ。削除ではなく「名簿の前面から外す」だけで、記録は残る。
+    // 在籍期間は出場した試合から導出するので保存しない(lib/year.js の tenureByPlayer)。
+    archivedAt: null,   // アーカイブした日時 | null=現役
+    archivedYear: null, // どの年度の終わりで抜けたか
+    archiveNote: '',    // '卒業' | '退部' | '移籍' など(任意)
   };
 }
 

@@ -391,7 +391,8 @@ export const MESSAGES = {
 
     // 通算/試合単位トグル
     'gamescope.total': '通算',
-    'gamescope.perGame': '試合単位',
+    'gamescope.year': '年度',
+    'gamescope.perGame': '試合',
     'gamescope.allSeasons': '全シーズン・大会',
     'gamescope.noGames': '試合がありません',
 
@@ -431,6 +432,12 @@ export const MESSAGES = {
     'set.edition': 'エディション',
     'set.editionNote': '「草野球・社会人」(大人向け)では📇AI選手名鑑・🤖AIスタメン提案が使えます(パワプロ風の際どい寸評を含むため)。「ブカツ(中高大)」「少年野球」ではこの2機能は表示されません。',
     'set.players': '選手登録 ({n}人)',
+    'archive.action': 'アーカイブ',
+    'archive.hint': '卒業・退部した選手を名簿の前面から外します。記録は残ります。',
+    'archive.section': 'アーカイブ ({n}人)',
+    'archive.desc': '卒業・退部した選手です。記録はすべて残っており、通算成績にも含まれます。オーダー編成の候補には出ません。',
+    'archive.restore': '戻す',
+    'archive.games': '{n}試合',
     'set.playerName': '選手名',
     'set.number': '背番号',
     'set.throwShort': '投',
@@ -1243,8 +1250,9 @@ export const MESSAGES = {
     'score.finish': 'Finish game',
     'score.seeAll': 'See all ▾',
 
-    'gamescope.total': 'Total',
-    'gamescope.perGame': 'Per game',
+    'gamescope.total': 'All-time',
+    'gamescope.year': 'Season',
+    'gamescope.perGame': 'Game',
     'gamescope.allSeasons': 'All seasons',
     'gamescope.noGames': 'No games',
 
@@ -1281,6 +1289,12 @@ export const MESSAGES = {
     'set.edition': 'Edition',
     'set.editionNote': 'In “Amateur & Club” (for adults), 📇 AI Player Profiles and 🤖 AI Lineup Suggestions are available (they include candid, game-style scouting notes). These two features are hidden in “School Club (JH–Univ)” and “Youth”.',
     'set.players': 'Players ({n})',
+    'archive.action': 'Archive',
+    'archive.hint': 'Move a departed player out of the active roster. Their records stay.',
+    'archive.section': 'Archived ({n})',
+    'archive.desc': 'Players who have left. All records are kept and still count toward all-time stats. They no longer appear when building a lineup.',
+    'archive.restore': 'Restore',
+    'archive.games': '{n} G',
     'set.playerName': 'Player name',
     'set.number': 'No.',
     'set.throwShort': 'T',

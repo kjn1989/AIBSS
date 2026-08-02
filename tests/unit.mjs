@@ -15,6 +15,8 @@ import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingS
 import { remapPlayerInGame, fillPlayerGaps } from '../src/lib/mergePlayers.js';
 import { computeBoxScore } from '../src/lib/boxscore.js';
 import { buildMatchups, opponentSummaries, oppPitcherByAtBat, oppPlayerKey, normalizeName } from '../src/lib/matchup.js';
+import { yearOfDate, yearOfGame, yearsInGames, tenureByPlayer, playedInYear, isArchived, yearLabel, currentYear, resolveYear, scopedGames } from '../src/lib/year.js';
+
 import { rebuildBatters, findDuplicateAtBats, findOrderBreaks, canRebuildOrders } from '../src/lib/battersRebuild.js';
 
 test('parseDirectionOnly: 方向のみの発話は方向、結果語を含めばnull(言い直し扱い)', () => {
@@ -1330,4 +1332,86 @@ test('oppBaserunning: 相手の盗塁・盗塁死を走者の記号ごとに数�
   assert.equal(rows[0].rate.toFixed(3), '0.667');
   // 走塁の記録が無い相手は行そのものが出ない(0と「記録なし」を混同しないため)
   assert.deepEqual(oppBaserunning({ playLogs: [] }), []);
+});
+
+// ---- 年度(4月始まり) ----
+test('yearOfDate: 4月始まりで年度が切り替わる', () => {
+  assert.equal(yearOfDate('2026-03-20'), 2025); // 3月はまだ前年度
+  assert.equal(yearOfDate('2026-03-31'), 2025);
+  assert.equal(yearOfDate('2026-04-01'), 2026);
+  assert.equal(yearOfDate('2026-12-31'), 2026);
+  // 開始月は設定で変えられる(1月=暦年 / 9月=北米式)
+  assert.equal(yearOfDate('2026-03-20', 1), 2026);
+  assert.equal(yearOfDate('2026-03-20', 9), 2025);
+  assert.equal(yearOfDate('2026-09-01', 9), 2026);
+  assert.equal(yearOfDate(null), null);
+  assert.equal(yearOfDate('へんな日付'), null);
+});
+
+test('yearOfGame: 手入力の year が日付より優先される(合宿等で年度をまたぐ場合)', () => {
+  assert.equal(yearOfGame({ date: '2026-03-20' }), 2025);
+  assert.equal(yearOfGame({ date: '2026-03-20', year: 2026 }), 2026);
+  assert.equal(yearOfGame({ date: '2026-03-20', year: '' }), 2025); // 空文字は未指定扱い
+});
+
+test('tenureByPlayer: 出場した試合から在籍期間を割り出す(手入力なし)', () => {
+  const g = (date, ids) => ({
+    id: date, date,
+    playLogs: ids.map((id, i) => ({ id: `${date}-${i}`, kind: 'atbat', payload: { playerId: id } })),
+    atBats: [], pitchingRecords: [],
+  });
+  const games = [
+    g('2022-05-01', ['a', 'b']),
+    g('2024-06-01', ['a', 'c']),
+    g('2026-05-01', ['c']),
+  ];
+  const t = tenureByPlayer(games);
+  assert.deepEqual([t.get('a').from, t.get('a').to, t.get('a').games], [2022, 2024, 2]);
+  assert.deepEqual([t.get('b').from, t.get('b').to], [2022, 2022]);
+  assert.deepEqual([t.get('c').from, t.get('c').to], [2024, 2026]);
+  // 年度スコープでは、その年度に出ていない選手が外れる
+  assert.equal(playedInYear(t, 'a', 2023), true);  // 2022–2024 の間
+  assert.equal(playedInYear(t, 'a', 2026), false); // 卒業後
+  assert.equal(playedInYear(t, 'c', 2026), true);
+  assert.equal(playedInYear(t, '未登録', 2026), false);
+  // 交代・投球の記録からも拾う
+  const sub = { id: 's', date: '2025-05-01', playLogs: [{ id: 's0', kind: 'sub', payload: { in: 'x', out: 'y' } }] };
+  const t2 = tenureByPlayer([sub]);
+  assert.deepEqual([t2.get('x').from, t2.get('y').from], [2025, 2025]);
+});
+
+test('yearsInGames / yearLabel / isArchived', () => {
+  const games = [{ date: '2026-04-01' }, { date: '2026-03-01' }, { date: '2024-08-01' }];
+  assert.deepEqual(yearsInGames(games), [2026, 2025, 2024]); // 新しい順
+  assert.equal(yearLabel(2025, 'ja'), '2025年度');
+  assert.equal(yearLabel(2025, 'en'), '2025–26');
+  assert.equal(yearLabel(2025, 'en', 1), '2025'); // 暦年なら年をまたがない
+  assert.equal(isArchived({ archivedAt: null }), false);
+  assert.equal(isArchived({ archivedAt: 1234 }), true);
+  assert.equal(currentYear(4, new Date('2026-03-20T00:00:00')), 2025);
+  assert.equal(currentYear(4, new Date('2026-04-20T00:00:00')), 2026);
+});
+
+test('scopedGames: 年度スコープは既定でも「その年度だけ」に絞る', () => {
+  // 既定(value.year 未指定)でも全件が返ってしまうと、見出しは「2026年度」なのに
+  // 中身は通算、という食い違いが起きる。トグルと集計で同じ既定を使う。
+  const state = {
+    settings: { yearStartMonth: 4 },
+    games: {
+      a: { id: 'a', date: '2026-06-10' },
+      b: { id: 'b', date: '2026-03-10' }, // 3月 = 2025年度
+      c: { id: 'c', date: '2024-06-10' },
+    },
+  };
+  const all = Object.values(state.games);
+  const now = currentYear(4);
+  assert.equal(resolveYear(all, { scope: 'year' }, 4), [2026, 2025, 2024].includes(now) ? now : 2026);
+  // 年度を明示すれば、その年度の試合だけ
+  assert.deepEqual(scopedGames(state, { scope: 'year', year: 2026 }).map((g) => g.id), ['a']);
+  assert.deepEqual(scopedGames(state, { scope: 'year', year: 2025 }).map((g) => g.id), ['b']);
+  // 通算は全件、試合スコープは1件
+  assert.equal(scopedGames(state, { scope: 'total' }).length, 3);
+  assert.deepEqual(scopedGames(state, { scope: 'game', gameId: 'c' }).map((g) => g.id), ['c']);
+  // 記録が1件も無いときだけ全件(空表示になるより素直)
+  assert.equal(resolveYear([], { scope: 'year' }, 4), null);
 });

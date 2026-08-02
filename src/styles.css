@@ -1358,3 +1358,9 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
   color: #ffe9c2; padding: 8px 12px; font-size: 12px; line-height: 1.5;
 }
 .persist-warn b { display: block; font-size: 12.5px; color: var(--amber); margin-bottom: 2px; }
+
+/* 通算成績に添える在籍期間(卒業生と現役を見分けるため。年度スコープでは出さない) */
+.tenure {
+  display: block; font-family: ui-monospace, Menlo, monospace;
+  font-size: 9.5px; font-weight: 400; color: var(--text-dim); margin-top: 1px;
+}
