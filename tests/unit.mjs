@@ -20,6 +20,7 @@ import { yearOfDate, yearOfGame, yearsInGames, tenureByPlayer, playedInYear, isA
   defaultYearStartMonth, schoolYearAtSeasonEnd, currentSchoolYear, labelOfYear } from '../src/lib/year.js';
 
 import { rebuildBatters, findDuplicateAtBats, findOrderBreaks, canRebuildOrders } from '../src/lib/battersRebuild.js';
+import { ownOffenseStats, ownBatteryStats } from '../src/lib/ownScout.js';
 
 test('parseDirectionOnly: 方向のみの発話は方向、結果語を含めばnull(言い直し扱い)', () => {
   assert.equal(parseDirectionOnly('ライト'), 'RF');
@@ -1692,4 +1693,85 @@ test('oppOffenseStats: 走ってくるチームか、送ってくるチームか
   assert.deepEqual(r.runners.map((x) => [x.name, x.sb, x.cs]), [['佐藤', 2, 0], ['中村', 0, 1]]);
   // 1回きりの場面は傾向とは言えないので出さない
   assert.equal(r.situations.every((x) => x.count >= 2), true);
+});
+
+// ---- ownScout.js: 同じ物差しを自軍に向ける ----
+test('ownOffenseStats: 自軍の走る/送るの傾向(相手と同じ形で返す)', () => {
+  const on = (bases) => ({ 1: bases.includes(1) || null, 2: bases.includes(2) || null, 3: bases.includes(3) || null });
+  const ab = (id, playerId, result, before, outs, pitchCount = 3) => ({ id, kind: 'atbat', inning: 1, isTop: true,
+    payload: { playerId, result, beforeRunners: before, outsBefore: outs, pitchCount } });
+  const g = {
+    id: 'g', opponent: '上智', isHome: false, // 自軍が先攻 = 自軍の攻撃は表
+    playLogs: [
+      ab('1', 'p1', 'sacBunt', on([1]), 0),
+      ab('2', 'p2', 'sacBunt', on([1]), 0),
+      ab('3', 'p1', 'out', on([1]), 0),
+      ab('4', 'p2', 'single', on([]), 0, 1),   // 初球打ち
+      ab('5', 'p1', 'bb', on([]), 1, 1),       // 四球は「振っていない」ので初球打ちに数えない
+      { id: '6', kind: 'sb', inning: 2, isTop: true, text: '盗塁', payload: { playerId: 'p1' } },
+      { id: '7', kind: 'sb', inning: 3, isTop: true, text: '盗塁', payload: { playerId: 'p1' } },
+      { id: '8', kind: 'runner', inning: 4, isTop: true, text: '盗塁死', payload: { playerId: 'p2' } },
+      // 相手の攻撃中(裏)の盗塁は自軍の機動力ではない
+      { id: '9', kind: 'sb', inning: 2, isTop: false, text: '盗塁', payload: { letter: 'A' } },
+    ],
+  };
+  const r = ownOffenseStats([g]);
+  assert.deepEqual([r.sb, r.cs, r.att], [2, 1, 3]);
+  assert.equal(r.sacBunt, 2);
+  assert.equal(r.firstPitchRate.toFixed(1), '0.2'); // 5打席中、初球で振ったのは1打席(四球は除く)
+  const s = r.situations.find((x) => x.key === 'o0_1');
+  assert.deepEqual([s.count, s.sac], [3, 2]);
+  assert.deepEqual(r.runners.map((x) => [x.playerId, x.sb, x.cs]), [['p1', 2, 0], ['p2', 0, 1]]);
+});
+
+test('ownBatteryStats: 回ごとの捕手を守備位置から確定し、盗塁阻止率を捕手ごとに出す', () => {
+  const g = {
+    id: 'g', opponent: '上智', isHome: false, // 自軍が先攻 = 守るのは裏
+    startingLineup: [
+      { order: 1, playerId: 'c1', position: '捕' },
+      { order: 2, playerId: 'pit1', position: '投' },
+    ],
+    lineup: [
+      { order: 1, playerId: 'c2', position: '捕' },
+      { order: 2, playerId: 'pit2', position: '投' },
+    ],
+    playLogs: [
+      { id: 'p0', kind: 'pitcher', inning: 1, isTop: false, payload: { in: 'pit1' } },
+      // 1〜3回: c1 が捕手
+      { id: '1', kind: 'sb', inning: 1, isTop: false, text: '盗塁', payload: { letter: 'A' } },
+      { id: '2', kind: 'sb', inning: 2, isTop: false, text: '盗塁', payload: { letter: 'B' } },
+      { id: '3', kind: 'runner', inning: 3, isTop: false, text: '盗塁死', payload: { letter: 'C' } },
+      { id: '4', kind: 'runner', inning: 3, isTop: false, text: '暴投', payload: {} },
+      // 4回から捕手交代
+      { id: 'sub', kind: 'sub', inning: 4, isTop: false, payload: { order: 1, in: 'c2', out: 'c1', position: '捕' } },
+      { id: 'pc', kind: 'pitcher', inning: 4, isTop: false, payload: { in: 'pit2', out: 'pit1' } },
+      { id: '5', kind: 'runner', inning: 4, isTop: false, text: '盗塁死', payload: { letter: 'D' } },
+      { id: '6', kind: 'runner', inning: 5, isTop: false, text: '捕逸', payload: {} },
+      { id: '7', kind: 'runner', inning: 5, isTop: false, text: '牽制死', payload: { letter: 'E' } },
+      // 自軍の攻撃中(表)に走られることはない。自軍が刺された記録を混ぜない
+      { id: '8', kind: 'runner', inning: 2, isTop: true, text: '盗塁死', payload: { playerId: 'p9' } },
+    ],
+  };
+  const r = ownBatteryStats([g]);
+  const c1 = r.catchers.find((c) => c.playerId === 'c1');
+  const c2 = r.catchers.find((c) => c.playerId === 'c2');
+  assert.deepEqual([c1.sbAllowed, c1.caught, c1.att], [2, 1, 3]);
+  assert.equal(c1.csRate.toFixed(3), '0.333');
+  assert.deepEqual([c2.sbAllowed, c2.caught, c2.pb], [0, 1, 1]);
+  assert.equal(c2.csRate, 1); // 1回試されて1回刺した
+  // 暴投は交代前の投手、牽制死は交代後の投手に付く
+  assert.equal(r.pitchers.find((p) => p.playerId === 'pit1').wp, 1);
+  assert.equal(r.pitchers.find((p) => p.playerId === 'pit2').pickoff, 1);
+});
+
+test('ownBatteryStats: 走られていない捕手の阻止率は0%ではなくnull', () => {
+  const g = {
+    id: 'g', opponent: '上智', isHome: false,
+    startingLineup: [{ order: 1, playerId: 'c1', position: '捕' }],
+    lineup: [{ order: 1, playerId: 'c1', position: '捕' }],
+    playLogs: [{ id: '1', kind: 'runner', inning: 1, isTop: false, text: '捕逸', payload: {} }],
+  };
+  const r = ownBatteryStats([g]);
+  assert.equal(r.catchers[0].csRate, null);
+  assert.equal(r.catchers[0].pb, 1);
 });
