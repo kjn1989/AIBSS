@@ -5,6 +5,7 @@ import { shareHighlightImage } from '../lib/shareImage.js';
 import { GameProgressContent, LinescoreTable } from './GameProgressView.jsx';
 import GameBoxScore from './GameBoxScore.jsx';
 import OppNamePrompt from './OppNamePrompt.jsx';
+import OppPlayerView from './OppPlayerView.jsx';
 import { PitchingGameManagement } from './PitchingTab.jsx';
 import ScoreSheetView from './ScoreSheetView.jsx';
 import NewspaperView from './NewspaperView.jsx';
@@ -110,6 +111,7 @@ function HighlightCard({ game }) {
 }
 
 export default function ResultTab() {
+  const [oppKey, setOppKey] = useState(null); // 相手選手ページ(打球分布)
   const { state, dispatch } = useStore();
   const t = useT();
   const [showSheet, setShowSheet] = useState(false);
@@ -213,7 +215,8 @@ export default function ResultTab() {
 
       {/* 成績が目の前にあるこの場所で、相手選手名を聞く(入力の動機が最大になる場所) */}
       <OppNamePrompt game={game} />
-      <GameBoxScore game={game} />
+      <GameBoxScore game={game} onOpenOpp={setOppKey} />
+      {oppKey && <OppPlayerView oppKey={oppKey} onClose={() => setOppKey(null)} />}
 
       <div className="section-title">{t('restab.progress')}</div>
       {/* 線分スコアは上の試合レポートに出しているのでここでは省く */}

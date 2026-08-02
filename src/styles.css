@@ -1482,3 +1482,28 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
   font-variant-numeric: tabular-nums;
 }
 .oppname-row input { flex: 1; min-width: 0; font-size: 13px; padding: 6px 8px; }
+
+/* ---- 相手選手ページ(打球分布) ---- */
+.opv-card { max-height: 88vh; overflow-y: auto; }
+.dirbar { display: flex; height: 9px; border-radius: 4px; overflow: hidden; gap: 2px; margin: 12px 0 5px; }
+.dirbar i { display: block; }
+.dirbar i.pull { background: var(--accent); }
+.dirbar i.mid { background: #3d6a9e; }
+.dirbar i.oppo { background: var(--bg-3); }
+.dirlab {
+  display: flex; justify-content: space-between; font-size: 10px; color: var(--text-dim);
+  font-family: ui-monospace, Menlo, monospace;
+}
+.opv-callout {
+  background: rgba(88, 166, 255, .1); border: 1px solid rgba(88, 166, 255, .35);
+  border-radius: 9px; padding: 9px 11px; font-size: 12px; line-height: 1.6; margin-top: 10px;
+}
+.kvrow {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 7px 0; border-bottom: 1px solid rgba(48, 54, 61, .5); font-size: 12.5px;
+}
+.kvrow:last-of-type { border-bottom: none; }
+.kvrow b { font-family: ui-monospace, Menlo, monospace; font-variant-numeric: tabular-nums; font-weight: 700; }
+.kvrow b.hot { color: var(--amber); }
+/* 名前が入っている相手カードに、選手ページへの導線を小さく添える */
+.bx-more { float: right; color: var(--accent); font-size: 10px; font-weight: 700; }

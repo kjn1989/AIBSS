@@ -3,6 +3,7 @@ import { useStore, usePlayerName, useT } from '../state/store.jsx';
 import { RESULTS, formatIP } from '../lib/model.js';
 import { buildLineupRows, roleTag, posFull, assignAtBatsByPlayer } from '../lib/lineupBox.js';
 import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf, oppHasName } from '../lib/oppBox.js';
+import { oppPlayerKey } from '../lib/matchup.js';
 import Sheet from './Sheet.jsx';
 
 // 1登場ぶんの打席群(+盗塁数)から表示用の打撃ラインを作る。
@@ -28,7 +29,7 @@ function lineFromBucket(atBats, sb) {
 //
 // 自軍/相手をセグメントコントロールで切り替える。相手も同じツリー形式で見せる
 // (自軍の投手記録をつけている時点で、相手の打席結果はすべて記録されているため)。
-export default function GameBoxScore({ game }) {
+export default function GameBoxScore({ game, onOpenOpp }) {
   const { state } = useStore();
   const t = useT();
   const [team, setTeam] = useState('mine'); // 'mine' | 'opp'
@@ -45,7 +46,7 @@ export default function GameBoxScore({ game }) {
           <button role="tab" aria-selected={team === 'opp'} className={team === 'opp' ? 'on' : ''} onClick={() => setTeam('opp')}>{oppName}</button>
         </div>
       )}
-      {team === 'mine' ? <MyTree game={game} /> : <OppTree game={game} />}
+      {team === 'mine' ? <MyTree game={game} /> : <OppTree game={game} onOpenOpp={onOpenOpp} />}
     </div>
   );
 }
@@ -106,7 +107,7 @@ function MyTree({ game }) {
 
 // ---- 相手: 同じ打順ツリー × その試合の成績 ----
 // 相手選手は記号(A〜B…)で記録されている。タップで実名に書き換えられる。
-function OppTree({ game }) {
+function OppTree({ game, onOpenOpp }) {
   const { state } = useStore();
   const t = useT();
   const lang = state.settings.lang || 'ja';
@@ -120,7 +121,13 @@ function OppTree({ game }) {
     const s = stats.get(p.letter);
     const named = oppHasName(game, p.letter);
     return (
-      <button className={`bx-card opp${i > 0 ? ' sub' : ''}`} key={key} onClick={() => setEditing(p.letter)}>
+      <button
+        className={`bx-card opp${i > 0 ? ' sub' : ''}`}
+        key={key}
+        // 名前が入っていれば選手ページ(打球分布)へ。未入力なら名前を入れる画面へ。
+        // 入力が済んだ相手ほど見る価値が出るので、動きを切り替える
+        onClick={() => (named && onOpenOpp ? onOpenOpp(oppPlayerKey(game, p.letter)) : setEditing(p.letter))}
+      >
         <div className="bx-top">
           {p.inning != null && <span className="bx-inn">{t('box.inningN', { n: p.inning })}</span>}
           {/* 相手の交代は種別(代打/守備)まで記録していないため、中立に「途中出場」とする */}
@@ -134,7 +141,10 @@ function OppTree({ game }) {
           </span>
           <span className="bx-edit" aria-hidden>✎</span>
         </div>
-        <div className="bx-bottom">{statLine(s, t) || t('box.noPa')}</div>
+        <div className="bx-bottom">
+          {statLine(s, t) || t('box.noPa')}
+          {named && <span className="bx-more">{t('box.oppOpen')}</span>}
+        </div>
       </button>
     );
   };
