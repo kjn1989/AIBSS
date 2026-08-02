@@ -14,7 +14,7 @@ import { newGame } from '../src/lib/model.js';
 import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf, oppLettersInGame, oppBaserunning } from '../src/lib/oppBox.js';
 import { remapPlayerInGame, fillPlayerGaps } from '../src/lib/mergePlayers.js';
 import { computeBoxScore } from '../src/lib/boxscore.js';
-import { buildMatchups, opponentSummaries, oppPitcherByAtBat, oppPlayerKey, normalizeName, opponentTeams, lastOppRoster, oppPlayerAtBats, oppBatteryStats } from '../src/lib/matchup.js';
+import { buildMatchups, opponentSummaries, oppPitcherByAtBat, oppPlayerKey, normalizeName, opponentTeams, lastOppRoster, oppPlayerAtBats, oppBatteryStats, oppOffenseStats } from '../src/lib/matchup.js';
 import { yearOfDate, yearOfGame, yearsInGames, tenureByPlayer, playedInYear, isArchived, yearLabel, currentYear, resolveYear, scopedGames,
   gradeOf, entryYearFromGrade, willGraduate, sortByGrade, usesGrade, defaultSchoolType, maxGradeOf,
   defaultYearStartMonth, schoolYearAtSeasonEnd, currentSchoolYear, labelOfYear } from '../src/lib/year.js';
@@ -1657,4 +1657,39 @@ test('oppBatteryStats: 相手捕手の盗塁阻止率と、投手の暴投・牽
   assert.equal(r.team.pb, 1);
   // 名前が入っていない相手は集計しない(誰の記録か特定できないため)
   assert.deepEqual(oppBatteryStats([{ ...g, oppNames: {} }]).catchers, []);
+});
+
+test('oppOffenseStats: 走ってくるチームか、送ってくるチームかを見る', () => {
+  const on = (bases) => ({ 1: bases.includes(1) || null, 2: bases.includes(2) || null, 3: bases.includes(3) || null });
+  const d = (id, letter, result, before, outs, pitchCount = 3) => ({ id, kind: 'defense', inning: 1, isTop: false,
+    payload: { letter, result, beforeRunners: before, outsBefore: outs, pitchCount } });
+  const g = {
+    id: 'g', opponent: '上智', isHome: true, // 相手が後攻 = 相手の攻撃は裏... ではなく isHome は自軍。相手の攻撃は表
+    oppLineup: [{ order: 1, letter: 'A' }, { order: 2, letter: 'B' }],
+    oppNames: { A: '佐藤', B: '中村' },
+    playLogs: [
+      d('1', 'A', 'sacBunt', on([1]), 0),
+      d('2', 'B', 'sacBunt', on([1]), 0),
+      d('3', 'A', 'out', on([1]), 0),
+      d('4', 'B', 'single', on([]), 0, 1),  // 初球打ち
+      d('5', 'A', 'out', on([]), 1, 5),
+      { id: '6', kind: 'sb', inning: 2, isTop: true, text: '盗塁', payload: { letter: 'A' } },
+      { id: '7', kind: 'sb', inning: 3, isTop: true, text: '盗塁', payload: { letter: 'A' } },
+      { id: '8', kind: 'runner', inning: 4, isTop: true, text: '盗塁死', payload: { letter: 'B' } },
+      // 自軍の攻撃中(裏)の盗塁は相手の機動力ではない
+      { id: '9', kind: 'sb', inning: 2, isTop: false, text: '盗塁', payload: { playerId: 'p0' } },
+    ],
+  };
+  const r = oppOffenseStats([g]);
+  assert.deepEqual([r.sb, r.cs, r.att], [2, 1, 3]);
+  assert.equal(r.sbRate.toFixed(3), '0.667');
+  assert.equal(r.sacBunt, 2);
+  assert.equal(r.firstPitchRate.toFixed(1), '0.2'); // 5打席中1打席が初球
+  // 無死一塁は3回あって、うち2回が送りバント
+  const s = r.situations.find((x) => x.key === 'o0_1');
+  assert.deepEqual([s.count, s.sac], [3, 2]);
+  // 走ってくる打者(企図の多い順)
+  assert.deepEqual(r.runners.map((x) => [x.name, x.sb, x.cs]), [['佐藤', 2, 0], ['中村', 0, 1]]);
+  // 1回きりの場面は傾向とは言えないので出さない
+  assert.equal(r.situations.every((x) => x.count >= 2), true);
 });

@@ -1498,6 +1498,8 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
   background: rgba(88, 166, 255, .1); border: 1px solid rgba(88, 166, 255, .35);
   border-radius: 9px; padding: 9px 11px; font-size: 12px; line-height: 1.6; margin-top: 10px;
 }
+/* 数字の読み方の但し書き。本文より一段落として、数字の邪魔をしない */
+.foot-note { margin: 10px 0 0; font-size: 11px; line-height: 1.6; color: var(--text-dim); }
 .kvrow {
   display: flex; justify-content: space-between; align-items: baseline;
   padding: 7px 0; border-bottom: 1px solid rgba(48, 54, 61, .5); font-size: 12.5px;
@@ -1508,3 +1510,19 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 /* 名前が入っている相手カードに、選手ページへの導線を小さく添える */
 .bx-more { float: right; color: var(--accent); font-size: 10px; font-weight: 700; }
 .opv-callout.good { background: rgba(63, 185, 80, .1); border-color: rgba(63, 185, 80, .35); }
+
+/* 数字を3つだけ大きく見せる小さなタイル(相手の機動力など、まず結論を見る画面用) */
+.kpi3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+.kpi {
+  background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px;
+  padding: 9px 6px; text-align: center; min-width: 0;
+}
+.kpi b {
+  display: block; font-family: ui-monospace, Menlo, monospace; font-variant-numeric: tabular-nums;
+  font-size: 19px; font-weight: 700; line-height: 1.2;
+}
+.kpi span {
+  display: block; font-size: 10.5px; color: var(--text-dim); margin-top: 3px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.kpi i { display: block; font-size: 9.5px; color: var(--text-dim); opacity: .75; font-style: normal; }

@@ -373,3 +373,89 @@ export function oppBatteryStats(games = []) {
     .sort((a, b) => (b.wp + b.bbHbp) - (a.wp + a.bbHbp));
   return { catchers: cRows, pitchers: pRows, team };
 }
+
+// ============================================================
+// 相手の機動力(走ってくるチームか、送ってくるチームか)
+//
+// 走者と結果はすべて相手の打席(defense)に記録されているので、
+// 「どの場面で何を仕掛けてきたか」まで組み立てられる。
+// ============================================================
+
+// 走者とアウト数から場面の名前を作る。よく出る形だけを名前で持ち、他はまとめる。
+const SITUATIONS = [
+  { key: 'o0_1', outs: 0, on: '1' }, { key: 'o1_1', outs: 1, on: '1' },
+  { key: 'o0_2', outs: 0, on: '2' }, { key: 'o1_2', outs: 1, on: '2' },
+  { key: 'o0_12', outs: 0, on: '12' }, { key: 'o1_12', outs: 1, on: '12' },
+  { key: 'o0_13', outs: 0, on: '13' }, { key: 'o1_13', outs: 1, on: '13' },
+];
+function situationKey(before, outs) {
+  const on = [1, 2, 3].filter((b) => before?.[b]).join('');
+  if (!on) return null; // 走者なしは仕掛けようがない
+  const found = SITUATIONS.find((s) => s.outs === Number(outs || 0) && s.on === on);
+  return found ? found.key : null;
+}
+
+export function oppOffenseStats(games = []) {
+  const byPlayer = new Map(); // 相手選手ごとの走塁
+  const sit = new Map();      // 場面ごとの仕掛け
+  let sb = 0; let cs = 0; let sacBunt = 0; let sacFly = 0;
+  let firstPitchSwings = 0; let paWithPitches = 0;
+
+  const who = (g, letter) => {
+    const key = oppPlayerKey(g, letter);
+    if (!key) return null;
+    if (!byPlayer.has(key)) {
+      const order = (g.oppLineup || []).find((l) => l.letter === letter)?.order ?? null;
+      byPlayer.set(key, { key, name: oppNameOf(g, letter), order, sb: 0, cs: 0 });
+    }
+    return byPlayer.get(key);
+  };
+
+  for (const g of games) {
+    const oppBattingIsTop = !!g.isHome; // 相手の攻撃はどちらの半回か
+    for (const l of g.playLogs || []) {
+      const p = l.payload || {};
+      if (l.kind === 'defense') {
+        if (p.result === 'sacBunt') sacBunt += 1;
+        if (p.result === 'sacFly') sacFly += 1;
+        // 初球から打ちにきた打席(投球数1でインプレー or 長打)
+        if (p.pitchCount != null) {
+          paWithPitches += 1;
+          if (p.pitchCount === 1 && p.result !== 'bb' && p.result !== 'hbp') firstPitchSwings += 1;
+        }
+        const k = situationKey(p.beforeRunners, p.outsBefore);
+        if (k) {
+          if (!sit.has(k)) sit.set(k, { key: k, count: 0, sac: 0 });
+          const s = sit.get(k);
+          s.count += 1;
+          if (p.result === 'sacBunt') s.sac += 1;
+        }
+        continue;
+      }
+      if (!!l.isTop !== oppBattingIsTop) continue; // 相手の攻撃中だけ
+      if (l.kind === 'sb') {
+        sb += 1;
+        const w = p.letter ? who(g, p.letter) : null;
+        if (w) w.sb += 1;
+      } else if (l.kind === 'runner' && l.text === '盗塁死') {
+        cs += 1;
+        const w = p.letter ? who(g, p.letter) : null;
+        if (w) w.cs += 1;
+      }
+    }
+  }
+
+  const runners = [...byPlayer.values()]
+    .map((r) => ({ ...r, att: r.sb + r.cs, rate: r.sb + r.cs > 0 ? r.sb / (r.sb + r.cs) : null }))
+    .filter((r) => r.att > 0)
+    .sort((a, b) => b.att - a.att || (a.order ?? 99) - (b.order ?? 99));
+  const situations = [...sit.values()]
+    .filter((s) => s.count >= 2) // 1回きりの場面は傾向とは言えない
+    .sort((a, b) => b.sac - a.sac || b.count - a.count);
+  return {
+    sb, cs, att: sb + cs, sbRate: sb + cs > 0 ? sb / (sb + cs) : null,
+    sacBunt, sacFly,
+    firstPitchRate: paWithPitches > 0 ? firstPitchSwings / paWithPitches : null,
+    runners, situations,
+  };
+}
