@@ -15,6 +15,39 @@
 
 export const DEFAULT_YEAR_START_MONTH = 4; // 日本の年度。設定で 1(暦年) や 9 にもできる
 
+// エディション・学校区分ごとの、年度(=チームの代)の開始月。
+//
+// 学校の年度は4月始まりだが、野球部の「代」はそれとは違う。
+// 中学・高校は夏の大会で3年生が引退し、秋から新チームが始まる。
+// だから代の区切りは9月で、2025年度 = 2025年9月〜2026年8月 = 2026年の夏に
+// 引退する代、になる。学年(入学年度から導出)とは別の軸なので混ぜない。
+//
+// 大学は秋のリーグ戦まで戦って年度末に卒業するので4月始まりでよい。
+// 少年野球(学童)は学年で動くので4月。草野球は代替わりが緩いので4月。
+export function defaultYearStartMonth(edition, schoolType) {
+  if (schoolType === 'junior' || schoolType === 'high') return 9; // 夏の大会後に代が替わる
+  return DEFAULT_YEAR_START_MONTH;
+}
+
+// 学年は「学校の年度」(常に4月始まり)で決まる。チームの代(中学・高校は9月始まり)
+// とは別の軸なので、混ぜてはいけない。
+// 混ぜると、4月に入学した1年生が9月に2年生になってしまう。
+export const SCHOOL_YEAR_START_MONTH = 4;
+export function schoolYearOfDate(date) { return yearOfDate(date, SCHOOL_YEAR_START_MONTH); }
+export function currentSchoolYear(now = new Date()) { return currentYear(SCHOOL_YEAR_START_MONTH, now); }
+
+// その代が終わる時点の学校年度。引退(卒業)の判定に使う。
+// 9月始まりの代は翌年の夏に終わるので、学校年度は1つ進む。
+//   代2025(2025年9月〜2026年8月) の終わり = 2026年8月 = 学校年度 2026
+export function schoolYearAtSeasonEnd(seasonYear, startMonth = DEFAULT_YEAR_START_MONTH) {
+  return (Number(startMonth) || DEFAULT_YEAR_START_MONTH) >= 7 ? seasonYear + 1 : seasonYear;
+}
+
+// その年度が「いつ終わるか」を表す月(締めの案内を出す判断に使う)
+export function yearEndMonth(startMonth = DEFAULT_YEAR_START_MONTH) {
+  return ((Number(startMonth) || DEFAULT_YEAR_START_MONTH) + 10) % 12 + 1;
+}
+
 // 日付文字列(YYYY-MM-DD) → 年度。startMonth が1なら暦年と一致する。
 export function yearOfDate(date, startMonth = DEFAULT_YEAR_START_MONTH) {
   if (!date) return null;
@@ -94,11 +127,19 @@ export function playedInYear(tenureMap, playerId, year) {
   return year >= t.from && year <= t.to;
 }
 
-// 年度の表示名。ja: 「2025年度」 / en: 「2025–26」(4月始まりのように年をまたぐ場合)
+// 年度の表示名。
+// 9月始まり(中学・高校の代)は「2026年の代」と呼ぶのが実感に合う。
+// 2025年9月に始まった代は、2026年の夏に引退するため。
 export function yearLabel(year, lang = 'ja', startMonth = DEFAULT_YEAR_START_MONTH) {
   if (year == null) return '';
-  if (lang === 'ja') return `${year}年度`;
-  return startMonth === 1 ? String(year) : `${year}–${String((year + 1) % 100).padStart(2, '0')}`;
+  const m = Number(startMonth) || DEFAULT_YEAR_START_MONTH;
+  if (lang === 'ja') {
+    if (m === 1) return `${year}年`;
+    if (m >= 7) return `${year + 1}年の代`; // 夏に代が替わる区分
+    return `${year}年度`;
+  }
+  if (m === 1) return String(year);
+  return `${year}–${String((year + 1) % 100).padStart(2, '0')}`;
 }
 
 // ============================================================
@@ -184,10 +225,11 @@ export function entryYearFromGrade(grade, year) {
   return year - Number(grade) + 1;
 }
 
-// その年度を終えたら卒業か(学年が最終学年に達しているか)。
-// 年度の締めで卒業予定者を自動で選ぶのに使う。
-export function willGraduate(player, year, maxGrade) {
-  const g = gradeOf(player, year);
+// その代を終えたら引退(卒業)か。
+// 学年は学校年度で数えるので、代の終わり時点の学校年度で判定する。
+// 中学・高校なら「翌年の夏の大会を終えたときに3年生か」を見ることになる。
+export function willGraduate(player, seasonYear, maxGrade, startMonth = DEFAULT_YEAR_START_MONTH) {
+  const g = gradeOf(player, schoolYearAtSeasonEnd(seasonYear, startMonth));
   return g != null && maxGrade != null && g >= maxGrade;
 }
 

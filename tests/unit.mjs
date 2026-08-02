@@ -16,7 +16,8 @@ import { remapPlayerInGame, fillPlayerGaps } from '../src/lib/mergePlayers.js';
 import { computeBoxScore } from '../src/lib/boxscore.js';
 import { buildMatchups, opponentSummaries, oppPitcherByAtBat, oppPlayerKey, normalizeName, opponentTeams, lastOppRoster } from '../src/lib/matchup.js';
 import { yearOfDate, yearOfGame, yearsInGames, tenureByPlayer, playedInYear, isArchived, yearLabel, currentYear, resolveYear, scopedGames,
-  gradeOf, entryYearFromGrade, willGraduate, sortByGrade, usesGrade, defaultSchoolType, maxGradeOf } from '../src/lib/year.js';
+  gradeOf, entryYearFromGrade, willGraduate, sortByGrade, usesGrade, defaultSchoolType, maxGradeOf,
+  defaultYearStartMonth, schoolYearAtSeasonEnd, currentSchoolYear } from '../src/lib/year.js';
 
 import { rebuildBatters, findDuplicateAtBats, findOrderBreaks, canRebuildOrders } from '../src/lib/battersRebuild.js';
 
@@ -1529,4 +1530,45 @@ test('lastOppRoster: 直近の対戦から相手の並びを取り出す', () =>
   // 対戦したことのない相手は null
   assert.equal(lastOppRoster(games, '知らないチーム'), null);
   assert.equal(lastOppRoster(games, ''), null);
+});
+
+test('defaultYearStartMonth: 中学・高校の代は夏の大会後(9月)に替わる', () => {
+  // 学校の年度は4月始まりだが、野球部の代は夏の大会で3年生が引退して秋から替わる。
+  // 学年(入学年度から導出)とは別の軸なので、混ぜずに開始月で表す。
+  assert.equal(defaultYearStartMonth('ブカツ(中高大)', 'high'), 9);
+  assert.equal(defaultYearStartMonth('ブカツ(中高大)', 'junior'), 9);
+  assert.equal(defaultYearStartMonth('ブカツ(中高大)', 'university'), 4); // 大学は年度末まで
+  assert.equal(defaultYearStartMonth('少年野球', 'elementary'), 4);
+  assert.equal(defaultYearStartMonth('草野球', null), 4);
+
+  // 9月始まりだと、夏の大会(7月)はまだ前の代に入る
+  assert.equal(yearOfDate('2026-07-20', 9), 2025); // 2026年夏 = 2025年9月に始まった代
+  assert.equal(yearOfDate('2026-09-01', 9), 2026); // 秋から新チーム
+  // 呼び方も実感に合わせる(2025年9月に始まった代は「2026年の代」)
+  assert.equal(yearLabel(2025, 'ja', 9), '2026年の代');
+  assert.equal(yearLabel(2025, 'ja', 4), '2025年度');
+  assert.equal(yearLabel(2025, 'ja', 1), '2025年');
+});
+
+test('学年は学校年度(4月)、代は9月。混ぜると1年生が半年で2年生になる', () => {
+  // 2026年4月に高校へ入学した1年生。学校年度 2026 で 1年
+  const p = { entryYear: 2026 };
+  assert.equal(gradeOf(p, 2026), 1);
+  assert.equal(gradeOf(p, 2027), 2); // 翌年の4月に2年
+  assert.equal(gradeOf(p, 2028), 3);
+
+  // 代(9月始まり)の終わり時点の学校年度で引退を判定する
+  //   代2025 = 2025年9月〜2026年8月 → 終わりは2026年8月 → 学校年度 2026
+  assert.equal(schoolYearAtSeasonEnd(2025, 9), 2026);
+  assert.equal(schoolYearAtSeasonEnd(2025, 4), 2025); // 4月始まりなら同じ年度
+
+  const high = maxGradeOf('high'); // 3
+  // 2024年入学(2026年度に3年) → 代2025(2026年夏に終わる)で引退
+  const senior = { entryYear: 2024 };
+  assert.equal(gradeOf(senior, 2026), 3);
+  assert.equal(willGraduate(senior, 2025, high, 9), true);
+  // 2025年入学は、その代ではまだ2年なので引退しない
+  assert.equal(willGraduate({ entryYear: 2025 }, 2025, high, 9), false);
+  // その次の代では引退する
+  assert.equal(willGraduate({ entryYear: 2025 }, 2026, high, 9), true);
 });

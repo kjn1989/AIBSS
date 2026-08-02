@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useStore, useT } from '../state/store.jsx';
 import {
   isArchived, tenureByPlayer, gradeOf, willGraduate, maxGradeOf, usesGrade,
-  defaultSchoolType, yearLabel, DEFAULT_YEAR_START_MONTH,
+  defaultSchoolType, yearLabel, schoolYearAtSeasonEnd, DEFAULT_YEAR_START_MONTH,
 } from '../lib/year.js';
 import { buildYearArchive, yearSummary, gamesInYear, archiveFileName } from '../lib/yearArchive.js';
 import { atBatCSV, downloadCSV } from '../lib/csv.js';
@@ -32,7 +32,7 @@ export default function YearCloseView({ year, onClose }) {
   // 卒業予定は最初から選んでおく。学年があれば確実に判定できる
   const [picked, setPicked] = useState(() => {
     const s = new Set();
-    if (gradeOn && maxGrade) for (const p of active) if (willGraduate(p, year, maxGrade)) s.add(p.id);
+    if (gradeOn && maxGrade) for (const p of active) if (willGraduate(p, year, maxGrade, startMonth)) s.add(p.id);
     return s;
   });
   const [notes, setNotes] = useState({}); // playerId -> '卒業' | '退部' | '移籍'
@@ -54,7 +54,7 @@ export default function YearCloseView({ year, onClose }) {
       for (const id of [p.playerId, p.in, p.out, p.pitcherId]) if (id) playedThisYear.add(id);
     }
   }
-  const graduating = active.filter((p) => gradeOn && maxGrade && willGraduate(p, year, maxGrade));
+  const graduating = active.filter((p) => gradeOn && maxGrade && willGraduate(p, year, maxGrade, startMonth));
   const gradIds = new Set(graduating.map((p) => p.id));
   const absent = active.filter((p) => !gradIds.has(p.id) && !playedThisYear.has(p.id));
   const staying = active.filter((p) => !gradIds.has(p.id) && playedThisYear.has(p.id));
@@ -99,7 +99,8 @@ export default function YearCloseView({ year, onClose }) {
 
   const row = (p, checked, auto) => {
     const tn = tenure.get(p.id);
-    const g = gradeOn ? gradeOf(p, year) : null;
+    // 代の終わり時点の学年で示す(高校なら「夏を終えたとき何年生か」)
+    const g = gradeOn ? gradeOf(p, schoolYearAtSeasonEnd(year, startMonth)) : null;
     return (
       <div className="yc-row" key={p.id} role="button" onClick={() => toggle(p.id)}>
         <span className={`yc-chk${checked ? ' on' : ''}`} aria-hidden="true" />
