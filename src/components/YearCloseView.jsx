@@ -23,6 +23,9 @@ export default function YearCloseView({ year, onClose }) {
   const startMonth = state.settings.yearStartMonth || DEFAULT_YEAR_START_MONTH;
   const gradeOn = usesGrade(state.settings.edition);
   const maxGrade = maxGradeOf(state.settings.schoolType || defaultSchoolType(state.settings.edition));
+  // 中学・高校は夏の大会でチームを離れるが、在学は3月まで続く。「卒業」ではなく「引退」
+  const leaveWord = startMonth >= 7 ? t('role.retire') : t('role.grad');
+  const nextLabel = yearLabel(year + 1, lang, startMonth);
 
   const active = state.players.filter((p) => !isArchived(p));
   const tenure = useMemo(() => tenureByPlayer(Object.values(state.games), startMonth), [state.games, startMonth]);
@@ -85,7 +88,7 @@ export default function YearCloseView({ year, onClose }) {
       // 理由ごとにまとめて適用する(理由は表示にしか使わないので粗くてよい)
       const byNote = new Map();
       for (const id of ids) {
-        const note = notes[id] || (gradIds.has(id) ? t('role.grad') : t('role.left'));
+        const note = notes[id] || (gradIds.has(id) ? leaveWord : t('role.left'));
         if (!byNote.has(note)) byNote.set(note, []);
         byNote.get(note).push(id);
       }
@@ -113,11 +116,11 @@ export default function YearCloseView({ year, onClose }) {
         </span>
         {checked && (
           <select
-            value={notes[p.id] || (auto ? t('role.grad') : t('role.left'))}
+            value={notes[p.id] || (auto ? leaveWord : t('role.left'))}
             onClick={(e) => e.stopPropagation()}
             onChange={(e) => setNotes((n) => ({ ...n, [p.id]: e.target.value }))}
           >
-            {[t('role.grad'), t('role.left'), t('role.moved')].map((v) => <option key={v} value={v}>{v}</option>)}
+            {[leaveWord, t('role.left'), t('role.moved')].map((v) => <option key={v} value={v}>{v}</option>)}
           </select>
         )}
       </div>
@@ -140,8 +143,8 @@ export default function YearCloseView({ year, onClose }) {
 
             {graduating.length > 0 && (
               <div className="yc-auto">
-                <b>{t('yc.autoTitle', { n: graduating.length, grade: maxGrade })}</b>
-                <span>{t('yc.autoDesc', { year: year + 1 })}</span>
+                <b>{t('yc.autoTitle', { n: graduating.length, grade: maxGrade, word: leaveWord })}</b>
+                <span>{t('yc.autoDesc', { next: nextLabel })}</span>
               </div>
             )}
             {graduating.map((p) => row(p, picked.has(p.id), true))}
@@ -155,7 +158,7 @@ export default function YearCloseView({ year, onClose }) {
 
             {staying.length > 0 && (
               <>
-                <div className="section-title">{t('yc.staying', { year: year + 1 })}</div>
+                <div className="section-title">{t('yc.stayingLabel', { next: nextLabel })}</div>
                 {staying.map((p) => row(p, picked.has(p.id), false))}
               </>
             )}
@@ -199,7 +202,7 @@ export default function YearCloseView({ year, onClose }) {
             {/* アーカイブ適用後に再計算された人数をそのまま使う。
                 ここで picked を引くと二重に減る(適用前の人数だと思い込んだのが原因) */}
             <p className="small dim">
-              {t('yc.doneDesc', { active: active.length, year: year + 1 })}
+              {t('yc.doneDescLabel', { active: active.length, next: nextLabel })}
             </p>
             <button className="primary wide mt12" onClick={onClose}>{t('action.close')}</button>
           </>
