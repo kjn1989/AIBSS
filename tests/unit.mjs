@@ -21,6 +21,7 @@ import { yearOfDate, yearOfGame, yearsInGames, tenureByPlayer, playedInYear, isA
 
 import { rebuildBatters, findDuplicateAtBats, findOrderBreaks, canRebuildOrders } from '../src/lib/battersRebuild.js';
 import { ownOffenseStats, ownBatteryStats } from '../src/lib/ownScout.js';
+import { padPointToBall, ballToPadPoint, nearestDirection, depthBand, contactCandidate, ballOf, chartPoint, zoneCounts, zoneOf, POS_BALL } from '../src/lib/battedBall.js';
 
 test('parseDirectionOnly: 方向のみの発話は方向、結果語を含めばnull(言い直し扱い)', () => {
   assert.equal(parseDirectionOnly('ライト'), 'RF');
@@ -1774,4 +1775,119 @@ test('ownBatteryStats: 走られていない捕手の阻止率は0%ではなくn
   const r = ownBatteryStats([g]);
   assert.equal(r.catchers[0].csRate, null);
   assert.equal(r.catchers[0].pb, 1);
+});
+
+// ---- battedBall.js: 打球の方向・深さ・強さ ----
+test('padPointToBall: チップの位置は今までどおりの方向、深さは定位置/内野に落ちる', () => {
+  // 守備位置のチップを押したときの値。チップは「定位置」の距離に置いてある
+  for (const [k, v] of Object.entries(POS_BALL)) {
+    assert.equal(nearestDirection(v.angle, v.depth), k, `${k} は自分自身に最も近いはず`);
+  }
+  assert.equal(depthBand(POS_BALL.LF.depth), 'normal');   // 左翼の定位置
+  assert.equal(depthBand(POS_BALL.CF.depth), 'normal');   // 中堅の定位置
+  assert.equal(depthBand(POS_BALL.SS.depth), 'infield');  // 遊撃は内野
+  assert.equal(depthBand(POS_BALL.P.depth), 'infield');
+});
+
+test('padPointToBall: ファウルゾーンは記録しない / 上辺中央はフェンス際', () => {
+  assert.equal(padPointToBall(0.02, 0.98).foul, true);  // 三塁線の外
+  assert.equal(padPointToBall(0.98, 0.98).foul, true);  // 一塁線の外
+  assert.equal(padPointToBall(0.5, 0.5).foul, false);
+  const top = padPointToBall(0.5, 0);
+  assert.equal(depthBand(top.depth), 'wall');
+  assert.ok(Math.abs(top.angle) < 0.001); // 上辺中央は中堅方向
+});
+
+test('ballToPadPoint: 押した位置に戻せる(往復して同じ点になる)', () => {
+  const b = padPointToBall(0.32, 0.24);
+  const p = ballToPadPoint(b.angle, b.depth);
+  assert.ok(Math.abs(p.fx - 0.32) < 1e-9);
+  assert.ok(Math.abs(p.fy - 0.24) < 1e-9);
+});
+
+test('contactCandidate: 候補は出すが「分からない場面」では出さない', () => {
+  assert.equal(contactCandidate('ground', 0.75), 'hard');  // 内野を抜けたゴロ
+  assert.equal(contactCandidate('ground', 0.30), 'weak');  // 手前で止まった
+  assert.equal(contactCandidate('ground', 0.50), null);    // 内野の普通のゴロは深さでは分からない
+  assert.equal(contactCandidate('fly', 0.95), 'hard');
+  assert.equal(contactCandidate('fly', 0.65), 'weak');
+  assert.equal(contactCandidate(null, 0.9), null);         // 軌道が無ければ候補も出さない
+  assert.equal(contactCandidate('fly', null), null);       // 深さが無ければ候補も出さない
+});
+
+test('ballOf: 角度があれば実座標、無ければ守備位置から補う', () => {
+  const exact = ballOf({ hitAngle: -20, hitDepth: 0.9, direction: 'LF' });
+  assert.deepEqual([exact.angle, exact.depth, exact.exact], [-20, 0.9, true]);
+  const fallback = ballOf({ direction: 'LF' });
+  assert.equal(fallback.exact, false);
+  assert.equal(Math.round(fallback.angle), Math.round(POS_BALL.LF.angle));
+  assert.equal(ballOf({ direction: null }), null); // 方向も無ければ図に置けない
+});
+
+test('chartPoint: 深さ1はフェンス上、深さ0は本塁', () => {
+  const home = chartPoint(0, 0);
+  assert.deepEqual([Math.round(home[0]), Math.round(home[1])], [50, 90]);
+  const cf = chartPoint(0, 1);
+  assert.deepEqual([Math.round(cf[0]), Math.round(cf[1])], [50, 14]); // 中堅のフェンス
+  const lineL = chartPoint(-45, 1);
+  assert.deepEqual([Math.round(lineL[0]), Math.round(lineL[1])], [2, 42]); // 三塁線のポール
+});
+
+test('zoneCounts: 角度と深さで区画に振り分け、古い記録も同じ図に入る', () => {
+  const rows = [
+    { hitAngle: -30, hitDepth: 0.95 }, // 左の深い
+    { hitAngle: -30, hitDepth: 0.92 }, // 同じ区画
+    { hitAngle: 0, hitDepth: 0.3 },    // 中の内野
+    { direction: 'SS' },               // 深さなし → 守備位置から
+    { direction: null },               // 図に置けない
+  ];
+  const { counts, placed } = zoneCounts(rows);
+  assert.equal(placed, 4);
+  assert.equal(counts.reduce((a, b) => a + b, 0), 4);
+  assert.equal(counts[zoneOf(-30, 0.95)], 2);
+  assert.ok(counts[zoneOf(0, 0.3)] >= 1);
+});
+
+test('aggregateBatting: ハードヒット率の分母は「強さを記録した打球」だけ', () => {
+  const g = {
+    atBats: [
+      { playerId: 'p1', result: 'single', contact: 'hard' },
+      { playerId: 'p1', result: 'out', contact: 'hard' },
+      { playerId: 'p1', result: 'out', contact: 'weak' },
+      { playerId: 'p1', result: 'out', contact: null },   // 未記録は分母に入れない
+      { playerId: 'p1', result: 'so', contact: 'hard' },  // 三振はバットに当たっていない
+      { playerId: 'p1', result: 'bb' },
+    ],
+  };
+  const s = aggregateBatting([g]).p1;
+  assert.equal(s.battedBalls, 4);      // 三振と四球は打球ではない
+  assert.equal(s.contactRecorded, 3);  // 強さが入っているのは3打球
+  assert.equal(s.hardHit, 2);
+  assert.equal(s.weakHit, 1);
+  const m = battingMetrics(s);
+  assert.equal(m.hardHit.toFixed(3), '0.667');
+});
+
+test('battingMetrics: 強さの記録が1つも無ければ 0% ではなく null', () => {
+  const g = { atBats: [{ playerId: 'p1', result: 'single' }, { playerId: 'p1', result: 'out' }] };
+  const s = aggregateBatting([g]).p1;
+  assert.equal(s.battedBalls, 2);
+  assert.equal(s.contactRecorded, 0);
+  assert.equal(battingMetrics(s).hardHit, null);
+});
+
+test('parseUtterance: 「レフト前にボテボテのゴロ」で方向・軌道・強さが入る', () => {
+  const top = parseUtterance('レフト前にボテボテのゴロでヒット')[0];
+  assert.equal(top.result, 'single');
+  assert.equal(top.direction, 'LF');
+  assert.equal(top.outType, 'ground'); // ヒットでも軌道を捨てない
+  assert.equal(top.contact, 'weak');
+});
+test('parseUtterance: 「痛烈なライナー」は強い打球として拾う', () => {
+  const top = parseUtterance('センターへ痛烈なライナーでヒット')[0];
+  assert.equal(top.contact, 'hard');
+  assert.equal(top.outType, 'liner');
+});
+test('parseUtterance: 強さを言わなければ未記録(平凡を勝手に入れない)', () => {
+  assert.equal(parseUtterance('ライト前ヒット')[0].contact, null);
 });

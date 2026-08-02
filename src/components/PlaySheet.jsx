@@ -1,9 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import Sheet from './Sheet.jsx';
 import { useStore, useT, usePlayerName, isMyTeamBatting } from '../state/store.jsx';
-import { RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES, outTypeLabel } from '../lib/model.js';
+import { RESULTS, DIRECTIONS, SO_TYPES, outTypeLabel } from '../lib/model.js';
 import { proposeMoves, batterDestOptions, runnerDestOptions, judgeAdvance } from '../lib/plays.js';
 import FieldPad from './FieldPad.jsx';
+import BattedBallPad from './BattedBallPad.jsx';
+import { depthBand } from '../lib/battedBall.js';
 
 const NEEDS_DIRECTION = ['single', 'double', 'triple', 'hr', 'out', 'error', 'sacBunt', 'sacFly'];
 
@@ -33,9 +35,16 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
   const proposal = useMemo(() => proposeMoves(result, runnersOn), [result]);
 
   const [direction, setDirection] = useState(initial.direction || null);
+  // 打点の極座標(角度・深さ)。方向チップだけを押した場合もここに入る
+  const [point, setPoint] = useState(
+    initial.hitAngle != null ? { angle: initial.hitAngle, depth: initial.hitDepth } : null,
+  );
   // 方向未選択時のみ広いフィールド図を開いておく。選択後は折りたたんでスクロールを減らす
   const [dirOpen, setDirOpen] = useState(!initial.direction);
   const [outType, setOutType] = useState(initial.outType || (result === 'out' ? 'ground' : null));
+  // 打球の強さ。既定は未記録(null)。押されていないものを平凡として
+  // 数え始めるとハードヒット率がすぐ嘘になるので、既定値は入れない
+  const [contact, setContact] = useState(initial.contact || null);
   const [soType, setSoType] = useState(initial.soType || 'swinging');
   const [dests, setDests] = useState(() => {
     const d = {};
@@ -111,13 +120,16 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
 
   const summary = () => {
     const dir = direction ? (lang === 'ja' ? DIRECTIONS[direction] : t(`dir.${direction}`)) : '';
-    const ot = result === 'out' && outType ? outLabel(outType) : '';
+    // 強さまで選んでいれば「大飛球」のような呼び名で返す。選んでいなければ従来どおり
+    const ot = contact && outType && outType !== 'dp'
+      ? t(`battedBall.${outType}.${contact}`)
+      : result === 'out' && outType ? outLabel(outType) : '';
     const soLabel = lang === 'ja' ? SO_TYPES[soType] : t(`soType.${soType}`);
     const label = result === 'so'
       ? soLabel + (batterTo === 1 ? t('playsheet.dropThird') : '')
       : result === 'out' ? '' : resultLabel;
     const runsSuffix = runs ? t('playsheet.runsSuffix', { n: runs }) : '';
-    if (lang === 'ja') return `${dir}${ot}${label}${runsSuffix}`;
+    if (lang === 'ja') return `${[dir, ot, label].filter(Boolean).join(' ')}${runsSuffix}`;
     // 英語は語順が異なるため、空でない要素を半角スペースで連結
     return `${[dir, ot, label].filter(Boolean).join(' ')}${runsSuffix}`;
   };
@@ -138,7 +150,11 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
       batterName: batterName || '',
       payload: {
         result,
-        outType: result === 'out' ? outType : null,
+        // 軌道はヒットのときも残す(これまで捨てていた)。併殺はアウトのときだけ
+        outType: outType === 'dp' && result !== 'out' ? null : outType,
+        contact: needsDir ? contact : null,
+        hitAngle: needsDir && point ? point.angle : null,
+        hitDepth: needsDir && point ? point.depth : null,
         soType: result === 'so' ? soType : undefined,
         direction: needsDir ? direction : null,
         moves,
@@ -165,12 +181,16 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
           {dirOpen ? (
             <FieldPad
               value={direction}
+              point={point}
               outfieldOnly={result === 'hr'}
-              onChange={(key) => { setDirection(key); setDirOpen(false); }}
+              onChange={(key, pt) => { setDirection(key); setPoint(pt); setDirOpen(false); }}
             />
           ) : (
             <button type="button" className="dir-summary" onClick={() => setDirOpen(true)}>
-              <span className="dir-label">{lang === 'ja' ? DIRECTIONS[direction] : t(`dir.${direction}`)}</span>
+              <span className="dir-label">
+                {lang === 'ja' ? DIRECTIONS[direction] : t(`dir.${direction}`)}
+                {point && <span className="depth-pill">{t(`depth.${depthBand(point.depth)}`)}</span>}
+              </span>
               <span className="change">{t('playsheet.change')}</span>
             </button>
           )}
@@ -190,21 +210,18 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
         </>
       )}
 
-      {result === 'out' && (
+      {needsDir && (
         <>
-          <div className="section-title">{t('playsheet.outType')}</div>
-          <div className="grid2">
-            {Object.keys(OUT_TYPES).map((k) => (
-              <button
-                key={k}
-                className={outType === k ? 'primary' : ''}
-                onClick={() => selectOutType(k)}
-                disabled={k === 'dp' && !hadRunners}
-              >
-                {outLabel(k)}
-              </button>
-            ))}
-          </div>
+          <div className="section-title">{t('playsheet.battedBall')}</div>
+          <BattedBallPad
+            trajectory={outType === 'dp' ? null : outType}
+            contact={contact}
+            depth={point ? point.depth : null}
+            onChange={(tr, c) => { setOutType(tr); setContact(c); }}
+            dp={outType === 'dp'}
+            onDp={() => (outType === 'dp' ? setOutType('ground') : selectOutType('dp'))}
+            dpDisabled={result !== 'out' || !hadRunners}
+          />
         </>
       )}
 

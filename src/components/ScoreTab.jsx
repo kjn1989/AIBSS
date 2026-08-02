@@ -828,7 +828,7 @@ export default function ScoreTab() {
       {sheet?.kind === 'play' && (
         <PlaySheet
           game={game}
-          initial={{ result: sheet.result, soType: sheet.soType, batterTo: sheet.batterTo, direction: sheet.direction, outType: sheet.outType }}
+          initial={{ result: sheet.result, soType: sheet.soType, batterTo: sheet.batterTo, direction: sheet.direction, outType: sheet.outType, contact: sheet.contact }}
           batterName={myBatting && batter ? nameOf(batter.playerId) : null}
           onClose={() => setSheet(null)}
         />

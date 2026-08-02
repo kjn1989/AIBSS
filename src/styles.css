@@ -1489,7 +1489,8 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 .dirbar i { display: block; }
 .dirbar i.pull { background: var(--accent); }
 .dirbar i.mid { background: #3d6a9e; }
-.dirbar i.oppo { background: var(--bg-3); }
+.dirbar { background: var(--bg-3); }
+.dirbar i.oppo { background: #4b5563; }
 .dirlab {
   display: flex; justify-content: space-between; font-size: 10px; color: var(--text-dim);
   font-family: ui-monospace, Menlo, monospace;
@@ -1532,3 +1533,74 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .kpi i { display: block; font-size: 9.5px; color: var(--text-dim); opacity: .75; font-style: normal; }
+
+/* ---- 打球方向パッド: 深さの目安と打点 ---- */
+/* 本塁を中心とした同心円。押した位置がどの深さの帯に入るかを見せる */
+.bf-ring {
+  position: absolute; left: 50%; top: 101%; aspect-ratio: 1;
+  transform: translate(-50%, -50%); border-radius: 50%;
+  border: 1px dashed rgba(255, 255, 255, .22); pointer-events: none;
+}
+.bf-ring.fence { border-style: solid; border-color: rgba(255, 255, 255, .42); }
+/* 押した点。フィールドのどこに落ちたかを1つだけ示す */
+.bf-mark {
+  position: absolute; width: 15px; height: 15px; border-radius: 50%;
+  transform: translate(-50%, -50%); pointer-events: none;
+  background: #fff; border: 3px solid var(--accent-2);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, .3), 0 2px 8px rgba(0, 0, 0, .5);
+}
+/* 押した内容を言葉で返す。押し間違いはここで気づける */
+.pad-readout {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-top: 8px; min-height: 30px; font-size: 14px;
+}
+.pad-readout b { font-weight: 800; }
+.depth-pill {
+  font-size: 11.5px; font-weight: 700; padding: 3px 9px; border-radius: 999px;
+  background: rgba(88, 166, 255, .16); color: var(--accent); margin-left: 6px;
+}
+
+/* ---- 打球パッド(行=軌道 × 列=強さ) ---- */
+.cpad { display: grid; grid-template-columns: 42px 1fr 1fr 1fr; gap: 6px; }
+.cpad-colhead {
+  font-size: 10px; letter-spacing: .06em; color: var(--text-dim);
+  text-align: center; padding-bottom: 2px;
+}
+.cpad-rowhead {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  font-size: 9.5px; font-weight: 700; color: var(--text-dim); line-height: 1.2;
+  white-space: nowrap;
+}
+.cpad-rowhead svg { display: block; }
+.cpad-cell {
+  display: flex; align-items: center; justify-content: center; text-align: center;
+  min-height: 52px; padding: 6px 3px; margin: 0;
+  font-size: 12.5px; line-height: 1.25; font-weight: 700; color: var(--text);
+  background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px;
+}
+/* 右にいくほど明るくして、迷ったときに位置で選べるようにする */
+.cpad-cell[data-s="normal"] { background: #1b222b; }
+.cpad-cell[data-s="hard"] { background: #202a35; border-color: #3a4552; }
+.cpad-cell.sel {
+  background: var(--accent-2); border-color: var(--accent); color: #fff;
+  box-shadow: 0 0 0 3px rgba(31, 111, 235, .28);
+}
+/* 深さから出した候補。点線なのは「まだ記録されていない」ことを示すため */
+.cpad-cell.cand { border-color: var(--accent); border-style: dashed; }
+.cpad-foot { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+.cpad-foot button { flex: 0 0 auto; margin: 0; }
+
+/* ---- スプレーチャートの操作(見せ方の切り替えと絞り込み) ---- */
+.spray-controls { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.spray-controls .seg-control { margin: 0; width: auto; align-self: flex-start; }
+.spray-controls .seg-control button { flex: 0 0 auto; overflow: visible; }
+.spray-filters { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip-sm {
+  font-size: 11.5px; font-weight: 600; line-height: 1; min-height: 0;
+  padding: 7px 11px; margin: 0; border-radius: 999px;
+  background: var(--bg-3); border: 1px solid var(--border); color: var(--text-dim);
+}
+.chip-sm.on { background: var(--accent-2); border-color: var(--accent-2); color: #fff; }
+/* 件数の濃淡の凡例 */
+.heat-ramp { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 10.5px; color: var(--text-dim); }
+.heat-ramp i { flex: 1 1 auto; height: 8px; border-radius: 4px; }

@@ -1087,6 +1087,11 @@ export function reducer(state, action) {
         ab.outType = p.outType || null;
         ab.soType = p.result === 'so' ? p.soType || null : null;
         ab.direction = p.direction || null;
+        // 打球の強さと打点(角度・深さ)。押されていなければ null のまま残す。
+        // 「平凡だった」と「記録していない」は別物なので既定値を入れない
+        ab.contact = p.contact || null;
+        ab.hitAngle = p.hitAngle ?? null;
+        ab.hitDepth = p.hitDepth ?? null;
         ab.pitches = pitches;
         ab.pitchCount = pitches.length;
         ab.firstPitch = pitches[0]?.type || null;
@@ -1118,7 +1123,9 @@ export function reducer(state, action) {
           payload: {
             atBatId: ab.id, playerId: batter.playerId, order: batter.order, result: p.result,
             outType: p.outType || null, soType: p.result === 'so' ? p.soType || null : null,
-            direction: p.direction, rbi, runs: totalRuns, outsOnPlay,
+            direction: p.direction, contact: p.contact || null,
+            hitAngle: p.hitAngle ?? null, hitDepth: p.hitDepth ?? null,
+            rbi, runs: totalRuns, outsOnPlay,
             beforeRunners: pending.snapshot.runners, outsBefore, balls, strikes, fouls, pitchCount: pitches.length,
             moveLines, scoreAfter: { my: g.myScore, opp: g.oppScore },
           },
@@ -1154,6 +1161,7 @@ export function reducer(state, action) {
             (oppMultiOut ? ` ⚡${oppMultiOut}` : '') + (totalRuns ? ` (${totalRuns}失点)` : ''),
           payload: {
             result: p.result, direction: p.direction, outType: p.outType || null,
+            contact: p.contact || null, hitAngle: p.hitAngle ?? null, hitDepth: p.hitDepth ?? null,
             soType: p.result === 'so' ? p.soType || null : null, runs: totalRuns, outsOnPlay,
             letter: oppBatter.letter, order: oppBatter.order,
             pitcherId: g.currentPitcherId || null, // どの自軍投手が投げたか(対左右打者split用)
@@ -1207,7 +1215,11 @@ export function reducer(state, action) {
       const pick = (k) => (p[k] !== undefined ? p[k] : cur[k]);
       const result = pick('result');
       const direction = pick('direction');
-      const outType = result === 'out' ? (pick('outType') || 'ground') : null;
+      // 軌道はヒットのときも保持する(アウトだけ既定値ゴロを補う)
+      const outType = result === 'out' ? (pick('outType') || 'ground') : (pick('outType') || null);
+      const contact = pick('contact') ?? null;
+      const hitAngle = pick('hitAngle') ?? null;
+      const hitDepth = pick('hitDepth') ?? null;
       const soType = result === 'so' ? (pick('soType') || 'swinging') : null;
       const label = (result === 'so' && SO_TYPES[soType]) || RESULTS[result]?.label || result;
       const dir = DIRECTIONS[direction] || '';
@@ -1220,6 +1232,9 @@ export function reducer(state, action) {
           ab.direction = direction || null;
           ab.outType = outType;
           ab.soType = soType;
+          ab.contact = contact;
+          ab.hitAngle = hitAngle;
+          ab.hitDepth = hitDepth;
           if (p.rbi !== undefined) ab.rbi = p.rbi;
         }
         const name = playerNameOf(state, log.payload.playerId);
@@ -1233,6 +1248,9 @@ export function reducer(state, action) {
         result,
         direction: direction || null,
         outType,
+        contact,
+        hitAngle,
+        hitDepth,
         soType,
         ...(p.rbi !== undefined ? { rbi: p.rbi } : {}),
         ...(p.runs !== undefined ? { runs: p.runs } : {}),
