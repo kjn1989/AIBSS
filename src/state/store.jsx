@@ -649,7 +649,21 @@ export function reducer(state, action) {
 
     // ===== 試合 =====
     case 'CREATE_GAME': {
-      const g = newGame(action.payload || {});
+      const { oppRoster, ...rest } = action.payload || {};
+      const g = newGame(rest);
+      // 前回の対戦から相手の並びを引き継ぐ。名前を入れる手間が「次に当たるとき」に
+      // 返ってくることが、相手選手名を入力し続けてもらえるかどうかの分かれ目になる。
+      if (oppRoster) {
+        if (oppRoster.lineup?.length) {
+          g.oppLineup = oppRoster.lineup.map((l) => ({ order: l.order, letter: l.letter, position: l.position || '' }));
+          g.oppUsedLetters = g.oppLineup.map((l) => l.letter);
+        }
+        g.oppNames = { ...(oppRoster.oppNames || {}) };
+        g.oppPositions = { ...(oppRoster.oppPositions || {}) };
+        g.oppBatterHands = { ...(oppRoster.oppBatterHands || {}) };
+        g.oppPitcherHands = { ...(oppRoster.oppPitcherHands || {}) };
+        if (oppRoster.oppPitcherLetter) g.oppPitcherLetter = oppRoster.oppPitcherLetter;
+      }
       return { ...state, games: { ...state.games, [g.id]: g }, currentGameId: g.id };
     }
     case 'SELECT_GAME':
