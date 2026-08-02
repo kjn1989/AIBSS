@@ -272,3 +272,104 @@ export function oppPlayerAtBats(games = [], oppKey) {
   if (!atBats.length && !sb && !cs) return null;
   return { oppKey, name, team, hand, atBats, kind, dir, sb, cs, sacBunt, games: gameIds.size };
 }
+
+// ============================================================
+// 相手バッテリーの隙(暴投・捕逸・牽制・盗塁阻止)
+//
+// 草野球・学生野球では、ここが一番点になる。「この捕手からは走れる」が
+// 分かるだけで作戦が1つ増える。
+//
+// 記録はすべて既にある:
+//   自軍の攻撃中(isTop が自軍の攻撃側)の sb / 盗塁死 / 暴投 / 捕逸 / 牽制死 は
+//   すべて相手バッテリーの出来事。
+// 誰の捕手だったかは、相手の守備位置と交代(oppsub)から辿る。
+// ============================================================
+
+// その試合で「捕手」を務めた記号を、回の進行順に並べる。
+// 戻り値: [{ letter, fromInning }]
+function oppCatcherTimeline(game) {
+  const slot = (game?.oppLineup || []).find(
+    (l) => (game.oppPositions || {})[l.letter] === '捕' || l.position === '捕',
+  );
+  // 守備位置が入っていない試合は辿れない(捕手を特定できないので空で返す)
+  if (!slot) return [];
+  const subs = (game.playLogs || [])
+    .filter((l) => l.kind === 'oppsub' && l.payload?.order === slot.order && l.payload?.in)
+    .sort((a, b) => Number(a.inning || 0) - Number(b.inning || 0));
+  const start = subs.length ? (subs[0].payload.out || slot.letter) : slot.letter;
+  const out = [{ letter: start, fromInning: 0 }];
+  for (const s of subs) out.push({ letter: s.payload.in, fromInning: Number(s.inning || 0) });
+  return out;
+}
+
+const catcherAt = (timeline, inning) => {
+  let cur = null;
+  for (const t of timeline) if (Number(inning || 0) >= t.fromInning) cur = t.letter;
+  return cur;
+};
+
+// 相手バッテリーの集計。
+// 戻り値: {
+//   catchers: [{ letter, name, sbAllowed, caught, att, csRate }]  ← 自軍が走ったとき
+//   pitchers: [{ letter, name, wp, bbHbp, pickoff }]
+//   team: { pb, balk }
+// }
+export function oppBatteryStats(games = []) {
+  const catchers = new Map();
+  const pitchers = new Map();
+  const team = { pb: 0, balk: 0 };
+
+  const cat = (key, name) => {
+    if (!catchers.has(key)) catchers.set(key, { key, name, sbAllowed: 0, caught: 0 });
+    return catchers.get(key);
+  };
+  const pit = (key, name) => {
+    if (!pitchers.has(key)) pitchers.set(key, { key, name, wp: 0, bbHbp: 0, pickoff: 0 });
+    return pitchers.get(key);
+  };
+
+  for (const g of games) {
+    const myBattingIsTop = !g.isHome; // 自軍の攻撃はどちらの半回か
+    const cTimeline = oppCatcherTimeline(g);
+    const pAt = oppPitcherByAtBat(g);
+    // 回ごとの相手投手(走者イベントは打席ログではないので、直前の打席から引く)
+    let lastPitcher = null;
+
+    for (const l of g.playLogs || []) {
+      if (l.kind === 'atbat') {
+        const lt = pAt.get(l.id);
+        if (lt) lastPitcher = lt;
+        // 与四死球は相手投手のもの
+        if (lt && (l.payload?.result === 'bb' || l.payload?.result === 'hbp')) {
+          const k = oppPlayerKey(g, lt);
+          if (k) pit(k, oppNameOf(g, lt)).bbHbp += 1;
+        }
+        continue;
+      }
+      if (!!l.isTop !== myBattingIsTop) continue; // 自軍の攻撃中の出来事だけが相手バッテリーの隙
+      const cLetter = catcherAt(cTimeline, l.inning);
+      const cKey = cLetter ? oppPlayerKey(g, cLetter) : null;
+      const pKey = lastPitcher ? oppPlayerKey(g, lastPitcher) : null;
+
+      if (l.kind === 'sb') {
+        if (cKey) cat(cKey, oppNameOf(g, cLetter)).sbAllowed += 1;
+      } else if (l.kind === 'runner') {
+        if (l.text === '盗塁死') { if (cKey) cat(cKey, oppNameOf(g, cLetter)).caught += 1; }
+        else if (l.text === '暴投') { if (pKey) pit(pKey, oppNameOf(g, lastPitcher)).wp += 1; }
+        else if (l.text === '捕逸') team.pb += 1;
+        else if (l.text === '牽制死') { if (pKey) pit(pKey, oppNameOf(g, lastPitcher)).pickoff += 1; }
+        else if (l.text === 'ボーク') team.balk += 1;
+      }
+    }
+  }
+
+  const cRows = [...catchers.values()].map((c) => {
+    const att = c.sbAllowed + c.caught;
+    // 企図0のときは阻止率を null にして 0% と区別する(「刺せない」と「試していない」は違う)
+    return { ...c, att, csRate: att > 0 ? c.caught / att : null };
+  }).sort((a, b) => b.att - a.att);
+  const pRows = [...pitchers.values()]
+    .filter((p) => p.wp || p.bbHbp || p.pickoff)
+    .sort((a, b) => (b.wp + b.bbHbp) - (a.wp + a.bbHbp));
+  return { catchers: cRows, pitchers: pRows, team };
+}

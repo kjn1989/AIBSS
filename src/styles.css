@@ -1507,3 +1507,4 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 .kvrow b.hot { color: var(--amber); }
 /* 名前が入っている相手カードに、選手ページへの導線を小さく添える */
 .bx-more { float: right; color: var(--accent); font-size: 10px; font-weight: 700; }
+.opv-callout.good { background: rgba(63, 185, 80, .1); border-color: rgba(63, 185, 80, .35); }

@@ -14,7 +14,7 @@ import { newGame } from '../src/lib/model.js';
 import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf, oppLettersInGame, oppBaserunning } from '../src/lib/oppBox.js';
 import { remapPlayerInGame, fillPlayerGaps } from '../src/lib/mergePlayers.js';
 import { computeBoxScore } from '../src/lib/boxscore.js';
-import { buildMatchups, opponentSummaries, oppPitcherByAtBat, oppPlayerKey, normalizeName, opponentTeams, lastOppRoster, oppPlayerAtBats } from '../src/lib/matchup.js';
+import { buildMatchups, opponentSummaries, oppPitcherByAtBat, oppPlayerKey, normalizeName, opponentTeams, lastOppRoster, oppPlayerAtBats, oppBatteryStats } from '../src/lib/matchup.js';
 import { yearOfDate, yearOfGame, yearsInGames, tenureByPlayer, playedInYear, isArchived, yearLabel, currentYear, resolveYear, scopedGames,
   gradeOf, entryYearFromGrade, willGraduate, sortByGrade, usesGrade, defaultSchoolType, maxGradeOf,
   defaultYearStartMonth, schoolYearAtSeasonEnd, currentSchoolYear, labelOfYear } from '../src/lib/year.js';
@@ -1622,4 +1622,39 @@ test('oppPlayerAtBats: 相手ひとりの打球を試合をまたいで集める
   assert.deepEqual([rR.dir.pull, rR.dir.oppo], [1, 1]);
   // 該当なしは null
   assert.equal(oppPlayerAtBats([g1], '上智|居ない'), null);
+});
+
+test('oppBatteryStats: 相手捕手の盗塁阻止率と、投手の暴投・牽制を集める', () => {
+  // 自軍はビジター(isHome=false)なので、自軍の攻撃は表
+  const g = {
+    id: 'g', opponent: '上智', isHome: false,
+    oppLineup: [{ order: 4, letter: 'D', position: '捕' }, { order: 1, letter: 'A', position: '投' }],
+    oppPositions: { D: '捕', A: '投' },
+    oppNames: { D: '渡辺', A: '田中', E: '高橋' },
+    oppPitcherLetter: 'A',
+    playLogs: [
+      { id: '1', kind: 'atbat', inning: 1, isTop: true, payload: { playerId: 'p0', result: 'bb' } },
+      { id: '2', kind: 'sb', inning: 1, isTop: true, text: '盗塁', payload: { playerId: 'p0' } },
+      { id: '3', kind: 'runner', inning: 2, isTop: true, text: '盗塁死', payload: { playerId: 'p1' } },
+      { id: '4', kind: 'runner', inning: 2, isTop: true, text: '暴投', payload: {} },
+      { id: '5', kind: 'runner', inning: 3, isTop: true, text: '捕逸', payload: {} },
+      // 5回から捕手が交代
+      { id: '6', kind: 'oppsub', inning: 5, isTop: true, payload: { order: 4, in: 'E', out: 'D' } },
+      { id: '7', kind: 'sb', inning: 6, isTop: true, text: '盗塁', payload: { playerId: 'p0' } },
+      { id: '8', kind: 'runner', inning: 6, isTop: true, text: '盗塁死', payload: { playerId: 'p2' } },
+      // 相手の攻撃中(裏)の出来事は相手バッテリーの隙ではない
+      { id: '9', kind: 'sb', inning: 3, isTop: false, text: '盗塁', payload: { letter: 'B' } },
+    ],
+  };
+  const r = oppBatteryStats([g]);
+  const watanabe = r.catchers.find((c) => c.name === '渡辺');
+  const takahashi = r.catchers.find((c) => c.name === '高橋');
+  assert.deepEqual([watanabe.sbAllowed, watanabe.caught, watanabe.att], [1, 1, 2]); // 交代前
+  assert.equal(watanabe.csRate.toFixed(3), '0.500');
+  assert.deepEqual([takahashi.sbAllowed, takahashi.caught], [1, 1]); // 交代後は別の捕手に付く
+  const tanaka = r.pitchers.find((p) => p.name === '田中');
+  assert.deepEqual([tanaka.wp, tanaka.bbHbp], [1, 1]);
+  assert.equal(r.team.pb, 1);
+  // 名前が入っていない相手は集計しない(誰の記録か特定できないため)
+  assert.deepEqual(oppBatteryStats([{ ...g, oppNames: {} }]).catchers, []);
 });
