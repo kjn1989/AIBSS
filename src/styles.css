@@ -1462,6 +1462,11 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 .icon-btn { min-width: 34px; padding: 4px 6px; font-size: 15px; line-height: 1; }
 /* 名簿の選手名。行の要素が増えても縦に潰れないよう、折り返さず省略する */
 .player-name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 名前の下に学年を小さく置く。横に並べると390pxで名前が潰れるため縦に積む */
+.player-cell { display: flex; flex-direction: column; justify-content: center; gap: 1px; }
+.player-grade { font-size: 10px; line-height: 1.2; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 行のいちばん左が背番号だと分かるようにする一言 */
+.roster-legend { font-size: 10.5px; color: var(--text-dim); margin: 0 0 4px 4px; }
 
 /* 主将・副主将。名簿の行に選択UIを足すと選手名が潰れるため、設定はここ1か所に集約し、
    行側は背番号ピルの色だけで示す(行幅の消費ゼロ) */
