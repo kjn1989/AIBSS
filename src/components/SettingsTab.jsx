@@ -164,7 +164,9 @@ function PadHintCard() {
   return (
     <div className="card">
       <h2>{t('padHint.title')}</h2>
-      <p className="small dim" style={{ marginBottom: 10 }}>{t('padHint.body')}</p>
+      <p className="small dim" style={{ marginBottom: 10 }}>
+        {t('padHint.body')}<br />{t('padHint.perGame')}
+      </p>
       <button onClick={() => { resetFieldPadHint(); setDone(true); }}>{t('padHint.reset')}</button>
       {done && <p className="small" style={{ color: 'var(--green)', margin: '10px 0 0' }}>{t('padHint.resetDone')}</p>}
     </div>
