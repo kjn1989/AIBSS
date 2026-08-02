@@ -134,19 +134,29 @@ export function playedInYear(tenureMap, playerId, year) {
   return year >= t.from && year <= t.to;
 }
 
-// 年度の表示名。
-// 9月始まり(中学・高校の代)は「2026年の代」と呼ぶのが実感に合う。
-// 2025年9月に始まった代は、2026年の夏に引退するため。
-export function yearLabel(year, lang = 'ja', startMonth = DEFAULT_YEAR_START_MONTH) {
+// 代・年度の表示名。
+//
+// 既定は「2027年度チーム」(夏に代が替わる区分)や「2025年度」。
+// ただしチームによって呼び方の文化が違う——伝統校の「第75期」、
+// 主将の名を取った「山田の代」など——ので、custom で上書きできる。
+// 上書きは settings.yearLabels に { 年: '呼び名' } で持つ。
+export function yearLabel(year, lang = 'ja', startMonth = DEFAULT_YEAR_START_MONTH, custom = null) {
   if (year == null) return '';
+  const own = custom?.[year] ?? custom?.[String(year)];
+  if (own && String(own).trim()) return String(own).trim();
   const m = Number(startMonth) || DEFAULT_YEAR_START_MONTH;
   if (lang === 'ja') {
     if (m === 1) return `${year}年`;
-    if (m >= 7) return `${year + 1}年の代`; // 夏に代が替わる区分
+    if (m >= 7) return `${year + 1}年度チーム`; // 夏に代が替わる区分。引退する年で呼ぶ
     return `${year}年度`;
   }
   if (m === 1) return String(year);
   return `${year}–${String((year + 1) % 100).padStart(2, '0')}`;
+}
+
+// 設定からそのまま呼べる形。呼び出し側で毎回3つ渡さなくて済むようにする。
+export function labelOfYear(year, settings = {}) {
+  return yearLabel(year, settings.lang || 'ja', settings.yearStartMonth || DEFAULT_YEAR_START_MONTH, settings.yearLabels);
 }
 
 // ============================================================

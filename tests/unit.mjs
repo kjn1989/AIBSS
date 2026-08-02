@@ -17,7 +17,7 @@ import { computeBoxScore } from '../src/lib/boxscore.js';
 import { buildMatchups, opponentSummaries, oppPitcherByAtBat, oppPlayerKey, normalizeName, opponentTeams, lastOppRoster } from '../src/lib/matchup.js';
 import { yearOfDate, yearOfGame, yearsInGames, tenureByPlayer, playedInYear, isArchived, yearLabel, currentYear, resolveYear, scopedGames,
   gradeOf, entryYearFromGrade, willGraduate, sortByGrade, usesGrade, defaultSchoolType, maxGradeOf,
-  defaultYearStartMonth, schoolYearAtSeasonEnd, currentSchoolYear } from '../src/lib/year.js';
+  defaultYearStartMonth, schoolYearAtSeasonEnd, currentSchoolYear, labelOfYear } from '../src/lib/year.js';
 
 import { rebuildBatters, findDuplicateAtBats, findOrderBreaks, canRebuildOrders } from '../src/lib/battersRebuild.js';
 
@@ -1546,8 +1546,8 @@ test('defaultYearStartMonth: 中学・高校の代は夏の大会後(9月)に替
   assert.equal(yearOfDate('2026-08-01', 8), 2026); // 8月から新チーム
   assert.equal(yearOfDate('2026-06-01', 8), 2025); // 春も前の代
   // 呼び方も実感に合わせる(2025年8月に始まった代は2026年の夏に引退する)
-  assert.equal(yearLabel(2025, 'ja', 8), '2026年の代');
-  assert.equal(yearLabel(2025, 'ja', 9), '2026年の代');
+  assert.equal(yearLabel(2025, 'ja', 8), '2026年度チーム');
+  assert.equal(yearLabel(2025, 'ja', 9), '2026年度チーム');
   assert.equal(yearLabel(2025, 'ja', 4), '2025年度');
   assert.equal(yearLabel(2025, 'ja', 1), '2025年');
 });
@@ -1574,4 +1574,22 @@ test('学年は学校年度(4月)、代は9月。混ぜると1年生が半年で
   assert.equal(willGraduate({ entryYear: 2025 }, 2025, high, 8), false);
   // その次の代では引退する
   assert.equal(willGraduate({ entryYear: 2025 }, 2026, high, 8), true);
+});
+
+test('代の呼び名はチームごとに上書きできる(「第75期」「山田の代」)', () => {
+  // 既定の呼び方
+  assert.equal(yearLabel(2025, 'ja', 8), '2026年度チーム');
+  assert.equal(yearLabel(2025, 'ja', 4), '2025年度');
+  // 上書き(伝統校の「期」、主将の名を取った呼び方)
+  const custom = { 2025: '第75期', 2024: '山田の代' };
+  assert.equal(yearLabel(2025, 'ja', 8, custom), '第75期');
+  assert.equal(yearLabel(2024, 'ja', 8, custom), '山田の代');
+  assert.equal(yearLabel(2023, 'ja', 8, custom), '2024年度チーム'); // 未設定は既定のまま
+  // 空欄・空白だけの上書きは既定に戻す(消したつもりが空文字で残るのを防ぐ)
+  assert.equal(yearLabel(2025, 'ja', 8, { 2025: '   ' }), '2026年度チーム');
+  // 保存が文字列キーになっていても引ける
+  assert.equal(yearLabel(2025, 'ja', 8, { '2025': '第75期' }), '第75期');
+  // 設定からそのまま呼べる形
+  assert.equal(labelOfYear(2025, { lang: 'ja', yearStartMonth: 8, yearLabels: custom }), '第75期');
+  assert.equal(labelOfYear(2025, { lang: 'ja', yearStartMonth: 8 }), '2026年度チーム');
 });

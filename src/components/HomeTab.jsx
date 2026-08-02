@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useStore, useT } from '../state/store.jsx';
-import { currentYear, yearLabel, DEFAULT_YEAR_START_MONTH } from '../lib/year.js';
+import { currentYear, labelOfYear, DEFAULT_YEAR_START_MONTH } from '../lib/year.js';
 import { yearSummary } from '../lib/yearArchive.js';
 import YearCloseView from './YearCloseView.jsx';
 
@@ -42,10 +42,10 @@ export default function HomeTab({ onNavigate }) {
 
   const closeBanner = showClose && (
     <div className="year-banner">
-      <b>{t('yc.banner', { year: yearLabel(prevYear, state.settings.lang || 'ja', startMonth) })}</b>
+      <b>{t('yc.banner', { year: labelOfYear(prevYear, state.settings) })}</b>
       <p>{t('yc.bannerDesc', {
         n: prevSummary.games, w: prevSummary.win, l: prevSummary.lose,
-        next: yearLabel(thisYear, state.settings.lang || 'ja', startMonth),
+        next: labelOfYear(thisYear, state.settings),
       })}</p>
       <div className="flex">
         <button className="primary grow" onClick={() => setClosingYear(prevYear)}>{t('yc.open')}</button>
