@@ -10,7 +10,7 @@
 //
 // 書き出しても端末からは何も消さない。消すかどうかは利用者の判断。
 // ============================================================
-import { yearOfGame, yearLabel, gradeOf, isArchived, DEFAULT_YEAR_START_MONTH } from './year.js';
+import { yearOfGame, labelOfYear, gradeOf, isArchived, DEFAULT_YEAR_START_MONTH } from './year.js';
 
 export const ARCHIVE_SCHEMA_VERSION = 1;
 
@@ -114,7 +114,7 @@ export function buildYearArchive(state, year) {
     edition: state.settings?.edition || '',
     year,
     yearStartMonth: startMonth,
-    yearLabel: yearLabel(year, 'ja', startMonth),
+    yearLabel: labelOfYear(year, state.settings || {}),
     summary: yearSummary(state.games, year, startMonth),
     roster,
     games,

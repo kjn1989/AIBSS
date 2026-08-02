@@ -8,7 +8,7 @@ import { EDITIONS, HAND_LABEL, editionLabel } from '../lib/model.js';
 import {
   isArchived, tenureByPlayer, currentYear, currentSchoolYear, DEFAULT_YEAR_START_MONTH,
   usesGrade, defaultSchoolType, defaultYearStartMonth, maxGradeOf, gradeOf, entryYearFromGrade,
-  sortByGrade, SCHOOL_TYPES, SEASON_START_MONTHS, yearLabel,
+  sortByGrade, SCHOOL_TYPES, SEASON_START_MONTHS, labelOfYear, yearLabel, yearsInGames,
 } from '../lib/year.js';
 import EditionText from './EditionText.jsx';
 import { listProfiles, getActiveProfileId, addProfile, switchActiveProfile, deleteProfile, listOrphanedProfiles, restoreProfile } from '../lib/profiles.js';
@@ -18,6 +18,48 @@ import Sheet from './Sheet.jsx';
 // 同じ名前で二重登録された選手を検出して統合を促すカード。
 // 二重登録があると「同じ人」と判定できず、打順移動の表示や通算成績が分断される。
 // 出場記録が多い方(=本来使われている方)を残す側の既定にする。
+// 代の呼び名。伝統校の「第75期」、主将の名を取った「山田の代」など、
+// チームによって呼び方の文化が違うので、既定の呼び方を上書きできるようにする。
+// 上書きは settings.yearLabels に { 年: '呼び名' } で持つ(空欄なら既定)。
+function SeasonNames() {
+  const { state, dispatch } = useStore();
+  const t = useT();
+  const startMonth = state.settings.yearStartMonth || DEFAULT_YEAR_START_MONTH;
+  const labels = state.settings.yearLabels || {};
+  // 記録のある代 + いまの代(まだ試合が無くても名前を付けられるように)
+  const years = [...new Set([
+    ...yearsInGames(Object.values(state.games), startMonth),
+    currentYear(startMonth),
+  ])].sort((a, b) => b - a);
+  if (!years.length) return null;
+
+  const setLabel = (y, v) => {
+    const next = { ...labels };
+    if (v.trim()) next[y] = v; else delete next[y];
+    dispatch({ type: 'UPDATE_SETTINGS', patch: { yearLabels: next } });
+  };
+
+  return (
+    <div className="mt12">
+      <label className="small dim" style={{ display: 'block', marginBottom: 4 }}>{t('season.names')}</label>
+      {years.slice(0, 8).map((y) => (
+        <div className="row" key={y}>
+          <span className="small dim" style={{ width: 92, flex: '0 0 92px' }}>
+            {t('season.default', { label: yearLabel(y, state.settings.lang || 'ja', startMonth) })}
+          </span>
+          <input
+            className="grow"
+            value={labels[y] || ''}
+            placeholder={yearLabel(y, state.settings.lang || 'ja', startMonth)}
+            onChange={(e) => setLabel(y, e.target.value)}
+          />
+        </div>
+      ))}
+      <p className="small dim" style={{ marginTop: 4 }}>{t('season.namesHint')}</p>
+    </div>
+  );
+}
+
 // 主将・副主将。名簿の行はもう要素が多く、役割の選択を各行に置くと選手名が潰れる。
 // 設定は1か所(この行)に集約し、行側には背番号ピルの色だけで示す(行幅の消費ゼロ)。
 function TeamRoleRow() {
@@ -296,9 +338,10 @@ export default function SettingsTab() {
               {t('season.startHint')}
               {' '}
               <span style={{ color: 'var(--accent)' }}>
-                {yearLabel(thisYear - (startMonth >= 7 ? 1 : 0), state.settings.lang || 'ja', startMonth)}
+                {labelOfYear(thisYear - (startMonth >= 7 ? 1 : 0), state.settings)}
               </span>
             </p>
+            <SeasonNames />
           </div>
         )}
         <div className="toggle-row editions">

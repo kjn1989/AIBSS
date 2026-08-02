@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useStore, useT } from '../state/store.jsx';
 import {
   isArchived, tenureByPlayer, gradeOf, willGraduate, maxGradeOf, usesGrade,
-  defaultSchoolType, yearLabel, schoolYearAtSeasonEnd, DEFAULT_YEAR_START_MONTH,
+  defaultSchoolType, labelOfYear, schoolYearAtSeasonEnd, DEFAULT_YEAR_START_MONTH,
 } from '../lib/year.js';
 import { buildYearArchive, yearSummary, gamesInYear, archiveFileName } from '../lib/yearArchive.js';
 import { atBatCSV, downloadCSV } from '../lib/csv.js';
@@ -25,7 +25,7 @@ export default function YearCloseView({ year, onClose }) {
   const maxGrade = maxGradeOf(state.settings.schoolType || defaultSchoolType(state.settings.edition));
   // 中学・高校は夏の大会でチームを離れるが、在学は3月まで続く。「卒業」ではなく「引退」
   const leaveWord = startMonth >= 7 ? t('role.retire') : t('role.grad');
-  const nextLabel = yearLabel(year + 1, lang, startMonth);
+  const nextLabel = labelOfYear(year + 1, state.settings);
 
   const active = state.players.filter((p) => !isArchived(p));
   const tenure = useMemo(() => tenureByPlayer(Object.values(state.games), startMonth), [state.games, startMonth]);
@@ -137,7 +137,7 @@ export default function YearCloseView({ year, onClose }) {
 
         {step === 1 && (
           <>
-            <h2>{t('yc.title', { year: yearLabel(year, lang, startMonth) })}</h2>
+            <h2>{t('yc.title', { year: labelOfYear(year, state.settings) })}</h2>
             <h3 className="yc-sub">{t('yc.step1')}</h3>
             <p className="small dim">{t('yc.step1Desc')}</p>
 
@@ -193,7 +193,7 @@ export default function YearCloseView({ year, onClose }) {
 
         {step === 3 && (
           <>
-            <h2>{t('yc.done', { year: yearLabel(year, lang, startMonth) })}</h2>
+            <h2>{t('yc.done', { year: labelOfYear(year, state.settings) })}</h2>
             <div className="yc-sum">
               <div><b>{gameCount}</b><span>{t('yc.games')}</span></div>
               <div><b>{summary.win}-{summary.lose}{summary.draw ? `-${summary.draw}` : ''}</b><span>{t('yc.record')}</span></div>

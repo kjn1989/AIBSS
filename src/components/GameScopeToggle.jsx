@@ -1,6 +1,6 @@
 import React from 'react';
 import { useStore, useT } from '../state/store.jsx';
-import { yearsInGames, yearLabel, resolveYear, scopedGames, DEFAULT_YEAR_START_MONTH } from '../lib/year.js';
+import { yearsInGames, labelOfYear, resolveYear, scopedGames, DEFAULT_YEAR_START_MONTH } from '../lib/year.js';
 
 // 取り込み側の変更を減らすため、集計ユーティリティはここからも再輸出する
 export { scopedGames, resolveYear };
@@ -28,7 +28,7 @@ export default function GameScopeToggle({ value, onChange }) {
           className={value.scope === 'year' ? 'active' : ''}
           onClick={() => onChange({ ...value, scope: 'year', year: curYear ?? null })}
         >
-          {curYear != null && value.scope === 'year' ? yearLabel(curYear, lang, startMonth) : t('gamescope.year')}
+          {curYear != null && value.scope === 'year' ? labelOfYear(curYear, state.settings) : t('gamescope.year')}
         </button>
         <button
           className={value.scope === 'game' ? 'active' : ''}
@@ -44,7 +44,7 @@ export default function GameScopeToggle({ value, onChange }) {
       {value.scope === 'year' && years.length > 1 && (
         <div style={{ marginBottom: 14 }}>
           <select value={curYear ?? ''} onChange={(e) => onChange({ ...value, year: Number(e.target.value) })}>
-            {years.map((y) => <option key={y} value={y}>{yearLabel(y, lang, startMonth)}</option>)}
+            {years.map((y) => <option key={y} value={y}>{labelOfYear(y, state.settings)}</option>)}
           </select>
         </div>
       )}
