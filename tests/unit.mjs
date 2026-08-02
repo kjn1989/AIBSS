@@ -1458,3 +1458,44 @@ test('sortByGrade: 上級生から並び、未設定は末尾', () => {
   ];
   assert.deepEqual(sortByGrade(ps, 2026).map((p) => p.name), ['3年若番', '3年', '1年', '未設定']);
 });
+
+// ---- 主将・副主将 ----
+// reducer は JSX 側にあるため、ここでは同じ規則を関数として再現して固定する。
+// (2人が主将になっている状態を作らせない、が守りたい不変条件)
+function applyTeamRole(players, id, role) {
+  const limit = role === 'captain' ? 1 : role === 'vice' ? 2 : 0;
+  const others = players.filter((p) => p.id !== id && p.teamRole === role);
+  const drop = new Set(others.slice(0, Math.max(0, others.length - (limit - 1))).map((p) => p.id));
+  return players.map((p) => {
+    if (p.id === id) return { ...p, teamRole: role };
+    if (role && drop.has(p.id)) return { ...p, teamRole: '' };
+    return p;
+  });
+}
+
+test('主将は1人・副主将は2人まで', () => {
+  let ps = [
+    { id: 'a', teamRole: '' }, { id: 'b', teamRole: '' },
+    { id: 'c', teamRole: '' }, { id: 'd', teamRole: '' },
+  ];
+  const roleOf = (list, id) => list.find((p) => p.id === id).teamRole;
+
+  ps = applyTeamRole(ps, 'a', 'captain');
+  assert.equal(roleOf(ps, 'a'), 'captain');
+  // 別の選手を主将にすると、前の主将は自動で外れる
+  ps = applyTeamRole(ps, 'b', 'captain');
+  assert.equal(roleOf(ps, 'b'), 'captain');
+  assert.equal(roleOf(ps, 'a'), '');
+  assert.equal(ps.filter((p) => p.teamRole === 'captain').length, 1);
+
+  // 副主将は2人まで並存できる
+  ps = applyTeamRole(ps, 'c', 'vice');
+  ps = applyTeamRole(ps, 'd', 'vice');
+  assert.equal(ps.filter((p) => p.teamRole === 'vice').length, 2);
+  // 3人目を付けると、いちばん古い1人が外れる
+  ps = applyTeamRole(ps, 'a', 'vice');
+  assert.equal(ps.filter((p) => p.teamRole === 'vice').length, 2);
+  assert.equal(roleOf(ps, 'c'), '');
+  // 主将は影響を受けない
+  assert.equal(roleOf(ps, 'b'), 'captain');
+});
