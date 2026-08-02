@@ -126,10 +126,12 @@ try {
   const body = await page.locator('body').innerText();
   check('三振後: 1回裏に交代しアウト0', body.includes('1回裏') && (await outs()) === 0);
 
-  // --- 8. 成績検証(試合単位スコープでこの試合のみ) ---
+  // --- 8. 成績検証(試合スコープでこの試合のみ) ---
+  // スコープの並びは 年度 / 試合 / 通算。既定は年度(いまのチーム)
   await page.click('nav button:has-text("成績")');
   await page.waitForTimeout(400);
-  await page.click('button:has-text("試合単位")');
+  check('成績: 既定のスコープは年度', await page.locator('.toggle-row button.active').first().innerText().then((s2) => /年度|\d{4}/.test(s2)));
+  await page.click('.toggle-row button:has-text("試合")');
   await page.waitForTimeout(400);
   // 試合選択UIがあれば最新(この試合)を選ぶ。既定で最新が選ばれる想定でテキストを確認
   const statsText = await page.locator('body').innerText();

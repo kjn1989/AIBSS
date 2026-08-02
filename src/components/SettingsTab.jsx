@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useStore, usePlayerName, persist, useT } from '../state/store.jsx';
 import { parseFirebaseConfig } from '../lib/cloud.js';
 import { encodeWatchLink, encodeInviteLink } from './WatchView.jsx';
 import QRCode from './QRCode.jsx';
 import { battingCSV, pitchingCSV, playLogCSV, atBatCSV, downloadCSV, shareCSV } from '../lib/csv.js';
 import { EDITIONS, HAND_LABEL, editionLabel } from '../lib/model.js';
+import { isArchived, tenureByPlayer, currentYear, DEFAULT_YEAR_START_MONTH } from '../lib/year.js';
 import EditionText from './EditionText.jsx';
 import { listProfiles, getActiveProfileId, addProfile, switchActiveProfile, deleteProfile, listOrphanedProfiles, restoreProfile } from '../lib/profiles.js';
 import OfficialCloudCard from './OfficialCloudCard.jsx';
@@ -13,6 +14,48 @@ import Sheet from './Sheet.jsx';
 // 同じ名前で二重登録された選手を検出して統合を促すカード。
 // 二重登録があると「同じ人」と判定できず、打順移動の表示や通算成績が分断される。
 // 出場記録が多い方(=本来使われている方)を残す側の既定にする。
+// アーカイブした選手(卒業・退部)。記録は残っており、1タップで戻せる。
+// 削除と並べて置くと誤解を招くので、折りたたんだ別の節にする。
+function ArchivedPlayers() {
+  const { state, dispatch } = useStore();
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const rows = state.players.filter(isArchived);
+  const tenure = useMemo(
+    () => tenureByPlayer(Object.values(state.games), state.settings.yearStartMonth || DEFAULT_YEAR_START_MONTH),
+    [state.games, state.settings.yearStartMonth],
+  );
+  if (rows.length === 0) return null;
+  return (
+    <div className="mt12">
+      <button className="small ghost" onClick={() => setOpen((v) => !v)}>
+        {open ? '▼' : '▶'} {t('archive.section', { n: rows.length })}
+      </button>
+      {open && (
+        <div className="mt8">
+          <p className="small dim" style={{ marginBottom: 8 }}>{t('archive.desc')}</p>
+          {rows.map((p) => {
+            const tn = tenure.get(p.id);
+            return (
+              <div className="row" key={p.id}>
+                <span className="num-edit dim" style={{ textAlign: 'center' }}>{p.number || '-'}</span>
+                <span className="grow dim">
+                  {p.name}
+                  {tn && <span className="tenure">{tn.from}–{tn.to} ・ {t('archive.games', { n: tn.games })}</span>}
+                </span>
+                {p.archiveNote && <span className="small dim">{p.archiveNote}</span>}
+                <button className="small ghost" onClick={() => dispatch({ type: 'UNARCHIVE_PLAYERS', ids: [p.id] })}>
+                  {t('archive.restore')}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DuplicatePlayersCard() {
   const { state, dispatch } = useStore();
   const t = useT();
@@ -143,7 +186,7 @@ export default function SettingsTab() {
       </div>
 
       <div className="card">
-        <h2>{t('set.players', { n: state.players.length })}</h2>
+        <h2>{t('set.players', { n: state.players.filter((p) => !isArchived(p)).length })}</h2>
         <div className="flex">
           <input className="grow" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={t('set.playerName')} />
           <input style={{ width: 70 }} value={newNumber} onChange={(e) => setNewNumber(e.target.value)} placeholder={t('set.number')} inputMode="numeric" />
@@ -161,7 +204,7 @@ export default function SettingsTab() {
           <span className="small dim grow" style={{ textAlign: 'right' }}>{t('set.handHint')}</span>
         </div>
         <div className="mt12">
-          {state.players.map((p) => (
+          {state.players.filter((p) => !isArchived(p)).map((p) => (
             <div className="row" key={p.id}>
               <input
                 className="num-edit"
@@ -181,11 +224,19 @@ export default function SettingsTab() {
               <select className="hand-select" value={p.bats || ''} onChange={(e) => dispatch({ type: 'UPDATE_PLAYER', id: p.id, patch: { bats: e.target.value } })}>
                 <option value="">—</option><option value="R">{t('hand.R')}</option><option value="L">{t('hand.L')}</option><option value="S">{t('hand.S')}</option>
               </select>
+              <button
+                className="small ghost"
+                title={t('archive.hint')}
+                onClick={() => dispatch({ type: 'ARCHIVE_PLAYERS', ids: [p.id], year: currentYear(state.settings.yearStartMonth || DEFAULT_YEAR_START_MONTH) })}
+              >
+                {t('archive.action')}
+              </button>
               <button className="small danger ghost" onClick={() => dispatch({ type: 'DELETE_PLAYER', id: p.id })}>{t('action.delete')}</button>
             </div>
           ))}
-          {state.players.length === 0 && <div className="dim small mt8">{t('set.noPlayers')}</div>}
+          {state.players.filter((p) => !isArchived(p)).length === 0 && <div className="dim small mt8">{t('set.noPlayers')}</div>}
         </div>
+        <ArchivedPlayers />
       </div>
 
       <DuplicatePlayersCard />

@@ -3,6 +3,7 @@ import { useStore, usePlayerName, useT } from '../state/store.jsx';
 import { aggregateBatting, aggregatePitching, pitchingMetrics, DETAIL_METRICS, detailRanking, battingMetrics, fmtAvg, mLabel, defaultInningBasis } from '../lib/stats.js';
 import { formatIP } from '../lib/model.js';
 import GameScopeToggle, { scopedGames } from './GameScopeToggle.jsx';
+import { tenureByPlayer, isArchived, DEFAULT_YEAR_START_MONTH } from '../lib/year.js';
 import PlayerView from './PlayerView.jsx';
 import MemberSection from './MemberSection.jsx';
 import TitleCards from './TitleCards.jsx';
@@ -15,7 +16,8 @@ export default function StatsTab() {
   const lang = state.settings.lang || 'ja';
   const statTr = (key) => t(`stat.${key}`);
   const nameOf = usePlayerName();
-  const [scope, setScope] = useState({ scope: 'season', gameId: null });
+  // 既定は年度(いまのチーム)。通算を既定にすると卒業生の混ざった一覧が初手で出てしまう
+  const [scope, setScope] = useState({ scope: 'year', gameId: null, year: null });
   const [metricKey, setMetricKey] = useState('ba');
   const [playerId, setPlayerId] = useState(null); // 選手個人ページ
   // 防御率・奪三振率の基準イニング。既定は試合のルール(7回制/9回制)から。
@@ -27,6 +29,16 @@ export default function StatsTab() {
   const inningBasis = basis ?? autoBasis;
   // 選べる基準: 7回・9回 + そのチームの実際の回数(学童6回など)
   const basisOptions = [...new Set([7, 9, autoBasis])].sort((a, b) => a - b);
+  // 在籍期間は全試合から算出する(スコープで絞った試合だけだと期間が縮んでしまう)
+  const tenure = useMemo(
+    () => tenureByPlayer(Object.values(state.games), state.settings.yearStartMonth || DEFAULT_YEAR_START_MONTH),
+    [state.games, state.settings.yearStartMonth],
+  );
+  // 通算では卒業生も並ぶので在籍期間を添える。年度・試合では自明なので出さない
+  const tenureOf = scope.scope === 'total'
+    ? (id) => { const t = tenure.get(id); if (!t) return ''; const p = state.players.find((x) => x.id === id);
+        return isArchived(p) ? `${t.from}–${t.to}` : `${t.from}–`; }
+    : null;
   const batting = useMemo(() => aggregateBatting(games), [games]);
   const pitching = useMemo(() => aggregatePitching(games), [games]);
 
@@ -106,8 +118,8 @@ export default function StatsTab() {
         )}
       </div>
 
-      <BattingSummaryTable batting={batting} nameOf={nameOf} onOpenPlayer={setPlayerId} />
-      <PitchingSummaryTable pitching={pitching} nameOf={nameOf} onOpenPlayer={setPlayerId} />
+      <BattingSummaryTable batting={batting} nameOf={nameOf} onOpenPlayer={setPlayerId} tenureOf={tenureOf} />
+      <PitchingSummaryTable pitching={pitching} nameOf={nameOf} onOpenPlayer={setPlayerId} tenureOf={tenureOf} />
       <MatchupCard games={games} onOpenPlayer={setPlayerId} />
       <p className="small dim" style={{ textAlign: 'center', marginBottom: 12 }}>
         {t('stats.tapHint')}
@@ -121,7 +133,7 @@ export default function StatsTab() {
 }
 
 // 全員の打撃基本成績一覧(参考テーブル)
-function BattingSummaryTable({ batting, nameOf, onOpenPlayer }) {
+function BattingSummaryTable({ batting, nameOf, onOpenPlayer, tenureOf }) {
   const t = useT();
   const rows = Object.values(batting)
     .filter((s) => s.pa > 0)
@@ -143,7 +155,12 @@ function BattingSummaryTable({ batting, nameOf, onOpenPlayer }) {
               const m = battingMetrics(s);
               return (
                 <tr key={s.playerId} onClick={() => onOpenPlayer?.(s.playerId)} role="button">
-                  <td style={{ color: 'var(--accent)', fontWeight: 700 }}>{nameOf(s.playerId)}</td>
+                  <td style={{ color: 'var(--accent)', fontWeight: 700 }}>
+                    {nameOf(s.playerId)}
+                    {tenureOf?.(s.playerId) && (
+                      <span className="tenure">{tenureOf(s.playerId)}</span>
+                    )}
+                  </td>
                   <td className="num">{s.pa}</td>
                   <td className="num">{s.ab}</td>
                   <td className="num">{s.h}</td>
@@ -164,7 +181,7 @@ function BattingSummaryTable({ batting, nameOf, onOpenPlayer }) {
 }
 
 // 全員の投手基本成績一覧(参考テーブル。旧「投手」タブのサマリーを移設)
-function PitchingSummaryTable({ pitching, nameOf, onOpenPlayer }) {
+function PitchingSummaryTable({ pitching, nameOf, onOpenPlayer, tenureOf }) {
   const t = useT();
   const rows = Object.values(pitching).filter((s) => s.outsRecorded > 0 || s.games > 0);
   if (rows.length === 0) return null;
@@ -184,7 +201,12 @@ function PitchingSummaryTable({ pitching, nameOf, onOpenPlayer }) {
               const m = pitchingMetrics(s);
               return (
                 <tr key={s.playerId} onClick={() => onOpenPlayer?.(s.playerId)} role="button">
-                  <td style={{ color: 'var(--accent)', fontWeight: 700 }}>{nameOf(s.playerId)}</td>
+                  <td style={{ color: 'var(--accent)', fontWeight: 700 }}>
+                    {nameOf(s.playerId)}
+                    {tenureOf?.(s.playerId) && (
+                      <span className="tenure">{tenureOf(s.playerId)}</span>
+                    )}
+                  </td>
                   <td className="num">{formatIP(s.outsRecorded)}</td>
                   <td className="num">{m.era === null ? '-' : m.era.toFixed(2)}</td>
                   <td className="num">{m.oba === null ? '-' : m.oba.toFixed(3).replace(/^0\./, '.')}</td>
