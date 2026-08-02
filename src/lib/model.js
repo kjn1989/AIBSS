@@ -109,6 +109,8 @@ export function newPlayer(name, number = '', opts = {}) {
     // 入学年度。学年は「年度 − 入学年度 + 1」で導出する(学年を保存すると毎年書き換えが要る)。
     // ブカツ・少年野球でのみ使う。未設定なら学年は「未設定」扱い。
     entryYear: opts.entryYear ?? null,
+    // チーム内の役割。'captain' | 'vice' | ''(なし)。全エディション共通。
+    teamRole: '',
     archivedAt: null,   // アーカイブした日時 | null=現役
     archivedYear: null, // どの年度の終わりで抜けたか
     archiveNote: '',    // '卒業' | '退部' | '移籍' など(任意)

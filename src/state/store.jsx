@@ -456,6 +456,22 @@ export function reducer(state, action) {
       const players = state.players.map((p) => (p.id === action.id ? { ...p, ...action.patch } : p));
       return { ...state, players };
     }
+    // ===== 主将・副主将 =====
+    // 主将は1人だけ。同じ役割を別の選手に付けたら、前の選手からは自動で外す
+    // (2人が主将になっている状態を作らせない)。副主将は2人まで許す。
+    case 'SET_TEAM_ROLE': {
+      const { id, role } = action; // role: 'captain' | 'vice' | ''
+      const limit = role === 'captain' ? 1 : role === 'vice' ? 2 : 0;
+      const others = state.players.filter((p) => p.id !== id && p.teamRole === role);
+      const drop = new Set(others.slice(0, Math.max(0, others.length - (limit - 1))).map((p) => p.id));
+      const players = state.players.map((p) => {
+        if (p.id === id) return { ...p, teamRole: role };
+        if (role && drop.has(p.id)) return { ...p, teamRole: '' };
+        return p;
+      });
+      return { ...state, players };
+    }
+
     // ===== 選手のアーカイブ(卒業・退部) =====
     // 削除ではない。記録は1件も失わず、名簿の前面とオーダー編成の候補から外れるだけ。
     // 通算成績には引き続き含まれ(チームの歴史)、年度スコープでは自動的に外れる。

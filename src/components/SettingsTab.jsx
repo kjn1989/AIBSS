@@ -17,6 +17,59 @@ import Sheet from './Sheet.jsx';
 // 同じ名前で二重登録された選手を検出して統合を促すカード。
 // 二重登録があると「同じ人」と判定できず、打順移動の表示や通算成績が分断される。
 // 出場記録が多い方(=本来使われている方)を残す側の既定にする。
+// 主将・副主将。名簿の行はもう要素が多く、役割の選択を各行に置くと選手名が潰れる。
+// 設定は1か所(この行)に集約し、行側には背番号ピルの色だけで示す(行幅の消費ゼロ)。
+function TeamRoleRow() {
+  const { state, dispatch } = useStore();
+  const t = useT();
+  const [picking, setPicking] = useState(null); // 'captain' | 'vice' | null
+  const active = state.players.filter((p) => !isArchived(p));
+  const nameOf = (role) => active.filter((p) => p.teamRole === role).map((p) => p.name).join('・');
+  const cap = nameOf('captain');
+  const vice = nameOf('vice');
+
+  return (
+    <div className="role-row mt8">
+      <button className="role-chip" onClick={() => setPicking(picking === 'captain' ? null : 'captain')}>
+        <b>{t('role.captain')}</b>
+        <span>{cap || t('role.unset')}</span>
+      </button>
+      <button className="role-chip" onClick={() => setPicking(picking === 'vice' ? null : 'vice')}>
+        <b>{t('role.vice')}</b>
+        <span>{vice || t('role.unset')}</span>
+      </button>
+      {picking && (
+        <div className="role-pick">
+          <div className="small dim" style={{ marginBottom: 6 }}>
+            {t('role.pick', { role: t(`role.${picking}`) })}
+          </div>
+          <div className="role-opts">
+            <button
+              className="small ghost"
+              onClick={() => {
+                active.filter((p) => p.teamRole === picking)
+                  .forEach((p) => dispatch({ type: 'SET_TEAM_ROLE', id: p.id, role: '' }));
+                setPicking(null);
+              }}
+            >
+              {t('role.none')}
+            </button>
+            {active.map((p) => (
+              <button
+                key={p.id}
+                className={`small ${p.teamRole === picking ? 'primary' : 'ghost'}`}
+                onClick={() => { dispatch({ type: 'SET_TEAM_ROLE', id: p.id, role: picking }); setPicking(null); }}
+              >
+                {p.number ? `${p.number} ` : ''}{p.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // アーカイブした選手(卒業・退部)。記録は残っており、1タップで戻せる。
 // 削除と並べて置くと誤解を招くので、折りたたんだ別の節にする。
 function ArchivedPlayers() {
@@ -271,6 +324,7 @@ export default function SettingsTab() {
             </div>
           </>
         )}
+        <TeamRoleRow />
         {gradeOn && (
           <div className="lens-row mt8">
             {[['grade', 'grade.sortGrade'], ['number', 'grade.sortNumber'], ['added', 'grade.sortAdded']].map(([k, key]) => (
@@ -289,7 +343,8 @@ export default function SettingsTab() {
               )}
             <div className="row">
               <input
-                className="num-edit"
+                className={`num-edit${p.teamRole === 'captain' ? ' cap' : p.teamRole === 'vice' ? ' vice' : ''}`}
+                title={p.teamRole === 'captain' ? t('role.captain') : p.teamRole === 'vice' ? t('role.vice') : undefined}
                 value={p.number || ''}
                 onChange={(e) => dispatch({ type: 'UPDATE_PLAYER', id: p.id, patch: { number: e.target.value } })}
                 placeholder="-"

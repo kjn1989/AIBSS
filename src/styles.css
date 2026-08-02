@@ -1386,3 +1386,17 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 .icon-btn { min-width: 34px; padding: 4px 6px; font-size: 15px; line-height: 1; }
 /* 名簿の選手名。行の要素が増えても縦に潰れないよう、折り返さず省略する */
 .player-name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* 主将・副主将。名簿の行に選択UIを足すと選手名が潰れるため、設定はここ1か所に集約し、
+   行側は背番号ピルの色だけで示す(行幅の消費ゼロ) */
+.role-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.role-chip {
+  flex: 1 1 0; min-width: 0; text-align: left; padding: 7px 11px; border-radius: 10px;
+  background: var(--bg-3); border: 1px solid var(--border); color: var(--text);
+}
+.role-chip b { display: block; font-size: 10px; font-weight: 700; color: var(--text-dim); letter-spacing: .04em; }
+.role-chip span { display: block; font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.role-pick { flex: 1 1 100%; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; padding: 10px; }
+.role-opts { display: flex; flex-wrap: wrap; gap: 6px; }
+.num-edit.cap { background: var(--accent-2); border-color: var(--accent-2); color: #fff; }
+.num-edit.vice { border-color: var(--accent); color: var(--accent); }
