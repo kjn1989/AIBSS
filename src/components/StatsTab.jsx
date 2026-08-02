@@ -9,6 +9,7 @@ import MemberSection from './MemberSection.jsx';
 import TitleCards from './TitleCards.jsx';
 import MatchupCard from './MatchupCard.jsx';
 import OppBatteryCard from './OppBatteryCard.jsx';
+import OppOffenseCard from './OppOffenseCard.jsx';
 
 // 成績・詳細ランキング(10大メトリクス) + 投手成績(旧「投手」タブを統合)
 export default function StatsTab() {
@@ -123,6 +124,7 @@ export default function StatsTab() {
       <PitchingSummaryTable pitching={pitching} nameOf={nameOf} onOpenPlayer={setPlayerId} tenureOf={tenureOf} />
       <MatchupCard games={games} onOpenPlayer={setPlayerId} />
       <OppBatteryCard games={games} />
+      <OppOffenseCard games={games} />
       <p className="small dim" style={{ textAlign: 'center', marginBottom: 12 }}>
         {t('stats.tapHint')}
       </p>
