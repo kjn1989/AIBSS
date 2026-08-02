@@ -25,14 +25,28 @@ export const PAD_ASPECT = 0.92;
 const HOME_X = 0.5;
 const HOME_Y = 1.01 * PAD_ASPECT;
 // パッド上での「フェンス」までの距離(幅を1とする単位)。
-// 上辺中央がちょうど柵に当たるように取る。
-const PAD_FENCE = 0.93;
+//
+// フェンスを図の外周ではなく内側に置く。理由は2つ:
+//   1) 柵の外(スタンド)を描けるので、本塁打を押す場所ができる。
+//      フェンスが外周だと「柵越え」を押す場所がそもそも無かった。
+//   2) 実際の球場の比率(本塁→二塁 約39m / フェンス 約100m)に合わせると
+//      内野が縮み、深さが効いてくる外野に面積が回る。
+//      以前は縦の6割が内野で、柵際は図の3%しかなく狙って押せなかった。
+export const PAD_FENCE = 0.80;
 
-// 守備位置のチップの座標(%)。FieldPad の POSITIONS と一致させること。
-export const POS_PCT = {
-  LF: [18, 27], CF: [50, 15], RF: [82, 27],
-  '3B': [20, 61], SS: [36, 46], '2B': [64, 46], '1B': [80, 61],
-  P: [50, 71], C: [50, 90],
+// 守備位置のチップ。極座標(角度・深さ)を正とする。
+// 深さはフェンスまでを1とした比率なので、図の縮尺を変えても意味が変わらない。
+// 外野は実際の定位置(75〜85%)がそのまま「定位置」の帯に入る。
+export const POS_BALL = {
+  LF: { angle: -25.2, depth: 0.808 },
+  CF: { angle: 0, depth: 0.851 },
+  RF: { angle: 25.2, depth: 0.808 },
+  SS: { angle: -15.5, depth: 0.384 },
+  '2B': { angle: 15.5, depth: 0.384 },
+  '3B': { angle: -39.2, depth: 0.347 },
+  '1B': { angle: 39.2, depth: 0.347 },
+  P: { angle: 0, depth: 0.202 },
+  C: { angle: 0, depth: 0.074 },
 };
 
 // パッド内の位置(0〜1の割合)を、幅を1とする座標に直す
@@ -59,14 +73,10 @@ export function ballToPadPoint(angle, depth) {
   return { fx: x, fy: y / PAD_ASPECT };
 }
 
-// 守備位置ごとの角度・深さ(チップを押したときの値)。
-// チップはちょうど「内野」「定位置」の距離に置いてあるので、
-// 今までどおりチップを押した人は今までどおりの記録になる。
-export const POS_BALL = Object.fromEntries(
-  Object.entries(POS_PCT).map(([k, [l, tp]]) => {
-    const b = padPointToBall(l / 100, tp / 100);
-    return [k, { angle: b.angle, depth: b.depth }];
-  }),
+// チップを描く位置(パッド内の割合)。極座標から毎回引き直すので、
+// 縮尺を変えてもチップと当たり判定がずれない。
+export const POS_PAD = Object.fromEntries(
+  Object.entries(POS_BALL).map(([k, v]) => [k, ballToPadPoint(v.angle, v.depth)]),
 );
 
 // 押した点にいちばん近いチップ = 記録される方向。
@@ -89,12 +99,14 @@ export function nearestDirection(angle, depth) {
 // ---- 深さの帯 ----
 // 数字(85.3m)ではなく言葉で出す。ベンチからの目分量に数字を付けると
 // 実測したかのように見えてしまうため。
+// 境界は実際の球場に合わせる: 内野の土の縁が約47m、外野手の定位置が75〜85m。
 export const DEPTH_BANDS = [
-  { key: 'infield', max: 0.62 },
-  { key: 'shallow', max: 0.73 },
+  { key: 'infield', max: 0.47 },
+  { key: 'shallow', max: 0.65 },
   { key: 'normal', max: 0.86 },
-  { key: 'deep', max: 0.97 },
-  { key: 'wall', max: Infinity },
+  { key: 'deep', max: 0.95 },
+  { key: 'wall', max: 1.0 },
+  { key: 'over', max: Infinity }, // 柵越え
 ];
 export function depthBand(depth) {
   if (depth == null) return null;
@@ -115,18 +127,18 @@ export const CELL_KEYS = TRAJECTORIES.flatMap((tr) => CONTACTS.map((c) => `${tr}
 export function contactCandidate(outType, depth) {
   if (depth == null || !outType) return null;
   if (outType === 'ground') {
-    if (depth >= 0.62) return 'hard';   // 内野を抜けた
-    if (depth <= 0.40) return 'weak';   // 手前で止まった
+    if (depth >= 0.55) return 'hard';   // 内野を抜けた
+    if (depth <= 0.28) return 'weak';   // 手前で止まった
     return null;                        // 内野の普通のゴロは深さでは分からない
   }
   if (outType === 'fly') {
-    if (depth >= 0.90) return 'hard';
-    if (depth <= 0.70) return 'weak';   // 外野の前に落ちる/詰まった
+    if (depth >= 0.88) return 'hard';
+    if (depth <= 0.62) return 'weak';   // 外野の前に落ちる/詰まった
     return null;
   }
   if (outType === 'liner') {
-    if (depth >= 0.78) return 'hard';
-    if (depth <= 0.55) return 'weak';
+    if (depth >= 0.76) return 'hard';
+    if (depth <= 0.50) return 'weak';
     return null;
   }
   return null;
@@ -191,7 +203,7 @@ export function ballOf(ab) {
 // 濃淡だけだと印象論になるので件数も併記する。日本のスコアブックに
 // 昔からある「打球方向図」と同じ考え方。
 export const ZONE_SLICES = 5;
-export const ZONE_RINGS = [0, 0.62, 0.86, Infinity]; // 内野 / 外野前〜定位置 / 深い〜柵際
+export const ZONE_RINGS = [0, 0.47, 0.86, Infinity]; // 内野 / 外野前〜定位置 / 深い〜柵際
 export const ZONE_COUNT = ZONE_SLICES * (ZONE_RINGS.length - 1);
 
 export function zoneOf(angle, depth) {

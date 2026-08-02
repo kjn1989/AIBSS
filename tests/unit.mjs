@@ -1787,15 +1787,21 @@ test('padPointToBall: チップの位置は今までどおりの方向、深さ�
   assert.equal(depthBand(POS_BALL.CF.depth), 'normal');   // 中堅の定位置
   assert.equal(depthBand(POS_BALL.SS.depth), 'infield');  // 遊撃は内野
   assert.equal(depthBand(POS_BALL.P.depth), 'infield');
+  // 内野は実際の球場の比率へ。図の6割が内野だと、深さが効く外野が潰れる
+  assert.ok(POS_BALL.SS.depth < 0.47, '遊撃は内野の土の内側');
+  assert.equal(depthBand(1.05), 'over');                  // 柵越え
 });
 
-test('padPointToBall: ファウルゾーンは記録しない / 上辺中央はフェンス際', () => {
+test('padPointToBall: ファウルゾーンは記録しない / 上辺はスタンド(柵越え)', () => {
   assert.equal(padPointToBall(0.02, 0.98).foul, true);  // 三塁線の外
   assert.equal(padPointToBall(0.98, 0.98).foul, true);  // 一塁線の外
   assert.equal(padPointToBall(0.5, 0.5).foul, false);
+  // フェンスを図の内側に置いたので、上端はスタンド = 本塁打を押す場所になる
   const top = padPointToBall(0.5, 0);
-  assert.equal(depthBand(top.depth), 'wall');
+  assert.equal(depthBand(top.depth), 'over');
   assert.ok(Math.abs(top.angle) < 0.001); // 上辺中央は中堅方向
+  // フェンスそのものは図の中にあり、その少し内側は「フェンス際」
+  assert.equal(depthBand(0.97), 'wall');
 });
 
 test('ballToPadPoint: 押した位置に戻せる(往復して同じ点になる)', () => {
@@ -1807,10 +1813,10 @@ test('ballToPadPoint: 押した位置に戻せる(往復して同じ点になる
 
 test('contactCandidate: 候補は出すが「分からない場面」では出さない', () => {
   assert.equal(contactCandidate('ground', 0.75), 'hard');  // 内野を抜けたゴロ
-  assert.equal(contactCandidate('ground', 0.30), 'weak');  // 手前で止まった
-  assert.equal(contactCandidate('ground', 0.50), null);    // 内野の普通のゴロは深さでは分からない
+  assert.equal(contactCandidate('ground', 0.20), 'weak');  // 手前で止まった
+  assert.equal(contactCandidate('ground', 0.40), null);    // 内野の普通のゴロは深さでは分からない
   assert.equal(contactCandidate('fly', 0.95), 'hard');
-  assert.equal(contactCandidate('fly', 0.65), 'weak');
+  assert.equal(contactCandidate('fly', 0.58), 'weak');
   assert.equal(contactCandidate(null, 0.9), null);         // 軌道が無ければ候補も出さない
   assert.equal(contactCandidate('fly', null), null);       // 深さが無ければ候補も出さない
 });

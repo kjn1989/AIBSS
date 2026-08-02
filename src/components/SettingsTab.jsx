@@ -3,6 +3,7 @@ import { useStore, usePlayerName, persist, useT } from '../state/store.jsx';
 import { parseFirebaseConfig } from '../lib/cloud.js';
 import { encodeWatchLink, encodeInviteLink } from './WatchView.jsx';
 import QRCode from './QRCode.jsx';
+import { resetFieldPadHint } from './FieldPad.jsx';
 import { battingCSV, pitchingCSV, playLogCSV, atBatCSV, downloadCSV, shareCSV } from '../lib/csv.js';
 import { EDITIONS, HAND_LABEL, editionLabel } from '../lib/model.js';
 import {
@@ -151,6 +152,21 @@ function ArchivedPlayers() {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+// 打球パッドの初回説明を、もう一度出せるようにする。
+// 「どこでも押せる」は一度見れば分かるが、あとから入った人には見せたい。
+function PadHintCard() {
+  const t = useT();
+  const [done, setDone] = React.useState(false);
+  return (
+    <div className="card">
+      <h2>{t('padHint.title')}</h2>
+      <p className="small dim" style={{ marginBottom: 10 }}>{t('padHint.body')}</p>
+      <button onClick={() => { resetFieldPadHint(); setDone(true); }}>{t('padHint.reset')}</button>
+      {done && <p className="small" style={{ color: 'var(--green)', margin: '10px 0 0' }}>{t('padHint.resetDone')}</p>}
     </div>
   );
 }
@@ -455,6 +471,8 @@ export default function SettingsTab() {
       </div>
 
       <DuplicatePlayersCard />
+
+      <PadHintCard />
 
       <div className="card">
         <h2>{t('set.demoTitle')}</h2>

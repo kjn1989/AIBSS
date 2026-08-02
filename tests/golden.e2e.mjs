@@ -77,8 +77,15 @@ try {
     await page.click(`.result-pad button:has-text("${label}")`);
     await page.waitForTimeout(350);
     if (direction) {
+      // 初回だけ「どこでも押せます」の説明が図に重なる。押して閉じる
+      const coach = page.locator('.pad-coach button');
+      if (await coach.count()) { await coach.click(); await page.waitForTimeout(200); }
       const f = page.locator('.field-pad button.field-pos').first();
-      if (await f.count()) { await f.click(); await page.waitForTimeout(250); }
+      if (await f.count()) {
+        await f.click();
+        // 押した点にボールが落ちるのを見せてから畳むので、その分だけ待つ
+        await page.waitForTimeout(800);
+      }
     }
   };
 
