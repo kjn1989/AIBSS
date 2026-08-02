@@ -207,6 +207,7 @@ export default function VoiceControl({ game }) {
       payload: {
         result: cand.result,
         outType: cand.outType,
+        contact: cand.contact || null,
         soType: cand.soType,
         direction: cand.direction,
         moves: movesOverride || proposal.moves,
@@ -811,7 +812,7 @@ export default function VoiceControl({ game }) {
       {mode === 'editing' && editCand && (
         <PlaySheet
           game={game}
-          initial={{ result: editCand.result, direction: editCand.direction, outType: editCand.outType, soType: editCand.soType }}
+          initial={{ result: editCand.result, direction: editCand.direction, outType: editCand.outType, contact: editCand.contact, soType: editCand.soType }}
           batterName={batterName}
           onClose={() => {
             setEditCand(null);

@@ -140,7 +140,7 @@ export default function PlayerView({ playerId, games, onClose }) {
           </div>
         )}
 
-        {allAtBats.length > 0 && <SprayChart atBats={allAtBats} />}
+        {allAtBats.length > 0 && <SprayChart atBats={allAtBats} bats={player?.bats} />}
         <TrendChart games={games} playerId={playerId} />
 
         {atBatsByGame.length > 0 && (

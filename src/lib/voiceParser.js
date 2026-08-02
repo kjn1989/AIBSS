@@ -114,9 +114,18 @@ const RESULT_DICT = {
 
 const OUT_TYPE_DICT = {
   ground: ['ゴロ', 'ぼてぼて', 'ボテボテ', 'ごろ'],
-  fly: ['フライ', 'ポップ', '打ち上げ', 'ふらい'],
+  fly: ['フライ', 'ポップ', '打ち上げ', 'ふらい', 'ポテン', 'ぽてん', '大飛球'],
   liner: ['ライナー', '直撃', 'らいなー'],
   dp: ['ゲッツー', '併殺', 'ダブルプレー', '併殺打'],
+};
+
+// 打球の強さ。実況で毎日使われている言葉をそのまま拾う。
+// 何も言われなければ null(未記録)。「平凡」と「言わなかった」は別物なので、
+// 既定で normal を入れることはしない。
+const CONTACT_DICT = {
+  hard: ['痛烈', 'つうれつ', '鋭い', 'するどい', '芯を食', '芯でとら', '芯で捉', '快心', '会心', '大飛球', '弾丸'],
+  weak: ['ぼてぼて', 'ボテボテ', 'ポテン', 'ぽてん', '詰ま', 'つま', '当たり損', 'ふらっと', 'ふらふら', '力のない', '弱い'],
+  normal: ['平凡', '平凡な'],
 };
 
 const PITCH_DICT = {
@@ -152,6 +161,8 @@ export function parseUtterance(rawText) {
   const dirScores = scoreDict(text, DIRECTION_DICT);
   const resScores = scoreDict(text, RESULT_DICT);
   const outTypeScores = scoreDict(text, OUT_TYPE_DICT);
+  const contactScores = scoreDict(text, CONTACT_DICT);
+  const contact = topKey(contactScores) || null;
   const pitchScores = scoreDict(text, PITCH_DICT);
 
   const bestDir = topKey(dirScores);
@@ -191,7 +202,11 @@ export function parseUtterance(rawText) {
     if (result === 'single' && text.includes('せーふてぃ')) s += 2;
 
     if (s <= 0) continue;
-    const outType = result === 'out' ? topKey(outTypeScores) || 'ground' : null;
+    // 軌道はヒットのときも拾う(これまでアウト以外は捨てていた)。
+    // アウトだけは今までどおり既定をゴロにする(記録上の後退を避けるため)
+    const spokenTraj = topKey(outTypeScores) || null;
+    const outType = result === 'out' ? spokenTraj || 'ground'
+      : (spokenTraj && spokenTraj !== 'dp' ? spokenTraj : null);
     // 三振: 発話に「見逃し/空振り」が含まれていれば確定、なければ確認カードで選ばせる
     const soExplicit = result === 'so' && (text.includes('見逃') || text.includes('空振') || text.includes('からぶ'));
     const soType = result === 'so' ? (text.includes('見逃') ? 'looking' : 'swinging') : null;
@@ -200,6 +215,7 @@ export function parseUtterance(rawText) {
       result,
       direction: needsDirection(result) ? bestDir || null : null,
       outType,
+      contact: needsDirection(result) ? contact : null,
       soType,
       soExplicit,
       label: result === 'so' && !soExplicit ? '三振' : playLabel(result, bestDir, outType, soType),
@@ -243,7 +259,7 @@ export function parseUtterance(rawText) {
   const seen = new Set();
   const out = [];
   for (const c of candidates) {
-    const key = `${c.kind}:${c.result || c.pitchType || ''}:${c.direction || ''}:${c.outType || ''}`;
+    const key = `${c.kind}:${c.result || c.pitchType || ''}:${c.direction || ''}:${c.outType || ''}:${c.contact || ''}`;
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(c);

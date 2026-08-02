@@ -6,6 +6,10 @@
 import { RESULTS, formatIP } from './model.js';
 
 // ---- 打者: 足し算カウントスタッツ(タイトル系) ----
+// バットに当たって前に飛んだ打席か。ハードヒット率の分母はここから作る
+const BATTED_BALL_RESULTS = new Set(['single', 'double', 'triple', 'hr', 'out', 'error', 'sacBunt', 'sacFly']);
+export const isBattedBall = (result) => BATTED_BALL_RESULTS.has(result);
+
 export function aggregateBatting(games) {
   const map = {}; // playerId -> stats
   const get = (pid) => {
@@ -21,6 +25,9 @@ export function aggregateBatting(games) {
         totalPitches: 0,
         clutch: 0,
         firstPitchSwings: 0, firstPitchHits: 0,
+        // 打球の質。分母は「強さを記録した打球」で、未記録は数えない。
+        // 未記録を平凡として数えると、ハードヒット率がすぐ嘘になる
+        battedBalls: 0, contactRecorded: 0, hardHit: 0, weakHit: 0,
         // 対左右投手(相手投手の左右を入力してある打席だけが対象)
         vsL: { ab: 0, h: 0 }, vsR: { ab: 0, h: 0 },
       };
@@ -48,6 +55,14 @@ export function aggregateBatting(games) {
       if (ab.result === 'bb') s.bb += 1;
       if (ab.result === 'hbp') s.hbp += 1;
       if (ab.result === 'so') s.so += 1;
+      if (isBattedBall(ab.result)) {
+        s.battedBalls += 1;
+        if (ab.contact) {
+          s.contactRecorded += 1;
+          if (ab.contact === 'hard') s.hardHit += 1;
+          else if (ab.contact === 'weak') s.weakHit += 1;
+        }
+      }
       if (ab.result === 'sacBunt') s.sacBunt += 1;
       if (ab.result === 'sacFly') s.sacFly += 1;
       if (ab.result === 'interference') s.interference += 1;
@@ -116,20 +131,32 @@ export function aggregatePitching(games) {
         wins: 0, saves: 0, holds: 0, games: 0,
         // 対左右打者(相手打者の左右を入力してある打席だけが対象)
         vsL: { ab: 0, h: 0 }, vsR: { ab: 0, h: 0 },
+        // 被打球の質。打たれていても全部ボテボテなら投球内容は良い、が見えるようにする
+        battedBalls: 0, contactRecorded: 0, hardHit: 0, weakHit: 0,
       };
     }
     return map[pid];
   };
   for (const g of games) {
-    // 対左右打者: 守備ログ(相手の打席)から、そのとき投げていた投手へ振り分ける
+    // 守備ログ(相手の打席)から、そのとき投げていた投手へ振り分ける
     for (const log of g.playLogs || []) {
       if (log.kind !== 'defense') continue;
       const p = log.payload || {};
+      if (!p.pitcherId) continue;
+      const s = get(p.pitcherId);
+      // 被打球の質(左右の入力が無くても数えられるので、対左右とは別に集計する)
+      if (isBattedBall(p.result)) {
+        s.battedBalls += 1;
+        if (p.contact) {
+          s.contactRecorded += 1;
+          if (p.contact === 'hard') s.hardHit += 1;
+          else if (p.contact === 'weak') s.weakHit += 1;
+        }
+      }
       const vsKey = p.batterHand === 'L' ? 'vsL' : p.batterHand === 'R' ? 'vsR' : null;
-      if (!p.pitcherId || !vsKey) continue;
+      if (!vsKey) continue;
       const def = RESULTS[p.result];
       if (!def || !def.ab) continue;
-      const s = get(p.pitcherId);
       s[vsKey].ab += 1;
       if (def.hit) s[vsKey].h += 1;
     }
@@ -247,7 +274,10 @@ export function battingMetrics(s) {
   const baVsL = div(s.vsL?.h, s.vsL?.ab); // 対左投手打率
   const baVsR = div(s.vsR?.h, s.vsR?.ab); // 対右投手打率
   const bbRate = div(s.bb + s.hbp, s.pa); // 四球率(選球眼)
-  return { ba, risp, obp, slg, ops, adv, ppa, clutch, fhit, baVsL, baVsR, bbRate };
+  // ハードヒット率。分母は「強さを記録した打球」。記録が無ければ null で、0% とは区別する
+  const hardHit = div(s.hardHit, s.contactRecorded);
+  const weakHit = div(s.weakHit, s.contactRecorded);
+  return { ba, risp, obp, slg, ops, adv, ppa, clutch, fhit, baVsL, baVsR, bbRate, hardHit, weakHit };
 }
 
 // ---- 投手メトリクス ----
@@ -265,7 +295,9 @@ export function pitchingMetrics(s, basis = 7) {
   const obaVsR = div(s.vsR?.h, s.vsR?.ab); // 対右打者被打率
   const k7 = ip > 0 ? (s.strikeouts / ip) * basis : null; // 奪三振率(basis回換算)
   const pip = ip > 0 ? s.pitches / ip : null; // 1イニングあたりの球数
-  return { ip, era, basis, whip, kbb, kbbDisplay, kbbSort, oba, obaVsL, obaVsR, k7, pip };
+  // 被ハードヒット率。低いほど良い(打たれていても中身が弱ければ内容は良い)
+  const hardHit = div(s.hardHit, s.contactRecorded);
+  return { ip, era, basis, whip, kbb, kbbDisplay, kbbSort, oba, obaVsL, obaVsR, k7, pip, hardHit };
 }
 
 // ---- 詳細ランキングのメトリクス定義 ----
@@ -277,6 +309,7 @@ const JA_UNITS = {
   chances: '機会', obp: '出塁率', slg: '長打率', firstPitch: '(初球打ち)',
   clutchDesc: '先制・同点・逆転・勝ち越し打の合計',
   vsR: '対右', vsL: '対左', tb: '塁打', kUnit: '奪三振', ipShort: '回', pitchesShort: '球', noData: '未入力',
+  hardHit: '強い打球', battedBall: '打球',
 };
 const jaTr = (key) => JA_UNITS[key];
 
@@ -350,6 +383,13 @@ export const DETAIL_METRICS = [
     qualify: (s) => s.pa > 0,
   },
   {
+    // 分母は「強さを記録した打球」。押されていない打球は数えない
+    key: 'hardHit', label: 'ハードヒット率', en: 'Hard-Hit%', type: 'bat', higherBetter: true,
+    value: (m) => m.hardHit, format: fmtPct,
+    detail: (s, m, tr = jaTr) => `${s.hardHit}/${s.contactRecorded}${tr('battedBall')}`,
+    qualify: (s) => s.contactRecorded >= 3,
+  },
+  {
     key: 'era7', label: '防御率', en: 'ERA', type: 'pit', higherBetter: false, perInning: true,
     value: (m) => m.era, format: fmt2,
     detail: (s, m, tr = jaTr) => `${tr('er')}${s.earnedRuns}/${formatIP(s.outsRecorded)}${tr('ipUnit')}`,
@@ -372,6 +412,13 @@ export const DETAIL_METRICS = [
     value: (m) => m.oba, format: fmtAvg,
     detail: (s, m, tr = jaTr) => `${tr('ha')}${s.hitsAllowed}/${tr('abFaced')}${s.abFaced}`,
     qualify: (s) => s.abFaced > 0,
+  },
+  {
+    // 打たれていても中身が弱ければ内容は良い。低いほど良い指標
+    key: 'hardHitAllowed', label: '被ハードヒット率', en: 'Hard-Hit% allowed', type: 'pit', higherBetter: false,
+    value: (m) => m.hardHit, format: fmtPct,
+    detail: (s, m, tr = jaTr) => `${s.hardHit}/${s.contactRecorded}${tr('battedBall')}`,
+    qualify: (s) => s.contactRecorded >= 3,
   },
   {
     // 相手打者の左右を入力してある打席だけが母数。未入力の打席は数えない。

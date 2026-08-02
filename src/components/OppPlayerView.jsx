@@ -53,7 +53,7 @@ export default function OppPlayerView({ oppKey, onClose }) {
         </p>
 
         <div className="mt12">
-          <SprayChart atBats={data.atBats} title={t('oppview.spray')} />
+          <SprayChart atBats={data.atBats} title={t('oppview.spray')} bats={data.hand} />
         </div>
 
         {dirTotal > 0 && (

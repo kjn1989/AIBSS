@@ -69,10 +69,14 @@ export function playLogCSV(games, nameOf, teamName) {
   return toCSV(rows);
 }
 
+// 打球の強さ。空欄は未記録(平凡ではない)
+const CONTACT_LABEL = { weak: '弱い', normal: '平凡', hard: '強い' };
+
 // ---- 打席詳細CSV(スナップショット・投球シーケンス込み) ----
 export function atBatCSV(games, nameOf) {
   const rows = [[
-    '日付', '対戦相手', 'イニング', '打順', '選手', '結果', '凡打種別', '方向',
+    '日付', '対戦相手', 'イニング', '打順', '選手', '結果', '打球種別', '方向',
+    '打球の強さ', '打球角度', '打球の深さ',
     '打点', '打席時得点', '投球数', '初球', '初球安打', '投球シーケンス',
     '開始時走者一', '開始時走者二', '開始時走者三', '開始時アウト', '開始時点差',
     '進塁打', 'クラッチ',
@@ -88,6 +92,10 @@ export function atBatCSV(games, nameOf) {
         (ab.result === 'so' && SO_TYPES[ab.soType]) || RESULTS[ab.result]?.label || ab.result,
         ab.outType ? OUT_TYPES[ab.outType] : '',
         ab.direction ? DIRECTIONS[ab.direction] : '',
+        // 未記録は空欄。「平凡」と書くと押していないものまで平凡になってしまう
+        CONTACT_LABEL[ab.contact] || '',
+        ab.hitAngle != null ? ab.hitAngle.toFixed(1) : '',
+        ab.hitDepth != null ? ab.hitDepth.toFixed(3) : '',
         ab.rbi, ab.runsOnPlay, ab.pitchCount,
         pitchLabel[ab.firstPitch] || '', ab.firstPitchHit ? '○' : '',
         (ab.pitches || []).map((p) => pitchLabel[p.type] || '?').join(''),
