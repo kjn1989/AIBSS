@@ -183,7 +183,8 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
               value={direction}
               point={point}
               outfieldOnly={result === 'hr'}
-              onChange={(key, pt) => { setDirection(key); setPoint(pt); setDirOpen(false); }}
+              onChange={(key, pt) => { setDirection(key); setPoint(pt); }}
+              onDone={() => setDirOpen(false)}
             />
           ) : (
             <button type="button" className="dir-summary" onClick={() => setDirOpen(true)}>

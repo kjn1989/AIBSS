@@ -569,30 +569,106 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
   border-radius: 2px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
-/* ---- 方向パッド(打球方向選択) ---- */
-.field-pad { display: block; aspect-ratio: 10 / 9.2; }
-/* 土のひし形: 一辺 = 本塁→一塁の距離 (アスペクト0.92時 ≈ 37.8%W) */
-/* 土の扇形の半径: 二塁の少し先まで(直径=116%W) */
-.field-pad .bf-dirtfan { width: 116%; }
-.field-pad .bf-basepath { width: 37.8%; }
+/* ---- 方向パッド(打球の落下点を選ぶ) ----
+   縮尺は実際の球場に合わせ、フェンスを図の内側に置いてスタンドまで描く。
+   柵が図の外周だと本塁打を押す場所が無く、深さが効く外野も潰れていた。
+   幾何の根拠は battedBall.js を参照。 */
+.pad-frame { display: flex; gap: 6px; align-items: stretch; }
+/* 深さの目盛り。上下方向に意味があることを、図の外で先に言い切る */
+.pad-ruler { position: relative; flex: 0 0 36px; width: 36px; }
+.pad-ruler span {
+  position: absolute; right: 0; transform: translateY(-50%);
+  font-size: 9.5px; line-height: 1.1; white-space: nowrap; color: var(--text-dim);
+  font-family: ui-monospace, Menlo, monospace; letter-spacing: -.02em;
+}
+.pad-ruler i.axis {
+  position: absolute; left: 50%; top: 3%; bottom: 3%; width: 1px;
+  background: linear-gradient(180deg, rgba(139, 148, 158, .5), rgba(139, 148, 158, .08));
+}
+/* 「押す」ことを図より先に言う。以前は図の下にあり、注意書きに見えていた */
+.pad-lead {
+  display: flex; align-items: center; gap: 7px; margin-bottom: 8px;
+  font-size: 12px; color: var(--accent); line-height: 1.5;
+  background: rgba(88, 166, 255, .10); border: 1px solid rgba(88, 166, 255, .3);
+  border-radius: 9px; padding: 8px 10px;
+}
+.pad-lead svg { flex: 0 0 auto; }
+
+.field-pad {
+  display: block; flex: 1 1 auto; aspect-ratio: 10 / 9.2;
+  touch-action: none; cursor: crosshair;
+  background: linear-gradient(180deg, #252b33, #1b2027); /* スタンド */
+}
+.field-pad.dragging { cursor: grabbing; }
+.field-pad .bf-grass {
+  position: absolute; left: 50%; top: 101%; aspect-ratio: 1;
+  transform: translate(-50%, -50%); border-radius: 50%; pointer-events: none;
+  background:
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, .045) 0 22px, transparent 22px 44px),
+    repeating-linear-gradient(-45deg, rgba(0, 0, 0, .10) 0 22px, transparent 22px 44px),
+    radial-gradient(circle, #2f7a41 0%, #276b38 62%, #215d30 100%);
+}
+.field-pad .bf-track {
+  position: absolute; left: 50%; top: 101%; aspect-ratio: 1;
+  transform: translate(-50%, -50%); border-radius: 50%; background: #6d5942; pointer-events: none;
+}
+.field-pad .bf-basepath { top: 84%; width: 22.1%; }
+.field-pad .bf-mound { top: 86.4%; width: 7.5%; }
+.field-pad .bf-line { height: 88%; }
+.field-pad .bf-base { width: 9px; height: 9px; }
+.field-pad .bf-base.b2 { left: 50%; top: 67.1%; }
+.field-pad .bf-base.b3 { left: 34.4%; top: 84.1%; }
+.field-pad .bf-base.b1 { left: 65.6%; top: 84.1%; }
+/* 深さの帯の境目。目盛りの文字と対応させる */
+.field-pad .bf-ring {
+  position: absolute; left: 50%; top: 101%; aspect-ratio: 1;
+  transform: translate(-50%, -50%); border-radius: 50%;
+  border: 1px dashed rgba(255, 255, 255, .38); pointer-events: none;
+}
+.field-pad .bf-ring.wall { border: 2px solid rgba(255, 255, 255, .75); border-style: solid; }
+/* チップは小さく半透明に。空いている芝のほうが「押せる場所」に見えるようにする */
 .field-pad button.field-pos {
   position: absolute;
   transform: translate(-50%, -50%);
-  min-height: 40px;
-  min-width: 58px;
-  padding: 6px 10px;
-  font-size: 14px;
-  font-weight: 800;
-  color: #14212e;
-  background: rgba(255, 255, 255, 0.92);
-  border: none;
+  min-height: 26px;
+  min-width: 0;
+  padding: 4px 9px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #eaf2fb;
+  background: rgba(16, 28, 22, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.42);
   border-radius: 999px;
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35);
+  box-shadow: none;
 }
 .field-pad button.field-pos.sel {
   background: var(--accent-2);
   color: #fff;
-  box-shadow: 0 0 0 4px rgba(31, 111, 235, 0.45), 0 3px 10px rgba(0, 0, 0, 0.4);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.4);
+}
+/* 初回だけ出す説明。一度閉じれば二度と出ない(設定から呼び戻せる) */
+.pad-coach {
+  position: absolute; inset: 0; z-index: 5; padding: 18px;
+  background: rgba(6, 10, 14, .74);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  text-align: center;
+}
+.pad-coach p { margin: 0; font-size: 12.5px; line-height: 1.65; color: #fff; max-width: 30ch; }
+.pad-coach b { display: block; font-size: 14px; font-weight: 800; margin-bottom: 3px; text-wrap: balance; }
+.pad-coach button {
+  margin: 6px 0 0; min-height: 36px; padding: 8px 20px; border-radius: 999px;
+  border: none; background: #fff; color: #14212e; font-size: 12.5px; font-weight: 700;
+}
+.pad-coach .ripple {
+  position: absolute; width: 16px; height: 16px; border-radius: 50%;
+  transform: translate(-50%, -50%); pointer-events: none;
+  border: 2px solid #fff; box-shadow: 0 0 8px rgba(255, 255, 255, .6);
+  animation: padRipple .9s ease-out infinite;
+}
+@keyframes padRipple {
+  from { transform: translate(-50%, -50%) scale(.6); opacity: .9; }
+  to { transform: translate(-50%, -50%) scale(3.4); opacity: 0; }
 }
 /* 方向選択済み時の折りたたみ表示: フィールド図を畳んでシート全体の高さを抑える */
 .dir-summary {
@@ -1534,15 +1610,13 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 }
 .kpi i { display: block; font-size: 9.5px; color: var(--text-dim); opacity: .75; font-style: normal; }
 
-/* ---- 打球方向パッド: 深さの目安と打点 ---- */
-/* 本塁を中心とした同心円。押した位置がどの深さの帯に入るかを見せる */
-.bf-ring {
-  position: absolute; left: 50%; top: 101%; aspect-ratio: 1;
-  transform: translate(-50%, -50%); border-radius: 50%;
-  border: 1px dashed rgba(255, 255, 255, .22); pointer-events: none;
-}
-.bf-ring.fence { border-style: solid; border-color: rgba(255, 255, 255, .42); }
+/* ---- 打球方向パッド: 打点のマーカー ---- */
 /* 押した点。フィールドのどこに落ちたかを1つだけ示す */
+.bf-mark.drop { animation: padDrop .28s cubic-bezier(.2, .9, .3, 1.4); }
+@keyframes padDrop {
+  from { transform: translate(-50%, -150%) scale(1.7); opacity: .25; }
+  to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}
 .bf-mark {
   position: absolute; width: 15px; height: 15px; border-radius: 50%;
   transform: translate(-50%, -50%); pointer-events: none;
@@ -1559,6 +1633,7 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
   font-size: 11.5px; font-weight: 700; padding: 3px 9px; border-radius: 999px;
   background: rgba(88, 166, 255, .16); color: var(--accent); margin-left: 6px;
 }
+.depth-pill.hr { background: rgba(227, 179, 65, .18); color: var(--gold); }
 
 /* ---- 打球パッド(行=軌道 × 列=強さ) ---- */
 .cpad { display: grid; grid-template-columns: 42px 1fr 1fr 1fr; gap: 6px; }
@@ -1604,3 +1679,8 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 /* 件数の濃淡の凡例 */
 .heat-ramp { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 10.5px; color: var(--text-dim); }
 .heat-ramp i { flex: 1 1 auto; height: 8px; border-radius: 4px; }
+
+/* 動きを減らす設定の端末では、落下やさざ波を止める(意味は言葉で伝わる) */
+@media (prefers-reduced-motion: reduce) {
+  .bf-mark.drop, .pad-coach .ripple { animation: none; }
+}
