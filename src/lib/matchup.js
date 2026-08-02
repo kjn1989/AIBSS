@@ -163,3 +163,55 @@ export function opponentSummaries(games = []) {
   }
   return [...map.values()].sort((a, b) => b.games - a.games);
 }
+
+// ============================================================
+// 対戦相手チームの台帳(導出)
+//
+// チーム名は自由入力なので、表記ゆれがあると対戦成績が分断される。
+// 過去の対戦相手を候補として出し、入口で選ばせることで揺れを防ぐ。
+// ============================================================
+
+// 過去の対戦相手。最後に対戦した順。
+// 戻り値: [{ name, key, games, lastDate }]
+export function opponentTeams(games = []) {
+  const map = new Map();
+  for (const g of games) {
+    const name = (g?.opponent || '').trim();
+    if (!name) continue;
+    const key = normalizeName(name);
+    const cur = map.get(key);
+    if (!cur) {
+      map.set(key, { key, name, games: 1, lastDate: g.date || '' });
+    } else {
+      cur.games += 1;
+      // 表記が揺れている場合は、最後に使った書き方を採用する
+      if ((g.date || '') >= cur.lastDate) { cur.lastDate = g.date || ''; cur.name = name; }
+    }
+  }
+  return [...map.values()].sort((a, b) => (b.lastDate || '').localeCompare(a.lastDate || ''));
+}
+
+// そのチームと最後に対戦した試合から、相手の並び(記号・名前・守備位置・左右)を取り出す。
+// 次の試合の下ごしらえに使う。名前を入れる手間が「次に当たるとき」に返ってくることが、
+// 相手選手名を入力し続けてもらえるかどうかの分かれ目になる。
+export function lastOppRoster(games = [], teamName) {
+  const key = normalizeName(teamName);
+  if (!key) return null;
+  const rows = games
+    .filter((g) => normalizeName(g.opponent) === key && (g.oppLineup || []).length)
+    .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const g = rows[0];
+  if (!g) return null;
+  const named = Object.keys(g.oppNames || {}).length;
+  return {
+    fromGameId: g.id,
+    fromDate: g.date || '',
+    namedCount: named,
+    lineup: (g.oppLineup || []).map((l) => ({ order: l.order, letter: l.letter, position: l.position || '' })),
+    oppNames: { ...(g.oppNames || {}) },
+    oppPositions: { ...(g.oppPositions || {}) },
+    oppBatterHands: { ...(g.oppBatterHands || {}) },
+    oppPitcherHands: { ...(g.oppPitcherHands || {}) },
+    oppPitcherLetter: g.oppPitcherLetter || 'A',
+  };
+}

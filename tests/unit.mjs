@@ -14,7 +14,7 @@ import { newGame } from '../src/lib/model.js';
 import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf, oppLettersInGame, oppBaserunning } from '../src/lib/oppBox.js';
 import { remapPlayerInGame, fillPlayerGaps } from '../src/lib/mergePlayers.js';
 import { computeBoxScore } from '../src/lib/boxscore.js';
-import { buildMatchups, opponentSummaries, oppPitcherByAtBat, oppPlayerKey, normalizeName } from '../src/lib/matchup.js';
+import { buildMatchups, opponentSummaries, oppPitcherByAtBat, oppPlayerKey, normalizeName, opponentTeams, lastOppRoster } from '../src/lib/matchup.js';
 import { yearOfDate, yearOfGame, yearsInGames, tenureByPlayer, playedInYear, isArchived, yearLabel, currentYear, resolveYear, scopedGames,
   gradeOf, entryYearFromGrade, willGraduate, sortByGrade, usesGrade, defaultSchoolType, maxGradeOf } from '../src/lib/year.js';
 
@@ -1498,4 +1498,35 @@ test('主将は1人・副主将は2人まで', () => {
   assert.equal(roleOf(ps, 'c'), '');
   // 主将は影響を受けない
   assert.equal(roleOf(ps, 'b'), 'captain');
+});
+
+test('opponentTeams: 表記ゆれをまとめ、最後に使った書き方を採用する', () => {
+  const games = [
+    { id: 'a', opponent: '上智 Mamues', date: '2025-05-01' },
+    { id: 'b', opponent: '上智Mamues', date: '2026-07-24' },
+    { id: 'c', opponent: '日大三高OB', date: '2026-06-01' },
+    { id: 'd', opponent: '', date: '2026-01-01' },
+  ];
+  const rows = opponentTeams(games);
+  assert.deepEqual(rows.map((r) => [r.name, r.games]), [['上智Mamues', 2], ['日大三高OB', 1]]);
+  assert.equal(rows[0].lastDate, '2026-07-24'); // 最後に対戦した順
+});
+
+test('lastOppRoster: 直近の対戦から相手の並びを取り出す', () => {
+  const mk = (id, date, names) => ({
+    id, date, opponent: '上智Mamues',
+    oppLineup: 'ABC'.split('').map((letter, i) => ({ order: i + 1, letter, position: '' })),
+    oppNames: names, oppPositions: { A: '中' }, oppBatterHands: { A: 'L' }, oppPitcherHands: { B: 'R' },
+    oppPitcherLetter: 'B',
+  });
+  const games = [mk('old', '2025-05-01', { A: '旧' }), mk('new', '2026-07-24', { A: '佐藤', B: '田中' })];
+  const r = lastOppRoster(games, '上智 Mamues'); // 表記が揺れていても引ける
+  assert.equal(r.fromGameId, 'new');
+  assert.equal(r.namedCount, 2);
+  assert.deepEqual(r.oppNames, { A: '佐藤', B: '田中' });
+  assert.equal(r.oppBatterHands.A, 'L');
+  assert.equal(r.lineup.length, 3);
+  // 対戦したことのない相手は null
+  assert.equal(lastOppRoster(games, '知らないチーム'), null);
+  assert.equal(lastOppRoster(games, ''), null);
 });
