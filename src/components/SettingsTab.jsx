@@ -8,7 +8,7 @@ import { EDITIONS, HAND_LABEL, editionLabel } from '../lib/model.js';
 import {
   isArchived, tenureByPlayer, currentYear, currentSchoolYear, DEFAULT_YEAR_START_MONTH,
   usesGrade, defaultSchoolType, defaultYearStartMonth, maxGradeOf, gradeOf, entryYearFromGrade,
-  sortByGrade, SCHOOL_TYPES,
+  sortByGrade, SCHOOL_TYPES, SEASON_START_MONTHS, yearLabel,
 } from '../lib/year.js';
 import EditionText from './EditionText.jsx';
 import { listProfiles, getActiveProfileId, addProfile, switchActiveProfile, deleteProfile, listOrphanedProfiles, restoreProfile } from '../lib/profiles.js';
@@ -279,6 +279,26 @@ export default function SettingsTab() {
               {SCHOOL_TYPES.map((st) => <option key={st.id} value={st.id}>{t(`school.${st.id}`)}</option>)}
             </select>
             <p className="small dim" style={{ marginTop: 4 }}>{t('grade.schoolHint')}</p>
+
+            {/* 代の切り替わり月。夏の大会の時期は地域やチームで前後するので選べるようにする */}
+            <label className="small dim" style={{ display: 'block', margin: '12px 0 4px' }}>{t('season.start')}</label>
+            <select
+              value={startMonth}
+              onChange={(e) => dispatch({ type: 'UPDATE_SETTINGS', patch: { yearStartMonth: Number(e.target.value) } })}
+            >
+              {SEASON_START_MONTHS.map((m) => (
+                <option key={m} value={m}>
+                  {m === 4 ? t('season.aprilNote') : m === 1 ? t('season.janNote') : t('season.month', { n: m })}
+                </option>
+              ))}
+            </select>
+            <p className="small dim" style={{ marginTop: 4 }}>
+              {t('season.startHint')}
+              {' '}
+              <span style={{ color: 'var(--accent)' }}>
+                {yearLabel(thisYear - (startMonth >= 7 ? 1 : 0), state.settings.lang || 'ja', startMonth)}
+              </span>
+            </p>
           </div>
         )}
         <div className="toggle-row editions">

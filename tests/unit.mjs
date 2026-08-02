@@ -1535,16 +1535,18 @@ test('lastOppRoster: 直近の対戦から相手の並びを取り出す', () =>
 test('defaultYearStartMonth: 中学・高校の代は夏の大会後(9月)に替わる', () => {
   // 学校の年度は4月始まりだが、野球部の代は夏の大会で3年生が引退して秋から替わる。
   // 学年(入学年度から導出)とは別の軸なので、混ぜずに開始月で表す。
-  assert.equal(defaultYearStartMonth('ブカツ(中高大)', 'high'), 9);
-  assert.equal(defaultYearStartMonth('ブカツ(中高大)', 'junior'), 9);
+  assert.equal(defaultYearStartMonth('ブカツ(中高大)', 'high'), 8);
+  assert.equal(defaultYearStartMonth('ブカツ(中高大)', 'junior'), 8);
   assert.equal(defaultYearStartMonth('ブカツ(中高大)', 'university'), 4); // 大学は年度末まで
   assert.equal(defaultYearStartMonth('少年野球', 'elementary'), 4);
   assert.equal(defaultYearStartMonth('草野球', null), 4);
 
-  // 9月始まりだと、夏の大会(7月)はまだ前の代に入る
-  assert.equal(yearOfDate('2026-07-20', 9), 2025); // 2026年夏 = 2025年9月に始まった代
-  assert.equal(yearOfDate('2026-09-01', 9), 2026); // 秋から新チーム
-  // 呼び方も実感に合わせる(2025年9月に始まった代は「2026年の代」)
+  // 8月始まり: 7月の夏の大会は前の代の最後の試合、8月からは新チーム
+  assert.equal(yearOfDate('2026-07-20', 8), 2025); // 夏の大会 = 2025年8月に始まった代
+  assert.equal(yearOfDate('2026-08-01', 8), 2026); // 8月から新チーム
+  assert.equal(yearOfDate('2026-06-01', 8), 2025); // 春も前の代
+  // 呼び方も実感に合わせる(2025年8月に始まった代は2026年の夏に引退する)
+  assert.equal(yearLabel(2025, 'ja', 8), '2026年の代');
   assert.equal(yearLabel(2025, 'ja', 9), '2026年の代');
   assert.equal(yearLabel(2025, 'ja', 4), '2025年度');
   assert.equal(yearLabel(2025, 'ja', 1), '2025年');
@@ -1559,6 +1561,7 @@ test('学年は学校年度(4月)、代は9月。混ぜると1年生が半年で
 
   // 代(9月始まり)の終わり時点の学校年度で引退を判定する
   //   代2025 = 2025年9月〜2026年8月 → 終わりは2026年8月 → 学校年度 2026
+  assert.equal(schoolYearAtSeasonEnd(2025, 8), 2026);
   assert.equal(schoolYearAtSeasonEnd(2025, 9), 2026);
   assert.equal(schoolYearAtSeasonEnd(2025, 4), 2025); // 4月始まりなら同じ年度
 
@@ -1566,9 +1569,9 @@ test('学年は学校年度(4月)、代は9月。混ぜると1年生が半年で
   // 2024年入学(2026年度に3年) → 代2025(2026年夏に終わる)で引退
   const senior = { entryYear: 2024 };
   assert.equal(gradeOf(senior, 2026), 3);
-  assert.equal(willGraduate(senior, 2025, high, 9), true);
+  assert.equal(willGraduate(senior, 2025, high, 8), true);
   // 2025年入学は、その代ではまだ2年なので引退しない
-  assert.equal(willGraduate({ entryYear: 2025 }, 2025, high, 9), false);
+  assert.equal(willGraduate({ entryYear: 2025 }, 2025, high, 8), false);
   // その次の代では引退する
-  assert.equal(willGraduate({ entryYear: 2025 }, 2026, high, 9), true);
+  assert.equal(willGraduate({ entryYear: 2025 }, 2026, high, 8), true);
 });
