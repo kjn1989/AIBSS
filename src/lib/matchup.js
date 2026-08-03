@@ -226,6 +226,8 @@ export function oppPlayerAtBats(games = [], oppKey) {
   let team = '';
   let hand = '';
   const kind = { ground: 0, fly: 0, line: 0 }; // ゴロ/フライ/ライナーの別
+  // 打球の強さ。分母は「強さを記録した打球」だけ(未記録を平凡として数えない)
+  let hardHit = 0; let contactRecorded = 0;
   const dir = { pull: 0, center: 0, oppo: 0 };
   let sb = 0; let cs = 0; let sacBunt = 0;
   const gameIds = new Set();
@@ -252,9 +254,18 @@ export function oppPlayerAtBats(games = [], oppKey) {
       if (!p.letter || !letters.has(p.letter)) continue;
       if (l.kind === 'defense') {
         gameIds.add(g.id);
-        // SprayChart がそのまま読める形に揃える(自軍の打席と同じ描画を使う)
-        atBats.push({ id: l.id, direction: p.direction || null, result: p.result, outType: p.outType || null });
+        // SprayChart がそのまま読める形に揃える(自軍の打席と同じ描画を使う)。
+        // 打点と強さも渡す。渡さないと相手の分布だけ9か所の団子のままになり、
+        // 「強い打球だけ」の絞り込みも出てこない
+        atBats.push({
+          id: l.id, direction: p.direction || null, result: p.result, outType: p.outType || null,
+          contact: p.contact || null, hitAngle: p.hitAngle ?? null, hitDepth: p.hitDepth ?? null,
+        });
         if (p.outType && kind[p.outType] != null) kind[p.outType] += 1;
+        if (p.contact) {
+          contactRecorded += 1;
+          if (p.contact === 'hard') hardHit += 1;
+        }
         if (p.result === 'sacBunt') sacBunt += 1;
         // 引っ張り/逆方向は打者の左右で入れ替わる。左打者は右方向が引っ張り
         const d = p.direction;
@@ -270,7 +281,7 @@ export function oppPlayerAtBats(games = [], oppKey) {
     }
   }
   if (!atBats.length && !sb && !cs) return null;
-  return { oppKey, name, team, hand, atBats, kind, dir, sb, cs, sacBunt, games: gameIds.size };
+  return { oppKey, name, team, hand, atBats, kind, dir, sb, cs, sacBunt, hardHit, contactRecorded, games: gameIds.size };
 }
 
 // ============================================================

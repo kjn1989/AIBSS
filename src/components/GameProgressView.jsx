@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { useStore, usePlayerName, useT } from '../state/store.jsx';
-import { RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES, resultCategory, multiOutLabel, outTypeLabel } from '../lib/model.js';
+import { RESULTS, DIRECTIONS, SO_TYPES, resultCategory, multiOutLabel, outTypeLabel } from '../lib/model.js';
+import FieldPad from './FieldPad.jsx';
+import BattedBallPad from './BattedBallPad.jsx';
+import { depthBand } from '../lib/battedBall.js';
 import { playLabel } from '../lib/voiceParser.js';
 import { computeBoxScore } from '../lib/boxscore.js';
 import { parseBatterCorrection, findTargetAtBat, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parseSlotBatters, parseAtBatDeletions, isExplicitSubText, inGamePlayerIds, preferInGamePlayers } from '../lib/correctionParser.js';
@@ -87,6 +90,14 @@ function EditPlaySheet({ game, log, onClose }) {
   const [direction, setDirection] = useState(p.direction || null);
   const [outType, setOutType] = useState(p.outType || 'ground');
   const [soType, setSoType] = useState(p.soType || 'swinging');
+  // 打点(角度・深さ)と強さ。入力できるものは直せなければならない。
+  // とくに方向だけ直して打点が古いままだと、分布図が直した方向と食い違う
+  const [point, setPoint] = useState(
+    p.hitAngle != null ? { angle: p.hitAngle, depth: p.hitDepth } : null,
+  );
+  const [contact, setContact] = useState(p.contact || null);
+  // 直しに来た時点では方向は入っているので畳んでおく(シートを短くする)
+  const [dirOpen, setDirOpen] = useState(!p.direction);
   const [rbi, setRbi] = useState(p.rbi ?? null);
   const isAtBat = log.kind === 'atbat';
   const [playerId, setPlayerId] = useState(p.playerId || null);
@@ -100,7 +111,12 @@ function EditPlaySheet({ game, log, onClose }) {
       type: 'EDIT_PLAY_LOG',
       gameId: game.id,
       logId: log.id,
-      patch: { result, direction, outType, soType, ...(isAtBat && rbi !== null ? { rbi } : {}) },
+      patch: {
+        result, direction, outType, soType, contact,
+        hitAngle: point ? point.angle : null,
+        hitDepth: point ? point.depth : null,
+        ...(isAtBat && rbi !== null ? { rbi } : {}),
+      },
     });
     onClose();
   };
@@ -132,25 +148,37 @@ function EditPlaySheet({ game, log, onClose }) {
         ))}
       </div>
 
+      {/* 入力と同じパッドで直す。方向だけ直して打点が古いまま残ると、
+          分布図が直した方向と食い違ってしまう */}
       <div className="section-title">{t('gp.direction')}</div>
-      <div className="grid3">
-        {Object.keys(DIRECTIONS).map((k) => (
-          <button key={k} className={`small ${direction === k ? 'primary' : ''}`} onClick={() => setDirection(direction === k ? null : k)}>
-            {lang === 'ja' ? DIRECTIONS[k] : t(`dir.${k}`)}
-          </button>
-        ))}
-      </div>
-
-      {result === 'out' && (
-        <>
-          <div className="section-title">{t('playsheet.outType')}</div>
-          <div className="grid2">
-            {Object.keys(OUT_TYPES).map((k) => (
-              <button key={k} className={`small ${outType === k ? 'primary' : ''}`} onClick={() => setOutType(k)}>{lang === 'ja' ? outTypeLabel(k, state.settings.edition) : t(`outType.${k}`)}</button>
-            ))}
-          </div>
-        </>
+      {dirOpen ? (
+        <FieldPad
+          value={direction}
+          point={point}
+          gameId={game.id}
+          onChange={(key, pt) => { setDirection(key); setPoint(pt); }}
+          onDone={() => setDirOpen(false)}
+        />
+      ) : (
+        <button type="button" className="dir-summary" onClick={() => setDirOpen(true)}>
+          <span className="dir-label">
+            {direction ? (lang === 'ja' ? DIRECTIONS[direction] : t(`dir.${direction}`)) : t('playsheet.notTapped')}
+            {point && <span className="depth-pill">{t(`depth.${depthBand(point.depth)}`)}</span>}
+          </span>
+          <span className="change">{t('playsheet.change')}</span>
+        </button>
       )}
+
+      <div className="section-title">{t('playsheet.battedBall')}</div>
+      <BattedBallPad
+        trajectory={outType === 'dp' ? null : outType}
+        contact={contact}
+        depth={point ? point.depth : null}
+        onChange={(tr, c) => { setOutType(tr); setContact(c); }}
+        dp={outType === 'dp'}
+        onDp={() => setOutType(outType === 'dp' ? 'ground' : 'dp')}
+        dpDisabled={result !== 'out'}
+      />
       {result === 'so' && (
         <>
           <div className="section-title">{t('playsheet.soType')}</div>
