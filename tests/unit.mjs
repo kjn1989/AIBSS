@@ -1617,13 +1617,33 @@ test('oppPlayerAtBats: 相手ひとりの打球を試合をまたいで集める
   assert.deepEqual([r.dir.pull, r.dir.center, r.dir.oppo], [2, 1, 1]);
   assert.deepEqual([r.kind.fly, r.kind.ground], [1, 1]);
   // SprayChart がそのまま読める形になっている
-  assert.deepEqual(Object.keys(r.atBats[0]).sort(), ['direction', 'id', 'outType', 'result']);
+  assert.deepEqual(Object.keys(r.atBats[0]).sort(),
+    ['contact', 'direction', 'hitAngle', 'hitDepth', 'id', 'outType', 'result']);
   // 右打者なら引っ張りと逆方向が入れ替わる
   const gR = { ...g1, oppBatterHands: { A: 'R' } };
   const rR = oppPlayerAtBats([gR], '上智|佐藤');
   assert.deepEqual([rR.dir.pull, rR.dir.oppo], [1, 1]);
   // 該当なしは null
   assert.equal(oppPlayerAtBats([g1], '上智|居ない'), null);
+});
+
+test('oppPlayerAtBats: 相手の打点と強さも渡す(渡さないと相手だけ団子のままになる)', () => {
+  const g = {
+    id: 'g', opponent: '上智', oppNames: { A: '佐藤' }, oppBatterHands: { A: 'R' },
+    playLogs: [
+      { id: 'a', kind: 'defense', payload: { letter: 'A', direction: 'LF', result: 'double', outType: 'liner', contact: 'hard', hitAngle: -28, hitDepth: 0.92 } },
+      { id: 'b', kind: 'defense', payload: { letter: 'A', direction: 'SS', result: 'out', outType: 'ground', contact: 'weak', hitAngle: -14, hitDepth: 0.33 } },
+      { id: 'c', kind: 'defense', payload: { letter: 'A', direction: 'CF', result: 'out', outType: 'fly' } }, // 強さ未記録
+    ],
+  };
+  const r = oppPlayerAtBats([g], '上智|佐藤');
+  assert.deepEqual([r.atBats[0].hitAngle, r.atBats[0].hitDepth], [-28, 0.92]);
+  assert.equal(r.atBats[0].contact, 'hard');
+  // 実際の落下点として図に置ける(守備位置からの推定ではない)
+  assert.equal(ballOf(r.atBats[0]).exact, true);
+  assert.equal(ballOf(r.atBats[2]).exact, false); // 打点なしは守備位置から
+  // ハードヒット率の分母は「強さを記録した打球」だけ
+  assert.deepEqual([r.hardHit, r.contactRecorded], [1, 2]);
 });
 
 test('oppBatteryStats: 相手捕手の盗塁阻止率と、投手の暴投・牽制を集める', () => {

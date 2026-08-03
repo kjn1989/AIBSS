@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { useStore, useT } from '../state/store.jsx';
 import { oppPlayerAtBats, buildMatchups } from '../lib/matchup.js';
 import SprayChart from './SprayChart.jsx';
-import { fmtAvg } from '../lib/stats.js';
+import { fmtAvg, fmtPct } from '../lib/stats.js';
 
 // ============================================================
 // 相手選手ページ
@@ -79,6 +79,18 @@ export default function OppPlayerView({ oppKey, onClose }) {
         <div className="section-title">{t('oppview.kind')}</div>
         <div className="kvrow"><span>{t('oppview.ground')}</span><b>{data.kind.ground}</b></div>
         <div className="kvrow"><span>{t('oppview.air')}</span><b>{data.kind.fly + data.kind.line}</b></div>
+        {/* 強さの記録がある打球だけを分母にする。0件のときは行ごと出さない */}
+        {data.contactRecorded > 0 && (
+          <div className="kvrow">
+            <span>{t('battedBall.hardHitRate')}</span>
+            <b className={data.hardHit / data.contactRecorded >= 0.4 ? 'hot' : ''}>
+              {fmtPct(data.hardHit / data.contactRecorded)}
+              <span className="dim small" style={{ marginLeft: 6, fontWeight: 400 }}>
+                {data.hardHit}/{data.contactRecorded}
+              </span>
+            </b>
+          </div>
+        )}
 
         {(data.sb || data.cs || data.sacBunt) > 0 && (
           <>
