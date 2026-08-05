@@ -145,45 +145,34 @@ export function contactCandidate(outType, depth) {
 }
 
 // ---- 描画側の幾何(スプレーチャート: viewBox 100x92 / 本塁 (50,90)) ----
+//
+// 入力パッドと同じ作りにする。フェンスを図の外周ではなく内側に置き、
+// 外にスタンドを描く。以前は柵が外周だったので、柵越えの打球を柵の上に
+// 押し込むしかなく、本塁打が「フェンス際の当たり」と同じ場所に見えていた。
+// 縮尺も実際の球場に合わせる(内野が縦の6割を占めていた)。
 export const CHART = { hx: 50, hy: 90, w: 100, h: 92 };
+// フェンスまでの距離(図の単位)。左右のポールが図の幅にちょうど収まり、
+// 中堅の柵の上に20ぶんスタンドが残る大きさにする
+export const CHART_FENCE = 70;
+// 内野の土の縁(深さ0.47)と、スタンドの外側(この深さで切って描く)
+export const CHART_DIRT = DEPTH_BANDS[0].max;
+export const CHART_MAX = 1.18;
 
-// フェンスは二次ベジエ (2,42)-(50,-14)-(98,42)。
-// 角度ごとの距離を先に作っておき、極座標から一発で図上の点に直せるようにする。
-const FENCE_TABLE = (() => {
-  const rows = [];
-  for (let i = 0; i <= 240; i++) {
-    const t = i / 240;
-    const u = 1 - t;
-    const x = u * u * 2 + 2 * u * t * 50 + t * t * 98;
-    const y = u * u * 42 + 2 * u * t * -14 + t * t * 42;
-    const dx = x - CHART.hx;
-    const dy = CHART.hy - y;
-    rows.push({ angle: (Math.atan2(dx, dy) * 180) / Math.PI, r: Math.hypot(dx, dy) });
-  }
-  return rows;
-})();
-
-export function fenceRadius(angle) {
-  const first = FENCE_TABLE[0];
-  const last = FENCE_TABLE[FENCE_TABLE.length - 1];
-  if (angle <= first.angle) return first.r;
-  if (angle >= last.angle) return last.r;
-  for (let i = 1; i < FENCE_TABLE.length; i++) {
-    if (FENCE_TABLE[i].angle >= angle) {
-      const a = FENCE_TABLE[i - 1];
-      const b = FENCE_TABLE[i];
-      const k = (angle - a.angle) / (b.angle - a.angle || 1);
-      return a.r + (b.r - a.r) * k;
-    }
-  }
-  return last.r;
-}
-
-// 極座標 → スプレーチャート上の点
+// 極座標 → スプレーチャート上の点。フェンスは角度によらず同じ距離(円形)。
+// 入力パッドと同じ扱いにしておかないと、押した位置と出る位置がずれる。
 export function chartPoint(angle, depth) {
   const rad = (angle * Math.PI) / 180;
-  const r = depth * fenceRadius(angle);
+  const r = depth * CHART_FENCE;
   return [CHART.hx + r * Math.sin(rad), CHART.hy - r * Math.cos(rad)];
+}
+
+// 深さ d の円弧を、扇形(ファウルライン内)として描くための path。
+// 芝・土・ワーニングゾーンの塗り分けに使う
+export function chartFan(depth) {
+  const [lx, ly] = chartPoint(-45, depth);
+  const [rx, ry] = chartPoint(45, depth);
+  const r = (depth * CHART_FENCE).toFixed(2);
+  return `M${CHART.hx},${CHART.hy} L${lx.toFixed(2)},${ly.toFixed(2)} A${r},${r} 0 0 1 ${rx.toFixed(2)},${ry.toFixed(2)} Z`;
 }
 
 // 打席1件から描画用の極座標を取り出す。
@@ -213,13 +202,13 @@ export function zoneOf(angle, depth) {
   return si + ri * ZONE_SLICES;
 }
 
-// 区画の輪郭(SVG path)。半径がフェンスの形に沿うので、外周が図とぴったり合う
+// 区画の輪郭(SVG path)。chartPoint 経由なので、外周がフェンスとぴったり合う
 export function zonePath(si, ri) {
   const step = 90 / ZONE_SLICES;
   const t0 = -45 + si * step;
   const t1 = t0 + step;
   const f0 = ZONE_RINGS[ri];
-  const f1 = ZONE_RINGS[ri + 1] === Infinity ? 1.06 : ZONE_RINGS[ri + 1];
+  const f1 = ZONE_RINGS[ri + 1] === Infinity ? CHART_MAX : ZONE_RINGS[ri + 1];
   let d = '';
   for (let i = 0; i <= 12; i++) {
     const th = t0 + ((t1 - t0) * i) / 12;
@@ -238,7 +227,7 @@ export function zonePath(si, ri) {
 export function zoneCenter(si, ri) {
   const step = 90 / ZONE_SLICES;
   const th = -45 + si * step + step / 2;
-  const f1 = ZONE_RINGS[ri + 1] === Infinity ? 1.06 : ZONE_RINGS[ri + 1];
+  const f1 = ZONE_RINGS[ri + 1] === Infinity ? CHART_MAX : ZONE_RINGS[ri + 1];
   return chartPoint(th, (ZONE_RINGS[ri] + f1) / 2);
 }
 

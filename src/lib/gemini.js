@@ -159,11 +159,12 @@ export async function interpretCorrection({ apiKey, text, players = [], lineup =
 {"operations":[
  {"type":"reassign","inning":整数,"from":"元の打者(登録名)","to":"実際の打者(登録名)","ordinal":整数またはnull},
  {"type":"substitution","inning":整数,"out":"退く選手","in":"入る選手","position":"投|捕|一|二|三|遊|左|中|右|DH|null","role":"ph|pr|def","afterBatter":相手打者の打順(回の途中で交代した場合その打者の後)またはnull},
- {"type":"result","inning":整数,"batter":"打者(登録名)またはnull","result":"single|double|triple|hr|out|so|bb|hbp|error|sacBunt|sacFly","direction":"P|C|1B|2B|3B|SS|LF|CF|RF|null","outType":"ground|fly|liner|dp|null","rbi":整数またはnull},
+ {"type":"result","inning":整数,"batter":"打者(登録名)またはnull","result":"single|double|triple|hr|out|so|bb|hbp|error|sacBunt|sacFly","direction":"P|C|1B|2B|3B|SS|LF|CF|RF|null","outType":"ground|fly|liner|dp|null","contact":"weak|normal|hard|null","rbi":整数またはnull},
  {"type":"position","player":"選手(登録名)","position":"投|捕|一|二|三|遊|左|中|右|DH"},
  {"type":"defense","inning":整数,"toInning":整数またはnull,"player":"選手(登録名)","position":"投|捕|一|二|三|遊|左|中|右|DH"}
 ],"questions":[{"text":"確認したいこと(日本語)","options":["答えの候補(そのまま修正文として使える一文)"]}]}
 【確認(questions)】文章だけでは決めきれない点があるときは、operations に無理に入れず questions に日本語の質問を入れる。判断がつかない例: 交代なのか守備位置の変更なのか分からない/どの回か書かれていない/同姓の選手が複数いる/守備位置が書かれていない。質問は最大2件、options には答えの候補を「そのまま修正文として使える一文」で入れる(例:「6回から山城は捕手です。」)。決められる場合は questions は空配列にする。
+【打球の強さ(contact)】「痛烈」「鋭い」「芯を食った」=hard、「ボテボテ」「詰まった」「ポテン」「当たり損ね」=weak、「平凡」=normal。強さに触れていない文では必ず null にする(記録済みの強さを消さないため)。outType(軌道)はヒットのときも書いてよい。
 規則: reassign=ある回の打者が実は別選手だった時の付け替え。substitution=交代の記録(role: ph=代打, pr=代走, def=守備交代や投手交代)。result=打席結果の訂正(方向directionは打球方向)。
 position=先発(スタメン)の守備位置そのものの登録ミスの訂正。「◯◯の先発守備位置が△△になっているが正しくは□□」のように回を伴わず、交代ではなく最初から誤って登録されていた場合に使う(positionには訂正後の正しい位置を入れる)。
 defense=その回からの守備位置の申告。「3〜6回はキャッチャーは山城だけです」のように回に幅がある場合は inning=3, toInning=6 のように範囲で出力する(1回だけなら toInning は null)。「7回の守備はショート茂木、サード入交、セカンド宇田川でした」のように、守備位置と選手の組が並ぶ文では、組の数だけ defense を出力する(この例なら茂木=遊、入交=三、宇田川=二 の3件)。選手の入れ替わりではなく守備位置の組み替えなので substitution にはしない。「AがBに代わって」「AからBに交代しました」のように退く選手と入る選手が書かれている場合だけ substitution を使う(この場合は打順の記録がズレていても、書かれたとおり substitution として出力する)。

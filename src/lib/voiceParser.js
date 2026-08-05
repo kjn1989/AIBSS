@@ -128,6 +128,12 @@ const CONTACT_DICT = {
   normal: ['平凡', '平凡な'],
 };
 
+// 「痛烈に修正して」のような、あとからの言い直しでも強さを読めるようにする。
+// 言われていなければ null(未記録)。平凡を勝手に入れないのは入力時と同じ。
+export function parseContact(text) {
+  return topKey(scoreDict(normalize(text || ''), CONTACT_DICT)) || null;
+}
+
 const PITCH_DICT = {
   ball: ['ボール', 'ぼーる'],
   // 「空振り」も1ストライク(単独発話時)。ただし「空振り三振」はRESULT_DICT.soが
