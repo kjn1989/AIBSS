@@ -9,7 +9,7 @@
 // 端末内で完結し、AIキー不要。判別できない場合は理由つきで返す。
 // ============================================================
 
-import { parseUtterance } from './voiceParser.js';
+import { parseUtterance, parseContact } from './voiceParser.js';
 
 // 全角数字→半角
 function toHalf(s) {
@@ -396,6 +396,10 @@ const SHORT_RESULT_MAP = {
   塁打: { result: 'double' },
 };
 
+// バットに当たって前に飛んだ結果か。三振・四球に直すときは軌道と強さを消す
+const BATTED_BALL = new Set(['single', 'double', 'triple', 'hr', 'out', 'error', 'sacBunt', 'sacFly']);
+const isBattedBallResult = (r) => BATTED_BALL.has(r);
+
 export function parseShortResult(phrase) {
   const m = (phrase || '').match(SHORT_RESULT_RE);
   if (!m) return null;
@@ -443,16 +447,22 @@ export function parseResultCorrections(rawText, players = []) {
       if (inning == null) continue;
       const parts = clause.split(/でなく|ではなく/);
       const phrase = parts.length > 1 ? parts.slice(1).join('') : clause;
-      // 打席結果を表す語も短縮表記(中安・三飛…)も無い文は打撃の話ではない
+      // 打席結果を表す語も短縮表記(中安・三飛…)も、打点も強さも無い文は打撃の話ではない
       const short = parseShortResult(phrase);
-      if (!RESULT_WORDS.test(phrase) && !short) continue;
-      const top = (parseUtterance(phrase) || []).find((c) => c.kind === 'play' && c.result);
       const rbi = parseRbi(phrase);
-      // 打点だけの訂正(「7回の中犠飛は打点1に修正」)は、結果に触れず打点だけ直す
+      const contact = parseContact(phrase);
+      if (!RESULT_WORDS.test(phrase) && !short && rbi == null && contact == null) continue;
+      const top = (parseUtterance(phrase) || []).find((c) => c.kind === 'play' && c.result);
+      // 打点や強さだけの訂正(「7回の中犠飛は打点1に」「あの当たりは痛烈に」)は、
+      // 結果に触れず、言われた項目だけを直す。
+      // 言われていない項目は patch に入れない(入れると現在値を消してしまう)
       if (!top && !short) {
-        if (rbi == null) continue;
+        if (rbi == null && contact == null) continue;
         const only = findNameHits(clause, players)[0] || lastBatter;
-        out.push({ inning, batterId: only?.id || null, batterName: only?.name || null, patch: { rbi } });
+        out.push({
+          inning, batterId: only?.id || null, batterName: only?.name || null,
+          patch: { ...(rbi != null ? { rbi } : {}), ...(contact ? { contact } : {}) },
+        });
         continue;
       }
       const hit = findNameHits(clause, players)[0] || lastBatter; // 節に名前が無ければ文の打者を継ぐ
@@ -464,8 +474,16 @@ export function parseResultCorrections(rawText, players = []) {
         patch: {
           result,
           direction: top?.direction || directionFromShort(phrase) || short?.direction || null,
-          outType: result === 'out' ? (top?.outType || short?.outType || 'ground') : null,
           soType: result === 'so' ? (top?.soType || 'swinging') : null,
+          // 打球でない結果(三振・四球)に変えるなら、軌道と強さは消す。
+          // 打球のままなら、言われた分だけ直して、言われていない項目は残す
+          ...(isBattedBallResult(result)
+            ? {
+              ...(result === 'out' || top?.outType || short?.outType
+                ? { outType: top?.outType || short?.outType || 'ground' } : {}),
+              ...(contact ? { contact } : {}),
+            }
+            : { outType: null, contact: null, hitAngle: null, hitDepth: null }),
           ...(rbi != null ? { rbi } : {}),
         },
       });

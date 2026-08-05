@@ -6,7 +6,7 @@ import { proposeMoves, judgeAdvance, batterDestOptions } from '../src/lib/plays.
 import { gameEndCheck, initialPresetIdFor, describeRules } from '../src/lib/rules.js';
 import { aggregateBatting, aggregatePitching, battingMetrics, pitchingMetrics, titleLeaders, DETAIL_METRICS, detailRanking, defaultInningBasis } from '../src/lib/stats.js';
 import { translate } from '../src/lib/i18n.js';
-import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, parseDirectionOnly } from '../src/lib/voiceParser.js';
+import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, parseDirectionOnly, parseContact } from '../src/lib/voiceParser.js';
 import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parseInningRange, parseSlotBatters, parseAtBatDeletions, parseShortResult, isExplicitSubText, inGamePlayerIds, preferInGamePlayers } from '../src/lib/correctionParser.js';
 import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarters, findPositionIssues } from '../src/lib/lineupBox.js';
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
@@ -1850,13 +1850,20 @@ test('ballOf: 角度があれば実座標、無ければ守備位置から補う
   assert.equal(ballOf({ direction: null }), null); // 方向も無ければ図に置けない
 });
 
-test('chartPoint: 深さ1はフェンス上、深さ0は本塁', () => {
+test('chartPoint: 深さ1はフェンス上、深さ0は本塁、柵越えは図の外へ出る', () => {
+  const near = (a, b, eps = 1) => Math.abs(a - b) <= eps;
   const home = chartPoint(0, 0);
   assert.deepEqual([Math.round(home[0]), Math.round(home[1])], [50, 90]);
   const cf = chartPoint(0, 1);
-  assert.deepEqual([Math.round(cf[0]), Math.round(cf[1])], [50, 14]); // 中堅のフェンス
-  const lineL = chartPoint(-45, 1);
-  assert.deepEqual([Math.round(lineL[0]), Math.round(lineL[1])], [2, 42]); // 三塁線のポール
+  assert.ok(near(cf[0], 50) && near(cf[1], 20), `中堅のフェンス ${cf}`);
+  // ポールは図の幅にちょうど収まる(はみ出して切れない)
+  const poleL = chartPoint(-45, 1);
+  const poleR = chartPoint(45, 1);
+  assert.ok(poleL[0] >= 0 && poleR[0] <= 100, `ポール ${poleL} ${poleR}`);
+  // 柵越えはフェンスより外側(スタンド)に描かれる。柵の上に潰さない
+  const hr = chartPoint(0, 1.1);
+  assert.ok(hr[1] < cf[1], `柵越えは柵より外 ${hr[1]} < ${cf[1]}`);
+  assert.ok(hr[1] > 0, `図の中には収まる ${hr[1]}`);
 });
 
 test('zoneCounts: 角度と深さで区画に振り分け、古い記録も同じ図に入る', () => {
@@ -1916,4 +1923,45 @@ test('parseUtterance: 「痛烈なライナー」は強い打球として拾う'
 });
 test('parseUtterance: 強さを言わなければ未記録(平凡を勝手に入れない)', () => {
   assert.equal(parseUtterance('ライト前ヒット')[0].contact, null);
+});
+
+// ---- correctionParser: 打球の強さもあとから直せる ----
+test('parseContact: 言い直しからも強さを読む(言われなければ未記録)', () => {
+  assert.equal(parseContact('痛烈な当たりでした'), 'hard');
+  assert.equal(parseContact('ボテボテのゴロ'), 'weak');
+  assert.equal(parseContact('レフト前ヒット'), null);
+});
+
+test('parseResultCorrections: 強さだけの訂正は、結果に触れず強さだけ直す', () => {
+  const players = [{ id: 'p1', name: '中島' }];
+  const r = parseResultCorrections('中島の7回の当たりは痛烈に修正してください', players);
+  assert.equal(r.length, 1);
+  assert.deepEqual(r[0].patch, { contact: 'hard' });   // 結果も方向も触らない
+  assert.equal(r[0].inning, 7);
+  assert.equal(r[0].batterId, 'p1');
+});
+
+test('parseResultCorrections: 結果と強さを一度に直せる', () => {
+  const players = [{ id: 'p1', name: '山田' }];
+  const r = parseResultCorrections('山田の3回はボテボテのゴロに修正', players);
+  assert.equal(r[0].patch.result, 'out');
+  assert.equal(r[0].patch.outType, 'ground');
+  assert.equal(r[0].patch.contact, 'weak');
+});
+
+test('parseResultCorrections: 強さを言っていない訂正では、強さの項目を送らない', () => {
+  const players = [{ id: 'p1', name: '山田' }];
+  const r = parseResultCorrections('山田の3回はセンター前ヒットに修正', players);
+  // patch に contact が入ると、記録済みの強さを消してしまう
+  assert.equal('contact' in r[0].patch, false);
+});
+
+test('parseResultCorrections: 三振に直すときは軌道と打点座標を消す(打球ではない)', () => {
+  const players = [{ id: 'p1', name: '山田' }];
+  const r = parseResultCorrections('山田の3回は三振に修正', players);
+  assert.equal(r[0].patch.result, 'so');
+  assert.deepEqual(
+    [r[0].patch.outType, r[0].patch.contact, r[0].patch.hitAngle, r[0].patch.hitDepth],
+    [null, null, null, null],
+  );
 });

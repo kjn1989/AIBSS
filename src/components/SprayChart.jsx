@@ -1,7 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { RESULTS } from '../lib/model.js';
 import { useT } from '../state/store.jsx';
-import { ballOf, chartPoint, zonePath, zoneCenter, zoneCounts, ZONE_SLICES, ZONE_RINGS } from '../lib/battedBall.js';
+import {
+  ballOf, chartPoint, chartFan, zonePath, zoneCenter, zoneCounts,
+  ZONE_SLICES, ZONE_RINGS, CHART_MAX, DEPTH_BANDS,
+} from '../lib/battedBall.js';
 
 // ============================================================
 // 打球分布(スプレーチャート)
@@ -145,13 +148,24 @@ export default function SprayChart({ atBats, title, bats }) {
             )}
           </div>
 
+          {/* 図は入力パッドと同じ作り。フェンスを内側に置き、外にスタンドを描く。
+              柵が外周だと柵越えの打球を柵の上に押し込むしかなく、本塁打が
+              「フェンス際の当たり」と同じ場所に見えてしまっていた */}
           <svg viewBox="0 0 100 92" className="spray-chart">
+            <rect x="0" y="0" width="100" height="92" fill="#1c2129" />
             {/* 芝と土は彩度を落とす。画面でいちばん明るいものはデータであるべき */}
-            <path d="M50,90 L2,42 Q50,-14 98,42 Z" fill="#1f3a2a" />
-            <path d="M50,90 L20,60 Q50,28 80,60 Z" fill="#3b3025" />
-            <path d="M50,84 L26,60 L50,36 L74,60 Z" fill="none" stroke="rgba(242,237,228,.42)" strokeWidth="1.4" />
-            <line x1="50" y1="90" x2="2" y2="42" stroke="rgba(242,237,228,.42)" strokeWidth="1" />
-            <line x1="50" y1="90" x2="98" y2="42" stroke="rgba(242,237,228,.42)" strokeWidth="1" />
+            <path d={chartFan(1)} fill="#3a3026" />
+            <path d={chartFan(0.955)} fill="#1f3a2a" />
+            <path d={chartFan(DEPTH_BANDS[0].max)} fill="#3b3025" />
+            {/* 柵。これより外はスタンド = 柵越え */}
+            <path d={chartFan(1)} fill="none" stroke="rgba(255,255,255,.7)" strokeWidth="1.2" />
+            {/* 内野のベースパス。二塁は深さ0.39(実際の本塁→二塁 39m / フェンス 100m) */}
+            <path
+              d={`M${chartPoint(0, 0.02).join(',')} L${chartPoint(-45, 0.276).join(',')} L${chartPoint(0, 0.39).join(',')} L${chartPoint(45, 0.276).join(',')} Z`}
+              fill="none" stroke="rgba(242,237,228,.42)" strokeWidth="1.2"
+            />
+            <line x1="50" y1="90" x2={chartPoint(-45, 1).at(0)} y2={chartPoint(-45, 1).at(1)} stroke="rgba(242,237,228,.42)" strokeWidth="1" />
+            <line x1="50" y1="90" x2={chartPoint(45, 1).at(0)} y2={chartPoint(45, 1).at(1)} stroke="rgba(242,237,228,.42)" strokeWidth="1" />
 
             {view === 'zone'
               ? counts.map((c, idx) => {
@@ -175,7 +189,7 @@ export default function SprayChart({ atBats, title, bats }) {
               })
               : rows.map((ab) => {
                 const b = ballOf(ab);
-                const [px, py] = chartPoint(b.angle, Math.min(b.depth, 1.04));
+                const [px, py] = chartPoint(b.angle, Math.min(b.depth, CHART_MAX));
                 const [jx, jy] = b.exact ? [0, 0] : jitter(ab.id);
                 const isHit = !!RESULTS[ab.result]?.hit;
                 return (

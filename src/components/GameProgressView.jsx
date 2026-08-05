@@ -4,6 +4,9 @@ import { RESULTS, DIRECTIONS, SO_TYPES, resultCategory, multiOutLabel, outTypeLa
 import FieldPad from './FieldPad.jsx';
 import BattedBallPad from './BattedBallPad.jsx';
 import { depthBand } from '../lib/battedBall.js';
+
+// バットに当たって前に飛んだ結果か。三振・四球に直すときは軌道と強さを消す
+const BATTED_BALL_RESULTS = new Set(['single', 'double', 'triple', 'hr', 'out', 'error', 'sacBunt', 'sacFly']);
 import { playLabel } from '../lib/voiceParser.js';
 import { computeBoxScore } from '../lib/boxscore.js';
 import { parseBatterCorrection, findTargetAtBat, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parseSlotBatters, parseAtBatDeletions, isExplicitSubText, inGamePlayerIds, preferInGamePlayers } from '../lib/correctionParser.js';
@@ -330,10 +333,20 @@ function NLCorrectionCard({ game }) {
         // 退く選手が特定できなくても、守備位置(投手等)があれば受け付ける(呼び出し側で解決)
         if (inId && (outId || clean(op.position))) subs.push({ inning, outId, outName: op.out || null, inId, inName: op.in, position: clean(op.position), subKind: op.role || 'def', afterOppOrder: num(op.afterBatter) });
       } else if (op.type === 'result' && inning && op.result) {
+        // 打球でない結果(三振・四球)に直すなら軌道と強さは消す。
+        // 打球のままなら、言われた項目だけを送る(送らない項目は現在値が残る)
+        const batted = BATTED_BALL_RESULTS.has(op.result);
+        const traj = clean(op.outType);
+        const cont = clean(op.contact);
         resultCorrs.push({ inning, batterId: idByName(op.batter), patch: {
           result: op.result, direction: clean(op.direction),
-          outType: op.result === 'out' ? (clean(op.outType) || 'ground') : null,
           soType: op.result === 'so' ? 'swinging' : null,
+          ...(batted
+            ? {
+              ...(op.result === 'out' || traj ? { outType: traj || 'ground' } : {}),
+              ...(cont ? { contact: cont } : {}),
+            }
+            : { outType: null, contact: null, hitAngle: null, hitDepth: null }),
           ...(num(op.rbi) != null ? { rbi: num(op.rbi) } : {}),
         } });
       }
