@@ -627,8 +627,9 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 }
 .field-pad .bf-ring.wall { border: 2px solid rgba(255, 255, 255, .75); border-style: solid; }
 /* チップは小さく半透明に。空いている芝のほうが「押せる場所」に見えるようにする */
-.field-pad button.field-pos {
+.field-pad .field-pos {
   position: absolute;
+  display: flex; align-items: center; justify-content: center;
   transform: translate(-50%, -50%);
   min-height: 26px;
   min-width: 0;
@@ -641,7 +642,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
   border-radius: 999px;
   box-shadow: none;
 }
-.field-pad button.field-pos.sel {
+.field-pad .field-pos.sel {
   background: var(--accent-2);
   color: #fff;
   border-color: var(--accent);
@@ -1716,3 +1717,45 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 @media (prefers-reduced-motion: reduce) {
   .bf-mark.drop, .pad-coach .ripple { animation: none; }
 }
+
+
+/* ---- ルーペ ----
+   指がフィールドに重なると、自分がどこを指しているのか見えない。
+   押している間だけ、指のいない側の角に拡大して出す。
+   指の近くに出すと結局手で隠れるので、あえて追いかけさせない。 */
+.pad-loupe {
+  position: absolute; top: 8px; width: 116px; height: 116px;
+  border-radius: 50%; overflow: hidden; z-index: 4; pointer-events: none;
+  border: 2px solid rgba(255, 255, 255, .9);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .55), inset 0 0 0 1px rgba(0, 0, 0, .35);
+  background: #1b2027;
+  animation: loupeIn .14s ease-out;
+}
+.pad-loupe.left { left: 8px; }
+.pad-loupe.right { right: 8px; }
+@keyframes loupeIn { from { opacity: 0; transform: scale(.9); } to { opacity: 1; transform: scale(1); } }
+/* 拡大したフィールドの絵。押した点がレンズの中心に来るよう位置をずらす */
+.pad-loupe-scene { position: absolute; border: none; border-radius: 0; }
+/* レンズの中のチップは控えめに。拡大するとチップが画面を埋めてしまい、
+   肝心の「どの深さの帯にいるか」が見えなくなる。名前は下のラベルに出る */
+.pad-loupe .field-pos {
+  min-height: 14px; padding: 1px 4px; font-size: 8px; font-weight: 700;
+  opacity: .5; background: rgba(16, 28, 22, .55); border-color: rgba(255, 255, 255, .3);
+  box-shadow: none;
+}
+.pad-loupe .field-pos.sel { background: rgba(16, 28, 22, .55); color: #eaf2fb; border-color: rgba(255, 255, 255, .3); }
+/* レンズの中心 = いま指している点 */
+.pad-loupe-cross {
+  position: absolute; z-index: 2; left: 50%; top: 50%; width: 15px; height: 15px;
+  transform: translate(-50%, -50%); border-radius: 50%;
+  background: #fff; border: 3px solid var(--accent-2);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, .35), 0 2px 8px rgba(0, 0, 0, .5);
+}
+/* 読み上げもレンズの中に置く。下の行は手で隠れていることが多い */
+.pad-loupe-label {
+  position: absolute; z-index: 2; left: 0; right: 0; bottom: 0;
+  padding: 4px 6px 6px; text-align: center;
+  font-size: 11.5px; font-weight: 800; color: #fff;
+  background: linear-gradient(180deg, rgba(10, 14, 18, 0), rgba(10, 14, 18, .85) 45%);
+}
+@media (prefers-reduced-motion: reduce) { .pad-loupe { animation: none; } }
