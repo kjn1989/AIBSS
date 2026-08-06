@@ -198,6 +198,11 @@ export const MESSAGES = {
     'playsheet.unearnedNo': '自責点として記録',
     'playsheet.collision': '⚠️ 複数の走者が同じ塁に到達しています。行き先を修正してください。',
     'playsheet.dpNoOut': '⚠️ ダブルプレーには走者のアウトが必要です。走者の行き先を「アウト」にしてください。',
+    'playsheet.sacTwoOuts': '⚠️ 2アウトでは犠打・犠飛は記録されません(規則9.08)。「凡打(アウト)」で記録してください。',
+    'playsheet.sacNoRunner': '⚠️ 走者が居ないので犠打・犠飛になりません。「凡打(アウト)」で記録してください。',
+    'playsheet.sacFlyNoScore': '⚠️ 犠飛は走者が生還してはじめて成立します。走者の行き先を「生還」にするか、「凡打(アウト)」で記録してください。',
+    'playsheet.sacBuntNoAdvance': '⚠️ 犠打は走者が進んではじめて成立します。走者の行き先を進塁にするか、「凡打(アウト)」で記録してください。',
+    'playsheet.dropThirdIllegal': '⚠️ 2アウト未満で一塁に走者が居るときは振り逃げできません(規則5.05)。打者の行き先を「アウト」にしてください。',
     'playsheet.confirmQ': '{summary} でよろしいですか？',
     'playsheet.runsSuffix': '・{n}点',
 
@@ -1290,6 +1295,11 @@ export const MESSAGES = {
     'playsheet.unearnedNo': 'Record as earned',
     'playsheet.collision': '⚠️ Multiple runners are heading to the same base. Please fix their destinations.',
     'playsheet.dpNoOut': '⚠️ A double play needs a runner out. Set a runner’s destination to “Out”.',
+    'playsheet.sacTwoOuts': '⚠️ Sacrifices are not scored with two out (Rule 9.08). Record it as an out instead.',
+    'playsheet.sacNoRunner': '⚠️ With no runners on, this is not a sacrifice. Record it as an out instead.',
+    'playsheet.sacFlyNoScore': '⚠️ A sacrifice fly requires a runner to score. Set a runner to score, or record it as an out.',
+    'playsheet.sacBuntNoAdvance': '⚠️ A sacrifice bunt requires a runner to advance. Advance a runner, or record it as an out.',
+    'playsheet.dropThirdIllegal': '⚠️ No dropped third strike with a runner on first and fewer than two out (Rule 5.05). Set the batter to “Out”.',
     'playsheet.confirmQ': 'Confirm: {summary}?',
     'playsheet.runsSuffix': ' · {n} run(s)',
 
