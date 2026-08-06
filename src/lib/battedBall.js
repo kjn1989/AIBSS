@@ -243,3 +243,90 @@ export function zoneCounts(atBats = []) {
   }
   return { counts, placed };
 }
+
+// ---- 入力パッドに重ねる目印の幾何(viewBox 1000 × 920) ----
+//
+// 押した点を拡大して見せる(ルーペ)のはやめた。芝には拡大するほどの細部が
+// 無く、レンズは図の1/3を覆うだけで情報が増えなかった。
+// 代わりに、指で隠れる半径(およそ25px)の外側に目印を置く。層は2つ:
+//
+//   粗い層 … いまいる深さの帯と方向のくさびが光る。何が記録されるかが
+//            図の広い面積で分かるので、遠目でも指が乗っていても読める
+//   精密な層 … 打点を中心にした同心円。中心が指で隠れていても、輪の対称性
+//              から目が中心を復元する(人の視覚がとくに得意な処理)
+//
+// 帯は「定位置」までしか言えないので、いまの正確な深さを弧1本で足す。
+// この弧はそのまま左の深さ目盛りへ届く。
+//
+// viewBox の縦横比は PAD_ASPECT と一致させること。ずれると円が楕円になる。
+export const PAD_VB = { w: 1000, h: 1000 * PAD_ASPECT };
+export const PAD_MAX = 1.18;          // スタンドまで描く深さ
+export const PAD_LABEL_DEPTH = 1.10;  // 方向名を置く深さ(柵の外)
+
+const padHome = { x: PAD_VB.w * HOME_X, y: PAD_VB.w * HOME_Y };
+export const padRadius = (depth) => depth * PAD_FENCE * PAD_VB.w;
+export function padPoint(angle, depth) {
+  const rad = (angle * Math.PI) / 180;
+  const r = padRadius(depth);
+  return [padHome.x + r * Math.sin(rad), padHome.y - r * Math.cos(rad)];
+}
+
+const f1 = (n) => n.toFixed(1);
+
+// 深さ depth の円弧(角度 a1 → a2)
+export function padArc(a1, a2, depth) {
+  const [x1, y1] = padPoint(a1, depth);
+  const [x2, y2] = padPoint(a2, depth);
+  const r = f1(padRadius(depth));
+  return `M${f1(x1)},${f1(y1)} A${r},${r} 0 0 1 ${f1(x2)},${f1(y2)}`;
+}
+
+// 帯(内外の深さ) × 角度 のセクター。帯・くさび・その重なりを同じ式で描く
+export function padSector(a1, a2, dIn, dOut) {
+  const [ox1, oy1] = padPoint(a1, dOut);
+  const [ox2, oy2] = padPoint(a2, dOut);
+  const [ix2, iy2] = padPoint(a2, dIn);
+  const [ix1, iy1] = padPoint(a1, dIn);
+  const rO = f1(padRadius(dOut));
+  const rI = padRadius(dIn);
+  const back = rI > 0.5
+    ? `A${f1(rI)},${f1(rI)} 0 0 0 ${f1(ix1)},${f1(iy1)}`
+    : `L${f1(ix1)},${f1(iy1)}`;
+  return `M${f1(ox1)},${f1(oy1)} A${rO},${rO} 0 0 1 ${f1(ox2)},${f1(oy2)} `
+    + `L${f1(ix2)},${f1(iy2)} ${back} Z`;
+}
+
+// 方向のくさび。スプレーチャートの区画(ZONE_SLICES)と同じ5分割にして、
+// 入力のときに光る範囲と、あとから見る集計の粒度を揃える
+export function padWedge(angle) {
+  const step = 90 / ZONE_SLICES;
+  const i = Math.max(0, Math.min(ZONE_SLICES - 1, Math.floor((angle + 45) / step)));
+  return { i, a1: -45 + i * step, a2: -45 + (i + 1) * step };
+}
+
+// いま光らせる深さの帯の内外。柵越えは無限なので図の外周で止める
+export function padBandRange(depth) {
+  const i = DEPTH_BANDS.findIndex((b) => depth < b.max);
+  const k = i < 0 ? DEPTH_BANDS.length - 1 : i;
+  const max = DEPTH_BANDS[k].max;
+  return {
+    key: DEPTH_BANDS[k].key,
+    dIn: k === 0 ? 0 : DEPTH_BANDS[k - 1].max,
+    dOut: Math.min(max === Infinity ? PAD_MAX : max, PAD_MAX),
+  };
+}
+
+// 方向名を置く位置(パッド内の割合)。打点の真上(打球が飛んでいく先)の
+// スタンドに置く。くさびの中心ではなく実際の角度に置くのは、名前が最寄りの
+// チップ(9分割)で決まるのに対し、くさびは5分割なので、両者がずれると
+// 「左翼」の札が三塁寄りの角に出てしまうため。
+//
+// 一塁・三塁の方向はそのままだと図の外に出て、枠に切られて字が読めない。
+// 枠に収まるところまで引き戻す。
+export function padLabelPoint(angle, margin = 0.085) {
+  const p = ballToPadPoint(angle, PAD_LABEL_DEPTH);
+  return {
+    fx: Math.max(margin, Math.min(1 - margin, p.fx)),
+    fy: Math.max(0.045, Math.min(0.955, p.fy)),
+  };
+}

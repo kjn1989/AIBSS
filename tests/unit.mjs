@@ -21,7 +21,7 @@ import { yearOfDate, yearOfGame, yearsInGames, tenureByPlayer, playedInYear, isA
 
 import { rebuildBatters, findDuplicateAtBats, findOrderBreaks, canRebuildOrders } from '../src/lib/battersRebuild.js';
 import { ownOffenseStats, ownBatteryStats } from '../src/lib/ownScout.js';
-import { padPointToBall, ballToPadPoint, nearestDirection, depthBand, contactCandidate, ballOf, chartPoint, zoneCounts, zoneOf, POS_BALL } from '../src/lib/battedBall.js';
+import { padPointToBall, ballToPadPoint, nearestDirection, depthBand, contactCandidate, ballOf, chartPoint, zoneCounts, zoneOf, POS_BALL, PAD_VB, PAD_ASPECT, padPoint, padWedge, padBandRange, padLabelPoint, padSector, padArc } from '../src/lib/battedBall.js';
 
 test('parseDirectionOnly: 方向のみの発話は方向、結果語を含めばnull(言い直し扱い)', () => {
   assert.equal(parseDirectionOnly('ライト'), 'RF');
@@ -1864,6 +1864,67 @@ test('chartPoint: 深さ1はフェンス上、深さ0は本塁、柵越えは図
   const hr = chartPoint(0, 1.1);
   assert.ok(hr[1] < cf[1], `柵越えは柵より外 ${hr[1]} < ${cf[1]}`);
   assert.ok(hr[1] > 0, `図の中には収まる ${hr[1]}`);
+});
+
+// ---- 入力パッドに重ねる目印(帯・くさび・波紋) ----
+test('padPoint: パッドの割合座標と同じ場所を指す(viewBox は真円が保てる比率)', () => {
+  // 比率がずれると同心円が楕円になる
+  assert.equal(PAD_VB.h / PAD_VB.w, PAD_ASPECT);
+  for (const [angle, depth] of [[0, 1], [-25.2, 0.808], [39.2, 0.347], [0, 0]]) {
+    const f = ballToPadPoint(angle, depth);
+    const [x, y] = padPoint(angle, depth);
+    assert.ok(Math.abs(x - f.fx * PAD_VB.w) < 0.01 && Math.abs(y - f.fy * PAD_VB.h) < 0.01,
+      `${angle}/${depth}: ${x},${y} vs ${f.fx * PAD_VB.w},${f.fy * PAD_VB.h}`);
+  }
+});
+
+test('padWedge: 方向のくさびはスプレーチャートの区画と同じ5分割', () => {
+  assert.deepEqual(padWedge(0), { i: 2, a1: -9, a2: 9 });
+  assert.deepEqual(padWedge(-39.2), { i: 0, a1: -45, a2: -27 });
+  assert.deepEqual(padWedge(39.2), { i: 4, a1: 27, a2: 45 });
+  // 端をはみ出しても最後のくさびに丸める(ファウルぎりぎりで落ちない)
+  assert.equal(padWedge(60).i, 4);
+  assert.equal(padWedge(-60).i, 0);
+});
+
+test('padBandRange: 光らせる帯は深さの帯と一致し、柵越えは図の外周で止める', () => {
+  assert.deepEqual(padBandRange(0.3), { key: 'infield', dIn: 0, dOut: 0.47 });
+  assert.deepEqual(padBandRange(0.79), { key: 'normal', dIn: 0.65, dOut: 0.86 });
+  const over = padBandRange(1.4);
+  assert.equal(over.key, 'over');
+  assert.equal(over.dIn, 1.0);
+  assert.ok(Number.isFinite(over.dOut) && over.dOut <= 1.18, `外周で止める ${over.dOut}`);
+});
+
+test('padLabelPoint: 一塁・三塁の方向名も枠の中に収まる(切れて読めなくならない)', () => {
+  // 一塁・三塁の方向は外を向くので、素直に置くとパッドの外に出る
+  for (let angle = -45; angle <= 45; angle += 1.5) {
+    const p = padLabelPoint(angle);
+    assert.ok(p.fx >= 0.085 && p.fx <= 0.915, `${angle}: fx=${p.fx}`);
+    assert.ok(p.fy >= 0.045 && p.fy <= 0.955, `${angle}: fy=${p.fy}`);
+  }
+  // 引き戻しが要るのは外側だけ。中堅・左右翼は素のままの位置に置ける
+  assert.ok(Math.abs(padLabelPoint(0).fx - 0.5) < 1e-9);
+  for (const angle of [-25.2, 25.2]) {
+    assert.ok(Math.abs(padLabelPoint(angle).fx - ballToPadPoint(angle, 1.1).fx) < 1e-9, `${angle} は素のまま`);
+  }
+  // 左右は対称
+  assert.ok(Math.abs(padLabelPoint(-39.2).fx + padLabelPoint(39.2).fx - 1) < 1e-9);
+  // くさびの中心ではなく実際の角度に置くので、角度が浅いほど中央寄りになる。
+  // (くさび中心だと同じくさびの中はすべて同じ場所になってしまう)
+  assert.ok(padLabelPoint(-20).fx > padLabelPoint(-40).fx, '角度が浅いほど中央寄り');
+  assert.ok(padLabelPoint(-30).fx !== padLabelPoint(-20).fx, '同じくさびの中でも角度で動く');
+});
+
+test('padSector / padArc: 有効な path を返し、内側が本塁のときは円弧を戻さない', () => {
+  const band = padSector(-45, 45, 0.65, 0.86);
+  assert.match(band, /^M[\d.]+,[\d.]+ A/);
+  assert.equal((band.match(/A/g) || []).length, 2, '内外2本の円弧');
+  // 内側が本塁(半径0)のくさびは、戻りが直線1本になる
+  const wedge = padSector(-9, 9, 0, 1);
+  assert.equal((wedge.match(/A/g) || []).length, 1, '外周だけ円弧');
+  assert.match(padArc(-45, 45, 0.79), /^M[\d.]+,[\d.]+ A[\d.]+,[\d.]+ 0 0 1 [\d.]+,[\d.]+$/);
+  assert.ok(!/NaN/.test(band + wedge + padArc(-45, 45, 1.18)));
 });
 
 test('zoneCounts: 角度と深さで区画に振り分け、古い記録も同じ図に入る', () => {
