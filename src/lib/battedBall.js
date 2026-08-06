@@ -271,7 +271,9 @@ export const PAD_MAX = 1.18;          // スタンドまで描く深さ
 // ファウルグラウンドを描く角度。パッドの下の隅で ±89度まで届くので、
 // そこまで塗っておけば「押せる場所」と絵が食い違わない
 export const PAD_FOUL_MAX = 89;
-export const PAD_LABEL_DEPTH = 1.10;  // 方向名を置く深さ(柵の外)
+// フェンスの頂点。これより上はどの横位置を見ても芝が無く、全部スタンドになる。
+// 方向名をここより上に置けば、札がどれだけ長くても図に被らない
+export const PAD_STANDS_TOP = 1.01 - PAD_FENCE / PAD_ASPECT;
 
 const padHome = { x: PAD_VB.w * HOME_X, y: PAD_VB.w * HOME_Y };
 export const padRadius = (depth) => depth * PAD_FENCE * PAD_VB.w;
@@ -326,20 +328,11 @@ export function padBandRange(depth) {
   };
 }
 
-// 方向名を置く位置(パッド内の割合)。打点の真上(打球が飛んでいく先)の
-// スタンドに置く。くさびの中心ではなく実際の角度に置くのは、名前が最寄りの
-// チップ(9分割)で決まるのに対し、くさびは5分割なので、両者がずれると
-// 「左翼」の札が三塁寄りの角に出てしまうため。
+// 方向名は図の中に置かない。センター奥のスタンド(上端中央)に固定する。
+// 打点の角度に合わせて動かしていた頃は、一塁・三塁の方向で札が枠の外へ出て
+// 字が切れた。座標を引き戻す、端に寄せる、と二度直したが、いずれも
+// 「札の幅」と「置ける余白」の綱引きが残っていた。
 //
-// 一塁・三塁の方向はそのままだと図の外に出て、枠に切られて字が読めない。
-// 中央揃えのまま座標を引き戻すやり方だと、札の幅ぶんの余白を知っている
-// 必要があり、「ファウル 三塁」のように字数が増えた瞬間にまた切れる。
-// そこで端に近いときは中央揃えをやめて枠の端に寄せる。
-// こうすると札がどれだけ長くても、はみ出しようがない。
-export function padLabelPoint(angle, margin = 0.17) {
-  const p = ballToPadPoint(angle, PAD_LABEL_DEPTH);
-  const fy = Math.max(0.045, Math.min(0.955, p.fy));
-  if (p.fx < margin) return { anchor: 'edge-l', fx: 0, fy };
-  if (p.fx > 1 - margin) return { anchor: 'edge-r', fx: 1, fy };
-  return { anchor: 'center', fx: p.fx, fy };
-}
+// 位置で方向を示す役目はもともと「くさび」が担っている。札は名前を言う役に
+// 徹すればよく、そうすると置き場所は動かす必要がない。動かさないなら
+// はみ出しようがないので、この計算自体が不要になる(配置は CSS に任せる)。

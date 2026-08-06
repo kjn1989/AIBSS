@@ -4,7 +4,7 @@ import { useT } from '../state/store.jsx';
 import {
   padPointToBall, ballToPadPoint, nearestDirection, depthBand, isFoul,
   POS_PAD, PAD_FENCE, DEPTH_BANDS,
-  PAD_VB, PAD_MAX, PAD_FOUL_MAX, padArc, padSector, padWedge, padBandRange, padLabelPoint,
+  PAD_VB, PAD_MAX, PAD_FOUL_MAX, padArc, padSector, padWedge, padBandRange,
 } from '../lib/battedBall.js';
 
 // ============================================================
@@ -119,7 +119,6 @@ export default function FieldPad({
   const foul = marker ? isFoul(point.angle) : false;
   const wedge = marker && !foul ? padWedge(point.angle) : null;
   const range = marker ? padBandRange(point.depth) : null;
-  const label = marker && value ? padLabelPoint(point.angle) : null;
   const spot = marker ? { left: `${marker.fx * 100}%`, top: `${marker.fy * 100}%` } : null;
   const depthArc = marker ? padArc(-45, 45, Math.min(point.depth, PAD_MAX)) : null;
 
@@ -230,15 +229,14 @@ export default function FieldPad({
             </>
           )}
 
-          {/* 方向名はくさびの先。手からもっとも遠い場所に置く読み札。
-              一塁・三塁のくさびは外を向くので、枠に収まるまで引き戻している */}
-          {label && (
-            <b
-              className={`bf-dirlabel ${label.anchor}${foul ? ' foul' : ''}`}
-              style={label.anchor === 'center'
-                ? { left: `${label.fx * 100}%`, top: `${label.fy * 100}%` }
-                : { top: `${label.fy * 100}%` }}
-            >
+          {/* 方向名はセンター奥のスタンドに固定する。どこを押しても同じ場所。
+              打点に合わせて動かしていた頃は、一塁・三塁で札が枠の外へ出て
+              字が切れた。位置で方向を示す役目はくさびが担っているので、
+              札は名前を言う役に徹してよく、動かす必要がない。
+              フェンスの頂点(PAD_STANDS_TOP)より上はどの横位置も芝が無いので、
+              札がどれだけ長くても図には被らない */}
+          {marker && value && (
+            <b className={`bf-dirlabel${foul ? ' foul' : ''}`}>
               {foul ? `${t('dir.foul')} ${t(`dir.${value}`)}` : t(`dir.${value}`)}
             </b>
           )}
