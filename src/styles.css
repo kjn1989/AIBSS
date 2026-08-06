@@ -1722,11 +1722,15 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 
 /* ---- ルーペ ----
    指がフィールドに重なると、自分がどこを指しているのか見えない。
-   押している間だけ、指のいない側の角に拡大して出す。
-   指の近くに出すと結局手で隠れるので、あえて追いかけさせない。 */
+   押している間だけ、指の真上に拡大して出す。置き場所に例外は作らない。
+   body 直下に描くので画面座標(position: fixed)。z-index 900 は
+   シート(550)や確認ダイアログ(600)より上 — 常に手前に浮く一時的な表示。 */
+.pad-loupe-layer { position: fixed; inset: 0; z-index: 900; pointer-events: none; }
+/* レンズと打点を結ぶ茎。線があるだけで「あの丸はこの点」だと一度で伝わる */
+.pad-loupe-stem { position: fixed; inset: 0; width: 100%; height: 100%; }
 .pad-loupe {
-  position: absolute; width: 116px; height: 116px;
-  border-radius: 50%; overflow: hidden; z-index: 4; pointer-events: none;
+  position: fixed; width: 116px; height: 116px;
+  border-radius: 50%; overflow: hidden; pointer-events: none;
   border: 2px solid rgba(255, 255, 255, .9);
   box-shadow: 0 6px 20px rgba(0, 0, 0, .55), inset 0 0 0 1px rgba(0, 0, 0, .35);
   background: #1b2027;
@@ -1735,10 +1739,15 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 @keyframes loupeIn { from { opacity: 0; transform: scale(.9); } to { opacity: 1; transform: scale(1); } }
 /* 拡大したフィールドの絵。押した点がレンズの中心に来るよう位置をずらす */
 .pad-loupe-scene { position: absolute; border: none; border-radius: 0; }
-/* レンズの中のチップは控えめに。拡大するとチップが画面を埋めてしまい、
-   肝心の「どの深さの帯にいるか」が見えなくなる。名前は下のラベルに出る */
+/* レンズの中のチップは思い切り小さく。
+   絵ぜんぶが 2.3倍になるので、素の 8px でも 18px 相当まで膨らみ、
+   チップひとつでレンズが埋まって中心の十字まで隠れていた。
+   拡大して見たいのは「芝のどのあたり・どの深さの帯か」であって
+   チップの字ではない(名前はレンズの上のラベルが言っている)。
+   倍率で割り戻し、実物より小さく見えるところまで落とす */
 .pad-loupe .field-pos {
-  min-height: 14px; padding: 1px 4px; font-size: 8px; font-weight: 700;
+  min-height: 9px; padding: 0 2px; font-size: 5.5px; font-weight: 700;
+  border-radius: 5px;
   opacity: .5; background: rgba(16, 28, 22, .55); border-color: rgba(255, 255, 255, .3);
   box-shadow: none;
 }
@@ -1746,7 +1755,7 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
    レンズの中だけ色が違うと、押しているものと見ているものが別に見える */
 .pad-loupe .field-pos.sel {
   opacity: 1; background: var(--accent-2); color: #fff;
-  border-color: var(--accent); box-shadow: 0 0 0 2px rgba(31, 111, 235, .45);
+  border-color: var(--accent); box-shadow: 0 0 0 1px rgba(31, 111, 235, .45);
 }
 /* レンズの中心 = いま指している点 */
 .pad-loupe-cross {
@@ -1755,11 +1764,18 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
   background: #fff; border: 3px solid var(--accent-2);
   box-shadow: 0 0 0 3px rgba(255, 255, 255, .35), 0 2px 8px rgba(0, 0, 0, .5);
 }
-/* 読み上げもレンズの中に置く。下の行は手で隠れていることが多い */
+/* 読み上げはレンズの上に載せる。手からいちばん遠く、
+   レンズの中に置いていた頃のように拡大した図を隠さない。
+   目は上から[名前][レンズ][茎][指]と一本で下りてくる */
 .pad-loupe-label {
-  position: absolute; z-index: 2; left: 0; right: 0; bottom: 0;
-  padding: 4px 6px 6px; text-align: center;
-  font-size: 11.5px; font-weight: 800; color: #fff;
-  background: linear-gradient(180deg, rgba(10, 14, 18, 0), rgba(10, 14, 18, .85) 45%);
+  position: fixed; transform: translateX(-50%);
+  height: 22px; display: flex; align-items: center;
+  padding: 0 10px; border-radius: 999px; white-space: nowrap;
+  font-size: 11.5px; font-weight: 800; color: #fff; letter-spacing: .02em;
+  background: rgba(10, 14, 18, .92); border: 1px solid rgba(255, 255, 255, .28);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .5);
+  animation: loupeIn .14s ease-out;
 }
-@media (prefers-reduced-motion: reduce) { .pad-loupe { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .pad-loupe, .pad-loupe-label { animation: none; }
+}
