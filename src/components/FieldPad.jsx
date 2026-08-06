@@ -48,11 +48,54 @@ function markHintSeen(gameId) {
   try { localStorage.setItem(HINT_KEY, String(gameId || '')); } catch { /* 出し続けても害はない */ }
 }
 
+// ルーペの大きさと倍率。指の腹(約40px)より十分大きく取る
+const LOUPE = 116;
+const LOUPE_ZOOM = 2.3;
+
+// フィールドの絵。本体とルーペの両方で同じものを描くために切り出す。
+// ルーペ側は拡大して覗くだけなので、押せる必要はない(span で描く)。
+function FieldScene({ t, keys, value, live = false }) {
+  const Chip = live ? 'button' : 'span';
+  return (
+    <>
+      {/* 外周はスタンド。柵の外を描くことで本塁打を押す場所ができる */}
+      <div className="bf-grass" style={{ width: `${dia(1)}%` }} />
+      <div className="bf-track" style={{ width: `${dia(1)}%` }} />
+      <div className="bf-grass" style={{ width: `${dia(0.955)}%` }} />
+      <div className="bf-dirtfan" style={{ width: `${dia(0.47)}%` }} />
+      <div className="bf-mound" />
+      <div className="bf-line left" />
+      <div className="bf-line right" />
+      <div className="bf-basepath" />
+      <div className="bf-base b2" />
+      <div className="bf-base b3" />
+      <div className="bf-base b1" />
+      {DEPTH_BANDS.slice(0, -2).map((b) => (
+        <div key={b.key} className="bf-ring" style={{ width: `${dia(b.max)}%` }} />
+      ))}
+      <div className="bf-ring wall" style={{ width: `${dia(1)}%` }} />
+      {keys.map((key) => (
+        <Chip
+          key={key}
+          {...(live ? { type: 'button', 'data-k': key } : {})}
+          className={`field-pos${value === key ? ' sel' : ''}`}
+          style={{ left: `${POS_PAD[key].fx * 100}%`, top: `${POS_PAD[key].fy * 100}%` }}
+        >
+          {t(`dir.${key}`)}
+        </Chip>
+      ))}
+    </>
+  );
+}
+
 export default function FieldPad({ value, point, onChange, onDone, outfieldOnly = false, gameId }) {
   const t = useT();
   const ref = useRef(null);
   const timer = useRef(null);
   const [dragging, setDragging] = useState(false);
+  const [loupe, setLoupe] = useState(false); // 押し続けている間だけ出す
+  const [size, setSize] = useState({ w: 0, h: 0 }); // ルーペの拡大計算に使うパッドの実寸
+  const loupeTimer = useRef(null);
   const [coach, setCoach] = useState(() => !hintSeenInGame(gameId));
   const keys = Object.keys(DIRECTIONS).filter((k) => (outfieldOnly ? OUTFIELD.includes(k) : true));
 
@@ -73,6 +116,11 @@ export default function FieldPad({ value, point, onChange, onDone, outfieldOnly 
     if (coach) return;
     clearTimeout(timer.current);
     setDragging(true);
+    const r = ref.current.getBoundingClientRect();
+    setSize({ w: r.width, h: r.height });
+    // すぐ出すと、素早く押しただけのときに一瞬ちらつく。少しだけ待つ
+    clearTimeout(loupeTimer.current);
+    loupeTimer.current = setTimeout(() => setLoupe(true), 110);
     ref.current.setPointerCapture?.(e.pointerId);
     const chip = e.target.closest?.('.field-pos');
     if (chip) {
@@ -91,6 +139,8 @@ export default function FieldPad({ value, point, onChange, onDone, outfieldOnly 
   const onUp = () => {
     if (!dragging) return;
     setDragging(false);
+    clearTimeout(loupeTimer.current);
+    setLoupe(false);
     // ボールが落ちるのを見せてから畳む。押した点を一度も見ないのが分かりにくさの元だった
     if (onDone) timer.current = setTimeout(onDone, 520);
   };
@@ -133,38 +183,35 @@ export default function FieldPad({ value, point, onChange, onDone, outfieldOnly 
           role="application"
           aria-label={t('playsheet.direction')}
         >
-          {/* 外周はスタンド。柵の外を描くことで本塁打を押す場所ができる */}
-          <div className="bf-grass" style={{ width: `${dia(1)}%` }} />
-          <div className="bf-track" style={{ width: `${dia(1)}%` }} />
-          <div className="bf-grass" style={{ width: `${dia(0.955)}%` }} />
-          <div className="bf-dirtfan" style={{ width: `${dia(0.47)}%` }} />
-          <div className="bf-mound" />
-          <div className="bf-line left" />
-          <div className="bf-line right" />
-          <div className="bf-basepath" />
-          <div className="bf-base b2" />
-          <div className="bf-base b3" />
-          <div className="bf-base b1" />
-          {DEPTH_BANDS.slice(0, -2).map((b) => (
-            <div key={b.key} className="bf-ring" style={{ width: `${dia(b.max)}%` }} />
-          ))}
-          <div className="bf-ring wall" style={{ width: `${dia(1)}%` }} />
-
-          {keys.map((key) => (
-            <button
-              key={key}
-              type="button"
-              data-k={key}
-              className={`field-pos${value === key ? ' sel' : ''}`}
-              style={{ left: `${POS_PAD[key].fx * 100}%`, top: `${POS_PAD[key].fy * 100}%` }}
-            >
-              {t(`dir.${key}`)}
-            </button>
-          ))}
+          <FieldScene t={t} keys={keys} value={value} live />
 
           {/* 打点はチップより後に描く。チップの裏に隠れると、押した点が見えなくなる */}
           {marker && (
             <div className={`bf-mark${dragging ? '' : ' drop'}`} style={{ left: `${marker.fx * 100}%`, top: `${marker.fy * 100}%` }} />
+          )}
+
+          {/* ルーペ。指がフィールドに重なると、どこを指しているのか自分で見えない。
+              押している間だけ、指のいない側の角に拡大して出す。
+              指を追いかけさせないのは、指の近くだと結局手で隠れるため */}
+          {loupe && marker && (
+            <div className={`pad-loupe ${marker.fx < 0.5 ? 'right' : 'left'}`}>
+              <div
+                className="pad-loupe-scene bf"
+                style={{
+                  width: size.w, height: size.h,
+                  transform: `scale(${LOUPE_ZOOM})`,
+                  transformOrigin: '0 0',
+                  left: LOUPE / 2 - LOUPE_ZOOM * marker.fx * size.w,
+                  top: LOUPE / 2 - LOUPE_ZOOM * marker.fy * size.h,
+                }}
+              >
+                <FieldScene t={t} keys={keys} value={value} />
+              </div>
+              <i className="pad-loupe-cross" />
+              <b className="pad-loupe-label">
+                {t(`dir.${value}`)}{band ? ` ${t(`depth.${band}`)}` : ''}
+              </b>
+            </div>
           )}
 
           {coach && (
