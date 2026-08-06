@@ -573,7 +573,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
    縮尺は実際の球場に合わせ、フェンスを図の内側に置いてスタンドまで描く。
    柵が図の外周だと本塁打を押す場所が無く、深さが効く外野も潰れていた。
    幾何の根拠は battedBall.js を参照。 */
-.pad-frame { display: flex; gap: 6px; align-items: stretch; }
+.pad-frame { position: relative; display: flex; gap: 6px; align-items: stretch; }
 /* 深さの目盛り。上下方向に意味があることを、図の外で先に言い切る */
 .pad-ruler { position: relative; flex: 0 0 36px; width: 36px; }
 .pad-ruler span {
@@ -597,10 +597,11 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .field-pad {
   display: block; flex: 1 1 auto; aspect-ratio: 10 / 9.2;
   touch-action: none; cursor: crosshair;
-  background: linear-gradient(180deg, #252b33, #1b2027); /* スタンド */
 }
+/* フィールドの絵。押せるパッドと、ルーペの中の複製の両方に効かせる */
+.bf-field { background: linear-gradient(180deg, #252b33, #1b2027); /* スタンド */ }
 .field-pad.dragging { cursor: grabbing; }
-.field-pad .bf-grass {
+.bf-field .bf-grass {
   position: absolute; left: 50%; top: 101%; aspect-ratio: 1;
   transform: translate(-50%, -50%); border-radius: 50%; pointer-events: none;
   background:
@@ -608,26 +609,26 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
     repeating-linear-gradient(-45deg, rgba(0, 0, 0, .10) 0 22px, transparent 22px 44px),
     radial-gradient(circle, #2f7a41 0%, #276b38 62%, #215d30 100%);
 }
-.field-pad .bf-track {
+.bf-field .bf-track {
   position: absolute; left: 50%; top: 101%; aspect-ratio: 1;
   transform: translate(-50%, -50%); border-radius: 50%; background: #6d5942; pointer-events: none;
 }
-.field-pad .bf-basepath { top: 84%; width: 22.1%; }
-.field-pad .bf-mound { top: 86.4%; width: 7.5%; }
-.field-pad .bf-line { height: 88%; }
-.field-pad .bf-base { width: 9px; height: 9px; }
-.field-pad .bf-base.b2 { left: 50%; top: 67.1%; }
-.field-pad .bf-base.b3 { left: 34.4%; top: 84.1%; }
-.field-pad .bf-base.b1 { left: 65.6%; top: 84.1%; }
+.bf-field .bf-basepath { top: 84%; width: 22.1%; }
+.bf-field .bf-mound { top: 86.4%; width: 7.5%; }
+.bf-field .bf-line { height: 88%; }
+.bf-field .bf-base { width: 9px; height: 9px; }
+.bf-field .bf-base.b2 { left: 50%; top: 67.1%; }
+.bf-field .bf-base.b3 { left: 34.4%; top: 84.1%; }
+.bf-field .bf-base.b1 { left: 65.6%; top: 84.1%; }
 /* 深さの帯の境目。目盛りの文字と対応させる */
-.field-pad .bf-ring {
+.bf-field .bf-ring {
   position: absolute; left: 50%; top: 101%; aspect-ratio: 1;
   transform: translate(-50%, -50%); border-radius: 50%;
   border: 1px dashed rgba(255, 255, 255, .38); pointer-events: none;
 }
-.field-pad .bf-ring.wall { border: 2px solid rgba(255, 255, 255, .75); border-style: solid; }
+.bf-field .bf-ring.wall { border: 2px solid rgba(255, 255, 255, .75); border-style: solid; }
 /* チップは小さく半透明に。空いている芝のほうが「押せる場所」に見えるようにする */
-.field-pad .field-pos {
+.bf-field .field-pos {
   position: absolute;
   display: flex; align-items: center; justify-content: center;
   transform: translate(-50%, -50%);
@@ -642,7 +643,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
   border-radius: 999px;
   box-shadow: none;
 }
-.field-pad .field-pos.sel {
+.bf-field .field-pos.sel {
   background: var(--accent-2);
   color: #fff;
   border-color: var(--accent);
@@ -1724,15 +1725,13 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
    押している間だけ、指のいない側の角に拡大して出す。
    指の近くに出すと結局手で隠れるので、あえて追いかけさせない。 */
 .pad-loupe {
-  position: absolute; top: 8px; width: 116px; height: 116px;
+  position: absolute; width: 116px; height: 116px;
   border-radius: 50%; overflow: hidden; z-index: 4; pointer-events: none;
   border: 2px solid rgba(255, 255, 255, .9);
   box-shadow: 0 6px 20px rgba(0, 0, 0, .55), inset 0 0 0 1px rgba(0, 0, 0, .35);
   background: #1b2027;
   animation: loupeIn .14s ease-out;
 }
-.pad-loupe.left { left: 8px; }
-.pad-loupe.right { right: 8px; }
 @keyframes loupeIn { from { opacity: 0; transform: scale(.9); } to { opacity: 1; transform: scale(1); } }
 /* 拡大したフィールドの絵。押した点がレンズの中心に来るよう位置をずらす */
 .pad-loupe-scene { position: absolute; border: none; border-radius: 0; }
@@ -1743,7 +1742,12 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
   opacity: .5; background: rgba(16, 28, 22, .55); border-color: rgba(255, 255, 255, .3);
   box-shadow: none;
 }
-.pad-loupe .field-pos.sel { background: rgba(16, 28, 22, .55); color: #eaf2fb; border-color: rgba(255, 255, 255, .3); }
+/* いま選ばれているチップだけは、本体と同じように光らせる。
+   レンズの中だけ色が違うと、押しているものと見ているものが別に見える */
+.pad-loupe .field-pos.sel {
+  opacity: 1; background: var(--accent-2); color: #fff;
+  border-color: var(--accent); box-shadow: 0 0 0 2px rgba(31, 111, 235, .45);
+}
 /* レンズの中心 = いま指している点 */
 .pad-loupe-cross {
   position: absolute; z-index: 2; left: 50%; top: 50%; width: 15px; height: 15px;

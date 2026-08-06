@@ -51,6 +51,8 @@ function markHintSeen(gameId) {
 // ルーペの大きさと倍率。指の腹(約40px)より十分大きく取る
 const LOUPE = 116;
 const LOUPE_ZOOM = 2.3;
+// 指先とレンズの下端のすき間。指の腹に少しかかるくらいだと近すぎる
+const LOUPE_GAP = 30;
 
 // フィールドの絵。本体とルーペの両方で同じものを描くために切り出す。
 // ルーペ側は拡大して覗くだけなので、押せる必要はない(span で描く)。
@@ -94,8 +96,10 @@ export default function FieldPad({ value, point, onChange, onDone, outfieldOnly 
   const timer = useRef(null);
   const [dragging, setDragging] = useState(false);
   const [loupe, setLoupe] = useState(false); // 押し続けている間だけ出す
-  const [size, setSize] = useState({ w: 0, h: 0 }); // ルーペの拡大計算に使うパッドの実寸
+  // ルーペの拡大と配置に使う実寸。ドラッグ中は変わらないので押した時に一度だけ測る
+  const [size, setSize] = useState({ w: 0, h: 0, padLeft: 0, padTop: 0, frameW: 0 });
   const loupeTimer = useRef(null);
+  const frameRef = useRef(null);
   const [coach, setCoach] = useState(() => !hintSeenInGame(gameId));
   const keys = Object.keys(DIRECTIONS).filter((k) => (outfieldOnly ? OUTFIELD.includes(k) : true));
 
@@ -117,7 +121,8 @@ export default function FieldPad({ value, point, onChange, onDone, outfieldOnly 
     clearTimeout(timer.current);
     setDragging(true);
     const r = ref.current.getBoundingClientRect();
-    setSize({ w: r.width, h: r.height });
+    const fr = frameRef.current.getBoundingClientRect();
+    setSize({ w: r.width, h: r.height, padLeft: r.left - fr.left, padTop: r.top - fr.top, frameW: fr.width });
     // すぐ出すと、素早く押しただけのときに一瞬ちらつく。少しだけ待つ
     clearTimeout(loupeTimer.current);
     loupeTimer.current = setTimeout(() => setLoupe(true), 110);
@@ -164,7 +169,7 @@ export default function FieldPad({ value, point, onChange, onDone, outfieldOnly 
         <span>{t('playsheet.tapField')}</span>
       </div>
 
-      <div className="pad-frame">
+      <div className="pad-frame" ref={frameRef}>
         {/* 深さの目盛り。上下方向に意味があることを、図の外で先に言い切る */}
         <div className="pad-ruler" aria-hidden="true">
           <i className="axis" />
@@ -174,7 +179,7 @@ export default function FieldPad({ value, point, onChange, onDone, outfieldOnly 
         </div>
 
         <div
-          className={`dir-pad field-pad bf${dragging ? ' dragging' : ''}`}
+          className={`dir-pad field-pad bf-field bf${dragging ? ' dragging' : ''}`}
           ref={ref}
           onPointerDown={onDown}
           onPointerMove={onMove}
@@ -190,29 +195,6 @@ export default function FieldPad({ value, point, onChange, onDone, outfieldOnly 
             <div className={`bf-mark${dragging ? '' : ' drop'}`} style={{ left: `${marker.fx * 100}%`, top: `${marker.fy * 100}%` }} />
           )}
 
-          {/* ルーペ。指がフィールドに重なると、どこを指しているのか自分で見えない。
-              押している間だけ、指のいない側の角に拡大して出す。
-              指を追いかけさせないのは、指の近くだと結局手で隠れるため */}
-          {loupe && marker && (
-            <div className={`pad-loupe ${marker.fx < 0.5 ? 'right' : 'left'}`}>
-              <div
-                className="pad-loupe-scene bf"
-                style={{
-                  width: size.w, height: size.h,
-                  transform: `scale(${LOUPE_ZOOM})`,
-                  transformOrigin: '0 0',
-                  left: LOUPE / 2 - LOUPE_ZOOM * marker.fx * size.w,
-                  top: LOUPE / 2 - LOUPE_ZOOM * marker.fy * size.h,
-                }}
-              >
-                <FieldScene t={t} keys={keys} value={value} />
-              </div>
-              <i className="pad-loupe-cross" />
-              <b className="pad-loupe-label">
-                {t(`dir.${value}`)}{band ? ` ${t(`depth.${band}`)}` : ''}
-              </b>
-            </div>
-          )}
 
           {coach && (
             <div className="pad-coach">
@@ -239,6 +221,43 @@ export default function FieldPad({ value, point, onChange, onDone, outfieldOnly 
             </div>
           )}
         </div>
+
+        {/* ルーペ。指がフィールドに重なると、どこを指しているのか自分で見えない。
+            押している間だけ、指のすぐ上に拡大して出す。
+            指の下は手のひらで隠れるので、必ず上(上に余白が無ければ横)に置く。
+            パッドは overflow:hidden なので、枠の側に置いて上へはみ出せるようにする */}
+        {loupe && marker && (() => {
+          const fingerX = size.padLeft + marker.fx * size.w;
+          const fingerY = size.padTop + marker.fy * size.h;
+          let left = fingerX - LOUPE / 2;
+          let top = fingerY - LOUPE_GAP - LOUPE;
+          if (top < -6) {
+            // 上に置けないときは指の横へ。下は手で隠れるので使わない
+            top = Math.max(-6, fingerY - LOUPE / 2);
+            left = marker.fx < 0.5 ? fingerX + LOUPE_GAP : fingerX - LOUPE_GAP - LOUPE;
+          }
+          left = Math.max(2, Math.min(size.frameW - LOUPE - 2, left));
+          return (
+            <div className="pad-loupe" style={{ left, top }}>
+              <div
+                className="pad-loupe-scene bf-field bf"
+                style={{
+                  width: size.w, height: size.h,
+                  transform: `scale(${LOUPE_ZOOM})`,
+                  transformOrigin: '0 0',
+                  left: LOUPE / 2 - LOUPE_ZOOM * marker.fx * size.w,
+                  top: LOUPE / 2 - LOUPE_ZOOM * marker.fy * size.h,
+                }}
+              >
+                <FieldScene t={t} keys={keys} value={value} />
+              </div>
+              <i className="pad-loupe-cross" />
+              <b className="pad-loupe-label">
+                {t(`dir.${value}`)}{band ? ` ${t(`depth.${band}`)}` : ''}
+              </b>
+            </div>
+          );
+        })()}
       </div>
 
       <div className="pad-readout">
