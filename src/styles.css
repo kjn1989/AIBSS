@@ -580,7 +580,11 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
   position: absolute; right: 0; transform: translateY(-50%);
   font-size: 9.5px; line-height: 1.1; white-space: nowrap; color: var(--text-dim);
   font-family: ui-monospace, Menlo, monospace; letter-spacing: -.02em;
+  transition: color .12s, text-shadow .12s;
 }
+/* いま押している深さの帯。図の中の弧がそのままここへ届く。
+   指が絶対に来ない場所なので、押している最中でも読める */
+.pad-ruler span.lit { color: #fff; text-shadow: 0 0 10px rgba(88, 166, 255, .9); }
 .pad-ruler i.axis {
   position: absolute; left: 50%; top: 3%; bottom: 3%; width: 1px;
   background: linear-gradient(180deg, rgba(139, 148, 158, .5), rgba(139, 148, 158, .08));
@@ -1720,62 +1724,59 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 }
 
 
-/* ---- ルーペ ----
+/* ---- 打点の目印(帯・くさび・波紋) ----
    指がフィールドに重なると、自分がどこを指しているのか見えない。
-   押している間だけ、指の真上に拡大して出す。置き場所に例外は作らない。
-   body 直下に描くので画面座標(position: fixed)。z-index 900 は
-   シート(550)や確認ダイアログ(600)より上 — 常に手前に浮く一時的な表示。 */
-.pad-loupe-layer { position: fixed; inset: 0; z-index: 900; pointer-events: none; }
-/* レンズと打点を結ぶ茎。線があるだけで「あの丸はこの点」だと一度で伝わる */
-.pad-loupe-stem { position: fixed; inset: 0; width: 100%; height: 100%; }
-.pad-loupe {
-  position: fixed; width: 116px; height: 116px;
-  border-radius: 50%; overflow: hidden; pointer-events: none;
-  border: 2px solid rgba(255, 255, 255, .9);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, .55), inset 0 0 0 1px rgba(0, 0, 0, .35);
-  background: #1b2027;
-  animation: loupeIn .14s ease-out;
+   一度は拡大鏡を出したが、芝には拡大するほどの細部が無く、図の1/3を
+   覆うだけで情報が増えなかった。いまは指で隠れる半径(およそ25px)の
+   外側に目印を置く。層は2つ:
+     粗い層 … 帯とくさび。何が記録されるかを図の広い面積で言う(SVG。
+              図の座標なので、パッドの大きさに追随してほしい)
+     精密な層 … 打点を中心にした同心円。中心が指で隠れても、輪の対称性
+              から目が中心を復元する(実寸px。指の大きさは画面で変わらない) */
+.bf-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.bf-band { fill: rgba(88, 166, 255, .15); }
+.bf-wedge { fill: rgba(88, 166, 255, .13); }
+/* 帯とくさびの重なり = 実際に記録される区画。ここだけ枠を付ける */
+.bf-cell {
+  fill: rgba(88, 166, 255, .34);
+  stroke: rgba(200, 230, 255, .85); stroke-width: 1.4; vector-effect: non-scaling-stroke;
 }
-@keyframes loupeIn { from { opacity: 0; transform: scale(.9); } to { opacity: 1; transform: scale(1); } }
-/* 拡大したフィールドの絵。押した点がレンズの中心に来るよう位置をずらす */
-.pad-loupe-scene { position: absolute; border: none; border-radius: 0; }
-/* レンズの中のチップは思い切り小さく。
-   絵ぜんぶが 2.3倍になるので、素の 8px でも 18px 相当まで膨らみ、
-   チップひとつでレンズが埋まって中心の十字まで隠れていた。
-   拡大して見たいのは「芝のどのあたり・どの深さの帯か」であって
-   チップの字ではない(名前はレンズの上のラベルが言っている)。
-   倍率で割り戻し、実物より小さく見えるところまで落とす */
-.pad-loupe .field-pos {
-  min-height: 9px; padding: 0 2px; font-size: 5.5px; font-weight: 700;
-  border-radius: 5px;
-  opacity: .5; background: rgba(16, 28, 22, .55); border-color: rgba(255, 255, 255, .3);
-  box-shadow: none;
+/* いまの正確な深さ。帯は「定位置」までしか言えないので弧1本で足す。
+   下に黒を敷かないと、芝の上でも土の上でも沈む */
+.bf-depth {
+  fill: none; stroke: #fff; stroke-width: 1.8; stroke-linecap: round;
+  stroke-dasharray: 5 4; vector-effect: non-scaling-stroke;
 }
-/* いま選ばれているチップだけは、本体と同じように光らせる。
-   レンズの中だけ色が違うと、押しているものと見ているものが別に見える */
-.pad-loupe .field-pos.sel {
-  opacity: 1; background: var(--accent-2); color: #fff;
-  border-color: var(--accent); box-shadow: 0 0 0 1px rgba(31, 111, 235, .45);
+.bf-depth.back { stroke: rgba(0, 0, 0, .45); stroke-width: 4.5; stroke-dasharray: none; }
+/* 同心円。中心ほど濃く、外へ薄い。いちばん外は指の外側(半径54px)まで届く */
+.bf-ripple {
+  position: absolute; border-radius: 50%; transform: translate(-50%, -50%);
+  pointer-events: none; border: 2px solid rgba(207, 233, 255, .5);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .5), inset 0 0 0 1px rgba(0, 0, 0, .5);
 }
-/* レンズの中心 = いま指している点 */
-.pad-loupe-cross {
-  position: absolute; z-index: 2; left: 50%; top: 50%; width: 15px; height: 15px;
-  transform: translate(-50%, -50%); border-radius: 50%;
-  background: #fff; border: 3px solid var(--accent-2);
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, .35), 0 2px 8px rgba(0, 0, 0, .5);
+.bf-ripple.r1 { width: 34px; height: 34px; border-width: 3px; border-color: #fff; }
+.bf-ripple.r2 { width: 66px; height: 66px; border-color: rgba(207, 233, 255, .8); }
+.bf-ripple.r3 { width: 108px; height: 108px; border-color: rgba(207, 233, 255, .5); }
+/* 押している間だけ広がる輪。動きがあると、指の下で何かが起きているのが伝わる */
+.bf-ping {
+  position: absolute; width: 44px; height: 44px; border-radius: 50%;
+  border: 2px solid rgba(207, 233, 255, .9); pointer-events: none;
+  animation: bfPing 1.7s cubic-bezier(.15, .6, .3, 1) infinite;
 }
-/* 読み上げはレンズの上に載せる。手からいちばん遠く、
-   レンズの中に置いていた頃のように拡大した図を隠さない。
-   目は上から[名前][レンズ][茎][指]と一本で下りてくる */
-.pad-loupe-label {
-  position: fixed; transform: translateX(-50%);
-  height: 22px; display: flex; align-items: center;
-  padding: 0 10px; border-radius: 999px; white-space: nowrap;
+@keyframes bfPing {
+  0% { transform: translate(-50%, -50%) scale(.35); opacity: .85; }
+  70%, 100% { transform: translate(-50%, -50%) scale(2.6); opacity: 0; }
+}
+/* 方向名はくさびの先(スタンド)。手からもっとも遠い場所に置く読み札。
+   一塁・三塁のくさびは外を向くので、JS 側で枠に収まるまで引き戻している */
+.bf-dirlabel {
+  position: absolute; transform: translate(-50%, -50%);
+  padding: 2px 8px; border-radius: 999px; white-space: nowrap; pointer-events: none;
   font-size: 11.5px; font-weight: 800; color: #fff; letter-spacing: .02em;
-  background: rgba(10, 14, 18, .92); border: 1px solid rgba(255, 255, 255, .28);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, .5);
-  animation: loupeIn .14s ease-out;
+  background: rgba(10, 14, 18, .9); border: 1px solid rgba(255, 255, 255, .3);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .5);
 }
+
 @media (prefers-reduced-motion: reduce) {
-  .pad-loupe, .pad-loupe-label { animation: none; }
+  .bf-ping { animation: none; opacity: .5; }
 }
