@@ -893,6 +893,10 @@ export function reducer(state, action) {
     case 'OPP_SET_PITCHER': {
       const g = deep(state.games[action.gameId]);
       const prev = g.oppPitcherLetter;
+      // 同じ投手を選び直したときは交代ではない。ログを残すと「自分に交代した」
+      // 記録になり、試合経過も取り消し履歴も汚れる。
+      // 初回の登録(まだ oppUsedLetters に無い)は素通しする
+      if (prev === action.letter && (g.oppUsedLetters || []).includes(action.letter)) return state;
       g.oppPitcherLetter = action.letter;
       if (!g.oppUsedLetters.includes(action.letter)) g.oppUsedLetters.push(action.letter);
       g.playLogs.push(newPlayLog({
@@ -907,6 +911,11 @@ export function reducer(state, action) {
     case 'SET_PITCHER': {
       const g = deep(state.games[action.gameId]);
       const prev = g.currentPitcherId;
+      // 同じ投手を選び直したときは交代ではない(音声の「投手は田中」でも起こる)。
+      // 初回の登板登録はまだ投手成績が無いので素通しする
+      if (prev === action.playerId && (g.pitchingRecords || []).some((r) => r.playerId === action.playerId)) {
+        return state;
+      }
       g.currentPitcherId = action.playerId;
       ensurePitchingRecord(g, action.playerId);
       // 継投時: 塁上走者の責任投手は前任のまま残す(自責点帰属ダイアログで使用)
@@ -1551,12 +1560,28 @@ function pushHistory(state, action) {
   return hist;
 }
 
+// 走者を塁に置く。既に誰か居たら、その走者を1つ先へ押し出す(押し出しの規則)。
+// 素直に代入すると、居た走者が黙って消える。UI から来る move は先頭の走者から
+// 順に押し出す形になっているのでここは通らないが、音声・AI修正・取り込みなど
+// 別の入口から不揃いな move が来たときに走者が1人失われるのを防ぐ。
+// 塁上の走者が消えるのは、気づかれないまま得点も打点も狂う類の壊れ方なので、
+// 到達経路が見つからなくても素通しにはしない。
+function pushInto(game, base, runner, onForcedHome) {
+  if (base >= 4) { onForcedHome(runner); return; } // 三塁から押し出されたら生還
+  const occupying = game.runners[base];
+  if (occupying) pushInto(game, base + 1, occupying, onForcedHome);
+  game.runners[base] = runner;
+}
+
 // 走者移動の適用: moves = [{from: 1|2|3, to: 2|3|4|'out'}]
 // 戻り値: { runs, advanced, outsFromMoves }
 function applyRunnerMoves(game, moves, { eventKind, erChoices = {}, unearnedRuns = {} } = {}) {
   let runs = 0;
   let advanced = false;
   let outsFromMoves = 0;
+  // 押し出されて生還した走者(通常は空。不揃いな move が来たときだけ入る)
+  const forcedHome = [];
+  const onForcedHome = (r) => forcedHome.push(r);
   // 3塁→2塁→1塁の順に処理(前の走者から)
   const sorted = [...(moves || [])].sort((a, b) => b.from - a.from);
   for (const mv of sorted) {
@@ -1582,10 +1607,27 @@ function applyRunnerMoves(game, moves, { eventKind, erChoices = {}, unearnedRuns
       }
       advanced = true;
     } else if (mv.to > mv.from) {
-      game.runners[mv.to] = runner;
+      pushInto(game, mv.to, runner, onForcedHome);
       advanced = true;
     } else {
-      game.runners[mv.to] = runner; // 通常は起きないが保険
+      pushInto(game, mv.to, runner, onForcedHome); // 通常は起きないが保険
+    }
+  }
+  // 押し出しで生還した走者を得点として処理する。ここを忘れると、
+  // 消えないようにしたつもりが「走者は消えないが点も入らない」になる
+  for (const r of forcedHome) {
+    runs += 1;
+    advanced = true;
+    addRun(game, {
+      playerId: r.playerId || null,
+      erChoice: r.pitcherId || null,
+      viaError: !!r.viaError,
+    });
+    if (r.playerId) {
+      game.playLogs.push(newPlayLog({
+        gameId: game.id, inning: game.inning, isTop: game.isTop, kind: 'run',
+        text: '得点', payload: { playerId: r.playerId },
+      }));
     }
   }
   return { runs, advanced, outsFromMoves };
