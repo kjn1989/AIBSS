@@ -7,6 +7,7 @@
 // ============================================================
 import { RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES, outTypeLabel } from './model.js';
 import { translate } from './i18n.js';
+import { isFoul } from './battedBall.js';
 
 // ---- 音声認識(ASR)の定番誤変換を補正 ----
 // iOS/Androidの音声認識が野球用語を一般語に誤変換するパターンを吸収する。
@@ -303,16 +304,23 @@ export function parseDirectionOnly(rawText) {
 
 // プレイの表示ラベル。lang='en' で英語表記に切替(既定'ja'は従来どおり)。
 // 保存済みログ文言(highlights等)は lang を渡さず日本語のまま維持する。
-export function playLabel(result, direction, outType, soType, edition, lang = 'ja') {
+// opts.hitAngle を渡すとファウルかどうかを見て表記に足す。
+// 足さないと、ファウルフライが「左翼フライ・アウト」になってフェアのフライと
+// 区別できなくなる(記録としては別物なので、ログの1行で分かる必要がある)。
+// 角度を持たない呼び出し(音声の解釈中など)は今までどおり動く。
+export function playLabel(result, direction, outType, soType, edition, lang = 'ja', opts = {}) {
   const en = lang === 'en';
   const dir = direction ? (en ? translate('en', `dir.${direction}`) : DIRECTIONS[direction]) : '';
+  const foul = isFoul(opts.hitAngle)
+    ? (en ? ' (foul)' : `(${translate('ja', 'dir.foul')})`)
+    : '';
+  if (result === 'so') return en ? translate('en', `soType.${soType || 'swinging'}`) : SO_TYPES[soType || 'swinging'];
   if (result === 'out') {
     const ot = en ? translate('en', `outType.${outType || 'ground'}`) : outTypeLabel(outType || 'ground', edition);
-    return en ? `${dir ? dir + ' ' : ''}${ot}` : `${dir}${ot}・アウト`;
+    return en ? `${dir ? dir + ' ' : ''}${ot}${foul}` : `${dir}${ot}${foul}・アウト`;
   }
-  if (result === 'so') return en ? translate('en', `soType.${soType || 'swinging'}`) : SO_TYPES[soType || 'swinging'];
   const rlabel = en ? translate('en', `result.${result}`) : (RESULTS[result]?.label || result);
-  return `${dir ? dir + ' ' : ''}${rlabel}`;
+  return `${dir ? dir + ' ' : ''}${rlabel}${foul}`;
 }
 
 // ============================================================

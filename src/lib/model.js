@@ -29,6 +29,13 @@ export const RESULTS = {
 // ---- 三振の内訳 ----
 export const SO_TYPES = { swinging: '空振り三振', looking: '見逃し三振' };
 
+// ---- ファウルグラウンドを選べる結果 ----
+// ファウルフライは凡打なので、打点をファウル側に置けないと記録できない。
+// 一方でファウルの安打は無く、ファウルのバントは犠打ではなくストライクなので、
+// これらはフェアゾーンだけに限る(押し間違いを図の側で防ぐ)。
+export const FOUL_RESULTS = ['out', 'error', 'sacFly'];
+export const allowsFoul = (result) => FOUL_RESULTS.includes(result);
+
 // ---- 凡打の内訳 ----
 export const OUT_TYPES = {
   ground: 'ゴロ',

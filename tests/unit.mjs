@@ -6,11 +6,11 @@ import { proposeMoves, judgeAdvance, batterDestOptions } from '../src/lib/plays.
 import { gameEndCheck, initialPresetIdFor, describeRules } from '../src/lib/rules.js';
 import { aggregateBatting, aggregatePitching, battingMetrics, pitchingMetrics, titleLeaders, DETAIL_METRICS, detailRanking, defaultInningBasis } from '../src/lib/stats.js';
 import { translate } from '../src/lib/i18n.js';
-import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, parseDirectionOnly, parseContact } from '../src/lib/voiceParser.js';
+import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, parseDirectionOnly, parseContact, playLabel } from '../src/lib/voiceParser.js';
 import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parseInningRange, parseSlotBatters, parseAtBatDeletions, parseShortResult, isExplicitSubText, inGamePlayerIds, preferInGamePlayers } from '../src/lib/correctionParser.js';
 import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarters, findPositionIssues } from '../src/lib/lineupBox.js';
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
-import { newGame } from '../src/lib/model.js';
+import { newGame, allowsFoul } from '../src/lib/model.js';
 import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf, oppLettersInGame, oppBaserunning } from '../src/lib/oppBox.js';
 import { remapPlayerInGame, fillPlayerGaps } from '../src/lib/mergePlayers.js';
 import { computeBoxScore } from '../src/lib/boxscore.js';
@@ -21,7 +21,7 @@ import { yearOfDate, yearOfGame, yearsInGames, tenureByPlayer, playedInYear, isA
 
 import { rebuildBatters, findDuplicateAtBats, findOrderBreaks, canRebuildOrders } from '../src/lib/battersRebuild.js';
 import { ownOffenseStats, ownBatteryStats } from '../src/lib/ownScout.js';
-import { padPointToBall, ballToPadPoint, nearestDirection, depthBand, contactCandidate, ballOf, chartPoint, zoneCounts, zoneOf, POS_BALL, PAD_VB, PAD_ASPECT, padPoint, padWedge, padBandRange, padLabelPoint, padSector, padArc } from '../src/lib/battedBall.js';
+import { padPointToBall, ballToPadPoint, nearestDirection, depthBand, contactCandidate, ballOf, chartPoint, zoneCounts, zoneOf, POS_BALL, PAD_VB, PAD_ASPECT, padPoint, padWedge, padBandRange, padLabelPoint, padSector, padArc, isFoul } from '../src/lib/battedBall.js';
 
 test('parseDirectionOnly: 方向のみの発話は方向、結果語を含めばnull(言い直し扱い)', () => {
   assert.equal(parseDirectionOnly('ライト'), 'RF');
@@ -1866,6 +1866,41 @@ test('chartPoint: 深さ1はフェンス上、深さ0は本塁、柵越えは図
   assert.ok(hr[1] > 0, `図の中には収まる ${hr[1]}`);
 });
 
+// ---- ファウルグラウンド ----
+test('isFoul: ファウルは角度だけで決まる。角度の無い古い記録はフェア扱い', () => {
+  assert.equal(isFoul(-46), true);
+  assert.equal(isFoul(46), true);
+  assert.equal(isFoul(-45), false);   // 線上はフェア
+  assert.equal(isFoul(45), false);
+  assert.equal(isFoul(0), false);
+  assert.equal(isFoul(null), false);  // 古い記録(そもそもファウルを記録できなかった)
+  assert.equal(isFoul(undefined), false);
+});
+
+test('allowsFoul: ファウルフライは凡打だけ。ファウルの安打とファウルの犠打は無い', () => {
+  for (const r of ['out', 'error', 'sacFly']) assert.equal(allowsFoul(r), true, r);
+  for (const r of ['single', 'double', 'triple', 'hr', 'sacBunt', 'bb', 'so']) {
+    assert.equal(allowsFoul(r), false, r);
+  }
+});
+
+test('ballOf: ファウルの打球には foul が立ち、守備位置からの推定はフェア扱い', () => {
+  assert.equal(ballOf({ hitAngle: -62, hitDepth: 0.4 }).foul, true);
+  assert.equal(ballOf({ hitAngle: -30, hitDepth: 0.4 }).foul, false);
+  assert.equal(ballOf({ direction: '3B' }).foul, false);
+});
+
+test('zoneCounts: ファウルは区画に入れない(端の区画が水増しされない)', () => {
+  const rows = [
+    { hitAngle: -30, hitDepth: 0.9 },   // 左の深い(区画に入る)
+    { hitAngle: -70, hitDepth: 0.4 },   // ファウル
+    { hitAngle: 70, hitDepth: 0.4 },    // ファウル
+  ];
+  const { counts, placed } = zoneCounts(rows);
+  assert.equal(placed, 1, 'ファウル2本は置かれない');
+  assert.equal(counts.reduce((a, b) => a + b, 0), 1);
+});
+
 // ---- 入力パッドに重ねる目印(帯・くさび・波紋) ----
 test('padPoint: パッドの割合座標と同じ場所を指す(viewBox は真円が保てる比率)', () => {
   // 比率がずれると同心円が楕円になる
@@ -1896,24 +1931,33 @@ test('padBandRange: 光らせる帯は深さの帯と一致し、柵越えは図
   assert.ok(Number.isFinite(over.dOut) && over.dOut <= 1.18, `外周で止める ${over.dOut}`);
 });
 
-test('padLabelPoint: 一塁・三塁の方向名も枠の中に収まる(切れて読めなくならない)', () => {
-  // 一塁・三塁の方向は外を向くので、素直に置くとパッドの外に出る
-  for (let angle = -45; angle <= 45; angle += 1.5) {
+test('padLabelPoint: 端に寄る札は中央揃えを解く(札の幅を知らなくてもはみ出さない)', () => {
+  // ファウルまで含めて、どの角度でも枠の中に収まる置き方になる
+  for (let angle = -89; angle <= 89; angle += 1.5) {
     const p = padLabelPoint(angle);
-    assert.ok(p.fx >= 0.085 && p.fx <= 0.915, `${angle}: fx=${p.fx}`);
+    assert.ok(['center', 'edge-l', 'edge-r'].includes(p.anchor), `${angle}: ${p.anchor}`);
+    if (p.anchor === 'center') {
+      // 中央揃えのままでよいのは、札の幅ぶんの余白がある内側だけ
+      assert.ok(p.fx >= 0.17 && p.fx <= 0.83, `${angle}: fx=${p.fx}`);
+    }
     assert.ok(p.fy >= 0.045 && p.fy <= 0.955, `${angle}: fy=${p.fy}`);
   }
-  // 引き戻しが要るのは外側だけ。中堅・左右翼は素のままの位置に置ける
-  assert.ok(Math.abs(padLabelPoint(0).fx - 0.5) < 1e-9);
-  for (const angle of [-25.2, 25.2]) {
-    assert.ok(Math.abs(padLabelPoint(angle).fx - ballToPadPoint(angle, 1.1).fx) < 1e-9, `${angle} は素のまま`);
+  // 外を向く方向は端へ。ここを中央揃えのまま座標だけ引き戻すと、
+  // 「ファウル 三塁」のように字数が増えた瞬間にまた切れていた
+  assert.equal(padLabelPoint(-39.2).anchor, 'edge-l');
+  assert.equal(padLabelPoint(39.2).anchor, 'edge-r');
+  assert.equal(padLabelPoint(-70).anchor, 'edge-l');
+  assert.equal(padLabelPoint(70).anchor, 'edge-r');
+  // 中央寄りの打球は素のままの位置に置ける
+  assert.equal(padLabelPoint(0).anchor, 'center');
+  for (const angle of [-15, 15]) {
+    const p = padLabelPoint(angle);
+    assert.equal(p.anchor, 'center');
+    assert.ok(Math.abs(p.fx - ballToPadPoint(angle, 1.1).fx) < 1e-9, `${angle} は素のまま`);
   }
-  // 左右は対称
-  assert.ok(Math.abs(padLabelPoint(-39.2).fx + padLabelPoint(39.2).fx - 1) < 1e-9);
   // くさびの中心ではなく実際の角度に置くので、角度が浅いほど中央寄りになる。
   // (くさび中心だと同じくさびの中はすべて同じ場所になってしまう)
-  assert.ok(padLabelPoint(-20).fx > padLabelPoint(-40).fx, '角度が浅いほど中央寄り');
-  assert.ok(padLabelPoint(-30).fx !== padLabelPoint(-20).fx, '同じくさびの中でも角度で動く');
+  assert.ok(padLabelPoint(-15).fx > padLabelPoint(-20).fx, '角度が浅いほど中央寄り');
 });
 
 test('padSector / padArc: 有効な path を返し、内側が本塁のときは円弧を戻さない', () => {
@@ -2025,4 +2069,16 @@ test('parseResultCorrections: 三振に直すときは軌道と打点座標を�
     [r[0].patch.outType, r[0].patch.contact, r[0].patch.hitAngle, r[0].patch.hitDepth],
     [null, null, null, null],
   );
+});
+
+test('playLabel: ファウルフライはログの1行でフェアと区別できる', () => {
+  const foul = { hitAngle: -62 };
+  assert.equal(playLabel('out', 'LF', 'fly', null, undefined, 'ja'), '左翼フライ・アウト');
+  assert.equal(playLabel('out', 'LF', 'fly', null, undefined, 'ja', foul), '左翼フライ(ファウル)・アウト');
+  assert.equal(playLabel('out', 'LF', 'fly', null, undefined, 'en', foul), 'LF Fly Out (foul)');
+  // フェアの角度や、角度を持たない古い記録は今までどおり
+  assert.equal(playLabel('out', 'LF', 'fly', null, undefined, 'ja', { hitAngle: -30 }), '左翼フライ・アウト');
+  assert.equal(playLabel('out', 'LF', 'fly', null, undefined, 'ja', {}), '左翼フライ・アウト');
+  // 三振には打球が無いので、うっかり角度が残っていても足さない
+  assert.equal(playLabel('so', null, null, 'swinging', undefined, 'ja', foul), '空振り三振');
 });

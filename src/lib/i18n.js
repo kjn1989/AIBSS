@@ -170,6 +170,7 @@ export const MESSAGES = {
     // 守備位置(打球方向)
     'dir.P': '投手', 'dir.C': '捕手', 'dir.1B': '一塁', 'dir.2B': '二塁', 'dir.3B': '三塁',
     'dir.SS': '遊撃', 'dir.LF': '左翼', 'dir.CF': '中堅', 'dir.RF': '右翼',
+    'dir.foul': 'ファウル',
 
     // 走者/打者の行き先(プレイ確定シート)
     'dest.out': 'アウト', 'dest.score': '得点', 'dest.stay': 'そのまま', 'dest.toBase': '{base}へ',
@@ -1017,6 +1018,7 @@ export const MESSAGES = {
     'spray.oppo': '流し',
     'spray.zoneNote': '角度{s}×深さ{r}の区画ごとの本数です。深さの記録がない打席も、守備位置から区画が決まるので同じ図に入ります。',
     'spray.exactNote': '打点まで記録があるのは {total}打球中 {n}打球です。残りは守備位置から置いています。',
+    'spray.foulNote': 'ファウルの打球 {n}本はこの図に含めていません(方向の割合も同じです)。',
     'trend.title': '成績推移',
     'trend.needMore': '2試合以上の記録が貯まると推移が表示されます。',
 
@@ -1263,6 +1265,7 @@ export const MESSAGES = {
 
     'dir.P': 'P', 'dir.C': 'C', 'dir.1B': '1B', 'dir.2B': '2B', 'dir.3B': '3B',
     'dir.SS': 'SS', 'dir.LF': 'LF', 'dir.CF': 'CF', 'dir.RF': 'RF',
+    'dir.foul': 'Foul',
 
     'dest.out': 'Out', 'dest.score': 'Scores', 'dest.stay': 'Stay', 'dest.toBase': 'to {base}',
 
@@ -2082,6 +2085,7 @@ export const MESSAGES = {
     'spray.oppo': 'Oppo',
     'spray.zoneNote': 'Counts per zone ({s} angles x {r} depths). Balls without a depth are placed from the fielding position, so they appear here too.',
     'spray.exactNote': '{n} of {total} balls have an exact landing spot; the rest are placed from the fielding position.',
+    'spray.foulNote': '{n} foul ball(s) are not shown here (nor in the direction split).',
     'trend.title': 'Stat Trends',
     'trend.needMore': 'Trends appear once you have 2+ games recorded.',
 

@@ -74,7 +74,12 @@ export default function SprayChart({ atBats, title, bats }) {
   const [view, setView] = useState('dot');
   const [filter, setFilter] = useState('all');
 
-  const placeable = useMemo(() => (atBats || []).filter((ab) => ballOf(ab)), [atBats]);
+  // ファウルはこの図に入れない。扇の外に落ちるので図として壊れるうえ、
+  // 引っ張り/流しはフェアの打球についての割合なので、混ぜると意味が変わる。
+  // 黙って捨てると気づけないので、本数は下の脚注で必ず言う
+  const all = useMemo(() => (atBats || []).filter((ab) => ballOf(ab)), [atBats]);
+  const fouls = useMemo(() => all.filter((ab) => ballOf(ab).foul).length, [all]);
+  const placeable = useMemo(() => all.filter((ab) => !ballOf(ab).foul), [all]);
   // 絞り込みの選択肢は、そのデータで意味があるものだけ出す
   const usable = useMemo(
     () => FILTERS.filter((f) => f.key === 'all' || placeable.some(f.match)),
@@ -119,7 +124,10 @@ export default function SprayChart({ atBats, title, bats }) {
         <span className="dim small">{t('spray.summary', { n: rows.length, h: hits })}</span>
       </h2>
       {placeable.length === 0 ? (
-        <div className="dim small">{t('spray.empty')}</div>
+        <div className="dim small">
+          {t('spray.empty')}
+          {fouls > 0 && <> {t('spray.foulNote', { n: fouls })}</>}
+        </div>
       ) : (
         <>
           <div className="spray-controls">
@@ -238,6 +246,7 @@ export default function SprayChart({ atBats, title, bats }) {
             {view === 'zone'
               ? t('spray.zoneNote', { s: ZONE_SLICES, r: ZONE_RINGS.length - 1 })
               : t('spray.exactNote', { n: exact, total: rows.length })}
+            {fouls > 0 && <> {t('spray.foulNote', { n: fouls })}</>}
           </p>
         </>
       )}

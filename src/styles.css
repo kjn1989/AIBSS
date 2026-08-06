@@ -1733,6 +1733,20 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
               図の座標なので、パッドの大きさに追随してほしい)
      精密な層 … 打点を中心にした同心円。中心が指で隠れても、輪の対称性
               から目が中心を復元する(実寸px。指の大きさは画面で変わらない) */
+/* ファウルグラウンド。芝の円をそのまま敷いていた頃はファウル側もフェアと
+   同じ緑で、押しても記録されない場所が押せそうに見えていた。
+   ファウルフライを押せる結果のときだけ「使える地面」の明るさにする */
+.bf-foulground { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.bf-foulground path { fill: rgba(6, 10, 14, .62); }
+.bf-foulground.on path { fill: rgba(6, 10, 14, .34); }
+.bf-foultag {
+  position: absolute; top: 5%; font-style: normal;
+  font-size: 9px; font-weight: 700; letter-spacing: .06em;
+  color: rgba(255, 255, 255, .5); pointer-events: none; white-space: nowrap;
+}
+.bf-foultag.left { left: 3%; }
+.bf-foultag.right { right: 3%; }
+
 .bf-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .bf-band { fill: rgba(88, 166, 255, .15); }
 .bf-wedge { fill: rgba(88, 166, 255, .13); }
@@ -1770,12 +1784,20 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 /* 方向名はくさびの先(スタンド)。手からもっとも遠い場所に置く読み札。
    一塁・三塁のくさびは外を向くので、JS 側で枠に収まるまで引き戻している */
 .bf-dirlabel {
-  position: absolute; transform: translate(-50%, -50%);
+  position: absolute;
   padding: 2px 8px; border-radius: 999px; white-space: nowrap; pointer-events: none;
   font-size: 11.5px; font-weight: 800; color: #fff; letter-spacing: .02em;
   background: rgba(10, 14, 18, .9); border: 1px solid rgba(255, 255, 255, .3);
   box-shadow: 0 2px 8px rgba(0, 0, 0, .5);
 }
+/* 端に寄せる版は中央揃えを解く。札の幅を知らなくてもはみ出さない */
+.bf-dirlabel.center { transform: translate(-50%, -50%); }
+.bf-dirlabel.edge-l { left: 4px; transform: translateY(-50%); }
+.bf-dirlabel.edge-r { right: 4px; transform: translateY(-50%); }
+/* ファウルは色を変える。フェアの打球と同じ見た目だと、記録を見返したときに
+   「三塁方向のフライ」と読み違える */
+.bf-dirlabel.foul { color: var(--amber); border-color: rgba(210, 153, 34, .55); }
+.depth-pill.foul { background: rgba(210, 153, 34, .18); color: var(--amber); }
 
 @media (prefers-reduced-motion: reduce) {
   .bf-ping { animation: none; opacity: .5; }

@@ -17,6 +17,7 @@
 // ============================================================
 import { RESULTS } from './model.js';
 import { oppNameOf, oppHasName } from './oppBox.js';
+import { isFoul } from './battedBall.js';
 
 // 表記ゆれの吸収。全角/半角・空白・記号・大文字小文字をならす。
 // 「上智大学女子野球部 Mamues」と「上智大学女子野球部Mamues」を同じ鍵にするため。
@@ -267,8 +268,10 @@ export function oppPlayerAtBats(games = [], oppKey) {
           if (p.contact === 'hard') hardHit += 1;
         }
         if (p.result === 'sacBunt') sacBunt += 1;
-        // 引っ張り/逆方向は打者の左右で入れ替わる。左打者は右方向が引っ張り
-        const d = p.direction;
+        // 引っ張り/逆方向は打者の左右で入れ替わる。左打者は右方向が引っ張り。
+        // ファウルは数えない。フェアの打球をどちらへ飛ばすかの割合なので、
+        // ファウルフライを混ぜると「三塁方向 = 引っ張り」として水増しされる
+        const d = isFoul(p.hitAngle) ? null : p.direction;
         if (d) {
           const rightSide = d === 'RF' || d === '1B' || d === '2B';
           const leftSide = d === 'LF' || d === '3B' || d === 'SS';

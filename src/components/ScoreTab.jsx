@@ -37,7 +37,7 @@ function AtBatHistory({ items, edition, lang }) {
     <div className="atbat-history">
       {items.map((it, i) => (
         <span className={`hist-chip ${resultCategory(it.result)}`} key={it.id}>
-          {i + 1}. {playLabel(it.result, it.direction, it.outType, it.soType, edition, lang)}
+          {i + 1}. {playLabel(it.result, it.direction, it.outType, it.soType, edition, lang, { hitAngle: it.hitAngle })}
           {multiOutLabel(it.outsOnPlay || 0) && <span className="mini-badge"> ⚡</span>}
         </span>
       ))}
@@ -446,7 +446,7 @@ function NoteSheet({ game, onClose, onConvert }) {
           <div className="section-title">{t('score.noteCandidates')}</div>
           {cands.map((c, i) => (
             <button key={i} className="cand-row" onClick={() => onConvert(c)}>
-              <b>{playLabel(c.result, c.direction, c.outType, c.soType, state.settings.edition, state.settings.lang || 'ja')}</b>
+              <b>{playLabel(c.result, c.direction, c.outType, c.soType, state.settings.edition, state.settings.lang || 'ja', { hitAngle: c.hitAngle })}</b>
               {typeof c.confidence === 'number' && <span className="pill small">{Math.round(c.confidence * 100)}%</span>}
               {c.why && <span className="small dim">{c.why}</span>}
             </button>

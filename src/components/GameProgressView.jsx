@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { useStore, usePlayerName, useT } from '../state/store.jsx';
-import { RESULTS, DIRECTIONS, SO_TYPES, resultCategory, multiOutLabel, outTypeLabel } from '../lib/model.js';
+import { RESULTS, DIRECTIONS, SO_TYPES, resultCategory, multiOutLabel, outTypeLabel, allowsFoul } from '../lib/model.js';
 import FieldPad from './FieldPad.jsx';
 import BattedBallPad from './BattedBallPad.jsx';
-import { depthBand } from '../lib/battedBall.js';
+import { depthBand, isFoul } from '../lib/battedBall.js';
 
 // バットに当たって前に飛んだ結果か。三振・四球に直すときは軌道と強さを消す
 const BATTED_BALL_RESULTS = new Set(['single', 'double', 'triple', 'hr', 'out', 'error', 'sacBunt', 'sacFly']);
@@ -50,7 +50,7 @@ function PlayCard({ log, nameOf, numberOf, onEdit, edition, lang, t, oppName }) 
   const name = isDefense ? (oppName ? oppName(p.letter) : p.letter) : nameOf(p.playerId);
   const number = isDefense ? null : numberOf(p.playerId);
   const category = resultCategory(p.result);
-  const label = playLabel(p.result, p.direction, p.outType, p.soType, edition, lang);
+  const label = playLabel(p.result, p.direction, p.outType, p.soType, edition, lang, { hitAngle: p.hitAngle });
   const multiOut = multiOutLabel(p.outsOnPlay || 0);
 
   return (
@@ -145,7 +145,16 @@ function EditPlaySheet({ game, log, onClose }) {
       <div className="section-title" style={isAtBat ? undefined : { marginTop: 0 }}>{t('gp.result')}</div>
       <div className="grid3">
         {Object.entries(RESULTS).map(([k, def]) => (
-          <button key={k} className={`small ${result === k ? 'primary' : ''}`} onClick={() => setResult(k)}>
+          <button
+            key={k}
+            className={`small ${result === k ? 'primary' : ''}`}
+            onClick={() => {
+              setResult(k);
+              // ファウルの安打は無い。ファウルフライを安打に直したら打点は外す
+              // (残すと「ファウルゾーンに落ちたヒット」という記録ができてしまう)
+              if (!allowsFoul(k) && point && isFoul(point.angle)) setPoint(null);
+            }}
+          >
             {lang === 'ja' ? def.label : t(`result.${k}`)}
           </button>
         ))}
@@ -159,6 +168,7 @@ function EditPlaySheet({ game, log, onClose }) {
           value={direction}
           point={point}
           gameId={game.id}
+          allowFoul={allowsFoul(result)}
           onChange={(key, pt) => { setDirection(key); setPoint(pt); }}
           onDone={() => setDirOpen(false)}
         />
@@ -166,6 +176,7 @@ function EditPlaySheet({ game, log, onClose }) {
         <button type="button" className="dir-summary" onClick={() => setDirOpen(true)}>
           <span className="dir-label">
             {direction ? (lang === 'ja' ? DIRECTIONS[direction] : t(`dir.${direction}`)) : t('playsheet.notTapped')}
+            {point && isFoul(point.angle) && <span className="depth-pill foul">{t('dir.foul')}</span>}
             {point && <span className="depth-pill">{t(`depth.${depthBand(point.depth)}`)}</span>}
           </span>
           <span className="change">{t('playsheet.change')}</span>
@@ -296,7 +307,7 @@ function NLCorrectionCard({ game }) {
     lineup: (game.lineup || []).map((l) => ({ order: l.order, name: nameOf(l.playerId), position: l.position || '' })),
     atbats: (game.playLogs || []).filter((l) => l.kind === 'atbat').map((l) => ({
       inning: l.inning, order: l.payload?.order, batter: nameOf(l.payload?.playerId),
-      result: playLabel(l.payload?.result, l.payload?.direction, l.payload?.outType, l.payload?.soType, state.settings.edition, lang),
+      result: playLabel(l.payload?.result, l.payload?.direction, l.payload?.outType, l.payload?.soType, state.settings.edition, lang, { hitAngle: l.payload?.hitAngle }),
     })),
   });
   // 同名で二重登録された選手がいる場合、この試合に既に出ている方を優先して選ぶ

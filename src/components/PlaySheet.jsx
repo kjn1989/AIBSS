@@ -1,11 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import Sheet from './Sheet.jsx';
 import { useStore, useT, usePlayerName, isMyTeamBatting } from '../state/store.jsx';
-import { RESULTS, DIRECTIONS, SO_TYPES, outTypeLabel } from '../lib/model.js';
+import { RESULTS, DIRECTIONS, SO_TYPES, outTypeLabel, allowsFoul } from '../lib/model.js';
 import { proposeMoves, batterDestOptions, runnerDestOptions, judgeAdvance } from '../lib/plays.js';
 import FieldPad from './FieldPad.jsx';
 import BattedBallPad from './BattedBallPad.jsx';
-import { depthBand } from '../lib/battedBall.js';
+import { depthBand, isFoul } from '../lib/battedBall.js';
 
 const NEEDS_DIRECTION = ['single', 'double', 'triple', 'hr', 'out', 'error', 'sacBunt', 'sacFly'];
 
@@ -183,6 +183,7 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
               value={direction}
               point={point}
               outfieldOnly={result === 'hr'}
+              allowFoul={allowsFoul(result)}
               onChange={(key, pt) => { setDirection(key); setPoint(pt); }}
               onDone={() => setDirOpen(false)}
               gameId={game.id}
@@ -191,6 +192,7 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
             <button type="button" className="dir-summary" onClick={() => setDirOpen(true)}>
               <span className="dir-label">
                 {lang === 'ja' ? DIRECTIONS[direction] : t(`dir.${direction}`)}
+                {point && isFoul(point.angle) && <span className="depth-pill foul">{t('dir.foul')}</span>}
                 {point && <span className="depth-pill">{t(`depth.${depthBand(point.depth)}`)}</span>}
               </span>
               <span className="change">{t('playsheet.change')}</span>
