@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { DIRECTIONS } from '../lib/model.js';
 import { useT } from '../state/store.jsx';
 import {
@@ -48,11 +49,23 @@ function markHintSeen(gameId) {
   try { localStorage.setItem(HINT_KEY, String(gameId || '')); } catch { /* 出し続けても害はない */ }
 }
 
-// ルーペの大きさと倍率。指の腹(約40px)より十分大きく取る
-const LOUPE = 116;
+// ---- ルーペ ----
+// 置き場所の決まりはひとつだけ: 「指の真上」。例外を作らない。
+//
+// 以前は上に入らなければ横へ逃がしていたが、パッドの上端は画面の y=249 で、
+// レンズ(116)+すき間 が入らない領域が外野ぜんぶに広がっていた。つまり
+// 「例外」のはずの横配置が、いちばんよく押す打球で毎回発動していた。
+// 左を押せば右に、右を押せば左に出るので、出るたびに探すことになる。
+// しかも指と同じ高さなので、本物の打点とレンズの中の点が並んで見えて
+// どちらが自分の指か分からない。
+//
+// パッドの上には画面の上端まで 249px 空いている。シートの中に閉じ込めず
+// body へ portal して画面座標で置けば、どこを押しても必ず上に入る。
+const LOUPE = 116;      // レンズの直径。指の腹(約40px)より十分大きく取る
 const LOUPE_ZOOM = 2.3;
-// 指先とレンズの下端のすき間。指の腹に少しかかるくらいだと近すぎる
-const LOUPE_GAP = 30;
+const LOUPE_GAP = 26;   // 指先とレンズ下端のすき間 = 茎の長さ
+const LOUPE_CAP = 22;   // レンズの上に載せる読み上げの高さ
+const LOUPE_EDGE = 6;   // 画面端に残す余白
 
 // フィールドの絵。本体とルーペの両方で同じものを描くために切り出す。
 // ルーペ側は拡大して覗くだけなので、押せる必要はない(span で描く)。
@@ -96,10 +109,9 @@ export default function FieldPad({ value, point, onChange, onDone, outfieldOnly 
   const timer = useRef(null);
   const [dragging, setDragging] = useState(false);
   const [loupe, setLoupe] = useState(false); // 押し続けている間だけ出す
-  // ルーペの拡大と配置に使う実寸。ドラッグ中は変わらないので押した時に一度だけ測る
-  const [size, setSize] = useState({ w: 0, h: 0, padLeft: 0, padTop: 0, frameW: 0 });
+  // ルーペの拡大と配置に使う実寸(画面座標)。押している間は動かないので一度だけ測る
+  const [size, setSize] = useState({ w: 0, h: 0, left: 0, top: 0, vw: 0 });
   const loupeTimer = useRef(null);
-  const frameRef = useRef(null);
   const [coach, setCoach] = useState(() => !hintSeenInGame(gameId));
   const keys = Object.keys(DIRECTIONS).filter((k) => (outfieldOnly ? OUTFIELD.includes(k) : true));
 
@@ -121,8 +133,7 @@ export default function FieldPad({ value, point, onChange, onDone, outfieldOnly 
     clearTimeout(timer.current);
     setDragging(true);
     const r = ref.current.getBoundingClientRect();
-    const fr = frameRef.current.getBoundingClientRect();
-    setSize({ w: r.width, h: r.height, padLeft: r.left - fr.left, padTop: r.top - fr.top, frameW: fr.width });
+    setSize({ w: r.width, h: r.height, left: r.left, top: r.top, vw: window.innerWidth });
     // すぐ出すと、素早く押しただけのときに一瞬ちらつく。少しだけ待つ
     clearTimeout(loupeTimer.current);
     loupeTimer.current = setTimeout(() => setLoupe(true), 110);
@@ -169,7 +180,7 @@ export default function FieldPad({ value, point, onChange, onDone, outfieldOnly 
         <span>{t('playsheet.tapField')}</span>
       </div>
 
-      <div className="pad-frame" ref={frameRef}>
+      <div className="pad-frame">
         {/* 深さの目盛り。上下方向に意味があることを、図の外で先に言い切る */}
         <div className="pad-ruler" aria-hidden="true">
           <i className="axis" />
@@ -222,23 +233,38 @@ export default function FieldPad({ value, point, onChange, onDone, outfieldOnly 
           )}
         </div>
 
-        {/* ルーペ。指がフィールドに重なると、どこを指しているのか自分で見えない。
-            押している間だけ、指のすぐ上に拡大して出す。
-            指の下は手のひらで隠れるので、必ず上(上に余白が無ければ横)に置く。
-            パッドは overflow:hidden なので、枠の側に置いて上へはみ出せるようにする */}
-        {loupe && marker && (() => {
-          const fingerX = size.padLeft + marker.fx * size.w;
-          const fingerY = size.padTop + marker.fy * size.h;
-          let left = fingerX - LOUPE / 2;
-          let top = fingerY - LOUPE_GAP - LOUPE;
-          if (top < -6) {
-            // 上に置けないときは指の横へ。下は手で隠れるので使わない
-            top = Math.max(-6, fingerY - LOUPE / 2);
-            left = marker.fx < 0.5 ? fingerX + LOUPE_GAP : fingerX - LOUPE_GAP - LOUPE;
-          }
-          left = Math.max(2, Math.min(size.frameW - LOUPE - 2, left));
-          return (
-            <div className="pad-loupe" style={{ left, top }}>
+      </div>
+
+      {/* ルーペ。指がフィールドに重なると、どこを指しているのか自分で見えない。
+          押している間だけ、指の真上に拡大して出す。
+          - 例外なく真上。出る場所が毎回同じなら、探さずに視線が行く
+          - レンズの下端から打点まで細い線(茎)を引く。離れた場所にある丸が
+            「いま押している点」だと、線があれば一度で分かる
+          - 読み上げはレンズの上。手からいちばん遠く、拡大した図も汚さない
+          画面座標で置きたいので body へ portal する(シートの overflow に切られない) */}
+      {loupe && marker && createPortal((() => {
+        const fingerX = size.left + marker.fx * size.w;
+        const fingerY = size.top + marker.fy * size.h;
+        // 画面からはみ出さない範囲で、できるかぎり指の真上
+        const cx = Math.max(
+          LOUPE / 2 + LOUPE_EDGE,
+          Math.min(size.vw - LOUPE / 2 - LOUPE_EDGE, fingerX),
+        );
+        const top = Math.max(LOUPE_EDGE, fingerY - LOUPE_GAP - LOUPE);
+        return (
+          <div className="pad-loupe-layer">
+            {/* 茎。端に寄って真上に置けなかったときは少し傾き、打点を指し続ける */}
+            <svg className="pad-loupe-stem" aria-hidden="true">
+              <line
+                x1={cx} y1={top + LOUPE} x2={fingerX} y2={fingerY}
+                stroke="rgba(0,0,0,.5)" strokeWidth="4.5" strokeLinecap="round"
+              />
+              <line
+                x1={cx} y1={top + LOUPE} x2={fingerX} y2={fingerY}
+                stroke="#fff" strokeWidth="2" strokeLinecap="round"
+              />
+            </svg>
+            <div className="pad-loupe" style={{ left: cx - LOUPE / 2, top }}>
               <div
                 className="pad-loupe-scene bf-field bf"
                 style={{
@@ -252,13 +278,13 @@ export default function FieldPad({ value, point, onChange, onDone, outfieldOnly 
                 <FieldScene t={t} keys={keys} value={value} />
               </div>
               <i className="pad-loupe-cross" />
-              <b className="pad-loupe-label">
-                {t(`dir.${value}`)}{band ? ` ${t(`depth.${band}`)}` : ''}
-              </b>
             </div>
-          );
-        })()}
-      </div>
+            <b className="pad-loupe-label" style={{ left: cx, top: top - LOUPE_CAP - 4 }}>
+              {t(`dir.${value}`)}{band ? ` ${t(`depth.${band}`)}` : ''}
+            </b>
+          </div>
+        );
+      })(), document.body)}
 
       <div className="pad-readout">
         {value ? (
