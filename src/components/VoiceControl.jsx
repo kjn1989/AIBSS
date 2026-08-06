@@ -395,6 +395,13 @@ export default function VoiceControl({ game }) {
       beep(320, 90);
       return true;
     }
+    // 照合に失敗すると全選手から拾い直すので、既に出場中の選手が返りうる。
+    // そのまま代打・代走にすると、その選手が2つの打順を占める
+    if ((op === 'ph' || op === 'pr') && inLineup.has(matched.id)) {
+      speak(`${matched.name}は出場中です`);
+      beep(320, 90);
+      return true;
+    }
 
     if (op === 'pitcher') {
       dispatch({

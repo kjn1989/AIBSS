@@ -774,6 +774,13 @@ export function reducer(state, action) {
       const g = deep(state.games[action.gameId]);
       const slot = g.lineup.find((l) => l.order === action.order);
       if (!slot) return state;
+      // 同じ選手が2つの打順を占めることはない。占めると打席も成績も
+      // 二重に付き、打順の追跡も壊れる。
+      // 入力シートは打順に居る選手を候補から外しているが、音声は照合に
+      // 失敗すると全選手から拾い直すので、ここでも止める
+      if (g.lineup.some((l) => l.order !== action.order && l.playerId === action.playerId)) {
+        return state;
+      }
       const outgoing = slot.playerId;
       slot.playerId = action.playerId;
       if (action.position) slot.position = action.position;

@@ -67,7 +67,7 @@ export function SubstituteSheet({ game, slot, onClose, initialKind = 'ph' }) {
         <button className="ghost" onClick={onClose}>{t('action.cancel')}</button>
         <button
           className="primary"
-          disabled={!playerId}
+          disabled={!playerId || (kind === 'pr' && !runnerBase)}
           onClick={() => {
             dispatch({
               type: 'SUBSTITUTE',
