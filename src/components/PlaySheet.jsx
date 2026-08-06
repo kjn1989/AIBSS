@@ -103,6 +103,33 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
   // 併殺打: 打者アウトに加え走者も1人以上アウトが成立条件。走者が誰もアウトになっていなければ確定不可
   const dpNoRunnerOut = outType === 'dp' && ![1, 2, 3].some((b) => runnersOn[b] && dests[b] === 'out');
 
+  // ---- 状況と矛盾する記録を止める ----
+  // 犠打・犠飛は「2アウトになる前」に限られる(公認野球規則 9.08 a / d)。
+  // 2アウトでの送りバントや外野フライは記録上ただの凡打で、そのまま残すと
+  // 犠打数・犠飛数が水増しされるだけでなく、犠打・犠飛は打数に数えないので
+  // 打率の分母まで狂う。
+  const isSac = result === 'sacBunt' || result === 'sacFly';
+  const sacTwoOuts = isSac && game.outs >= 2;
+  const sacNoRunner = isSac && !hadRunners;
+  const advanced = (b) => dests[b] === 4 || (typeof dests[b] === 'number' && dests[b] > b);
+  // 犠飛は走者が生還してはじめて犠飛。一・二塁の走者が1つずつ進んだだけの
+  // 外野フライは犠飛ではない
+  const sacFlyNoScore = result === 'sacFly' && !sacTwoOuts && !sacNoRunner
+    && ![1, 2, 3].some((b) => runnersOn[b] && dests[b] === 4);
+  // 犠打は走者が進んではじめて犠打。誰も進まなければ野選か凡打
+  const sacBuntNoAdvance = result === 'sacBunt' && !sacTwoOuts && !sacNoRunner
+    && ![1, 2, 3].some((b) => runnersOn[b] && advanced(b));
+  // 振り逃げ: 2アウト未満で一塁が埋まっているときは打者は走れない(規則 5.05 a(2))
+  const dropThirdIllegal = result === 'so' && batterTo === 1 && runnersOn[1] && game.outs < 2;
+
+  const blockers = [
+    [sacTwoOuts, 'playsheet.sacTwoOuts'],
+    [sacNoRunner, 'playsheet.sacNoRunner'],
+    [sacFlyNoScore, 'playsheet.sacFlyNoScore'],
+    [sacBuntNoAdvance, 'playsheet.sacBuntNoAdvance'],
+    [dropThirdIllegal, 'playsheet.dropThirdIllegal'],
+  ].filter(([on]) => on).map(([, k]) => k);
+
   // 凡打の種類を選ぶ(併殺打選択時は、強制されるフォース走者(一塁→二塁→三塁の順で先頭)を
   // 自動でアウトに。既に誰かアウトになっていれば上書きしない)
   const selectOutType = (k) => {
@@ -349,6 +376,7 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
 
       {collision && <div className="warn-box mt12">{t('playsheet.collision')}</div>}
       {dpNoRunnerOut && <div className="warn-box mt12">{t('playsheet.dpNoOut')}</div>}
+      {blockers.map((k) => <div key={k} className="warn-box mt12">{t(k)}</div>)}
 
       <div className="confirm-card mt16" style={{ marginBottom: 0, padding: 12 }}>
         <div className="q" style={{ fontSize: 16, marginBottom: 0 }}>
@@ -358,7 +386,7 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
 
       <div className="sheet-actions">
         <button className="ghost" onClick={onClose}>{t('action.cancel')}</button>
-        <button className="primary" onClick={confirm} disabled={(needsDir && !direction) || collision || dpNoRunnerOut}>
+        <button className="primary" onClick={confirm} disabled={(needsDir && !direction) || collision || dpNoRunnerOut || blockers.length > 0}>
           {t('action.confirm')}
         </button>
       </div>
