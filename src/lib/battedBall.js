@@ -180,12 +180,17 @@ export function chartFan(depth) {
 // 戻り値の exact で「実際に押された点」か「守備位置からの推定」かが分かる。
 export function ballOf(ab) {
   if (ab && ab.hitAngle != null && ab.hitDepth != null) {
-    return { angle: ab.hitAngle, depth: ab.hitDepth, exact: true };
+    return { angle: ab.hitAngle, depth: ab.hitDepth, exact: true, foul: isFoul(ab.hitAngle) };
   }
   const p = ab && POS_BALL[ab.direction];
   if (!p) return null;
-  return { angle: p.angle, depth: p.depth, exact: false };
+  return { angle: p.angle, depth: p.depth, exact: false, foul: false };
 }
+
+// ファウルかどうかは角度だけで決まる。専用の項目を足さないのは、
+// 足すと「角度はファウルなのに項目はフェア」という食い違いが起こりうるため。
+// 角度の無い古い記録はフェア扱い(そもそもファウルを記録できなかった)。
+export const isFoul = (angle) => angle != null && Math.abs(angle) > 45;
 
 // ---- 区画(角度5 × 深さ3) ----
 // 数が増えたら1本ずつではなく区画の濃淡で見せる。
@@ -237,7 +242,9 @@ export function zoneCounts(atBats = []) {
   let placed = 0;
   for (const ab of atBats) {
     const b = ballOf(ab);
-    if (!b) continue;
+    // ファウルには区画が無い(区画はフェアゾーンの5分割)。
+    // zoneOf は範囲外を端の区画に丸めるので、入れると端の件数が水増しされる
+    if (!b || b.foul) continue;
     counts[zoneOf(b.angle, Math.min(b.depth, 1.05))] += 1;
     placed += 1;
   }
@@ -261,6 +268,9 @@ export function zoneCounts(atBats = []) {
 // viewBox の縦横比は PAD_ASPECT と一致させること。ずれると円が楕円になる。
 export const PAD_VB = { w: 1000, h: 1000 * PAD_ASPECT };
 export const PAD_MAX = 1.18;          // スタンドまで描く深さ
+// ファウルグラウンドを描く角度。パッドの下の隅で ±89度まで届くので、
+// そこまで塗っておけば「押せる場所」と絵が食い違わない
+export const PAD_FOUL_MAX = 89;
 export const PAD_LABEL_DEPTH = 1.10;  // 方向名を置く深さ(柵の外)
 
 const padHome = { x: PAD_VB.w * HOME_X, y: PAD_VB.w * HOME_Y };
@@ -322,11 +332,14 @@ export function padBandRange(depth) {
 // 「左翼」の札が三塁寄りの角に出てしまうため。
 //
 // 一塁・三塁の方向はそのままだと図の外に出て、枠に切られて字が読めない。
-// 枠に収まるところまで引き戻す。
-export function padLabelPoint(angle, margin = 0.085) {
+// 中央揃えのまま座標を引き戻すやり方だと、札の幅ぶんの余白を知っている
+// 必要があり、「ファウル 三塁」のように字数が増えた瞬間にまた切れる。
+// そこで端に近いときは中央揃えをやめて枠の端に寄せる。
+// こうすると札がどれだけ長くても、はみ出しようがない。
+export function padLabelPoint(angle, margin = 0.17) {
   const p = ballToPadPoint(angle, PAD_LABEL_DEPTH);
-  return {
-    fx: Math.max(margin, Math.min(1 - margin, p.fx)),
-    fy: Math.max(0.045, Math.min(0.955, p.fy)),
-  };
+  const fy = Math.max(0.045, Math.min(0.955, p.fy));
+  if (p.fx < margin) return { anchor: 'edge-l', fx: 0, fy };
+  if (p.fx > 1 - margin) return { anchor: 'edge-r', fx: 1, fy };
+  return { anchor: 'center', fx: p.fx, fy };
 }

@@ -2,9 +2,9 @@ import React, { useRef, useState } from 'react';
 import { DIRECTIONS } from '../lib/model.js';
 import { useT } from '../state/store.jsx';
 import {
-  padPointToBall, ballToPadPoint, nearestDirection, depthBand,
+  padPointToBall, ballToPadPoint, nearestDirection, depthBand, isFoul,
   POS_PAD, PAD_FENCE, DEPTH_BANDS,
-  PAD_VB, PAD_MAX, padArc, padSector, padWedge, padBandRange, padLabelPoint,
+  PAD_VB, PAD_MAX, PAD_FOUL_MAX, padArc, padSector, padWedge, padBandRange, padLabelPoint,
 } from '../lib/battedBall.js';
 
 // ============================================================
@@ -54,7 +54,9 @@ function markHintSeen(gameId) {
   try { localStorage.setItem(HINT_KEY, String(gameId || '')); } catch { /* 出し続けても害はない */ }
 }
 
-export default function FieldPad({ value, point, onChange, onDone, outfieldOnly = false, gameId }) {
+export default function FieldPad({
+  value, point, onChange, onDone, outfieldOnly = false, allowFoul = false, gameId,
+}) {
   const t = useT();
   const ref = useRef(null);
   const timer = useRef(null);
@@ -64,7 +66,9 @@ export default function FieldPad({ value, point, onChange, onDone, outfieldOnly 
 
   const commit = (fx, fy) => {
     const b = padPointToBall(fx, fy);
-    if (b.foul) return; // ファウルゾーンは記録しない
+    // ファウルフライは凡打なので、ファウルグラウンドも押せる必要がある。
+    // 一方でファウルの安打は無いので、結果によっては受け付けない
+    if (b.foul && !allowFoul) return;
     const dir = nearestDirection(b.angle, b.depth);
     if (outfieldOnly && !OUTFIELD.includes(dir)) return;
     onChange(dir, { angle: b.angle, depth: b.depth });
@@ -110,8 +114,10 @@ export default function FieldPad({ value, point, onChange, onDone, outfieldOnly 
     return { key: b.key, top: Math.max(2.5, Math.min(96, topOf((lo + hi) / 2))) };
   });
 
-  // 目印の幾何。押している間だけでなく、選ばれている間ずっと出す
-  const wedge = marker ? padWedge(point.angle) : null;
+  // 目印の幾何。押している間だけでなく、選ばれている間ずっと出す。
+  // ファウルは方向のくさびを持たない(区画はフェアゾーンの5分割なので)
+  const foul = marker ? isFoul(point.angle) : false;
+  const wedge = marker && !foul ? padWedge(point.angle) : null;
   const range = marker ? padBandRange(point.depth) : null;
   const label = marker && value ? padLabelPoint(point.angle) : null;
   const spot = marker ? { left: `${marker.fx * 100}%`, top: `${marker.fy * 100}%` } : null;
@@ -166,14 +172,33 @@ export default function FieldPad({ value, point, onChange, onDone, outfieldOnly 
           ))}
           <div className="bf-ring wall" style={{ width: `${dia(1)}%` }} />
 
+          {/* ファウルグラウンド。ファウルフライを押せる結果のときは
+              「使える地面」に、そうでないときは沈めて押せないと分かるように。
+              芝の円をそのまま敷いていた頃は、ファウル側もフェアと同じ緑で、
+              押しても記録されない場所が押せそうに見えていた */}
+          <svg
+            className={`bf-foulground${allowFoul ? ' on' : ''}`}
+            viewBox={`0 0 ${PAD_VB.w} ${PAD_VB.h}`}
+            aria-hidden="true"
+          >
+            <path d={padSector(-PAD_FOUL_MAX, -45, 0, PAD_MAX)} />
+            <path d={padSector(45, PAD_FOUL_MAX, 0, PAD_MAX)} />
+          </svg>
+          {allowFoul && (
+            <>
+              <i className="bf-foultag left">{t('dir.foul')}</i>
+              <i className="bf-foultag right">{t('dir.foul')}</i>
+            </>
+          )}
+
           {/* 粗い層: いまいる深さの帯と方向のくさびが光る。
               指が点に乗っていても、図の広い面積が「何が記録されるか」を答える。
               図の座標なので拡大縮小に追随してほしく、SVG で描く */}
           {marker && (
             <svg className="bf-overlay" viewBox={`0 0 ${PAD_VB.w} ${PAD_VB.h}`} aria-hidden="true">
               <path className="bf-band" d={padSector(-45, 45, range.dIn, range.dOut)} />
-              <path className="bf-wedge" d={padSector(wedge.a1, wedge.a2, 0, 1)} />
-              <path className="bf-cell" d={padSector(wedge.a1, wedge.a2, range.dIn, range.dOut)} />
+              {wedge && <path className="bf-wedge" d={padSector(wedge.a1, wedge.a2, 0, 1)} />}
+              {wedge && <path className="bf-cell" d={padSector(wedge.a1, wedge.a2, range.dIn, range.dOut)} />}
               {/* 帯は「定位置」までしか言えない。いまの正確な深さを弧1本で足す。
                   この弧はそのまま左の目盛りへ届く */}
               <path className="bf-depth back" d={depthArc} />
@@ -208,8 +233,13 @@ export default function FieldPad({ value, point, onChange, onDone, outfieldOnly 
           {/* 方向名はくさびの先。手からもっとも遠い場所に置く読み札。
               一塁・三塁のくさびは外を向くので、枠に収まるまで引き戻している */}
           {label && (
-            <b className="bf-dirlabel" style={{ left: `${label.fx * 100}%`, top: `${label.fy * 100}%` }}>
-              {t(`dir.${value}`)}
+            <b
+              className={`bf-dirlabel ${label.anchor}${foul ? ' foul' : ''}`}
+              style={label.anchor === 'center'
+                ? { left: `${label.fx * 100}%`, top: `${label.fy * 100}%` }
+                : { top: `${label.fy * 100}%` }}
+            >
+              {foul ? `${t('dir.foul')} ${t(`dir.${value}`)}` : t(`dir.${value}`)}
             </b>
           )}
 
@@ -249,6 +279,7 @@ export default function FieldPad({ value, point, onChange, onDone, outfieldOnly 
         {value ? (
           <>
             <b>{t(`dir.${value}`)}</b>
+            {foul && <span className="depth-pill foul">{t('dir.foul')}</span>}
             {band && <span className={`depth-pill${band === 'over' ? ' hr' : ''}`}>{t(`depth.${band}`)}</span>}
             <span className="dim small">{t(dragging ? 'playsheet.dragHint' : 'playsheet.willRecord')}</span>
           </>

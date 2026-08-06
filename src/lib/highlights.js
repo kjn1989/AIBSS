@@ -13,7 +13,7 @@ function findClutchHit(game, nameOf) {
   const ab = [...game.atBats].reverse().find((a) => ['goahead', 'comeback', 'first'].includes(a.clutch));
   if (!ab) return null;
   const who = nameOf ? nameOf(ab.playerId) : '';
-  return { atBat: ab, name: who, label: `${inningLabel(ab)} ${who ? `${who} ` : ''}${playLabel(ab.result, ab.direction, ab.outType, ab.soType)}(${ab.rbi}打点)` };
+  return { atBat: ab, name: who, label: `${inningLabel(ab)} ${who ? `${who} ` : ''}${playLabel(ab.result, ab.direction, ab.outType, ab.soType, undefined, 'ja', { hitAngle: ab.hitAngle })}(${ab.rbi}打点)` };
 }
 
 // MVP的活躍: 安打3・本塁打5・打点2・得点1の簡易加重で最高得点の打者
