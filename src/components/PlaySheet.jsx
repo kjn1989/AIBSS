@@ -34,6 +34,11 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
   const runnersOn = { 1: !!game.runners[1], 2: !!game.runners[2], 3: !!game.runners[3] };
   const proposal = useMemo(() => proposeMoves(result, runnersOn), [result]);
 
+  // 併殺打が成立しうるか。打者アウト + 走者アウトで2つ取るので、
+  // 既に2アウトなら起こりえない(1つ目のアウトでその回が終わる)。
+  // 走者が居ないときも成立しない。
+  const dpPossible = result === 'out' && (runnersOn[1] || runnersOn[2] || runnersOn[3]) && game.outs < 2;
+
   const [direction, setDirection] = useState(initial.direction || null);
   // 打点の極座標(角度・深さ)。方向チップだけを押した場合もここに入る
   const [point, setPoint] = useState(
@@ -41,7 +46,13 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
   );
   // 方向未選択時のみ広いフィールド図を開いておく。選択後は折りたたんでスクロールを減らす
   const [dirOpen, setDirOpen] = useState(!initial.direction);
-  const [outType, setOutType] = useState(initial.outType || (result === 'out' ? 'ground' : null));
+  // 音声や取り込みで併殺が指定されていても、成立しない状況なら併殺では始めない。
+  // ボタンが押せないのに併殺のまま固まって、解除できなくなるのを防ぐ
+  const [outType, setOutType] = useState(
+    initial.outType === 'dp' && !dpPossible
+      ? 'ground'
+      : (initial.outType || (result === 'out' ? 'ground' : null)),
+  );
   // 打球の強さ。既定は未記録(null)。押されていないものを平凡として
   // 数え始めるとハードヒット率がすぐ嘘になるので、既定値は入れない
   const [contact, setContact] = useState(initial.contact || null);
@@ -224,7 +235,7 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
             onChange={(tr, c) => { setOutType(tr); setContact(c); }}
             dp={outType === 'dp'}
             onDp={() => (outType === 'dp' ? setOutType('ground') : selectOutType('dp'))}
-            dpDisabled={result !== 'out' || !hadRunners}
+            dpDisabled={!dpPossible}
           />
         </>
       )}

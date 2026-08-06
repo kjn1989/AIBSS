@@ -184,6 +184,9 @@ function EditPlaySheet({ game, log, onClose }) {
       )}
 
       <div className="section-title">{t('playsheet.battedBall')}</div>
+      {/* 併殺は、その打席が始まった時点で2アウト未満のときだけ。
+          既に2アウトなら1つ目のアウトでその回が終わるので起こりえない。
+          古いログには outsBefore が無いので、その場合は従来どおり許す */}
       <BattedBallPad
         trajectory={outType === 'dp' ? null : outType}
         contact={contact}
@@ -191,7 +194,7 @@ function EditPlaySheet({ game, log, onClose }) {
         onChange={(tr, c) => { setOutType(tr); setContact(c); }}
         dp={outType === 'dp'}
         onDp={() => setOutType(outType === 'dp' ? 'ground' : 'dp')}
-        dpDisabled={result !== 'out'}
+        dpDisabled={result !== 'out' || (p.outsBefore ?? 0) >= 2}
       />
       {result === 'so' && (
         <>

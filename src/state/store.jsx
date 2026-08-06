@@ -323,6 +323,15 @@ function judgeClutch(scoreDiffBefore, rbi, myScoreBefore, oppScoreBefore) {
 }
 
 // チェンジ処理(3アウト)
+// 1つの回で3アウトを超えることはない。
+// 2アウトから併殺を記録する等、成立しないプレイが入口をすり抜けても、
+// ここで止めれば投球回(outsRecorded)や「⚡ダブルプレー」の表示までは壊れない。
+// 野球の規則そのもの(1つ目のアウトでその回は終わる)なので、
+// 丸めているのではなく正しい値にしている。
+function capOuts(game) {
+  if (game.outs > 3) game.outs = 3;
+}
+
 function changeHalf(game) {
   game.outs = 0;
   game.runners = { 1: null, 2: null, 3: null };
@@ -975,6 +984,7 @@ export function reducer(state, action) {
       }
       const whoOf = (from) => ({ playerId: whoByFrom[from]?.playerId ?? null, letter: whoByFrom[from]?.letter ?? null });
       applyRunnerMoves(g, action.moves, { eventKind: action.event, erChoices: action.erChoices });
+      capOuts(g);
       // 守備時: 走塁アウト(盗塁死・牽制死等)も投手のアウト数に加算
       if (!isMyTeamBatting(g) && g.currentPitcherId && g.outs > outsBefore) {
         ensurePitchingRecord(g, g.currentPitcherId).outsRecorded += g.outs - outsBefore;
@@ -1074,6 +1084,7 @@ export function reducer(state, action) {
       //  movesにアウトがあるのに+1すると打者アウトと合わせて3アウトになる二重計上バグになる)
       if (p.outType === 'dp' && !(p.moves || []).some((m) => m.to === 'out')) g.outs += 1;
       if (p.extraOuts) g.outs += p.extraOuts;
+      capOuts(g);
 
       // このプレイでまとめて取ったアウト数(ダブル/トリプルプレー判定用)。changeHalf前に確定。
       const outsOnPlay = Math.max(0, g.outs - outsBefore);
