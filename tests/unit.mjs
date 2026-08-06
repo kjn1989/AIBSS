@@ -1812,6 +1812,26 @@ test('padPointToBall: チップの位置は今までどおりの方向、深さ�
   assert.equal(depthBand(1.05), 'over');                  // 柵越え
 });
 
+test('POS_BALL: 外野チップは「深い」の帯にかからない(頭を越えた当たりを吸わない)', () => {
+  // チップは押すと吸着する <button> なので、深く置くと「外野の頭を越えた
+  // 当たり」を狙った指がチップに吸われ、深い当たりが定位置として記録される。
+  // チップの高さ26px ぶんが「深い」の内側境界(深さ0.86)より手前にあること。
+  const H = 289;                       // 実機幅390pxのときのパッド高
+  const py = (angle, depth) => ballToPadPoint(angle, depth).fy * H;
+  for (const k of ['LF', 'CF', 'RF']) {
+    const { angle, depth } = POS_BALL[k];
+    const chipTop = py(angle, depth) - 13;   // チップ上端(高さ26pxの半分)
+    const deepEdge = py(angle, 0.86);        // 「深い」の内側境界
+    assert.ok(chipTop > deepEdge + 4,
+      `${k}: チップ上端 ${chipTop.toFixed(1)} が「深い」の境界 ${deepEdge.toFixed(1)} に近すぎる`);
+    // 前に出しすぎて「外野前」に落ちてもいけない(チップの名前は定位置)
+    assert.equal(depthBand(depth), 'normal', `${k} は定位置の帯に入る`);
+  }
+  // 中堅はいちばん深く守る
+  assert.ok(POS_BALL.CF.depth > POS_BALL.LF.depth);
+  assert.equal(POS_BALL.LF.depth, POS_BALL.RF.depth, '左右は対称');
+});
+
 test('padPointToBall: ファウルゾーンは記録しない / 上辺はスタンド(柵越え)', () => {
   assert.equal(padPointToBall(0.02, 0.98).foul, true);  // 三塁線の外
   assert.equal(padPointToBall(0.98, 0.98).foul, true);  // 一塁線の外
