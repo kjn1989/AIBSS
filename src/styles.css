@@ -1781,22 +1781,29 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
   0% { transform: translate(-50%, -50%) scale(.35); opacity: .85; }
   70%, 100% { transform: translate(-50%, -50%) scale(2.6); opacity: 0; }
 }
-/* 方向名はくさびの先(スタンド)。手からもっとも遠い場所に置く読み札。
-   一塁・三塁のくさびは外を向くので、JS 側で枠に収まるまで引き戻している */
+/* 方向名はセンター奥のスタンドに固定する(どこを押しても同じ場所)。
+   フェンスの頂点は上から 14.0%(battedBall.js の PAD_STANDS_TOP)で、
+   そこより上はどの横位置にも芝が無い。札の下端をその内側に収めておけば、
+   「ファウル 左翼」のように字数が増えても図には被らない。
+   打点に合わせて動かしていた頃は一塁・三塁で枠の外へ出て字が切れていた。
+   位置で方向を示す役目はくさびが担っているので、札は動かなくてよい。
+   高さの予算: パッド高 289px のとき、フェンスまで 40.6px に対し札は上端
+   5.2px + 高さ 27px = 32.2px。実機のフォントが少し大きくても触れないだけの
+   余裕を残す(検証で 5px 以上を要求している) */
 .bf-dirlabel {
-  position: absolute;
-  padding: 2px 8px; border-radius: 999px; white-space: nowrap; pointer-events: none;
-  font-size: 11.5px; font-weight: 800; color: #fff; letter-spacing: .02em;
-  background: rgba(10, 14, 18, .9); border: 1px solid rgba(255, 255, 255, .3);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, .5);
+  position: absolute; left: 50%; top: 1.8%; transform: translateX(-50%);
+  padding: 4px 14px; border-radius: 999px; white-space: nowrap; pointer-events: none;
+  font-size: 14px; font-weight: 800; line-height: 1.15; letter-spacing: .06em;
+  color: #fff; background: var(--accent-2);
+  border: 1.5px solid rgba(255, 255, 255, .6);
+  box-shadow: 0 3px 14px rgba(0, 0, 0, .6), 0 0 0 4px rgba(31, 111, 235, .22);
 }
-/* 端に寄せる版は中央揃えを解く。札の幅を知らなくてもはみ出さない */
-.bf-dirlabel.center { transform: translate(-50%, -50%); }
-.bf-dirlabel.edge-l { left: 4px; transform: translateY(-50%); }
-.bf-dirlabel.edge-r { right: 4px; transform: translateY(-50%); }
 /* ファウルは色を変える。フェアの打球と同じ見た目だと、記録を見返したときに
    「三塁方向のフライ」と読み違える */
-.bf-dirlabel.foul { color: var(--amber); border-color: rgba(210, 153, 34, .55); }
+.bf-dirlabel.foul {
+  background: var(--amber); color: #1b1405;
+  box-shadow: 0 3px 14px rgba(0, 0, 0, .6), 0 0 0 4px rgba(210, 153, 34, .25);
+}
 .depth-pill.foul { background: rgba(210, 153, 34, .18); color: var(--amber); }
 
 @media (prefers-reduced-motion: reduce) {

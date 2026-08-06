@@ -21,7 +21,7 @@ import { yearOfDate, yearOfGame, yearsInGames, tenureByPlayer, playedInYear, isA
 
 import { rebuildBatters, findDuplicateAtBats, findOrderBreaks, canRebuildOrders } from '../src/lib/battersRebuild.js';
 import { ownOffenseStats, ownBatteryStats } from '../src/lib/ownScout.js';
-import { padPointToBall, ballToPadPoint, nearestDirection, depthBand, contactCandidate, ballOf, chartPoint, zoneCounts, zoneOf, POS_BALL, PAD_VB, PAD_ASPECT, padPoint, padWedge, padBandRange, padLabelPoint, padSector, padArc, isFoul } from '../src/lib/battedBall.js';
+import { padPointToBall, ballToPadPoint, nearestDirection, depthBand, contactCandidate, ballOf, chartPoint, zoneCounts, zoneOf, POS_BALL, PAD_VB, PAD_ASPECT, padPoint, padWedge, padBandRange, PAD_STANDS_TOP, padSector, padArc, isFoul } from '../src/lib/battedBall.js';
 
 test('parseDirectionOnly: 方向のみの発話は方向、結果語を含めばnull(言い直し扱い)', () => {
   assert.equal(parseDirectionOnly('ライト'), 'RF');
@@ -1931,33 +1931,19 @@ test('padBandRange: 光らせる帯は深さの帯と一致し、柵越えは図
   assert.ok(Number.isFinite(over.dOut) && over.dOut <= 1.18, `外周で止める ${over.dOut}`);
 });
 
-test('padLabelPoint: 端に寄る札は中央揃えを解く(札の幅を知らなくてもはみ出さない)', () => {
-  // ファウルまで含めて、どの角度でも枠の中に収まる置き方になる
-  for (let angle = -89; angle <= 89; angle += 1.5) {
-    const p = padLabelPoint(angle);
-    assert.ok(['center', 'edge-l', 'edge-r'].includes(p.anchor), `${angle}: ${p.anchor}`);
-    if (p.anchor === 'center') {
-      // 中央揃えのままでよいのは、札の幅ぶんの余白がある内側だけ
-      assert.ok(p.fx >= 0.17 && p.fx <= 0.83, `${angle}: fx=${p.fx}`);
-    }
-    assert.ok(p.fy >= 0.045 && p.fy <= 0.955, `${angle}: fy=${p.fy}`);
+test('PAD_STANDS_TOP: この高さより上はどの横位置にも芝が無い(札が図に被らない根拠)', () => {
+  // 方向名はここより上に固定する。座標を計算しないので、札がどれだけ
+  // 長くなっても切れない — 二度やらかした「枠外にはみ出す」の再発防止
+  assert.ok(Math.abs(PAD_STANDS_TOP - 0.1404) < 0.001, `PAD_STANDS_TOP=${PAD_STANDS_TOP}`);
+  // フェンス(深さ1)の頂点と一致する
+  assert.ok(Math.abs(ballToPadPoint(0, 1).fy - PAD_STANDS_TOP) < 1e-9);
+  // その高さでは、左端から右端までどこを見ても芝(深さ1以内)に入らない
+  for (let fx = 0; fx <= 1.0001; fx += 0.02) {
+    assert.ok(padPointToBall(fx, PAD_STANDS_TOP).depth >= 1,
+      `fx=${fx.toFixed(2)} で深さ ${padPointToBall(fx, PAD_STANDS_TOP).depth.toFixed(3)}`);
   }
-  // 外を向く方向は端へ。ここを中央揃えのまま座標だけ引き戻すと、
-  // 「ファウル 三塁」のように字数が増えた瞬間にまた切れていた
-  assert.equal(padLabelPoint(-39.2).anchor, 'edge-l');
-  assert.equal(padLabelPoint(39.2).anchor, 'edge-r');
-  assert.equal(padLabelPoint(-70).anchor, 'edge-l');
-  assert.equal(padLabelPoint(70).anchor, 'edge-r');
-  // 中央寄りの打球は素のままの位置に置ける
-  assert.equal(padLabelPoint(0).anchor, 'center');
-  for (const angle of [-15, 15]) {
-    const p = padLabelPoint(angle);
-    assert.equal(p.anchor, 'center');
-    assert.ok(Math.abs(p.fx - ballToPadPoint(angle, 1.1).fx) < 1e-9, `${angle} は素のまま`);
-  }
-  // くさびの中心ではなく実際の角度に置くので、角度が浅いほど中央寄りになる。
-  // (くさび中心だと同じくさびの中はすべて同じ場所になってしまう)
-  assert.ok(padLabelPoint(-15).fx > padLabelPoint(-20).fx, '角度が浅いほど中央寄り');
+  // 1つ下(内側)には芝がある = 境目として正しい
+  assert.ok(padPointToBall(0.5, PAD_STANDS_TOP + 0.02).depth < 1);
 });
 
 test('padSector / padArc: 有効な path を返し、内側が本塁のときは円弧を戻さない', () => {
