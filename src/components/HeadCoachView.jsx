@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useStore, usePlayerName, useT } from '../state/store.jsx';
 import { aggregateBatting, battingMetrics, fmtAvg } from '../lib/stats.js';
 import { generateLineup } from '../lib/gemini.js';
-import { POSITIONS, uncoveredPositions } from '../lib/model.js';
+import { POSITIONS, uncoveredPositions, attendeesOf } from '../lib/model.js';
 import FullscreenView from './FullscreenView.jsx';
 
 // AIヘッドコーチ: 今季の打撃成績をもとにGeminiが打順・守備位置を提案する(参考・おまけ機能)
@@ -19,8 +19,10 @@ export default function HeadCoachView({ game, canApply, onClose }) {
   const games = useMemo(() => Object.values(state.games), [state.games]);
   const batting = useMemo(() => aggregateBatting(games), [games]);
 
-  // 対象選手: ロースター全員(今季成績を1行サマリーに)
-  const players = state.players.map((p) => {
+  // 対象選手: 今日来ているメンバー(今季成績を1行サマリーに)。
+  // ロースター全員を送っていた頃は、その日に来ていない選手が提案に出てきた
+  const here = useMemo(() => attendeesOf(game, state.players), [game, state.players]);
+  const players = here.map((p) => {
     const s = batting[p.id];
     const m = s && s.pa > 0 ? battingMetrics(s) : null;
     const statsLine = m
@@ -36,7 +38,7 @@ export default function HeadCoachView({ game, canApply, onClose }) {
   });
 
   // 誰も守れない位置があるなら、AIに投げる前に言う(投げても埋まらない)
-  const holes = useMemo(() => uncoveredPositions(state.players), [state.players]);
+  const holes = useMemo(() => uncoveredPositions(here), [here]);
 
   const run = async () => {
     setError('');

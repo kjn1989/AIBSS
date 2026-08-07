@@ -164,6 +164,89 @@ export function newPlayer(name, number = '', opts = {}) {
   };
 }
 
+// その試合に来ているメンバーだけを返す。
+// 参加メンバーを記録していない試合(この項目より前のデータ)は、全員が来ていた扱い。
+// 空配列は「1人も来ていない」ではなく「まだ決めていない」なので、これも全員扱いにする。
+export function attendeesOf(game, players = []) {
+  const ids = game && game.attendees;
+  if (!Array.isArray(ids) || ids.length === 0) return players;
+  const set = new Set(ids);
+  return players.filter((p) => set.has(p.id));
+}
+
+// 直近の試合の参加メンバー。次の試合の既定値に使う。
+// 顔ぶれは週ごとに大きく変わらないので、毎回まっさらから選ぶより
+// 前回からの差分だけ直すほうが手数が少ない。
+export function lastAttendees(games = []) {
+  const rows = games
+    .filter((g) => g && !String(g.id || '').startsWith('demo-') && Array.isArray(g.attendees) && g.attendees.length)
+    .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')) || (b.startedAt || 0) - (a.startedAt || 0));
+  return rows[0] ? [...rows[0].attendees] : null;
+}
+
+// 参加メンバーから打順と守備を組む。
+//
+// 登録順に 投捕一二三遊左中右 を機械的に当てていた頃は、誰がどこを守れるかを
+// 見ていなかったので位置がばらばらになった。メインを優先し、メインで埋まらない
+// 位置だけサブで埋める(AIスタメン提案と同じ順序)。
+//
+// 候補の少ない位置から先に決める。捕手が1人しかいないのに、その人を先に
+// 別の位置へ入れてしまうと捕手が空くため。
+// 戻り値: { lineup: [{ playerId, position }], unfilled: [位置] }
+export function autoLineupFrom(players = [], { max = 9 } = {}) {
+  const taken = new Set();
+  const assigned = {}; // 位置 -> playerId
+  const remaining = new Set(FIELD_POSITIONS);
+
+  const candidates = (pos) => {
+    const mains = [];
+    const subs = [];
+    for (const p of players) {
+      if (taken.has(p.id)) continue;
+      const k = playablePosition(p, pos);
+      if (k === 'main') mains.push(p);
+      else if (k === 'sub') subs.push(p);
+    }
+    return { mains, subs };
+  };
+
+  while (remaining.size > 0) {
+    // いちばん候補が少ない位置から決める(同数ならメインが少ないほうを先に)
+    let pick = null;
+    let pickScore = null;
+    for (const pos of remaining) {
+      const { mains, subs } = candidates(pos);
+      const score = [mains.length + subs.length, mains.length];
+      if (!pickScore || score[0] < pickScore[0] || (score[0] === pickScore[0] && score[1] < pickScore[1])) {
+        pick = { pos, mains, subs };
+        pickScore = score;
+      }
+    }
+    remaining.delete(pick.pos);
+    const who = pick.mains[0] || pick.subs[0] || null;
+    if (who) { assigned[pick.pos] = who.id; taken.add(who.id); }
+  }
+
+  // 守れる人が居なかった位置。黙って別の人を入れず、空けたまま返す
+  const unfilled = FIELD_POSITIONS.filter((pos) => !assigned[pos]);
+
+  // 打順は名簿の並びのまま(打順の最適化はAIスタメン提案の仕事)。
+  // 守備に付いた人を先に、余った人は控えとして後ろに置く。
+  const lineup = [];
+  for (const p of players) {
+    const pos = FIELD_POSITIONS.find((x) => assigned[x] === p.id);
+    if (pos) lineup.push({ playerId: p.id, position: pos });
+  }
+  for (const p of players) {
+    if (lineup.length >= max) break;
+    if (!taken.has(p.id)) lineup.push({ playerId: p.id, position: '控' });
+  }
+  return {
+    lineup: lineup.slice(0, max).map((x, i) => ({ order: i + 1, ...x })),
+    unfilled,
+  };
+}
+
 // ---- エディション(利用シーン別のモード切り替え) ----
 // AIスタメン提案・AI選手名鑑など一部AI機能は「草野球」エディション(=大人向け)限定。
 // パワプロ風の際どい寸評等が未成年(ブカツ/少年野球)の文脈にそぐわないため。
@@ -204,7 +287,7 @@ export function newMember(name, role = 'マネージャー') {
   };
 }
 
-export function newGame({ opponent = '', isHome = false, date = null, season = '', rules = null, allowReentry = false } = {}) {
+export function newGame({ opponent = '', isHome = false, date = null, season = '', rules = null, allowReentry = false, attendees = null } = {}) {
   return {
     id: uid(),
     date: date || new Date().toISOString().slice(0, 10),
@@ -217,6 +300,9 @@ export function newGame({ opponent = '', isHome = false, date = null, season = '
     // リエントリー(一度退いた選手の再出場)を認める試合か。
     // 大会・年代によって扱いが違うので試合ごとに持つ。false のときだけ再出場を警告する。
     allowReentry,
+    // その試合に来ているメンバー(選手ID の配列)。登録選手が全員来るとは限らない。
+    // null = 未設定(この項目より前に作られた試合)。そのときは全員が来ていた扱いにする。
+    attendees: Array.isArray(attendees) ? [...attendees] : null,
     startedAt: Date.now(), // 試合開始時刻(時間制限ルールの判定に使用)
     status: 'ongoing', // 'ongoing' | 'finished'
     inning: 1,

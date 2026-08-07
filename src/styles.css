@@ -1486,6 +1486,34 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 .roster-list .row { gap: 6px; }
 .roster-list .row .icon-btn { padding: 4px 7px; }
 
+/* ---- 今日のメンバー ----
+   登録選手が全員来るわけではない。来ていない人を外しておくと、
+   打順の自動セットとAIスタメン提案がその人を出さなくなる */
+.att-count { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.att-count b { font-size: 26px; font-weight: 800; font-family: ui-monospace, Menlo, monospace; line-height: 1; }
+.att-count span { font-size: 12px; color: var(--text-dim); }
+.att-count i { display: block; font-style: normal; font-size: 11px; opacity: .8; }
+.att-count button { margin-left: auto; flex: 0 0 auto; }
+.att-list { max-height: 46vh; overflow-y: auto; margin-bottom: 4px; }
+.att-row {
+  display: flex; align-items: center; gap: 10px; padding: 9px 2px;
+  border-bottom: 1px solid rgba(48, 54, 61, .6); cursor: pointer; user-select: none;
+}
+.att-row:last-child { border-bottom: none; }
+.att-box {
+  width: 22px; height: 22px; flex: 0 0 auto; border-radius: 6px;
+  border: 1.5px solid var(--border); background: var(--bg-3);
+  display: grid; place-items: center; font-size: 13px; color: transparent;
+}
+.att-row.on .att-box { background: var(--accent-2); border-color: var(--accent-2); color: #fff; }
+.att-name { flex: 1; min-width: 0; font-size: 14px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.att-num, .att-pos { flex: 0 0 auto; font-size: 11px; color: var(--text-dim); font-family: ui-monospace, Menlo, monospace; }
+.att-pos { min-width: 2.2em; text-align: right; }
+/* 来ていない人は沈める。チェックの有無だけだと一覧で見分けにくい */
+.att-row:not(.on) .att-name, .att-row:not(.on) .att-num, .att-row:not(.on) .att-pos { opacity: .4; }
+.att-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 8px; }
+.att-edit { display: block; width: 100%; margin-bottom: 10px; }
+
 /* ---- 守備位置(主・可) ----
    名前の下に 学年 と並べて置く。行を横に伸ばすと390pxで名前が潰れる */
 .player-meta { display: flex; align-items: center; gap: 6px; min-width: 0; }

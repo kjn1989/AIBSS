@@ -10,7 +10,7 @@ import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfi
 import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parseInningRange, parseSlotBatters, parseAtBatDeletions, parseShortResult, isExplicitSubText, inGamePlayerIds, preferInGamePlayers } from '../src/lib/correctionParser.js';
 import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarters, findPositionIssues } from '../src/lib/lineupBox.js';
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
-import { newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions } from '../src/lib/model.js';
+import { newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions, attendeesOf, lastAttendees, autoLineupFrom } from '../src/lib/model.js';
 import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf, oppLettersInGame, oppBaserunning } from '../src/lib/oppBox.js';
 import { remapPlayerInGame, fillPlayerGaps } from '../src/lib/mergePlayers.js';
 import { computeBoxScore } from '../src/lib/boxscore.js';
@@ -2139,4 +2139,78 @@ test('positionCoverage / uncoveredPositions: 守れる人数を主と可で分�
 test('FIELD_POSITIONS: DH・打・控は選手の属性ではないので登録の対象にしない', () => {
   assert.equal(FIELD_POSITIONS.length, 9);
   for (const x of ['DH', '打', '控']) assert.ok(!FIELD_POSITIONS.includes(x), x);
+});
+
+// ---- 今日のメンバー ----
+test('attendeesOf: 未設定と空配列は「全員」。決めていないことと0人は別物ではない', () => {
+  const ps = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+  assert.equal(attendeesOf({ attendees: null }, ps).length, 3, '古い試合は全員が来ていた扱い');
+  assert.equal(attendeesOf({ attendees: [] }, ps).length, 3, 'まだ決めていない状態も全員扱い');
+  assert.equal(attendeesOf(undefined, ps).length, 3);
+  assert.deepEqual(attendeesOf({ attendees: ['a', 'c'] }, ps).map((p) => p.id), ['a', 'c']);
+  // 名簿から消えた選手IDが残っていても落ちない
+  assert.deepEqual(attendeesOf({ attendees: ['a', 'zzz'] }, ps).map((p) => p.id), ['a']);
+});
+
+test('lastAttendees: 直近の試合の参加者を返す。デモ試合は引き継がない', () => {
+  const games = [
+    { id: 'g1', date: '2026-05-01', attendees: ['a'] },
+    { id: 'g2', date: '2026-06-01', attendees: ['a', 'b'] },
+    { id: 'g0', date: '2026-06-10', attendees: null },
+  ];
+  assert.deepEqual(lastAttendees(games), ['a', 'b']);
+  // デモデータの顔ぶれを本番の既定にしない
+  assert.deepEqual(lastAttendees([...games, { id: 'demo-1', date: '2026-07-01', attendees: ['z'] }]), ['a', 'b']);
+  // まだ1試合も記録が無ければ null(呼び出し側は全員を既定にする)
+  assert.equal(lastAttendees([]), null);
+  assert.equal(lastAttendees([{ id: 'x', date: '2026-01-01', attendees: [] }]), null);
+});
+
+test('newGame: 参加メンバーは既定で未設定。勝手に全員を書き込まない', () => {
+  assert.equal(newGame().attendees, null);
+  const g = newGame({ attendees: ['a', 'b'] });
+  assert.deepEqual(g.attendees, ['a', 'b']);
+});
+
+// ---- 打順の自動セット ----
+test('autoLineupFrom: メインを優先し、埋まらない位置だけサブで埋める', () => {
+  const ps = FIELD_POSITIONS.map((pos, i) => ({ id: `p${i}`, position: pos, subPositions: [] }));
+  const { lineup, unfilled } = autoLineupFrom(ps);
+  assert.equal(unfilled.length, 0);
+  // 全員が自分のメインの位置に付く
+  for (const row of lineup) {
+    const p = ps.find((x) => x.id === row.playerId);
+    assert.equal(row.position, p.position, `${row.playerId} はメインの位置に付く`);
+  }
+  assert.deepEqual(lineup.map((x) => x.order), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+});
+
+test('autoLineupFrom: 候補が1人しかいない位置を先に押さえる', () => {
+  // 捕手を守れるのは1人だけ。その人を一塁に取られると捕手が空く
+  const ps = [
+    { id: 'only', position: '捕', subPositions: ['一'] },
+    { id: 'x', position: '', subPositions: ['一'] },
+  ];
+  const { lineup } = autoLineupFrom(ps);
+  const only = lineup.find((r) => r.playerId === 'only');
+  assert.equal(only.position, '捕', '1人しか守れない位置を優先して埋める');
+  assert.equal(lineup.find((r) => r.playerId === 'x').position, '一');
+});
+
+test('autoLineupFrom: 守れない位置は空けたまま返す(別の人で埋めない)', () => {
+  const ps = [
+    { id: 'a', position: '遊', subPositions: [] },
+    { id: 'b', position: '', subPositions: [] },
+  ];
+  const { lineup, unfilled } = autoLineupFrom(ps);
+  assert.ok(unfilled.includes('捕') && unfilled.includes('投'));
+  assert.equal(lineup.find((r) => r.playerId === 'a').position, '遊');
+  // 守備位置の登録が無い選手は控えに回る。勝手にどこかを守らせない
+  assert.equal(lineup.find((r) => r.playerId === 'b').position, '控');
+});
+
+test('autoLineupFrom: 人数が多くても打順は9人まで', () => {
+  const ps = Array.from({ length: 15 }, (_, i) => ({ id: `p${i}`, position: FIELD_POSITIONS[i % 9], subPositions: [] }));
+  assert.equal(autoLineupFrom(ps).lineup.length, 9);
+  assert.equal(autoLineupFrom([]).lineup.length, 0);
 });

@@ -8,6 +8,7 @@ import PlaySheet from './PlaySheet.jsx';
 import RunnerEventSheet from './RunnerEventSheet.jsx';
 import { opponentTeams, lastOppRoster, normalizeName } from '../lib/matchup.js';
 import Sheet from './Sheet.jsx';
+import AttendanceSheet from './AttendanceSheet.jsx';
 import VoiceControl from './VoiceControl.jsx';
 import { SubstituteSheet } from './OrderTab.jsx';
 import HighlightSheet from './HighlightSheet.jsx';
@@ -15,7 +16,7 @@ import DefenseCheckView from './DefenseCheckView.jsx';
 import { OppSubstituteSheet } from './OppOrderCard.jsx';
 import { oppNameOf, oppPositionOf, oppHasName } from '../lib/oppBox.js';
 import GameProgressView from './GameProgressView.jsx';
-import { POSITIONS, OPP_LETTERS, resultCategory, multiOutLabel, positionLabel } from '../lib/model.js';
+import { POSITIONS, OPP_LETTERS, resultCategory, multiOutLabel, positionLabel, attendeesOf, autoLineupFrom } from '../lib/model.js';
 import { playLabel } from '../lib/voiceParser.js';
 import { convertMemoToPlay, guessPlayFromMemo, maskNames } from '../lib/gemini.js';
 import { canWriteCloud } from '../lib/officialCloud.js';
@@ -188,6 +189,7 @@ function GameSetup() {
   const pastOpponents = opponentTeams(allGames);
   const recall = lastOppRoster(allGames, opponent);
   const [carryOver, setCarryOver] = useState(true);
+  const [att, setAtt] = useState(false); // 「今日のメンバー」を開いているか
   const matched = pastOpponents.find((o) => o.key === normalizeName(opponent));
 
   const onPresetChange = (id) => {
@@ -196,13 +198,17 @@ function GameSetup() {
     if (id === 'custom') setCustom(customFromRules(presetById(presetId)?.rules));
   };
 
-  const startGame = () => {
+  // 参加メンバーを決めてから試合を作る。ここを通らないと開始しない。
+  // 登録選手が全員来るわけではないので、居ない人を含んだまま打順を組むと
+  // 自動セットにもAIスタメン提案にも欠席者が出てくる
+  const startGame = (attendees) => {
     dispatch({
       type: 'CREATE_GAME',
       payload: {
         // 表記ゆれを入口で止める: 過去に対戦した相手なら、その書き方に揃える
         opponent: matched ? matched.name : opponent.trim(),
         isHome, season: season.trim(), rules: resolveRulesFrom(presetId, custom), allowReentry,
+        attendees,
         oppRoster: carryOver && recall ? recall : null,
       },
     });
@@ -264,10 +270,17 @@ function GameSetup() {
           allowReentry={allowReentry} setAllowReentry={setAllowReentry}
         />
 
-        <button className="primary" style={{ width: '100%' }} onClick={startGame}>
+        <button className="primary" style={{ width: '100%' }} onClick={() => setAtt(true)}>
           {t('gamesetup.start')}
         </button>
       </div>
+
+      {att && (
+        <AttendanceSheet
+          onDone={(ids) => { setAtt(false); startGame(ids); }}
+          onClose={() => setAtt(false)}
+        />
+      )}
 
       {ongoing.length > 0 && (
         <div className="card">
@@ -648,14 +661,14 @@ export default function ScoreTab() {
   // 選ぶまで投球・結果入力をロックして、球数の記録漏れを防ぐ。
   const needsPitcher = !noLineup && ((myBatting && !game.oppPitcherLetter) || (!myBatting && !game.currentPitcherId));
 
+  // 今日来ているメンバーから組む。登録順に 投捕一二三遊左中右 を当てていた頃は、
+  // 誰がどこを守れるかを見ていなかったので位置がばらばらになっていた
   const quickLineup = () => {
-    const nine = state.players.filter((p) => !p.id.startsWith('demo-')).slice(0, 9);
-    const source = nine.length >= 1 ? nine : state.players.slice(0, 9);
-    dispatch({
-      type: 'SET_LINEUP',
-      gameId: game.id,
-      lineup: source.map((p, i) => ({ order: i + 1, playerId: p.id, position: POSITIONS[i] || '控' })),
-    });
+    const active = state.players.filter((p) => !p.id.startsWith('demo-'));
+    const here = attendeesOf(game, active.length ? active : state.players);
+    const { lineup } = autoLineupFrom(here.length ? here : state.players);
+    if (!lineup.length) return;
+    dispatch({ type: 'SET_LINEUP', gameId: game.id, lineup });
   };
 
   return (

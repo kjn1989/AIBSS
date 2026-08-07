@@ -63,6 +63,14 @@ try {
   await page.waitForTimeout(400);
   await page.fill('input[placeholder="対戦相手名"]', 'ゴールデンパス');
   await page.click('button:has-text("試合開始")');
+  // 試合開始は「今日のメンバー」を必ず通る。登録選手が全員来るとは限らないので、
+  // 誰が来ているかを決めてから試合が始まる(既定は前回の参加者、初回は全員)
+  await page.waitForTimeout(500);
+  const att = page.locator('.sheet').filter({ hasText: '今日のメンバー' });
+  if (await att.count()) {
+    await page.click('.sheet-actions button.primary');
+    await page.waitForTimeout(500);
+  }
   await page.waitForTimeout(500);
   const autoSet = page.locator('button:has-text("登録選手から打順を自動セット")');
   if (await autoSet.count()) { await autoSet.click(); await page.waitForTimeout(400); }

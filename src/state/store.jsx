@@ -801,6 +801,14 @@ export function reducer(state, action) {
       g.updatedAt = Date.now();
       return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
     }
+    // 今日のメンバー。遅刻・早退があるので、試合が始まってからも直せる
+    case 'SET_ATTENDEES': {
+      const g = deep(state.games[action.gameId]);
+      if (!g) return state;
+      g.attendees = Array.isArray(action.attendees) ? [...action.attendees] : null;
+      g.updatedAt = Date.now();
+      return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
+    }
     case 'SET_POSITION': {
       // 守備位置のみ変更(交代を伴わない)
       const g = deep(state.games[action.gameId]);
