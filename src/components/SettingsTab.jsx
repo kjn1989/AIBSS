@@ -662,15 +662,14 @@ export default function SettingsTab() {
                   onClick={() => setPosPlayer(p.id)}
                   aria-label={t('pos.sheetTitle', { name: p.name })}
                 >
-                  {p.position || t('pos.unset')}
-                  {/* サブは2つまで位置そのものを出す。3つ以上は数にする。
+                  {p.position ? <b>{p.position}</b> : t('pos.unset')}
+                  {/* サブは優先順の上位2つを位置そのもので出し、残りは数にする。
                       数だけだと「何を守れるのか」が名簿から読み取れない */}
                   {(p.subPositions || []).length > 0 && (
-                    <i>
-                      {(p.subPositions || []).length <= 2
-                        ? (p.subPositions || []).join('')
-                        : `+${(p.subPositions || []).length}`}
-                    </i>
+                    <i>{(p.subPositions || []).slice(0, 2).join('')}</i>
+                  )}
+                  {(p.subPositions || []).length > 2 && (
+                    <u>+{(p.subPositions || []).length - 2}</u>
                   )}
                 </button>
                 </span>
