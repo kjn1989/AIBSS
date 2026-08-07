@@ -564,7 +564,7 @@ export default function SettingsTab() {
         )}
         {/* アーカイブと削除は年に数回しか触らず、削除は取り消せない。
             各行に常時置くのをやめ、この入口の奥にまとめる */}
-        <button className="small ghost mt8 manage-open" style={{ width: '100%' }} onClick={() => setManage(true)}>
+        <button className="primary mt8 manage-open" style={{ width: '100%' }} onClick={() => setManage(true)}>
           {t('manage.open')}
           <span className="dim">{t('manage.openSub')}</span>
         </button>
