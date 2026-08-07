@@ -63,20 +63,6 @@ export default function RosterManageSheet({ onClose }) {
   });
   const switchTab = (next) => { setTab(next); setMarks(new Map()); setConfirming(false); };
 
-  // ---- まとめて。全員と、学年ごと ----
-  const groups = useMemo(() => {
-    const list = [{ key: 'all', label: t('manage.all'), members: rows }];
-    if (tab === 'active' && gradeOn) {
-      for (let g = maxGrade; g >= 1; g--) {
-        const members = rows.filter((p) => gradeOf(p, thisYear) === g);
-        if (members.length) list.push({ key: `g${g}`, label: t('grade.nth', { n: g }), members });
-      }
-      const unset = rows.filter((p) => gradeOf(p, thisYear) == null);
-      if (unset.length) list.push({ key: 'none', label: t('grade.unsetShort'), members: unset });
-    }
-    return list.filter((x) => x.members.length > 0);
-  }, [rows, tab, gradeOn, maxGrade, thisYear, t]);
-
   const gamesOf = (id) => tenure.get(id)?.games || 0;
 
   const runMove = () => {
@@ -91,24 +77,27 @@ export default function RosterManageSheet({ onClose }) {
       return next;
     });
   };
-  const runDelete = () => {
+  const runDelete = ({ alsoMove } = {}) => {
+    // アーカイブを先にやる。削除で選手が消えたあとにIDを引くと空振りする
+    if (alsoMove) runMove();
     // 1件ずつ消す(取り消しは最後の1人ぶんしか効かないので、先に確認を挟んである)
     for (const id of marked('d')) dispatch({ type: 'DELETE_PLAYER', id });
     setMarks(new Map());
     setConfirming(false);
   };
+  // 上で付けた印を一度に実行する。削除があるときは確認を挟む
+  const runBoth = () => { if (nDelete > 0) setConfirming('both'); else runMove(); };
 
   const actMove = tab === 'active' ? t('manage.actArchive') : t('manage.actRestore');
 
-  // 選手の行も「まとめて」の行も、まったく同じ形にする(覚えることを1つにする)。
   // 塗りつぶさず色文字だけにして、押したときに塗る。どちらの操作かは色で分かる
-  const Chips = ({ ids, big }) => {
+  const Chips = ({ ids }) => {
     const all = (kind) => ids.length > 0 && ids.every((id) => marks.get(id) === kind);
     return (
       <>
         <button
           type="button"
-          className={`mg-act move${all('a') ? ' on' : ''}${big ? ' big' : ''}`}
+          className={`mg-act move${all('a') ? ' on' : ''}`}
           aria-pressed={all('a')}
           onClick={() => setMark(ids, 'a')}
         >
@@ -116,7 +105,7 @@ export default function RosterManageSheet({ onClose }) {
         </button>
         <button
           type="button"
-          className={`mg-act del${all('d') ? ' on' : ''}${big ? ' big' : ''}`}
+          className={`mg-act del${all('d') ? ' on' : ''}`}
           aria-pressed={all('d')}
           onClick={() => setMark(ids, 'd')}
         >
@@ -147,9 +136,16 @@ export default function RosterManageSheet({ onClose }) {
         {withRecords.length > 0 && (
           <div className="warn-box mt8">{t('manage.confirmRecords', { n: withRecords.length })}</div>
         )}
+        {confirming === 'both' && nMove > 0 && (
+          <p className="small dim mt8" style={{ margin: '8px 0 0' }}>
+            {t('manage.alsoMove', { n: nMove, act: actMove })}
+          </p>
+        )}
         <div className="sheet-actions">
           <button className="ghost" onClick={() => setConfirming(false)}>{t('manage.cancel')}</button>
-          <button className="danger" onClick={runDelete}>{t('manage.confirmDo')}</button>
+          <button className="danger" onClick={() => runDelete({ alsoMove: confirming === 'both' })}>
+            {t('manage.confirmDo')}
+          </button>
         </div>
       </Sheet>
     );
@@ -205,21 +201,24 @@ export default function RosterManageSheet({ onClose }) {
         </button>
       </div>
 
-      {/* まとめて。行とまったく同じ形にして、対象が「1人」か「学年ぜんぶ」かだけを変える */}
-      {rows.length > 0 && (
-        <div className="mg-bulk">
-          <div className="mg-bulk-h">{t('manage.bulkHead')}</div>
-          {groups.map((gr) => (
-            <div className="mg-row bulk" key={gr.key}>
-              <span className="mg-name">
-                <b>{gr.label}</b>
-                <i>{t('manage.groupN', { n: gr.members.length })}</i>
-              </span>
-              <Chips ids={idsOf(gr.members)} big />
-            </div>
-          ))}
-        </div>
-      )}
+      {/* 上で付けた印を一度に実行する。アーカイブする人と削除する人を
+          仕分けたあと、2つのボタンを別々に押さずに済ませるためのもの */}
+      <button
+        type="button"
+        className="mg-both"
+        disabled={nMove === 0 && nDelete === 0}
+        onClick={runBoth}
+      >
+        <b>{t('manage.bulkHead')}</b>
+        <i>
+          {nMove === 0 && nDelete === 0
+            ? t('manage.bulkNone')
+            : [
+              nMove > 0 && t(tab === 'active' ? 'manage.archiveN' : 'manage.restoreN', { n: nMove }),
+              nDelete > 0 && t('manage.deleteN', { n: nDelete }),
+            ].filter(Boolean).join('・')}
+        </i>
+      </button>
     </Sheet>
   );
 }

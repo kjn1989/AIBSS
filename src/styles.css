@@ -1520,20 +1520,16 @@ button.manage-open {
 .mg-act.move.on { background: var(--accent-2); border-color: var(--accent-2); color: #fff; }
 .mg-act.del.on { background: var(--red); border-color: var(--red); color: #fff; }
 
-/* まとめて。行とまったく同じ形にして、対象が「1人」か「学年ぜんぶ」かだけを変える。
-   実行ボタンの下に置く(下から順に「印を付ける→動かす」ではなく、
-   「1人ずつ→実行→まとめて」と、使う頻度の高い順に並べる) */
-.mg-bulk { margin-top: 14px; }
-.mg-bulk-h {
-  font-size: 10.5px; font-weight: 800; letter-spacing: .06em;
-  color: var(--text-dim); margin-bottom: 6px;
+/* 上で付けた印を一度に実行するコマンド。アーカイブする人と削除する人を仕分けたあと、
+   2つのボタンを別々に押さずに済ませる。左右いっぱいに置いて、行の操作と混ざらないようにする */
+.mg-both {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  width: 100%; min-height: 52px; margin-top: 10px; padding: 8px 12px;
+  border-radius: 12px; background: var(--bg-3); border: 1px solid var(--border);
 }
-.mg-row.bulk {
-  background: var(--bg-3); border: 1px solid var(--border); border-radius: 11px;
-  margin-bottom: 6px; padding: 8px 8px 8px 12px;
-}
-.mg-row.bulk .mg-name b { font-size: 13px; }
-.mg-act.big { min-height: 36px; padding: 4px 11px; }
+.mg-both b { font-size: 13.5px; font-weight: 800; color: var(--text); }
+.mg-both i { font-style: normal; font-size: 11px; color: var(--text-dim); }
+.mg-both:disabled { opacity: .5; }
 
 /* 実行と削除は同じ幅にする。人数を並べて見比べるボタンなので、
    幅が違うと片方だけ強く見える */

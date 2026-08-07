@@ -113,26 +113,29 @@ try {
   await page.waitForTimeout(250);
   check('同じボタンをもう一度押すと印が外れる', await page.locator('.mg-bar .del').isDisabled());
 
-  // まとめては行と同じ形。全員に一度で印が付く
-  const bulkAll = page.locator('.mg-row.bulk').first();
-  await bulkAll.locator('.mg-act.move').click();
-  await page.waitForTimeout(300);
-  check('まとめてで全員に印が付く',
-    (await page.locator('.mg-bar .go').innerText()).includes(`${total}人`),
-    await page.locator('.mg-bar .go').innerText());
-  await bulkAll.locator('.mg-act.move').click();
-  await page.waitForTimeout(300);
-  check('まとめてをもう一度押すと全員外れる', await page.locator('.mg-bar .go').isDisabled());
+  // まとめては、上で付けた印を一度に実行するコマンド
+  await list.nth(1).locator('.mg-act.del').click();
+  await page.waitForTimeout(250);
+  check('まとめては印の内訳を出す',
+    (await page.locator('.mg-both').innerText()).includes('1人をアーカイブ・1人を削除'),
+    (await page.locator('.mg-both').innerText()).replace(/\n/g, ' / '));
+  check('グループ一括の行は無い', (await page.locator('.mg-row.bulk').count()) === 0);
 
   // 削除は必ず確認を挟み、やめれば1人も消えない
-  await list.nth(0).locator('.mg-act.del').click();
-  await page.waitForTimeout(250);
   await page.locator('.mg-bar .del').click();
   await page.waitForTimeout(400);
   check('削除は確認を挟む', (await page.locator('.mg-confirm-row').count()) === 1);
   await page.locator('.sheet-actions button:has-text("やめる")').click();
   await page.waitForTimeout(350);
   check('やめると誰も消えない', (await list.count()) === total, `${await list.count()} / ${total}`);
+
+  // ここまでの印(row0=move, row1=del)を明示的に外し、次の手順を素の状態から始める
+  await list.nth(0).locator('.mg-act.move').click();
+  await page.waitForTimeout(150);
+  await list.nth(1).locator('.mg-act.del').click();
+  await page.waitForTimeout(250);
+  check('印を外すと実行できなくなる',
+    await page.locator('.mg-bar .go').isDisabled() && await page.locator('.mg-bar .del').isDisabled());
 
   // アーカイブは可逆
   await list.nth(0).locator('.mg-act.move').click();
@@ -163,6 +166,22 @@ try {
   await page.waitForTimeout(500);
   check('確認すれば削除できる', (await list.count()) === total - 1,
     `${await list.count()} / ${total - 1}`);
+
+  // まとめて実行は、アーカイブと削除を1回で終わらせる
+  const left = await list.count();
+  await list.nth(0).locator('.mg-act.move').click();
+  await page.waitForTimeout(180);
+  await list.nth(1).locator('.mg-act.del').click();
+  await page.waitForTimeout(250);
+  await page.locator('.mg-both').click();
+  await page.waitForTimeout(400);
+  check('まとめてでもアーカイブぶんを知らせる',
+    (await page.locator('.sheet').innerText()).includes('あわせて'),
+    (await page.locator('.sheet').innerText()).replace(/\n+/g, ' / ').slice(0, 160));
+  await page.locator('.sheet-actions button:has-text("記録ごと削除する")').click();
+  await page.waitForTimeout(600);
+  check('まとめて実行で2人ぶん減る', (await list.count()) === left - 2,
+    `${await list.count()} / ${left - 2}`);
 
   // シートがエディションの色を継ぐ(body直下に出るので .app の外に落ちていた)
   const accent = await page.evaluate(() => {
