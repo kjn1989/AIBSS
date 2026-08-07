@@ -1521,15 +1521,23 @@ button.manage-open {
 .mg-act.del.on { background: var(--red); border-color: var(--red); color: #fff; }
 
 /* 上で付けた印を一度に実行するコマンド。アーカイブする人と削除する人を仕分けたあと、
-   2つのボタンを別々に押さずに済ませる。左右いっぱいに置いて、行の操作と混ざらないようにする */
+   2つのボタンを別々に押さずに済ませる。左右いっぱいに置いて、行の操作と混ざらないようにする。
+   印が何も無いうちは灰色で沈め、印が付いた瞬間に「押せる・押すべき」が分かるよう
+   エディションの色で塗る(実行/削除ボタンと同じ強さ) */
 .mg-both {
   display: flex; flex-direction: column; align-items: center; gap: 2px;
-  width: 100%; min-height: 52px; margin-top: 10px; padding: 8px 12px;
+  width: 100%; min-height: 54px; margin-top: 10px; padding: 8px 12px;
   border-radius: 12px; background: var(--bg-3); border: 1px solid var(--border);
 }
 .mg-both b { font-size: 13.5px; font-weight: 800; color: var(--text); }
 .mg-both i { font-style: normal; font-size: 11px; color: var(--text-dim); }
 .mg-both:disabled { opacity: .5; }
+.mg-both:not(:disabled) {
+  background: var(--accent-2); border-color: var(--accent-2);
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--accent-2) 45%, transparent);
+}
+.mg-both:not(:disabled) b { color: #fff; }
+.mg-both:not(:disabled) i { color: rgba(255, 255, 255, .85); }
 
 /* 実行と削除は同じ幅にする。人数を並べて見比べるボタンなので、
    幅が違うと片方だけ強く見える */
