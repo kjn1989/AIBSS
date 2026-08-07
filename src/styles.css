@@ -21,10 +21,12 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-/* ---- エディション別テーマ(.appのdata-edition属性で切り替え) ----
+/* ---- エディション別テーマ(data-edition属性で切り替え) ----
    ぱっと見でどのエディションか分かるよう、アクセント色と背景トーンを変える。
-   草野球 = 既定の青 / ブカツ(中高大) = 緑(球場スコアボード) / 少年野球 = オレンジ(元気・親しみ) */
-.app[data-edition='ブカツ(中高大)'] {
+   草野球 = 既定の青 / ブカツ(中高大) = 緑(球場スコアボード) / 少年野球 = オレンジ(元気・親しみ)
+   .app だけでなく属性そのものに掛ける。シートは body 直下に出る(=.appの外)ので、
+   .app 前提だとシートの中だけ色が継がれなかった */
+[data-edition='ブカツ(中高大)'] {
   --accent: #3fb950;
   --accent-2: #2ea043;
   --bg: #0c1210;
@@ -32,7 +34,7 @@
   --bg-3: #1b2c24;
   --border: #2b4438;
 }
-.app[data-edition='少年野球'] {
+[data-edition='少年野球'] {
   --accent: #ffa657;
   --accent-2: #e8833a;
   --bg: #14100b;
@@ -1488,37 +1490,56 @@ button.manage-open {
   min-height: 44px; padding: 8px 10px; font-size: 13px; color: #fff;
 }
 .manage-open .dim { font-weight: 400; color: #fff; opacity: .78; }
-.mg-picks { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
-.mg-pick {
-  min-height: 30px; padding: 4px 10px; border-radius: 999px;
-  font-size: 11.5px; font-weight: 700;
-  color: var(--text-dim); background: var(--bg-3); border: 1px solid var(--border);
-}
 .mg-list { display: flex; flex-direction: column; }
+/* 行そのものが操作の場。チェックで選んでから下のボタンで動作を決める2段構えをやめ、
+   行の中で「アーカイブ」「削除」を直に選ぶ。1タップで誰を・どうするかまで決まり、
+   アーカイブする人と削除する人を同時に仕分けられる */
 .mg-row {
-  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
-  padding: 9px 6px; background: transparent; border: none;
-  border-bottom: 1px solid var(--border); border-radius: 0;
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 4px; border-bottom: 1px solid var(--border);
 }
-.mg-row.on { background: rgba(88, 166, 255, .10); }
-.mg-ck {
-  width: 22px; height: 22px; flex: 0 0 auto; border-radius: 6px;
-  border: 1.5px solid var(--text-dim); background: transparent;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 13px; font-weight: 800; color: transparent;
+/* 印が付いた行は背景でも示す。仕分けの結果が一覧で見渡せる */
+.mg-row.m-move { background: color-mix(in srgb, var(--accent) 11%, transparent); }
+.mg-row.m-del { background: rgba(248, 81, 73, .10); }
+.mg-name { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.mg-name b {
+  font-size: 14px; font-weight: 700;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.mg-row.on .mg-ck { background: var(--accent-2); border-color: var(--accent-2); color: #fff; }
-.mg-name { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.mg-name b { font-size: 14px; font-weight: 700; }
 .mg-name i {
   font-style: normal; font-size: 10px; color: var(--text-dim);
   font-family: ui-monospace, Menlo, monospace;
 }
-/* 選択中だけ実行できる。押せない理由を「押せなさ」で示す */
-.sheet .sheet-actions.mg-bar button { font-size: 13.5px; padding: 4px 6px; }
-.sheet .sheet-actions.mg-bar .close { flex: 0 0 auto; width: 62px; }
+/* 塗らずに色文字だけ。押すと塗る。アーカイブはエディションの色、削除は赤 */
+.mg-act {
+  flex: 0 0 auto; min-height: 32px; padding: 4px 9px; border-radius: 9px;
+  font-size: 11.5px; font-weight: 800; background: transparent;
+}
+.mg-act.move { color: var(--accent); border-color: var(--accent); }
+.mg-act.del { color: var(--red); border-color: var(--red); }
+.mg-act.move.on { background: var(--accent-2); border-color: var(--accent-2); color: #fff; }
+.mg-act.del.on { background: var(--red); border-color: var(--red); color: #fff; }
+
+/* まとめて。行とまったく同じ形にして、対象が「1人」か「学年ぜんぶ」かだけを変える。
+   実行ボタンの下に置く(下から順に「印を付ける→動かす」ではなく、
+   「1人ずつ→実行→まとめて」と、使う頻度の高い順に並べる) */
+.mg-bulk { margin-top: 14px; }
+.mg-bulk-h {
+  font-size: 10.5px; font-weight: 800; letter-spacing: .06em;
+  color: var(--text-dim); margin-bottom: 6px;
+}
+.mg-row.bulk {
+  background: var(--bg-3); border: 1px solid var(--border); border-radius: 11px;
+  margin-bottom: 6px; padding: 8px 8px 8px 12px;
+}
+.mg-row.bulk .mg-name b { font-size: 13px; }
+.mg-act.big { min-height: 36px; padding: 4px 11px; }
+
 /* 実行と削除は同じ幅にする。人数を並べて見比べるボタンなので、
    幅が違うと片方だけ強く見える */
+.sheet .sheet-actions.mg-bar { position: static; box-shadow: none; }
+.sheet .sheet-actions.mg-bar button { font-size: 13.5px; padding: 4px 6px; }
+.sheet .sheet-actions.mg-bar .close { flex: 0 0 auto; width: 62px; }
 .sheet .sheet-actions.mg-bar .go,
 .sheet .sheet-actions.mg-bar .del { flex: 1 1 0; width: auto; min-width: 0; }
 .mg-bar button:disabled { opacity: .45; }

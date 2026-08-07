@@ -91,53 +91,90 @@ try {
   // ---- まとめて整理する ----
   await page.locator('button:has-text("選手をまとめて整理する")').click();
   await page.waitForTimeout(500);
-  const total = await page.locator('.mg-row').count();
+  const list = page.locator('.mg-list .mg-row');
+  const total = await list.count();
   check('在籍者が並ぶ', total > 0, `${total}`);
-  check('誰も選んでいなければ実行できない', await page.locator('.mg-bar .go').isDisabled());
-  check('誰も選んでいなければ削除できない', await page.locator('.mg-bar .del').isDisabled());
+  check('印を付けるまで実行できない', await page.locator('.mg-bar .go').isDisabled());
+  check('印を付けるまで削除できない', await page.locator('.mg-bar .del').isDisabled());
 
-  await page.locator('.mg-row').first().click();
+  // 行の中で操作そのものを選ぶ。アーカイブと削除は同時に仕分けられる
+  await list.nth(0).locator('.mg-act.move').click();
+  await page.waitForTimeout(200);
+  await list.nth(1).locator('.mg-act.del').click();
   await page.waitForTimeout(250);
-  check('選ぶと実行ボタンに人数が出る',
-    (await page.locator('.mg-bar .go').innerText()).includes('1人'),
+  check('アーカイブと削除を同時に仕分けられる',
+    (await page.locator('.mg-bar .go').innerText()).includes('1人')
+    && (await page.locator('.mg-bar .del').innerText()).includes('1人'),
+    `${await page.locator('.mg-bar .go').innerText()} / ${await page.locator('.mg-bar .del').innerText()}`);
+  check('印を付けた行は色が変わる',
+    (await page.locator('.mg-list .mg-row.m-move').count()) === 1
+    && (await page.locator('.mg-list .mg-row.m-del').count()) === 1);
+  await list.nth(1).locator('.mg-act.del').click();
+  await page.waitForTimeout(250);
+  check('同じボタンをもう一度押すと印が外れる', await page.locator('.mg-bar .del').isDisabled());
+
+  // まとめては行と同じ形。全員に一度で印が付く
+  const bulkAll = page.locator('.mg-row.bulk').first();
+  await bulkAll.locator('.mg-act.move').click();
+  await page.waitForTimeout(300);
+  check('まとめてで全員に印が付く',
+    (await page.locator('.mg-bar .go').innerText()).includes(`${total}人`),
     await page.locator('.mg-bar .go').innerText());
+  await bulkAll.locator('.mg-act.move').click();
+  await page.waitForTimeout(300);
+  check('まとめてをもう一度押すと全員外れる', await page.locator('.mg-bar .go').isDisabled());
 
   // 削除は必ず確認を挟み、やめれば1人も消えない
+  await list.nth(0).locator('.mg-act.del').click();
+  await page.waitForTimeout(250);
   await page.locator('.mg-bar .del').click();
   await page.waitForTimeout(400);
   check('削除は確認を挟む', (await page.locator('.mg-confirm-row').count()) === 1);
   await page.locator('.sheet-actions button:has-text("やめる")').click();
   await page.waitForTimeout(350);
-  check('やめると誰も消えない', (await page.locator('.mg-row').count()) === total,
-    `${await page.locator('.mg-row').count()} / ${total}`);
+  check('やめると誰も消えない', (await list.count()) === total, `${await list.count()} / ${total}`);
 
   // アーカイブは可逆
+  await list.nth(0).locator('.mg-act.move').click();
+  await page.waitForTimeout(250);
   await page.locator('.mg-bar .go').click();
   await page.waitForTimeout(400);
-  check('アーカイブすると在籍から外れる', (await page.locator('.mg-row').count()) === total - 1);
+  check('アーカイブすると在籍から外れる', (await list.count()) === total - 1,
+    `${await list.count()} / ${total - 1}`);
   const tabs = page.locator('.sheet .lens-row button');
   await tabs.nth(1).click();
   await page.waitForTimeout(350);
-  check('アーカイブ済みタブに移る', (await page.locator('.mg-row').count()) === 1);
-  await page.locator('.mg-row').first().click();
-  await page.waitForTimeout(200);
+  check('アーカイブ済みタブに移る', (await list.count()) === 1);
+  await list.nth(0).locator('.mg-act.move').click();
+  await page.waitForTimeout(250);
   await page.locator('.mg-bar .go').click();
   await page.waitForTimeout(400);
-  check('戻すと在籍に返る', (await page.locator('.mg-row').count()) === 0);
+  check('戻すと在籍に返る', (await list.count()) === 0);
   await tabs.first().click();
   await page.waitForTimeout(350);
-  check('在籍が元の人数に戻る', (await page.locator('.mg-row').count()) === total,
-    `${await page.locator('.mg-row').count()} / ${total}`);
+  check('在籍が元の人数に戻る', (await list.count()) === total, `${await list.count()} / ${total}`);
 
   // 確認まで進めば実際に消える
-  await page.locator('.mg-row').last().click();
-  await page.waitForTimeout(200);
+  await list.nth(total - 1).locator('.mg-act.del').click();
+  await page.waitForTimeout(250);
   await page.locator('.mg-bar .del').click();
   await page.waitForTimeout(400);
   await page.locator('.sheet-actions button:has-text("記録ごと削除する")').click();
   await page.waitForTimeout(500);
-  check('確認すれば削除できる', (await page.locator('.mg-row').count()) === total - 1,
-    `${await page.locator('.mg-row').count()} / ${total - 1}`);
+  check('確認すれば削除できる', (await list.count()) === total - 1,
+    `${await list.count()} / ${total - 1}`);
+
+  // シートがエディションの色を継ぐ(body直下に出るので .app の外に落ちていた)
+  const accent = await page.evaluate(() => {
+    const chip = document.querySelector('.mg-act.move');
+    const app = document.querySelector('.app');
+    return {
+      chip: getComputedStyle(chip).color,
+      app: getComputedStyle(app).getPropertyValue('--accent').trim(),
+    };
+  });
+  const hex2rgb = (h) => `rgb(${parseInt(h.slice(1, 3), 16)}, ${parseInt(h.slice(3, 5), 16)}, ${parseInt(h.slice(5, 7), 16)})`;
+  check('シートがエディションの色を継ぐ', accent.chip === hex2rgb(accent.app), JSON.stringify(accent));
 
   check('横はみ出しなし', await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1));
 } finally {
