@@ -13,15 +13,16 @@ import {
 // 年に数回・卒業のときにまとめて触るものなので、常時出しておく価値がない。
 // そのうえ削除は取り消せないのに、行の端で他のボタンと隣り合っていた。
 //
-// 行から外してこの画面に集約する。卒業は学年まるごと起きるので、
-// 「3年をまとめて」で選んで一度に処理できる形にする。
-// 「戻す」も同じ画面のタブに置く(アーカイブに関することが1か所に集まる)。
+// 行から外してこの画面に集約する。選び方は「チェックしてから、下のどちらの
+// ボタンを押すか決める」ではなく、行の中で操作そのものを選ぶ。1タップで
+// 「誰を・どうするか」まで決まり、アーカイブする人と削除する人を同時に仕分けられる。
+// 印を付けるだけなので、実際に動くのは下のボタンを押したとき(削除はさらに確認)。
 // ============================================================
 export default function RosterManageSheet({ onClose }) {
   const { state, dispatch } = useStore();
   const t = useT();
   const [tab, setTab] = useState('active');
-  const [sel, setSel] = useState(() => new Set());
+  const [marks, setMarks] = useState(() => new Map()); // id -> 'a'(移す) | 'd'(消す)
   const [confirming, setConfirming] = useState(false);
 
   const thisYear = currentSchoolYear();
@@ -48,64 +49,97 @@ export default function RosterManageSheet({ onClose }) {
   const archived = useMemo(() => state.players.filter(isArchived), [state.players]);
 
   const rows = tab === 'active' ? active : archived;
-  const ids = rows.map((p) => p.id);
-  // タブを切り替えたときに、見えていない選手が選ばれたままにならないようにする
-  const picked = ids.filter((id) => sel.has(id));
-  const nPicked = picked.length;
+  const idsOf = (list) => list.map((p) => p.id);
+  const marked = (kind) => idsOf(rows).filter((id) => marks.get(id) === kind);
+  const nMove = marked('a').length;   // アーカイブする / 名簿に戻す
+  const nDelete = marked('d').length;
 
-  const toggle = (id) => setSel((prev) => {
-    const next = new Set(prev);
-    if (next.has(id)) next.delete(id); else next.add(id);
+  const setMark = (ids, kind) => setMarks((prev) => {
+    const next = new Map(prev);
+    // すでに全員その印なら外す(同じボタンで付け外しできる)
+    const allOn = ids.length > 0 && ids.every((id) => next.get(id) === kind);
+    for (const id of ids) { if (allOn) next.delete(id); else next.set(id, kind); }
     return next;
   });
-  const switchTab = (next) => { setTab(next); setSel(new Set()); setConfirming(false); };
+  const switchTab = (next) => { setTab(next); setMarks(new Map()); setConfirming(false); };
 
-  // 学年ショートカット。もう選び終わっているならもう一度押して外せる
-  const pickGrade = (g) => {
-    const members = active.filter((p) => (g == null ? gradeOf(p, thisYear) == null : gradeOf(p, thisYear) === g));
-    const allOn = members.length > 0 && members.every((p) => sel.has(p.id));
-    setSel((prev) => {
-      const next = new Set(prev);
-      for (const p of members) { if (allOn) next.delete(p.id); else next.add(p.id); }
+  // ---- まとめて。全員と、学年ごと ----
+  const groups = useMemo(() => {
+    const list = [{ key: 'all', label: t('manage.all'), members: rows }];
+    if (tab === 'active' && gradeOn) {
+      for (let g = maxGrade; g >= 1; g--) {
+        const members = rows.filter((p) => gradeOf(p, thisYear) === g);
+        if (members.length) list.push({ key: `g${g}`, label: t('grade.nth', { n: g }), members });
+      }
+      const unset = rows.filter((p) => gradeOf(p, thisYear) == null);
+      if (unset.length) list.push({ key: 'none', label: t('grade.unsetShort'), members: unset });
+    }
+    return list.filter((x) => x.members.length > 0);
+  }, [rows, tab, gradeOn, maxGrade, thisYear, t]);
+
+  const gamesOf = (id) => tenure.get(id)?.games || 0;
+
+  const runMove = () => {
+    const ids = marked('a');
+    if (!ids.length) return;
+    dispatch(tab === 'active'
+      ? { type: 'ARCHIVE_PLAYERS', ids, year: thisYear }
+      : { type: 'UNARCHIVE_PLAYERS', ids });
+    setMarks((prev) => {
+      const next = new Map(prev);
+      for (const id of ids) next.delete(id);
       return next;
     });
   };
-  const grades = gradeOn
-    ? Array.from({ length: maxGrade }, (_, i) => maxGrade - i)
-      .filter((g) => active.some((p) => gradeOf(p, thisYear) === g))
-    : [];
-  const hasUnsetGrade = gradeOn && active.some((p) => gradeOf(p, thisYear) == null);
-
-  const gamesOf = (p) => tenure.get(p.id)?.games || 0;
-  const withRecords = picked.filter((id) => (tenure.get(id)?.games || 0) > 0);
-
-  const doArchive = () => {
-    dispatch({ type: 'ARCHIVE_PLAYERS', ids: picked, year: thisYear });
-    setSel(new Set());
-  };
-  const doRestore = () => {
-    dispatch({ type: 'UNARCHIVE_PLAYERS', ids: picked });
-    setSel(new Set());
-  };
-  const doDelete = () => {
+  const runDelete = () => {
     // 1件ずつ消す(取り消しは最後の1人ぶんしか効かないので、先に確認を挟んである)
-    for (const id of picked) dispatch({ type: 'DELETE_PLAYER', id });
-    setSel(new Set());
+    for (const id of marked('d')) dispatch({ type: 'DELETE_PLAYER', id });
+    setMarks(new Map());
     setConfirming(false);
+  };
+
+  const actMove = tab === 'active' ? t('manage.actArchive') : t('manage.actRestore');
+
+  // 選手の行も「まとめて」の行も、まったく同じ形にする(覚えることを1つにする)。
+  // 塗りつぶさず色文字だけにして、押したときに塗る。どちらの操作かは色で分かる
+  const Chips = ({ ids, big }) => {
+    const all = (kind) => ids.length > 0 && ids.every((id) => marks.get(id) === kind);
+    return (
+      <>
+        <button
+          type="button"
+          className={`mg-act move${all('a') ? ' on' : ''}${big ? ' big' : ''}`}
+          aria-pressed={all('a')}
+          onClick={() => setMark(ids, 'a')}
+        >
+          {actMove}
+        </button>
+        <button
+          type="button"
+          className={`mg-act del${all('d') ? ' on' : ''}${big ? ' big' : ''}`}
+          aria-pressed={all('d')}
+          onClick={() => setMark(ids, 'd')}
+        >
+          {t('action.delete')}
+        </button>
+      </>
+    );
   };
 
   // ---- 削除の確認。取り消せない操作なので、何が消えるかを名指しで見せる ----
   if (confirming) {
-    const names = state.players.filter((p) => picked.includes(p.id));
+    const ids = marked('d');
+    const names = state.players.filter((p) => ids.includes(p.id));
+    const withRecords = ids.filter((id) => gamesOf(id) > 0);
     return (
-      <Sheet title={t('manage.confirmTitle', { n: nPicked })} onClose={() => setConfirming(false)}>
+      <Sheet title={t('manage.confirmTitle', { n: ids.length })} onClose={() => setConfirming(false)}>
         <p className="small" style={{ margin: '0 0 10px', color: 'var(--red)' }}>{t('manage.confirmBody')}</p>
         <div className="mg-confirm">
           {names.map((p) => (
             <div className="mg-confirm-row" key={p.id}>
               <b>{p.name}</b>
-              <span className={gamesOf(p) > 0 ? 'has' : ''}>
-                {gamesOf(p) > 0 ? t('archive.games', { n: gamesOf(p) }) : t('manage.noGames')}
+              <span className={gamesOf(p.id) > 0 ? 'has' : ''}>
+                {gamesOf(p.id) > 0 ? t('archive.games', { n: gamesOf(p.id) }) : t('manage.noGames')}
               </span>
             </div>
           ))}
@@ -115,7 +149,7 @@ export default function RosterManageSheet({ onClose }) {
         )}
         <div className="sheet-actions">
           <button className="ghost" onClick={() => setConfirming(false)}>{t('manage.cancel')}</button>
-          <button className="danger" onClick={doDelete}>{t('manage.confirmDo')}</button>
+          <button className="danger" onClick={runDelete}>{t('manage.confirmDo')}</button>
         </div>
       </Sheet>
     );
@@ -135,35 +169,13 @@ export default function RosterManageSheet({ onClose }) {
         {tab === 'active' ? t('archive.hint') : t('archive.desc')}
       </p>
 
-      {tab === 'active' && (grades.length > 0 || hasUnsetGrade) && (
-        <div className="mg-picks">
-          {grades.map((g) => (
-            <button key={g} className="mg-pick" onClick={() => pickGrade(g)}>
-              {t('manage.pickGrade', { g: t('grade.nth', { n: g }) })}
-            </button>
-          ))}
-          {hasUnsetGrade && (
-            <button className="mg-pick" onClick={() => pickGrade(null)}>
-              {t('manage.pickGrade', { g: t('grade.unsetShort') })}
-            </button>
-          )}
-        </div>
-      )}
-
       <div className="mg-list">
         {rows.map((p) => {
-          const on = sel.has(p.id);
+          const mk = marks.get(p.id);
           const tn = tenure.get(p.id);
           const g = gradeOn ? gradeOf(p, thisYear) : null;
           return (
-            <button
-              key={p.id}
-              className={`mg-row${on ? ' on' : ''}`}
-              role="checkbox"
-              aria-checked={on}
-              onClick={() => toggle(p.id)}
-            >
-              <span className="mg-ck" aria-hidden="true">{on ? '✓' : ''}</span>
+            <div className={`mg-row${mk === 'a' ? ' m-move' : mk === 'd' ? ' m-del' : ''}`} key={p.id}>
               <span className="mg-name">
                 <b>{p.number ? `${p.number} ` : ''}{p.name}</b>
                 <i>
@@ -171,7 +183,8 @@ export default function RosterManageSheet({ onClose }) {
                   {tn ? `${tn.from}–${tn.to} ・ ${t('archive.games', { n: tn.games })}` : t('manage.noGames')}
                 </i>
               </span>
-            </button>
+              <Chips ids={[p.id]} />
+            </div>
           );
         })}
         {rows.length === 0 && (
@@ -179,18 +192,34 @@ export default function RosterManageSheet({ onClose }) {
         )}
       </div>
 
-      {/* 選んでいる間だけ実行できる。閉じるは常に押せる位置に残す */}
+      {/* 印を付けただけでは何も起きない。ここを押して初めて動く(削除はさらに確認) */}
       <div className="sheet-actions mg-bar">
         <button className="ghost close" onClick={onClose}>{t('action.close')}</button>
-        <button className="primary go" disabled={nPicked === 0} onClick={tab === 'active' ? doArchive : doRestore}>
-          {nPicked === 0
-            ? t('manage.none')
-            : t(tab === 'active' ? 'manage.archiveN' : 'manage.restoreN', { n: nPicked })}
+        <button className="primary go" disabled={nMove === 0} onClick={runMove}>
+          {nMove === 0
+            ? actMove
+            : t(tab === 'active' ? 'manage.archiveN' : 'manage.restoreN', { n: nMove })}
         </button>
-        <button className="danger del" disabled={nPicked === 0} onClick={() => setConfirming(true)}>
-          {nPicked === 0 ? t('action.delete') : t('manage.deleteN', { n: nPicked })}
+        <button className="danger del" disabled={nDelete === 0} onClick={() => setConfirming(true)}>
+          {nDelete === 0 ? t('action.delete') : t('manage.deleteN', { n: nDelete })}
         </button>
       </div>
+
+      {/* まとめて。行とまったく同じ形にして、対象が「1人」か「学年ぜんぶ」かだけを変える */}
+      {rows.length > 0 && (
+        <div className="mg-bulk">
+          <div className="mg-bulk-h">{t('manage.bulkHead')}</div>
+          {groups.map((gr) => (
+            <div className="mg-row bulk" key={gr.key}>
+              <span className="mg-name">
+                <b>{gr.label}</b>
+                <i>{t('manage.groupN', { n: gr.members.length })}</i>
+              </span>
+              <Chips ids={idsOf(gr.members)} big />
+            </div>
+          ))}
+        </div>
+      )}
     </Sheet>
   );
 }
