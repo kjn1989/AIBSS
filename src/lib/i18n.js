@@ -667,7 +667,7 @@ export const MESSAGES = {
     'archive.games': '{n}試合',
     // 選手をまとめて整理する(アーカイブ・削除)
     'manage.open': '選手をまとめて整理する',
-    'manage.openSub': 'アーカイブ（卒業・退部）・削除',
+    'manage.openSub': '(アーカイブ(卒業/退部)、削除)',
     'manage.title': '選手をまとめて整理する',
     'manage.tabActive': '在籍 {n}人',
     'manage.tabArchived': 'アーカイブ済み {n}人',
@@ -1783,7 +1783,7 @@ export const MESSAGES = {
     'archive.hint': 'Move a departed player out of the active roster. Their records stay.',
     'archive.desc': 'Players who have left. All records are kept and still count toward all-time stats. They no longer appear when building a lineup.',
     'manage.open': 'Manage the roster',
-    'manage.openSub': 'Archive (left the team) / delete',
+    'manage.openSub': '(archive for graduation/leaving, delete)',
     'manage.title': 'Manage the roster',
     'manage.tabActive': 'Active {n}',
     'manage.tabArchived': 'Archived {n}',
