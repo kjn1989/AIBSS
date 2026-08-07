@@ -1480,8 +1480,15 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 /* ---- 選手をまとめて整理する(アーカイブ・削除) ----
    もとは名簿の各行に 📥 と 🗑 が並んでいた。年に数回しか触らないものを
    常時出しておくうえ、取り消せない削除が行の端にあった。行から外して奥にまとめる */
-.manage-open { display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap; }
-.manage-open .dim { font-weight: 400; }
+/* 入口は「探して見つける」ものではなく「あることを知らせる」もの。
+   すぐ上の「学年をまとめて設定」と同じ薄さだと名簿の背景に沈むので、
+   アクセント色を薄く敷いて一段明るくする(実行ボタンほどは強くしない) */
+button.manage-open {
+  display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap;
+  color: var(--accent); border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.manage-open .dim { font-weight: 400; color: var(--accent); opacity: .8; }
 .mg-picks { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .mg-pick {
   min-height: 30px; padding: 4px 10px; border-radius: 999px;
