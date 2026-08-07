@@ -10,7 +10,7 @@ import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfi
 import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parseInningRange, parseSlotBatters, parseAtBatDeletions, parseShortResult, isExplicitSubText, inGamePlayerIds, preferInGamePlayers } from '../src/lib/correctionParser.js';
 import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarters, findPositionIssues } from '../src/lib/lineupBox.js';
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
-import { newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions, attendeesOf, lastAttendees, autoLineupFrom } from '../src/lib/model.js';
+import { newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions, attendeesOf, lastAttendees, autoLineupFrom, subRank } from '../src/lib/model.js';
 import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf, oppLettersInGame, oppBaserunning } from '../src/lib/oppBox.js';
 import { remapPlayerInGame, fillPlayerGaps } from '../src/lib/mergePlayers.js';
 import { computeBoxScore } from '../src/lib/boxscore.js';
@@ -2213,4 +2213,57 @@ test('autoLineupFrom: 人数が多くても打順は9人まで', () => {
   const ps = Array.from({ length: 15 }, (_, i) => ({ id: `p${i}`, position: FIELD_POSITIONS[i % 9], subPositions: [] }));
   assert.equal(autoLineupFrom(ps).lineup.length, 9);
   assert.equal(autoLineupFrom([]).lineup.length, 0);
+});
+
+// ---- サブの優先順 ----
+test('subRank: サブは書かれている順が優先度。先頭が0(最優先)', () => {
+  const p = { position: '遊', subPositions: ['二', '三', '一'] };
+  assert.equal(subRank(p, '二'), 0);
+  assert.equal(subRank(p, '三'), 1);
+  assert.equal(subRank(p, '一'), 2);
+  assert.equal(subRank(p, '捕'), -1, 'サブに無い位置は -1');
+  assert.equal(subRank(p, '遊'), -1, 'メインはサブの順番には入らない');
+  assert.equal(subRank({}, '二'), -1);
+});
+
+test('autoLineupFrom: 同じ位置を守れる者どうしなら、上位に置いている選手が入る', () => {
+  // 2人とも 二 と 三 を守れる。違いは順番だけなので、順番がそのまま効く
+  const ps = [
+    { id: '二が上', position: '', subPositions: ['二', '三'] },
+    { id: '三が上', position: '', subPositions: ['三', '二'] },
+  ];
+  const { lineup } = autoLineupFrom(ps);
+  assert.equal(lineup.find((r) => r.playerId === '二が上').position, '二');
+  assert.equal(lineup.find((r) => r.playerId === '三が上').position, '三');
+
+  // 順番を入れ替えれば、入る位置も入れ替わる(順番が本当に効いている)
+  const swapped = [
+    { id: '二が上', position: '', subPositions: ['三', '二'] },
+    { id: '三が上', position: '', subPositions: ['二', '三'] },
+  ];
+  const l2 = autoLineupFrom(swapped).lineup;
+  assert.equal(l2.find((r) => r.playerId === '二が上').position, '三');
+  assert.equal(l2.find((r) => r.playerId === '三が上').position, '二');
+});
+
+test('autoLineupFrom: 守備位置が埋まることは、サブの順番より優先される', () => {
+  // 高 は 二 を1番目に置いているが、三 を守れるのは 高 だけ。
+  // 高 を 二 に入れると 三 が空くので、順番より「両方埋まる」を採る
+  const ps = [
+    { id: '低', position: '', subPositions: ['左', '中', '二'] },
+    { id: '高', position: '', subPositions: ['二', '三'] },
+  ];
+  const { lineup, unfilled } = autoLineupFrom(ps);
+  assert.equal(lineup.find((r) => r.playerId === '高').position, '三');
+  assert.equal(lineup.find((r) => r.playerId === '低').position, '二');
+  assert.ok(!unfilled.includes('二') && !unfilled.includes('三'), '両方とも埋まる');
+});
+
+test('autoLineupFrom: メインはサブの順番より常に優先される', () => {
+  const ps = [
+    { id: 'メイン持ち', position: '二', subPositions: [] },
+    { id: 'サブ最優先', position: '', subPositions: ['二'] },
+  ];
+  const { lineup } = autoLineupFrom(ps);
+  assert.equal(lineup.find((r) => r.playerId === 'メイン持ち').position, '二');
 });

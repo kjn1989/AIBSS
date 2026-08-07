@@ -93,6 +93,14 @@ export function playablePosition(player, pos) {
   return (player.subPositions || []).includes(pos) ? 'sub' : null;
 }
 
+// サブの中での優先順位。subPositions の並びがそのまま順番(先頭がいちばん優先)。
+// 0 が最優先、-1 はサブに入っていない。
+// 「二塁のほうが三塁より任せやすい」という差を、順番だけで表せるようにしている。
+export function subRank(player, pos) {
+  const i = (player?.subPositions || []).indexOf(pos);
+  return i;
+}
+
 // 名簿(または今日の参加メンバー)で、各守備位置を守れる人数。
 // 「捕手が1人しかいない」を出すために main と sub を分けて数える。
 export function positionCoverage(players = []) {
@@ -207,6 +215,9 @@ export function autoLineupFrom(players = [], { max = 9 } = {}) {
       if (k === 'main') mains.push(p);
       else if (k === 'sub') subs.push(p);
     }
+    // サブは、その位置を上位に置いている選手から先に使う。
+    // 「二塁のほうが三塁より任せやすい」と登録した意図を活かす
+    subs.sort((a, b) => subRank(a, pos) - subRank(b, pos));
     return { mains, subs };
   };
 

@@ -1533,22 +1533,65 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 .pos-btn.set { color: var(--accent); border-style: solid; border-color: var(--accent); }
 .pos-btn i { font-style: normal; opacity: .75; margin-left: 3px; font-size: 9.5px; }
 
-.pos-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 12px; }
+/* メインとサブを別々に並べる。丸(1つだけ)と四角(複数)は説明が要らない記号 */
+.pos-sec {
+  display: flex; align-items: baseline; gap: 8px;
+  font-size: 11.5px; font-weight: 800; color: var(--text-dim);
+  margin: 16px 0 7px; letter-spacing: .04em;
+}
+.pos-sec i { font-style: normal; font-weight: 400; opacity: .85; }
+.pos-chips { display: flex; flex-wrap: wrap; gap: 7px; margin: 0 0 2px; }
 .pos-chip {
+  position: relative;
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
   min-width: 46px; min-height: 46px; padding: 0 10px; border-radius: 12px;
   font-size: 16px; font-weight: 800;
   color: var(--text-dim); background: var(--bg-3); border: 1px solid var(--border);
 }
-/* 状態のクラスに main / sub をそのまま使うと、アプリ本体のコンテナ .main
-   (flex:1 / padding あり) と衝突して、チップも凡例も引き伸ばされる。
-   接頭辞を付けて衝突を避ける */
-.pos-chip.pos-sub { color: var(--text); background: rgba(88, 166, 255, .14); border-color: var(--accent); }
+/* 選択の記号。丸=メイン(1つ) / 四角=サブ(複数) */
+.pos-chip .mk { width: 13px; height: 13px; flex: 0 0 auto; border: 1.5px solid var(--text-dim); }
+.pos-chip.radio .mk { border-radius: 50%; }
+.pos-chip.check .mk { border-radius: 4px; }
 .pos-chip.pos-main { color: #fff; background: var(--accent-2); border-color: var(--accent); }
-.pos-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; font-size: 11.5px; color: var(--text-dim); }
-.pos-legend span { display: inline-flex; align-items: center; gap: 5px; }
-.pos-legend i { width: 12px; height: 12px; border-radius: 4px; border: 1px solid var(--accent); }
-.pos-legend i.pos-main { background: var(--accent-2); }
-.pos-legend i.pos-sub { background: rgba(88, 166, 255, .14); }
+.pos-chip.pos-main .mk {
+  border-color: #fff;
+  background: radial-gradient(circle, #fff 0 3.5px, transparent 3.5px);
+}
+.pos-chip.pos-sub { color: var(--text); background: rgba(88, 166, 255, .14); border-color: var(--accent); }
+.pos-chip.pos-sub .mk {
+  border-color: var(--accent); background: var(--accent-2);
+}
+.pos-chip.pos-sub .mk::after {
+  content: "✓"; position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+  font-size: 10px; color: #fff; font-weight: 900;
+}
+/* メインに選ばれている位置は、サブ側では押せない(同じ位置が二重に立たない) */
+.pos-chip.is-main-here { opacity: .35; }
+/* サブの優先順。選んだ順に番号が付く */
+.pos-chip .rank {
+  position: absolute; top: -6px; right: -6px;
+  min-width: 17px; height: 17px; padding: 0 4px; border-radius: 999px;
+  background: var(--accent-2); color: #fff; border: 1px solid var(--bg-2);
+  font-size: 10px; font-weight: 800; display: grid; place-items: center;
+}
+/* 順番の入れ替え。サブが2つ以上のときだけ出す */
+.pos-order { display: flex; flex-wrap: wrap; gap: 7px; }
+.pos-order-item {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 4px 4px 8px; border-radius: 10px;
+  background: var(--bg-3); border: 1px solid var(--border);
+  font-size: 14px; font-weight: 700; color: var(--text);
+}
+.pos-order-item b {
+  min-width: 16px; height: 16px; border-radius: 999px; background: var(--accent-2); color: #fff;
+  font-size: 10px; display: grid; place-items: center;
+}
+.pos-order-item .up {
+  min-width: 30px; min-height: 30px; padding: 0; border-radius: 8px;
+  background: transparent; border: 1px solid var(--border); color: var(--text);
+  font-size: 13px;
+}
+.pos-order-item .up:disabled { opacity: .3; }
 
 /* 行のいちばん左が背番号、名前の下が学年だと分かるようにする一言 */
 .roster-legend { font-size: 10.5px; line-height: 1.5; color: var(--text-dim); margin: 0 0 4px 4px; }
