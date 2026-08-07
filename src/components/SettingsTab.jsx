@@ -15,6 +15,7 @@ import EditionText from './EditionText.jsx';
 import { listProfiles, getActiveProfileId, addProfile, switchActiveProfile, deleteProfile, listOrphanedProfiles, restoreProfile } from '../lib/profiles.js';
 import OfficialCloudCard from './OfficialCloudCard.jsx';
 import Sheet from './Sheet.jsx';
+import RosterManageSheet from './RosterManageSheet.jsx';
 
 // 同じ名前で二重登録された選手を検出して統合を促すカード。
 // 二重登録があると「同じ人」と判定できず、打順移動の表示や通算成績が分断される。
@@ -108,48 +109,6 @@ function TeamRoleRow() {
               </button>
             ))}
           </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// アーカイブした選手(卒業・退部)。記録は残っており、1タップで戻せる。
-// 削除と並べて置くと誤解を招くので、折りたたんだ別の節にする。
-function ArchivedPlayers() {
-  const { state, dispatch } = useStore();
-  const t = useT();
-  const [open, setOpen] = useState(false);
-  const rows = state.players.filter(isArchived);
-  const tenure = useMemo(
-    () => tenureByPlayer(Object.values(state.games), state.settings.yearStartMonth || DEFAULT_YEAR_START_MONTH),
-    [state.games, state.settings.yearStartMonth],
-  );
-  if (rows.length === 0) return null;
-  return (
-    <div className="mt12">
-      <button className="small ghost" onClick={() => setOpen((v) => !v)}>
-        {open ? '▼' : '▶'} {t('archive.section', { n: rows.length })}
-      </button>
-      {open && (
-        <div className="mt8">
-          <p className="small dim" style={{ marginBottom: 8 }}>{t('archive.desc')}</p>
-          {rows.map((p) => {
-            const tn = tenure.get(p.id);
-            return (
-              <div className="row" key={p.id}>
-                <span className="num-edit dim" style={{ textAlign: 'center' }}>{p.number || '-'}</span>
-                <span className="grow dim">
-                  {p.name}
-                  {tn && <span className="tenure">{tn.from}–{tn.to} ・ {t('archive.games', { n: tn.games })}</span>}
-                </span>
-                {p.archiveNote && <span className="small dim">{p.archiveNote}</span>}
-                <button className="small ghost" onClick={() => dispatch({ type: 'UNARCHIVE_PLAYERS', ids: [p.id] })}>
-                  {t('archive.restore')}
-                </button>
-              </div>
-            );
-          })}
         </div>
       )}
     </div>
@@ -412,6 +371,7 @@ export default function SettingsTab() {
   const [newGrade, setNewGrade] = useState('');
   const [rosterSort, setRosterSort] = useState('grade');
   const [gradeBulk, setGradeBulk] = useState(false);
+  const [manage, setManage] = useState(false);
   const [posPlayer, setPosPlayer] = useState(null); // 守備位置シートを開いている選手ID
   // 学年はブカツ・少年野球でのみ使う。草野球では欄ごと出さない
   const gradeOn = usesGrade(state.settings.edition);
@@ -597,11 +557,19 @@ export default function SettingsTab() {
         </div>
         <TeamRoleRow />
         {gradeOn && (
-          <>
           <button className="small ghost mt8" style={{ width: '100%' }} onClick={() => setGradeBulk(true)}>
             {t('grade.bulkOpen')}
             {unsetGrades > 0 && <span className="dim"> ({t('grade.bulkUnset', { n: unsetGrades })})</span>}
           </button>
+        )}
+        {/* アーカイブと削除は年に数回しか触らず、削除は取り消せない。
+            各行に常時置くのをやめ、この入口の奥にまとめる */}
+        <button className="small ghost mt8 manage-open" style={{ width: '100%' }} onClick={() => setManage(true)}>
+          {t('manage.open')}
+          <span className="dim">{t('manage.openSub')}</span>
+        </button>
+        {gradeOn && (
+          <>
           <div className="lens-row mt8">
             {[['grade', 'grade.sortGrade'], ['number', 'grade.sortNumber'], ['added', 'grade.sortAdded']].map(([k, key]) => (
               <button key={k} className={rosterSort === k ? 'on' : ''} onClick={() => setRosterSort(k)}>{t(key)}</button>
@@ -613,12 +581,24 @@ export default function SettingsTab() {
           {/* 行のいちばん左が背番号だと分かるように書く。すぐ上に「学年」の見出しが
               出るので、丸の数字が学年に見えてしまっていた */}
           {rosterRows.length > 0 && <div className="roster-legend">{t('set.rosterLegend')}</div>}
+          {/* 学年の区切りが無いエディションには載せる見出しが無いので、一覧の直上に1本出す */}
+          {rosterRows.length > 0 && !gradeOn && (
+            <div className="roster-colhead">
+              <span className="sp" /><i>{t('set.throwShort')}</i><i>{t('set.batShort')}</i>
+            </div>
+          )}
           {rosterRows.map(({ p, head, grade }) => (
             <React.Fragment key={p.id}>
               {head && (
                 <div className="grade-head">
                   <b>{head.grade == null ? t('grade.unset') : t('grade.nth', { n: head.grade })}</b>
                   {head.grade != null && <span>{t('grade.count', { n: head.n, y: head.entry })}</span>}
+                  {/* 右/左のセレクトが2つ並ぶだけでは、どちらが投でどちらが打か行から
+                      読み取れない。区切りの見出しは「この区切りの中で共通のこと」を
+                      書く場所なので、列の名前をここに置く(行の高さは増えない) */}
+                  <span className="hand-cols">
+                    <i>{t('set.throwShort')}</i><i>{t('set.batShort')}</i>
+                  </span>
                 </div>
               )}
             <div className="row">
@@ -686,27 +666,12 @@ export default function SettingsTab() {
               >
                 <option value="">—</option><option value="R">{t('hand.R')}</option><option value="L">{t('hand.L')}</option><option value="S">{t('hand.S')}</option>
               </select>
-              <button
-                className="small ghost icon-btn"
-                title={t('archive.hint')}
-                aria-label={t('archive.action')}
-                onClick={() => dispatch({ type: 'ARCHIVE_PLAYERS', ids: [p.id], year: thisYear })}
-              >
-                📥
-              </button>
-              <button
-                className="small danger ghost icon-btn"
-                title={t('action.delete')}
-                aria-label={t('action.delete')}
-                onClick={() => dispatch({ type: 'DELETE_PLAYER', id: p.id })}
-              >
-                🗑
-              </button>
             </div>
             </React.Fragment>
           ))}
           {state.players.filter((p) => !isArchived(p)).length === 0 && <div className="dim small mt8">{t('set.noPlayers')}</div>}
           {gradeBulk && <GradeBulkSheet onClose={() => setGradeBulk(false)} />}
+          {manage && <RosterManageSheet onClose={() => setManage(false)} />}
           {posPlayer && (() => {
             const target = state.players.find((x) => x.id === posPlayer);
             return target ? <PositionSheet player={target} onClose={() => setPosPlayer(null)} /> : null;
@@ -716,7 +681,6 @@ export default function SettingsTab() {
             <div className="warn-box mt8">{t('pos.uncovered', { list: holes.join('・') })}</div>
           )}
         </div>
-        <ArchivedPlayers />
       </div>
 
       <DuplicatePlayersCard />
