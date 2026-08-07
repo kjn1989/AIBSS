@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { useStore, useT, useCurrentGame, usePlayerName } from '../state/store.jsx';
-import { POSITIONS, positionLabel } from '../lib/model.js';
+import { POSITIONS, positionLabel, attendeesOf } from '../lib/model.js';
+import { isArchived } from '../lib/year.js';
 import { canWriteCloud } from '../lib/officialCloud.js';
 import Sheet from './Sheet.jsx';
 import LineupWizard from './LineupWizard.jsx';
 import OppOrderCard, { OppSubstituteSheet } from './OppOrderCard.jsx';
 import HeadCoachView from './HeadCoachView.jsx';
+import AttendanceSheet from './AttendanceSheet.jsx';
 
 // ---- 交代シート(代打・代走・守備交代) ----
 // スコア入力タブ(打者カード/走者タップ)からも再利用するため export する
@@ -99,6 +101,7 @@ export default function OrderTab() {
   const game = useCurrentGame();
   const nameOf = usePlayerName();
   const [subSlot, setSubSlot] = useState(null);
+  const [attOpen, setAttOpen] = useState(false); // 今日のメンバーを直す
   const [oppSlot, setOppSlot] = useState(null); // 相手の交代シート
   const [team, setTeam] = useState('mine'); // 'mine' | 'opp'
   const [coachOpen, setCoachOpen] = useState(false);
@@ -175,6 +178,19 @@ export default function OrderTab() {
           {coachBtn}
           {!gameStarted && <button className="small" onClick={rebuildLineup}>{t('order.rebuild')}</button>}
         </div>
+        {/* 参加メンバーは試合開始のときに決めるが、遅刻・早退があるので直せる必要がある。
+            ここを直すと打順の自動セットとAIスタメン提案の対象も変わる */}
+        <button className="small ghost att-edit" onClick={() => setAttOpen(true)}>
+          {t('att.edit', { n: attendeesOf(game, state.players.filter((p) => !isArchived(p))).length })}
+        </button>
+        {attOpen && (
+          <AttendanceSheet
+            initial={game.attendees}
+            confirmKey="att.save"
+            onDone={(ids) => { dispatch({ type: 'SET_ATTENDEES', gameId: game.id, attendees: ids }); setAttOpen(false); }}
+            onClose={() => setAttOpen(false)}
+          />
+        )}
         {game.lineup.map((slot, i) => (
           <div className="row" key={slot.order}>
             <span className="rank-badge">{slot.order}</span>

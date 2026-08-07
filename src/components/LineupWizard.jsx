@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { useStore, usePlayerName, useT } from '../state/store.jsx';
 import { isArchived } from '../lib/year.js';
-import { positionLabel } from '../lib/model.js';
+import { positionLabel, attendeesOf } from '../lib/model.js';
 import { FIELD_SPOTS } from '../lib/fieldSpots.js';
 import Sheet from './Sheet.jsx';
 
@@ -30,8 +30,12 @@ export default function LineupWizard({ game }) {
   const [useDH, setUseDH] = useState(false); // DH制(投手は打たず、DHが代わりに打つ)
   const [pitcherId, setPitcherId] = useState(''); // DH制時の打順外の投手
 
-  // アーカイブ済み(卒業・退部)の選手はオーダー候補に出さない。誤って組んでしまうのを防ぐ
-  const players = state.players.filter((p) => !p.id.startsWith('demo-') && !isArchived(p));
+  // アーカイブ済み(卒業・退部)の選手はオーダー候補に出さない。誤って組んでしまうのを防ぐ。
+  // さらに今日来ているメンバーだけに絞る。居ない人を並べても選べてしまう
+  const players = attendeesOf(
+    game,
+    state.players.filter((p) => !p.id.startsWith('demo-') && !isArchived(p)),
+  );
   const pastGames = Object.values(state.games)
     .filter((g) => g.id !== game.id && (g.lineup?.length > 0))
     .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
