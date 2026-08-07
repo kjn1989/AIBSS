@@ -188,7 +188,7 @@ export default function RosterManageSheet({ onClose }) {
             : t(tab === 'active' ? 'manage.archiveN' : 'manage.restoreN', { n: nPicked })}
         </button>
         <button className="danger del" disabled={nPicked === 0} onClick={() => setConfirming(true)}>
-          {t('action.delete')}
+          {nPicked === 0 ? t('action.delete') : t('manage.deleteN', { n: nPicked })}
         </button>
       </div>
     </Sheet>

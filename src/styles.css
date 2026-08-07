@@ -1518,7 +1518,7 @@ button.manage-open {
 .sheet .sheet-actions.mg-bar button { font-size: 13.5px; padding: 4px 6px; }
 .sheet .sheet-actions.mg-bar .close { flex: 0 0 auto; width: 62px; }
 .sheet .sheet-actions.mg-bar .go { flex: 1 1 auto; }
-.sheet .sheet-actions.mg-bar .del { flex: 0 0 auto; width: 68px; }
+.sheet .sheet-actions.mg-bar .del { flex: 0 0 auto; width: auto; padding: 4px 12px; }
 .mg-bar button:disabled { opacity: .45; }
 .mg-confirm { max-height: 40vh; overflow-y: auto; }
 .mg-confirm-row {
