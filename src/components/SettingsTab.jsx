@@ -5,7 +5,7 @@ import { encodeWatchLink, encodeInviteLink } from './WatchView.jsx';
 import QRCode from './QRCode.jsx';
 import { resetFieldPadHint } from './FieldPad.jsx';
 import { battingCSV, pitchingCSV, playLogCSV, atBatCSV, downloadCSV, shareCSV } from '../lib/csv.js';
-import { EDITIONS, HAND_LABEL, editionLabel } from '../lib/model.js';
+import { EDITIONS, HAND_LABEL, editionLabel, FIELD_POSITIONS, playablePosition, uncoveredPositions } from '../lib/model.js';
 import {
   isArchived, tenureByPlayer, currentYear, currentSchoolYear, DEFAULT_YEAR_START_MONTH,
   usesGrade, defaultSchoolType, defaultYearStartMonth, maxGradeOf, gradeOf, entryYearFromGrade,
@@ -163,6 +163,60 @@ function ArchivedPlayers() {
 // 10人20人を1行ずつ開いて選ぶのは現実的でないので、まとめて付ける道を用意する。
 // 押した瞬間に保存する(まとめて設定しておいて保存を押し忘れる事故を作らない)。
 // ============================================================
+// ---- 守備位置を決めるシート ----
+// 主(いつもの位置)は1つ、可(任せられる位置)は複数。
+// 1つのチップを押すたびに なし → 可 → 主 → なし と回る。
+// 主と可を別々のUIに分けると、同じ9つの位置を2回見ることになって迷う。
+function PositionSheet({ player, onClose }) {
+  const { dispatch } = useStore();
+  const t = useT();
+  const main = player.position || '';
+  const subs = player.subPositions || [];
+
+  const cycle = (pos) => {
+    const kind = playablePosition(player, pos);
+    let patch;
+    if (kind === 'main') patch = { position: '' };                                   // 主 → なし
+    else if (kind === 'sub') patch = { position: pos, subPositions: subs.filter((x) => x !== pos) }; // 可 → 主
+    else patch = { subPositions: [...subs, pos] };                                   // なし → 可
+    // 主を移すときは、前の主が可として残らないようにする(同じ位置が二重に立つ)
+    if (patch.position && main && main !== pos) {
+      patch.subPositions = (patch.subPositions || subs).filter((x) => x !== main);
+    }
+    dispatch({ type: 'UPDATE_PLAYER', id: player.id, patch });
+  };
+
+  return (
+    <Sheet title={t('pos.sheetTitle', { name: player.name })} onClose={onClose}>
+      <p className="dim small" style={{ marginTop: 0 }}>{t('pos.sheetHint')}</p>
+      <div className="pos-chips">
+        {FIELD_POSITIONS.map((pos) => {
+          const kind = playablePosition(player, pos);
+          return (
+            <button
+              key={pos}
+              type="button"
+              className={`pos-chip${kind ? ` pos-${kind}` : ''}`}
+              aria-pressed={!!kind}
+              onClick={() => cycle(pos)}
+            >
+              {pos}
+            </button>
+          );
+        })}
+      </div>
+      <div className="pos-legend">
+        <span><i className="pos-main" />{t('pos.main')}</span>
+        <span><i className="pos-sub" />{t('pos.sub')}</span>
+        <span className="dim">{t('pos.cycle')}</span>
+      </div>
+      <div className="sheet-actions">
+        <button className="primary" onClick={onClose}>{t('action.close')}</button>
+      </div>
+    </Sheet>
+  );
+}
+
 function GradeBulkSheet({ onClose }) {
   const { state, dispatch } = useStore();
   const t = useT();
@@ -306,6 +360,7 @@ export default function SettingsTab() {
   const [newGrade, setNewGrade] = useState('');
   const [rosterSort, setRosterSort] = useState('grade');
   const [gradeBulk, setGradeBulk] = useState(false);
+  const [posPlayer, setPosPlayer] = useState(null); // 守備位置シートを開いている選手ID
   // 学年はブカツ・少年野球でのみ使う。草野球では欄ごと出さない
   const gradeOn = usesGrade(state.settings.edition);
   const startMonth = state.settings.yearStartMonth || DEFAULT_YEAR_START_MONTH;
@@ -315,6 +370,9 @@ export default function SettingsTab() {
   const maxGrade = maxGradeOf(schoolType) || 6;
 
   // 名簿の並び。学年順のときは学年ごとの見出しを差し込む(どこで区切れるか分かるように)
+  // 誰も守れない位置。現役の名簿だけで見る(アーカイブ済みは出られない)
+  const holes = uncoveredPositions(state.players.filter((p) => !isArchived(p)));
+
   const rosterRows = (() => {
     const active = state.players.filter((p) => !isArchived(p));
     let rows = active;
@@ -499,7 +557,7 @@ export default function SettingsTab() {
           </div>
           </>
         )}
-        <div className="mt12">
+        <div className="mt12 roster-list">
           {/* 行のいちばん左が背番号だと分かるように書く。すぐ上に「学年」の見出しが
               出るので、丸の数字が学年に見えてしまっていた */}
           {rosterRows.length > 0 && <div className="roster-legend">{t('set.rosterLegend')}</div>}
@@ -524,6 +582,7 @@ export default function SettingsTab() {
               />
               <span className="grow player-cell">
                 <span className="player-name">{p.name}</span>
+                <span className="player-meta">
                 {gradeOn && (
                   // 学年は登録時にしか決められず、あとから直せなかった。
                   // 入れ違いや入力漏れを直す手段が無いと名簿が信用できなくなる
@@ -543,6 +602,20 @@ export default function SettingsTab() {
                     ))}
                   </select>
                 )}
+                {/* 守備位置。ここが空だとAIスタメン提案は「誰がどこを守れるか」を
+                    知らないまま9枠を埋めることになる */}
+                <button
+                  type="button"
+                  className={`pos-btn${p.position ? ' set' : ''}`}
+                  onClick={() => setPosPlayer(p.id)}
+                  aria-label={t('pos.sheetTitle', { name: p.name })}
+                >
+                  {p.position || t('pos.unset')}
+                  {(p.subPositions || []).length > 0 && (
+                    <i>+{(p.subPositions || []).length}</i>
+                  )}
+                </button>
+                </span>
               </span>
               <select
                 className="hand-select" aria-label={t('set.throwShort')} title={t('set.throwShort')}
@@ -564,12 +637,27 @@ export default function SettingsTab() {
               >
                 📥
               </button>
-              <button className="small danger ghost" onClick={() => dispatch({ type: 'DELETE_PLAYER', id: p.id })}>{t('action.delete')}</button>
+              <button
+                className="small danger ghost icon-btn"
+                title={t('action.delete')}
+                aria-label={t('action.delete')}
+                onClick={() => dispatch({ type: 'DELETE_PLAYER', id: p.id })}
+              >
+                🗑
+              </button>
             </div>
             </React.Fragment>
           ))}
           {state.players.filter((p) => !isArchived(p)).length === 0 && <div className="dim small mt8">{t('set.noPlayers')}</div>}
           {gradeBulk && <GradeBulkSheet onClose={() => setGradeBulk(false)} />}
+          {posPlayer && (() => {
+            const target = state.players.find((x) => x.id === posPlayer);
+            return target ? <PositionSheet player={target} onClose={() => setPosPlayer(null)} /> : null;
+          })()}
+          {/* 誰も守れない位置があると、そもそもスタメンが組めない。名簿の側で先に言う */}
+          {holes.length > 0 && (
+            <div className="warn-box mt8">{t('pos.uncovered', { list: holes.join('・') })}</div>
+          )}
         </div>
         <ArchivedPlayers />
       </div>

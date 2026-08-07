@@ -10,7 +10,7 @@ import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfi
 import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parseInningRange, parseSlotBatters, parseAtBatDeletions, parseShortResult, isExplicitSubText, inGamePlayerIds, preferInGamePlayers } from '../src/lib/correctionParser.js';
 import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarters, findPositionIssues } from '../src/lib/lineupBox.js';
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
-import { newGame, allowsFoul } from '../src/lib/model.js';
+import { newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions } from '../src/lib/model.js';
 import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf, oppLettersInGame, oppBaserunning } from '../src/lib/oppBox.js';
 import { remapPlayerInGame, fillPlayerGaps } from '../src/lib/mergePlayers.js';
 import { computeBoxScore } from '../src/lib/boxscore.js';
@@ -2087,4 +2087,56 @@ test('playLabel: ファウルフライはログの1行でフェアと区別で�
   assert.equal(playLabel('out', 'LF', 'fly', null, undefined, 'ja', {}), '左翼フライ・アウト');
   // 三振には打球が無いので、うっかり角度が残っていても足さない
   assert.equal(playLabel('so', null, null, 'swinging', undefined, 'ja', foul), '空振り三振');
+});
+
+// ---- 守備位置(主・可) ----
+test('playablePosition: 主と可を区別する。登録の無い位置は守れない', () => {
+  const p = { position: '遊', subPositions: ['二', '三'] };
+  assert.equal(playablePosition(p, '遊'), 'main');
+  assert.equal(playablePosition(p, '二'), 'sub');
+  assert.equal(playablePosition(p, '捕'), null);
+  // 未登録の選手はどこも守れない扱い(AIには「守備位置の登録なし」と伝える)
+  assert.equal(playablePosition({ position: '', subPositions: [] }, '遊'), null);
+  assert.equal(playablePosition(null, '遊'), null);
+  assert.equal(playablePosition(p, ''), null);
+  // 古い記録(subPositions が無い)でも落ちない
+  assert.equal(playablePosition({ position: '捕' }, '捕'), 'main');
+  assert.equal(playablePosition({ position: '捕' }, '一'), null);
+});
+
+test('newPlayer: 守備位置の初期値は未設定。既定で勝手にどこかを守れることにしない', () => {
+  const p = newPlayer('テスト');
+  assert.equal(p.position, '');
+  assert.deepEqual(p.subPositions, []);
+  // 渡せば入る。配列は複製する(呼び出し側の配列と繋がらない)
+  const subs = ['一'];
+  const q = newPlayer('テスト2', '9', { position: '遊', subPositions: subs });
+  assert.equal(q.position, '遊');
+  assert.deepEqual(q.subPositions, ['一']);
+  subs.push('二');
+  assert.deepEqual(q.subPositions, ['一'], '呼び出し側の配列を書き換えても影響されない');
+});
+
+test('positionCoverage / uncoveredPositions: 守れる人数を主と可で分けて数える', () => {
+  const roster = [
+    { position: '捕', subPositions: [] },
+    { position: '遊', subPositions: ['二', '捕'] },
+    { position: '二', subPositions: [] },
+  ];
+  const cov = positionCoverage(roster);
+  assert.deepEqual(cov['捕'], { main: 1, sub: 1, total: 2 });
+  assert.deepEqual(cov['遊'], { main: 1, sub: 0, total: 1 });
+  assert.deepEqual(cov['投'], { main: 0, sub: 0, total: 0 });
+  // 誰も守れない位置が分かる = そのままではスタメンが組めない
+  const holes = uncoveredPositions(roster);
+  assert.ok(holes.includes('投') && holes.includes('一') && holes.includes('三'));
+  assert.ok(!holes.includes('捕') && !holes.includes('遊') && !holes.includes('二'));
+  // 全員そろえば穴は無い
+  assert.deepEqual(uncoveredPositions(FIELD_POSITIONS.map((x) => ({ position: x, subPositions: [] }))), []);
+  assert.deepEqual(uncoveredPositions([]).length, FIELD_POSITIONS.length);
+});
+
+test('FIELD_POSITIONS: DH・打・控は選手の属性ではないので登録の対象にしない', () => {
+  assert.equal(FIELD_POSITIONS.length, 9);
+  for (const x of ['DH', '打', '控']) assert.ok(!FIELD_POSITIONS.includes(x), x);
 });

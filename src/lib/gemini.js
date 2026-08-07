@@ -258,38 +258,59 @@ export async function generateScoutReport({ apiKey, name, number, tags, statsSum
 // dh=true: DH制(打順9人=守備8+DH1、別に打順外の投手1人、合計10人)
 // dh=false: DHなし(打順9人=投手含む全員守備)
 function lineupPrompt(players, dh) {
-  const list = players.map((p) => `- ${p.name}（${p.statsLine || '成績データ少'}）`).join('\n');
+  // 守備位置を渡さないと、AIは誰がどこを守れるか知らないまま9枠を埋めることになる。
+  // 主(いつもの位置)と可(任せられる位置)を分けて渡し、主を優先させる。
+  const list = players.map((p) => {
+    const pos = p.mainPos
+      ? `主:${p.mainPos}${p.subPos && p.subPos.length ? ` 可:${p.subPos.join('')}` : ''}`
+      : (p.subPos && p.subPos.length ? `可:${p.subPos.join('')}` : '守備位置の登録なし');
+    return `- ${p.name}（${pos}／${p.statsLine || '成績データ少'}）`;
+  }).join('\n');
+  const posRule = `
+守備位置の決め方（最優先の条件）:
+- 各選手には【主】(いつもの守備位置)と【可】(任せられる位置)が付いています。
+- 原則として【主】の位置に置いてください。
+- 【主】だけでは9つの守備位置が埋まらない場合に限り、その位置を【可】に持つ選手を回してください。
+- 【主】にも【可】にも無い位置には、絶対に置かないでください。
+- 誰も守れない位置が残る場合は、その位置を無理に埋めず、unfilled にその位置を入れてください。
+- 「守備位置の登録なし」の選手は、守備につけず DH か控えに回してください。`;
   if (dh) {
     return `あなたは草野球チームの名将ヘッドコーチです。以下の候補選手の今季成績をもとに、最も得点が期待できるスタメンを提案してください。DH制です。
 
 候補選手（今季成績）:
 ${list}
 
+${posRule}
+
 条件:
-- 打順(lineup)はちょうど9人。守備位置は「捕 一 二 三 遊 左 中 右」を各1つずつ割り当て、残り1人をDHにする（8守備+DH=9人。各ポジション重複禁止・欠け禁止）。投手は打順に入れない。
+- 打順(lineup)はちょうど9人。守備位置は「捕 一 二 三 遊 左 中 右」を各1つずつ割り当て、残り1人をDHにする（8守備+DH=9人。各ポジション重複禁止）。投手は打順に入れない。
 - 別途、打順に入らない投手(pitcher)を1人選ぶ（打席に立たない）。合計10人。
 - 候補が11人以上いる場合は、成績を見て使う10人を選抜する（全員を入れない）。
 - nameは候補選手名を一字一句そのまま使う（余計な装飾なし）。
 - 各打者に position（捕一二三遊左中右DHのいずれか）と reason（30字程度の起用理由）を付ける。
+- 各打者に fit を付ける。その位置が【主】なら "main"、【可】なら "sub"、DHなら "dh"。
 - 出塁率の高い打者を上位、長打力を3〜5番等のセオリーを踏まえる。
 - strategy に全体の狙いを80字程度で。
 - 出力は次のJSON形式のみ。前置き・説明は一切禁止:
-{"lineup":[{"name":"...","position":"...","reason":"..."}],"pitcher":{"name":"...","reason":"..."},"strategy":"..."}`;
+{"lineup":[{"name":"...","position":"...","fit":"main|sub|dh","reason":"..."}],"pitcher":{"name":"...","reason":"..."},"unfilled":["..."],"strategy":"..."}`;
   }
   return `あなたは草野球チームの名将ヘッドコーチです。以下の候補選手の今季成績をもとに、最も得点が期待できるスタメン9人を選び、打順と守備位置を提案してください。DHなしです。
 
 候補選手（今季成績）:
 ${list}
 
+${posRule}
+
 条件:
-- 打順(lineup)はちょうど9人。守備位置「投 捕 一 二 三 遊 左 中 右」を9人に各1つずつ割り当てる（重複禁止・欠け禁止。投手も打席に立つ）。
+- 打順(lineup)はちょうど9人。守備位置「投 捕 一 二 三 遊 左 中 右」を9人に各1つずつ割り当てる（重複禁止。投手も打席に立つ）。
 - 候補が10人以上いる場合は、成績を見て9人を選抜する（全員を入れない）。
 - nameは候補選手名を一字一句そのまま使う（余計な装飾なし）。
 - 各選手に position（投捕一二三遊左中右のいずれか）と reason（30字程度の起用理由）を付ける。
+- 各選手に fit を付ける。その位置が【主】なら "main"、【可】なら "sub"。
 - 出塁率の高い打者を上位、長打力を3〜5番等のセオリーを踏まえる。
 - strategy に全体の狙いを80字程度で。
 - 出力は次のJSON形式のみ。前置き・説明は一切禁止:
-{"lineup":[{"name":"...","position":"...","reason":"..."}],"strategy":"..."}`;
+{"lineup":[{"name":"...","position":"...","fit":"main|sub","reason":"..."}],"unfilled":["..."],"strategy":"..."}`;
 }
 
 // 戻り値: 成功 { lineup:[{name,position,reason}], pitcher(DH時のみ){name,reason}, strategy } / 失敗 { error } / 未設定・オフライン null
@@ -299,7 +320,13 @@ export async function generateLineup({ apiKey, players, dh = false }) {
   if (!Array.isArray(r.data.lineup) || r.data.lineup.length === 0) {
     return { error: 'AIの応答にlineupが含まれていません' };
   }
-  return { lineup: r.data.lineup, pitcher: dh ? r.data.pitcher || null : null, strategy: r.data.strategy || '' };
+  return {
+    lineup: r.data.lineup,
+    pitcher: dh ? r.data.pitcher || null : null,
+    // 誰も守れなかった位置。黙って埋めさせるより、埋まらなかったと言わせる
+    unfilled: Array.isArray(r.data.unfilled) ? r.data.unfilled : [],
+    strategy: r.data.strategy || '',
+  };
 }
 
 // ---------------- AIスポーツ新聞(試合記事) ----------------

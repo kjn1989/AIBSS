@@ -1,14 +1,15 @@
 import React, { useState, useMemo } from 'react';
-import { useStore, usePlayerName } from '../state/store.jsx';
+import { useStore, usePlayerName, useT } from '../state/store.jsx';
 import { aggregateBatting, battingMetrics, fmtAvg } from '../lib/stats.js';
 import { generateLineup } from '../lib/gemini.js';
-import { POSITIONS } from '../lib/model.js';
+import { POSITIONS, uncoveredPositions } from '../lib/model.js';
 import FullscreenView from './FullscreenView.jsx';
 
 // AIヘッドコーチ: 今季の打撃成績をもとにGeminiが打順・守備位置を提案する(参考・おまけ機能)
 export default function HeadCoachView({ game, canApply, onClose }) {
   const { state, dispatch } = useStore();
   const nameOf = usePlayerName();
+  const t = useT();
   const apiKey = state.settings.geminiApiKey;
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null); // { lineup, pitcher, strategy }
@@ -25,8 +26,17 @@ export default function HeadCoachView({ game, canApply, onClose }) {
     const statsLine = m
       ? `打率${fmtAvg(m.ba)} 出塁率${fmtAvg(m.obp)} OPS${m.ops === null ? '-' : m.ops.toFixed(3)} 打点${s.rbi} 本${s.hr}`
       : '成績データ少';
-    return { name: p.name, statsLine };
+    return {
+      name: p.name,
+      statsLine,
+      // 守備位置を渡さないと、AIは誰がどこを守れるか知らないまま9枠を埋める
+      mainPos: p.position || '',
+      subPos: p.subPositions || [],
+    };
   });
+
+  // 誰も守れない位置があるなら、AIに投げる前に言う(投げても埋まらない)
+  const holes = useMemo(() => uncoveredPositions(state.players), [state.players]);
 
   const run = async () => {
     setError('');
@@ -87,6 +97,9 @@ export default function HeadCoachView({ game, canApply, onClose }) {
               <button className={dh ? 'active' : ''} onClick={() => { setDh(true); setResult(null); }}>あり(10人)</button>
             </div>
           </div>
+          {holes.length > 0 && (
+            <div className="warn-box mt8">{t('pos.uncovered', { list: holes.join('・') })}</div>
+          )}
           <button className="primary" onClick={run} disabled={loading} style={{ width: '100%' }}>
             {loading ? '🤔 考え中...' : result ? '🔄 もう一度提案してもらう' : `🤖 スタメン(${dh ? '10' : '9'}人)を提案してもらう`}
           </button>
@@ -102,6 +115,9 @@ export default function HeadCoachView({ game, canApply, onClose }) {
                 <p style={{ lineHeight: 1.7 }}>{result.strategy}</p>
               </div>
             )}
+            {result.unfilled && result.unfilled.length > 0 && (
+              <div className="warn-box mt8">{t('pos.aiUnfilled', { list: result.unfilled.join('・') })}</div>
+            )}
             <div className="card">
               <h2>提案オーダー</h2>
               {result.lineup.map((item, i) => (
@@ -110,6 +126,9 @@ export default function HeadCoachView({ game, canApply, onClose }) {
                   <div className="grow">
                     <b>{item.name}</b>
                     {item.position && <span className="pill blue" style={{ marginLeft: 6 }}>{item.position}</span>}
+                    {/* 主の位置か、可で回ってもらった位置か。理由を読む前に分かる */}
+                    {item.fit === 'sub' && <span className="pill amber" style={{ marginLeft: 4 }}>{t('pos.fitSub')}</span>}
+                    {item.fit === 'main' && <span className="pill" style={{ marginLeft: 4 }}>{t('pos.fitMain')}</span>}
                     {item.reason && <div className="small dim">{item.reason}</div>}
                   </div>
                 </div>
