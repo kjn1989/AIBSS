@@ -81,6 +81,41 @@ export const DIRECTIONS = {
 // '打' = 全員打ちの打撃のみ(守備につかない打者)、'控' = ベンチ
 export const POSITIONS = ['投', '捕', '一', '二', '三', '遊', '左', '中', '右', 'DH', '打', '控'];
 
+// 選手に登録する守備位置。DH・打・控は「その試合での役割」であって
+// 選手の属性ではないので、登録の対象からは外す。
+export const FIELD_POSITIONS = ['投', '捕', '一', '二', '三', '遊', '左', '中', '右'];
+
+// その選手がその位置を守れるか。'main'(いつもの位置) / 'sub'(任せられる) / null。
+// AIスタメン提案は main を優先し、main だけで9枠が埋まらないときに sub を使う。
+export function playablePosition(player, pos) {
+  if (!player || !pos) return null;
+  if (player.position === pos) return 'main';
+  return (player.subPositions || []).includes(pos) ? 'sub' : null;
+}
+
+// 名簿(または今日の参加メンバー)で、各守備位置を守れる人数。
+// 「捕手が1人しかいない」を出すために main と sub を分けて数える。
+export function positionCoverage(players = []) {
+  const out = {};
+  for (const pos of FIELD_POSITIONS) {
+    let main = 0;
+    let sub = 0;
+    for (const p of players) {
+      const k = playablePosition(p, pos);
+      if (k === 'main') main += 1;
+      else if (k === 'sub') sub += 1;
+    }
+    out[pos] = { main, sub, total: main + sub };
+  }
+  return out;
+}
+
+// 誰も守れない位置。ここが空でなければ、スタメンは組めない
+export function uncoveredPositions(players = []) {
+  const cov = positionCoverage(players);
+  return FIELD_POSITIONS.filter((pos) => cov[pos].total === 0);
+}
+
 // 守備位置マークの英語表記(保存値は日本語のまま、表示だけ切り替える)。
 const POSITION_EN = {
   投: 'P', 捕: 'C', 一: '1B', 二: '2B', 三: '3B', 遊: 'SS', 左: 'LF', 中: 'CF', 右: 'RF',
@@ -106,6 +141,11 @@ export function newPlayer(name, number = '', opts = {}) {
     id: uid(), name, number, createdAt: Date.now(),
     throws: opts.throws || '', // 投げる手: 'R'|'L'|'' (捕手左投げ等の稀少ケースも許容)
     bats: opts.bats || '',     // 打つ側: 'R'|'L'|'S'|''
+    // 守備位置。position=主(いつもの位置・1つ) / subPositions=任せられる位置(複数)。
+    // これが無いと、AIスタメン提案は「誰がどこを守れるか」を知らないまま
+    // 9つの守備位置を埋めることになり、位置がばらばらになる。
+    position: opts.position || '',
+    subPositions: Array.isArray(opts.subPositions) ? [...opts.subPositions] : [],
     // AI選手名鑑(スカウト寸評)の保存内容。未確定の間は編集画面側のローカル状態のみで保持する。
     scoutTags: [], // { label, type }[]
     scoutCatchphrase: '',
