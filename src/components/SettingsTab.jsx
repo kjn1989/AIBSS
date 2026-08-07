@@ -646,10 +646,7 @@ export default function SettingsTab() {
                   {/* サブは優先順の上位2つを位置そのもので出し、残りは数にする。
                       数だけだと「何を守れるのか」が名簿から読み取れない */}
                   {(p.subPositions || []).length > 0 && (
-                    <i>{(p.subPositions || []).slice(0, 2).join('')}</i>
-                  )}
-                  {(p.subPositions || []).length > 2 && (
-                    <u>+{(p.subPositions || []).length - 2}</u>
+                    <i>{(p.subPositions || []).join('')}</i>
                   )}
                 </button>
                 </span>
