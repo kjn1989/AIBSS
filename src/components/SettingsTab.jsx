@@ -5,7 +5,7 @@ import { encodeWatchLink, encodeInviteLink } from './WatchView.jsx';
 import QRCode from './QRCode.jsx';
 import { resetFieldPadHint } from './FieldPad.jsx';
 import { battingCSV, pitchingCSV, playLogCSV, atBatCSV, downloadCSV, shareCSV } from '../lib/csv.js';
-import { EDITIONS, HAND_LABEL, editionLabel, FIELD_POSITIONS, playablePosition, uncoveredPositions } from '../lib/model.js';
+import { EDITIONS, HAND_LABEL, editionLabel, FIELD_POSITIONS, uncoveredPositions } from '../lib/model.js';
 import {
   isArchived, tenureByPlayer, currentYear, currentSchoolYear, DEFAULT_YEAR_START_MONTH,
   usesGrade, defaultSchoolType, defaultYearStartMonth, maxGradeOf, gradeOf, entryYearFromGrade,
@@ -164,52 +164,104 @@ function ArchivedPlayers() {
 // 押した瞬間に保存する(まとめて設定しておいて保存を押し忘れる事故を作らない)。
 // ============================================================
 // ---- 守備位置を決めるシート ----
-// 主(いつもの位置)は1つ、可(任せられる位置)は複数。
-// 1つのチップを押すたびに なし → 可 → 主 → なし と回る。
-// 主と可を別々のUIに分けると、同じ9つの位置を2回見ることになって迷う。
+// メインとサブを別々に並べる。1回押すとサブ、もう1回でメイン、という
+// 切り替え方は説明を読まないと分からず、読んでも指が覚えるまで迷っていた。
+// とくに「1つしか守らない選手」がいちばん多いのに、その人でも2回押す必要があった。
+//
+// メインは丸(1つだけ)、サブは四角(複数)。ラジオとチェックの違いは説明が要らない。
+// サブは選んだ順が優先順位で、番号を出す。上げ下げもできる。
 function PositionSheet({ player, onClose }) {
   const { dispatch } = useStore();
   const t = useT();
   const main = player.position || '';
   const subs = player.subPositions || [];
+  const patch = (p) => dispatch({ type: 'UPDATE_PLAYER', id: player.id, patch: p });
 
-  const cycle = (pos) => {
-    const kind = playablePosition(player, pos);
-    let patch;
-    if (kind === 'main') patch = { position: '' };                                   // 主 → なし
-    else if (kind === 'sub') patch = { position: pos, subPositions: subs.filter((x) => x !== pos) }; // 可 → 主
-    else patch = { subPositions: [...subs, pos] };                                   // なし → 可
-    // 主を移すときは、前の主が可として残らないようにする(同じ位置が二重に立つ)
-    if (patch.position && main && main !== pos) {
-      patch.subPositions = (patch.subPositions || subs).filter((x) => x !== main);
-    }
-    dispatch({ type: 'UPDATE_PLAYER', id: player.id, patch });
+  const setMain = (pos) => {
+    const next = main === pos ? '' : pos;
+    // メインに選んだ位置はサブから外す。同じ位置が二重に立つと順番も意味を失う
+    patch({ position: next, subPositions: subs.filter((x) => x !== next) });
+  };
+  const toggleSub = (pos) => {
+    if (pos === main) return;
+    patch({ subPositions: subs.includes(pos) ? subs.filter((x) => x !== pos) : [...subs, pos] });
+  };
+  const promote = (pos) => {
+    const i = subs.indexOf(pos);
+    if (i <= 0) return;
+    const next = [...subs];
+    next[i - 1] = subs[i];
+    next[i] = subs[i - 1];
+    patch({ subPositions: next });
   };
 
   return (
     <Sheet title={t('pos.sheetTitle', { name: player.name })} onClose={onClose}>
       <p className="dim small" style={{ marginTop: 0 }}>{t('pos.sheetHint')}</p>
+
+      <div className="pos-sec">{t('pos.mainHead')}<i>{t('pos.mainNote')}</i></div>
+      <div className="pos-chips">
+        {FIELD_POSITIONS.map((pos) => (
+          <button
+            key={pos}
+            type="button"
+            className={`pos-chip radio${main === pos ? ' pos-main' : ''}`}
+            role="radio"
+            aria-checked={main === pos}
+            onClick={() => setMain(pos)}
+          >
+            <span className="mk" aria-hidden="true" />{pos}
+          </button>
+        ))}
+      </div>
+
+      <div className="pos-sec">{t('pos.subHead')}<i>{t('pos.subNote')}</i></div>
       <div className="pos-chips">
         {FIELD_POSITIONS.map((pos) => {
-          const kind = playablePosition(player, pos);
+          const isMain = main === pos;
+          const rank = subs.indexOf(pos);
           return (
             <button
               key={pos}
               type="button"
-              className={`pos-chip${kind ? ` pos-${kind}` : ''}`}
-              aria-pressed={!!kind}
-              onClick={() => cycle(pos)}
+              className={`pos-chip check${rank >= 0 ? ' pos-sub' : ''}${isMain ? ' is-main-here' : ''}`}
+              role="checkbox"
+              aria-checked={rank >= 0}
+              disabled={isMain}
+              title={isMain ? t('pos.alreadyMain') : ''}
+              onClick={() => toggleSub(pos)}
             >
-              {pos}
+              <span className="mk" aria-hidden="true" />{pos}
+              {rank >= 0 && <b className="rank">{rank + 1}</b>}
             </button>
           );
         })}
       </div>
-      <div className="pos-legend">
-        <span><i className="pos-main" />{t('pos.main')}</span>
-        <span><i className="pos-sub" />{t('pos.sub')}</span>
-        <span className="dim">{t('pos.cycle')}</span>
-      </div>
+
+      {/* サブが2つ以上あるときだけ、順番を直す行を出す。
+          1つしか無いなら順番に意味が無いので出さない */}
+      {subs.length > 1 && (
+        <>
+          <div className="pos-sec">{t('pos.orderHead')}<i>{t('pos.orderNote')}</i></div>
+          <div className="pos-order">
+            {subs.map((pos, i) => (
+              <span key={pos} className="pos-order-item">
+                <b>{i + 1}</b>{pos}
+                <button
+                  type="button"
+                  className="up"
+                  disabled={i === 0}
+                  aria-label={t('pos.promote', { pos })}
+                  onClick={() => promote(pos)}
+                >
+                  ↑
+                </button>
+              </span>
+            ))}
+          </div>
+        </>
+      )}
+
       <div className="sheet-actions">
         <button className="primary" onClick={onClose}>{t('action.close')}</button>
       </div>
