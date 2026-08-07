@@ -885,7 +885,14 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 .pill.intf { color: var(--gold); border-color: var(--gold); }
 .pill.multiout { color: var(--gold); border-color: var(--gold); background: rgba(227,179,65,0.14); font-weight: 800; }
 /* 名簿の行は要素が多く、選手名が潰れやすい。左右のセレクトは値が1文字なので詰める */
-.hand-select { width: 44px; padding: 4px 1px; font-size: 12px; }
+/* 投/打の左右は1文字しか入らないのに、ネイティブの三角(▼)ぶんの幅を
+   取られていた。矢印を消して中央寄せにすると 44px → 34px で足りる。
+   2つあるので20px、名簿の行では守備位置の表示に回せる分になる */
+.hand-select {
+  width: 34px; padding: 4px 0; font-size: 12px; text-align: center;
+  -webkit-appearance: none; appearance: none;
+  background-image: none; text-align-last: center;
+}
 /* 選手一覧の背番号: 登録後もタップ→入力で変更できる編集フィールド */
 .num-edit {
   width: 46px; flex: 0 0 auto; text-align: center; padding: 4px 2px;

@@ -611,8 +611,14 @@ export default function SettingsTab() {
                   aria-label={t('pos.sheetTitle', { name: p.name })}
                 >
                   {p.position || t('pos.unset')}
+                  {/* サブは2つまで位置そのものを出す。3つ以上は数にする。
+                      数だけだと「何を守れるのか」が名簿から読み取れない */}
                   {(p.subPositions || []).length > 0 && (
-                    <i>+{(p.subPositions || []).length}</i>
+                    <i>
+                      {(p.subPositions || []).length <= 2
+                        ? (p.subPositions || []).join('')
+                        : `+${(p.subPositions || []).length}`}
+                    </i>
                   )}
                 </button>
                 </span>
