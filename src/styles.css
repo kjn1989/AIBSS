@@ -1462,6 +1462,69 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 }
 .grade-head b { font-size: 12.5px; font-weight: 800; color: var(--accent); }
 .grade-head span { font-size: 10px; color: var(--text-dim); font-family: ui-monospace, Menlo, monospace; }
+/* 投/打の列名。右/左のセレクトが2つ並ぶだけでは、どちらが投でどちらが打か
+   行から読み取れない。区切りの見出しに載せれば行の高さを増やさずに済む。
+   幅と間隔は .roster-list .row の hand-select に合わせてある(34px + gap 5px) */
+.grade-head .hand-cols, .roster-colhead { display: flex; gap: 5px; margin-left: auto; padding-right: 4px; }
+.grade-head .hand-cols i, .roster-colhead i {
+  font-style: normal; width: 34px; text-align: center;
+  font-size: 10px; font-weight: 700; color: var(--text-dim); font-family: inherit;
+}
+/* 学年の区切りが無いエディション用。一覧の直上に1本だけ置く */
+.roster-colhead {
+  align-items: center; margin-left: 0; padding: 0 4px 4px;
+  border-bottom: 1px solid var(--border);
+}
+.roster-colhead .sp { flex: 1; }
+
+/* ---- 選手をまとめて整理する(アーカイブ・削除) ----
+   もとは名簿の各行に 📥 と 🗑 が並んでいた。年に数回しか触らないものを
+   常時出しておくうえ、取り消せない削除が行の端にあった。行から外して奥にまとめる */
+.manage-open { display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap; }
+.manage-open .dim { font-weight: 400; }
+.mg-picks { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.mg-pick {
+  min-height: 30px; padding: 4px 10px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 700;
+  color: var(--text-dim); background: var(--bg-3); border: 1px solid var(--border);
+}
+.mg-list { display: flex; flex-direction: column; }
+.mg-row {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  padding: 9px 6px; background: transparent; border: none;
+  border-bottom: 1px solid var(--border); border-radius: 0;
+}
+.mg-row.on { background: rgba(88, 166, 255, .10); }
+.mg-ck {
+  width: 22px; height: 22px; flex: 0 0 auto; border-radius: 6px;
+  border: 1.5px solid var(--text-dim); background: transparent;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 800; color: transparent;
+}
+.mg-row.on .mg-ck { background: var(--accent-2); border-color: var(--accent-2); color: #fff; }
+.mg-name { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.mg-name b { font-size: 14px; font-weight: 700; }
+.mg-name i {
+  font-style: normal; font-size: 10px; color: var(--text-dim);
+  font-family: ui-monospace, Menlo, monospace;
+}
+/* 選択中だけ実行できる。押せない理由を「押せなさ」で示す */
+.sheet .sheet-actions.mg-bar button { font-size: 13.5px; padding: 4px 6px; }
+.sheet .sheet-actions.mg-bar .close { flex: 0 0 auto; width: 62px; }
+.sheet .sheet-actions.mg-bar .go { flex: 1 1 auto; }
+.sheet .sheet-actions.mg-bar .del { flex: 0 0 auto; width: 68px; }
+.mg-bar button:disabled { opacity: .45; }
+.mg-confirm { max-height: 40vh; overflow-y: auto; }
+.mg-confirm-row {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 7px 4px; border-bottom: 1px solid var(--border);
+}
+.mg-confirm-row b { font-size: 14px; font-weight: 700; }
+.mg-confirm-row span {
+  margin-left: auto; font-size: 10.5px; color: var(--text-dim);
+  font-family: ui-monospace, Menlo, monospace;
+}
+.mg-confirm-row span.has { color: var(--red); }
 /* 小さな並べ替えトグル(名簿・引き出しの中で使う) */
 .lens-row { display: flex; gap: 2px; padding: 2px; background: var(--bg-3); border-radius: 7px; }
 .lens-row button {
