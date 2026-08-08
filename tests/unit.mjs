@@ -7,7 +7,7 @@ import { gameEndCheck, initialPresetIdFor, describeRules } from '../src/lib/rule
 import { aggregateBatting, aggregatePitching, battingMetrics, pitchingMetrics, titleLeaders, DETAIL_METRICS, detailRanking, defaultInningBasis } from '../src/lib/stats.js';
 import { translate } from '../src/lib/i18n.js';
 import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, parseDirectionOnly, parseContact, playLabel } from '../src/lib/voiceParser.js';
-import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parsePositionSwaps, keepsBattingOrder, parseInningRange, parseSlotBatters, parseAtBatDeletions, parseShortResult, isExplicitSubText, inGamePlayerIds, preferInGamePlayers } from '../src/lib/correctionParser.js';
+import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parsePositionSwaps, keepsBattingOrder, explicitOrderChange, stripInningFractions, parseInningRange, parseSlotBatters, parseAtBatDeletions, parseShortResult, isExplicitSubText, inGamePlayerIds, preferInGamePlayers } from '../src/lib/correctionParser.js';
 import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarters, findPositionIssues } from '../src/lib/lineupBox.js';
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
 import { newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions, attendeesOf, lastAttendees, autoLineupFrom, subRank } from '../src/lib/model.js';
@@ -2343,4 +2343,48 @@ test('入れ替え文から守備陣形の重複が出ない', () => {
   const aligns = parseDefensiveAlignment(SWAP_TEXT, SWAP_PLAYERS);
   const keys = aligns.map((a) => `${a.inning}|${a.playerId}`);
   assert.equal(new Set(keys).size, keys.length, `同じ回・同じ選手が重複している: ${keys.join(', ')}`);
+});
+
+
+// ============================================================
+// 指示していない操作を勝手に作らない
+//
+// 実際の指示文から、頼んでいない「打順スロットの打者訂正」が3件生まれていた。
+// 投手成績の説明文と、打席の付け替えの説明文を、打者の訂正として読んでいたため。
+// ============================================================
+test('投手成績の説明を打者の訂正として読まない', () => {
+  // 「8番打者まで」は相手打者のこと。自軍の8番の打席とは関係がない
+  assert.deepEqual(parseSlotBatters('茂木 2/3回（5回裏、8番打者まで） 失点3 自責3', SWAP_PLAYERS), []);
+  assert.deepEqual(parseSlotBatters('宇田川 1/3回（5回裏、9番打者） 失点0 自責0', SWAP_PLAYERS), []);
+});
+
+test('打席の付け替えの説明を打者の訂正として読まない', () => {
+  // 「宇田川の記録を助っ人Aへ移す」指示。逆向きに「6回の3番は宇田川」を作ってはいけない
+  assert.deepEqual(
+    parseSlotBatters('3番 宇田川：6回「捕邪」・7回「中2」の記録を助っ人Aへ移動', SWAP_PLAYERS),
+    [],
+  );
+});
+
+test('交代の矢印(→)を打者の訂正として読まない', () => {
+  assert.deepEqual(parseSlotBatters('6回表：3番 宇田川 → 助っ人A（代打出場）', SWAP_PLAYERS), []);
+});
+
+test('投球回の分数(2/3回)を回番号として拾わない', () => {
+  // 「2/3回」の分母を3回と読み、5回の出来事が3回に付く事故が起きた
+  assert.equal(stripInningFractions('茂木 2/3回（5回裏、8番打者まで）').includes('3回'), false);
+  assert.deepEqual(parseInningRange('茂木 2/3回（5回裏、8番打者まで）'), { from: 5, to: 5 });
+});
+
+test('指示文から、頼んでいない打者訂正が1件も出ない', () => {
+  assert.deepEqual(parseSlotBatters(SWAP_TEXT, SWAP_PLAYERS), []);
+});
+
+test('explicitOrderChange: 「交代」だけでは打順移動の根拠にしない', () => {
+  // 交代=入る側が退く側の打順に入ること。出場中の選手の打順が動くことではない
+  assert.equal(explicitOrderChange('3回 三塁 本郷 ⇄ 捕手 宇田川（守備交代のみ）', ['本郷', '宇田川']), false);
+  assert.equal(explicitOrderChange('2回に6番の平川が奥田と交代', ['平川', '奥田']), false);
+  // 記録側の打順が本当に間違っているときだけ
+  assert.equal(explicitOrderChange('宇田川と本郷の打順が逆になっています', ['宇田川', '本郷']), true);
+  assert.equal(explicitOrderChange('宇田川の打順を修正してください', ['宇田川']), true);
 });

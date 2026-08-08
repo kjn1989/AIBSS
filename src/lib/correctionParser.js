@@ -79,7 +79,15 @@ const RESULT_WORDS = /安打|単打|ヒット|ゴロ|フライ|ライナー|三�
 
 // 「3-6回」「3〜6回」「3回から6回」のような回の範囲を読む。
 // 単独の「6回」なら from=to=6。範囲が読めなければ null。
-export function parseInningRange(seg) {
+// 投球回の分数表記(「2/3回」「1・1/3回」)は回の指定ではない。
+// 先に落としておかないと、分母を回番号として拾ってしまう
+// (「茂木 2/3回」が「3回」と読まれ、5回の出来事が3回に付く事故が起きた)。
+export function stripInningFractions(seg) {
+  return String(seg).replace(/\d+\s*[/／]\s*\d+\s*回/g, ' ');
+}
+
+export function parseInningRange(rawSeg) {
+  const seg = stripInningFractions(rawSeg);
   const m = seg.match(/(\d+)\s*回?\s*(?:から|[-–—〜～~ー])\s*(\d+)\s*回/);
   if (m) {
     const from = parseInt(m[1], 10);
@@ -99,6 +107,21 @@ export function isExplicitSubText(rawText, names = []) {
   for (const seg of splitSentences(rawText)) {
     if (!SUB_KEYWORDS.test(seg) || isReassignPhrase(seg)) continue;
     if (list.every((n) => seg.includes(n))) return true;
+  }
+  return false;
+}
+
+// 打順そのものを動かす、と明示している文か。
+// 野球では、出場中の選手の打順は動かない(交代とは「入る側が退く側の打順に入る」こと)。
+// だから「交代」と書いてあるだけでは打順移動の根拠にならない。
+// 記録側の打順が実際に間違っている場合だけを、はっきりした言い方で拾う。
+const ORDER_CHANGE = /打順(を|が|は)?\s*(入れ?替|逆|取り違|間違|誤|ずれ|ズレ|違っ|直し|修正|変更して|変えて)|(\d+)\s*番\s*(と|→|は)\s*(\d+)\s*番/;
+export function explicitOrderChange(rawText, names = []) {
+  const list = names.filter(Boolean);
+  for (const seg of splitSentences(rawText)) {
+    if (!ORDER_CHANGE.test(seg)) continue;
+    if (KEEP_ORDER.test(seg)) continue; // 「打順変更なし」を含む文は対象外
+    if (!list.length || list.every((n) => seg.includes(n))) return true;
   }
   return false;
 }
@@ -418,8 +441,16 @@ export function parseAtBatDeletions(rawText, players = []) {
 export function parseSlotBatters(rawText, players = []) {
   const out = [];
   let lastInning = null;
-  for (const seg of splitSentences(rawText)) {
-    if (/交代|代わ|替わ/.test(seg)) continue; // 交代は parseSubstitutions
+  for (const seg0 of splitSentences(rawText)) {
+    const seg = stripInningFractions(seg0);
+    if (/交代|代わ|替わ|代打|代走/.test(seg)) continue; // 交代は parseSubstitutions
+    if (/[→⇒▶]/.test(seg)) continue; // 「◯◯ → △△」は交代の書き方。打者の訂正ではない
+    // 投手成績の説明(「5回裏、8番打者まで 失点3」)は打者の訂正ではない。
+    // 「8番打者」は相手打者を指しており、自軍の8番の打席とは関係がない
+    if (/失点|自責|被安|奪三振|投球回|球数|与四球/.test(seg)) continue;
+    // 「3番 宇田川：6回の記録を助っ人Aへ移動」は打席の付け替え(parseBatterReassignments)。
+    // ここで拾うと「6回の3番は宇田川」となり、付け替えを打ち消してしまう
+    if (ATTACH_WORDS.test(seg)) continue;
     if (findPositionHits(seg).length) continue; // 守備位置の話は parseDefensiveAlignment
     const innM = seg.match(/(\d+)\s*回/);
     if (innM) lastInning = parseInt(innM[1], 10);

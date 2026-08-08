@@ -9,7 +9,7 @@ import { depthBand, isFoul } from '../lib/battedBall.js';
 const BATTED_BALL_RESULTS = new Set(['single', 'double', 'triple', 'hr', 'out', 'error', 'sacBunt', 'sacFly']);
 import { playLabel } from '../lib/voiceParser.js';
 import { computeBoxScore } from '../lib/boxscore.js';
-import { parseBatterCorrection, findTargetAtBat, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parsePositionSwaps, parseSlotBatters, parseAtBatDeletions, isExplicitSubText, keepsBattingOrder, inGamePlayerIds, preferInGamePlayers } from '../lib/correctionParser.js';
+import { parseBatterCorrection, findTargetAtBat, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parsePositionSwaps, parseSlotBatters, parseAtBatDeletions, isExplicitSubText, explicitOrderChange, inGamePlayerIds, preferInGamePlayers } from '../lib/correctionParser.js';
 import { posFull, buildLineupRows, findPositionIssues, alignmentByInning } from '../lib/lineupBox.js';
 import { findDuplicateAtBats, canRebuildOrders, findOrderBreaks } from '../lib/battersRebuild.js';
 import { oppNameOf } from '../lib/oppBox.js';
@@ -560,14 +560,14 @@ function NLCorrectionCard({ game }) {
       const target = orderOf(s.outId);
       if (target == null || target === own.order) return true; // 自分の打順の中の話
       const pair = [s.outName || nameOf(s.outId), s.inName || nameOf(s.inId)];
-      // 「打順変更なし」「⇄(入れ替え)」と書かれているなら、打順を動かしてはいけない。
-      // ここを見落とすと、守備位置の交換が「退く/入る」になり、入る側が相手の打順を
-      // 奪ってしまう(3番の選手が以後ずっと4番として扱われる事故が起きた)
-      if (keepsBattingOrder(text, pair)) {
-        orderMoved.push(`${pair[1]}（${own.order}${t('gp.nlOrderSuffix')}）`);
-        return false;
-      }
-      if (isExplicitSubText(text, pair)) return true;
+      // 野球では、出場中の選手の打順は動かない。交代とは「入る側が退く側の打順に入る」
+      // ことであって、既に打順を持っている選手が別の枠へ移ることではない。
+      // ここを許すと、守備位置の入れ替えや言い回しの揺れが打順の乗っ取りになる
+      // (3番の選手が以後ずっと4番として扱われる事故が起きた)。
+      // 記録側の打順が本当に間違っている場合だけ、明示された指示で動かす。
+      if (explicitOrderChange(text, pair)) return true;
+      // 同じ指示の中で「その選手が元の打順から抜ける交代」も書かれているなら、
+      // 打順そのものの入れ替えとして筋が通るので受け付ける
       const paired = subs.some((o) => o !== s && o.outId === s.inId && orderOf(o.outId) === own.order);
       if (!paired) orderMoved.push(`${pair[1]}（${own.order}${t('gp.nlOrderSuffix')}）`);
       return paired;
