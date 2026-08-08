@@ -413,7 +413,10 @@ function NLCorrectionCard({ game }) {
       aligns: (() => {
         const m = new Map();
         for (const al of [...(a.aligns || []), ...(b.aligns || [])]) {
-          const k = `${al.inning}|${al.playerId}`;
+          // 回の途中で代わった指定は別物として残す。まとめてしまうと、
+          // 「5回頭から茂木が投手 → 8番の後に宇田川」の前半が消え、
+          // 茂木の登板そのものが無かったことになる
+          const k = `${al.inning}|${al.playerId}|${al.afterOppOrder ?? ''}`;
           const cur = m.get(k);
           const to = Math.max(Number(al.toInning) || al.inning, Number(cur?.toInning) || cur?.inning || 0);
           m.set(k, { ...al, toInning: to });
@@ -513,12 +516,26 @@ function NLCorrectionCard({ game }) {
           continue;
         }
         const innings = inningsToFix(al.playerId, al.position, al.inning, to);
-        if (!innings.length) {
+        // 回の途中の指定は「もうその位置だから不要」で捨てられない。
+        // 回の終わりの姿が同じでも、途中で誰が投げたかは別の情報として要る
+        if (!innings.length && al.afterOppOrder == null) {
           alreadyOk.push(`${own.order}${t('gp.nlOrderSuffix')} ${al.playerName || nameOf(al.playerId)}（${posFull(al.position, lang)}）`);
           continue;
         }
-        alignAppl.push({ ...al, toInning: to, innings, order: own.order, from: own.from });
+        alignAppl.push({ ...al, toInning: to, innings: innings.length ? innings : [al.inning], order: own.order, from: own.from });
       } else {
+        // 同じ指示の中で、この選手を入れる交代が既に書かれているなら、その打順に入る。
+        // ここで別の交代を作ると、その守備位置に居ただけの選手が不当に退かされる
+        // (「6回から助っ人Cは右翼」が「境貴仁→助っ人C」になり、9番が消える事故が起きた)
+        const pend = subs.find((s) => s.inId === al.playerId);
+        const pendOrder = pend ? (pend.order ?? orderOf(pend.outId)) : null;
+        if (pendOrder != null) {
+          alignAppl.push({
+            ...al, toInning: Math.max(Number(al.toInning) || al.inning, al.inning),
+            innings: [al.inning], order: pendOrder, from: null,
+          });
+          continue;
+        }
         // この試合に出ていない選手=交代。その位置の現在の守備者と入れ替える(交代の解決へ回す)
         const cur = (game.lineup || []).find((l) => l.position === al.position && l.playerId);
         if (!cur) { alignUnresolved.push(al.playerName || nameOf(al.playerId)); continue; }
@@ -553,6 +570,33 @@ function NLCorrectionCard({ game }) {
     // それが無いものは採用しない。守備位置の変更としては別途 alignAppl で反映される。
     // ただし「AがBと交代しました」と文章にはっきり書かれている場合は、記録側の打順が
     // ズレているだけなので、そのまま交代として受け付ける(この訂正が本来の目的)。
+    // 同じ回に同じ選手が2度入る交代は作れない(1人が同時に2つの枠に入ることになる)。
+    // 「3番の宇田川に代わって助っ人Aが代打」と「助っ人Aが投手です」のように、
+    // 交代と守備位置が別の文で書かれたときに起きる。退く側が分かっている方を交代として残し、
+    // もう一方は守備位置の指定として拾い直す
+    for (const [, group] of subs.reduce((m, s) => {
+      const k = `${s.inning}|${s.inId}`;
+      m.set(k, [...(m.get(k) || []), s]);
+      return m;
+    }, new Map())) {
+      if (group.length < 2) continue;
+      const keep = group.find((s) => s.outId) || group[0];
+      for (const s of group) {
+        if (s === keep) continue;
+        if (s.position) {
+          const ord = keep.order ?? orderOf(keep.outId);
+          if (ord != null) {
+            alignAppl.push({
+              inning: s.inning, toInning: s.inning, innings: [s.inning],
+              playerId: s.inId, playerName: s.inName || nameOf(s.inId),
+              position: s.position, order: ord, from: null,
+              afterOppOrder: s.afterOppOrder ?? null,
+            });
+          }
+        }
+        subs = subs.filter((x) => x !== s);
+      }
+    }
     const orderMoved = []; // 打順が動くため採用しなかったもの(黙って捨てると原因が分からない)
     subs = subs.filter((s) => {
       const own = slotOfPlayer(s.inId);
@@ -566,9 +610,12 @@ function NLCorrectionCard({ game }) {
       // (3番の選手が以後ずっと4番として扱われる事故が起きた)。
       // 記録側の打順が本当に間違っている場合だけ、明示された指示で動かす。
       if (explicitOrderChange(text, pair)) return true;
-      // 同じ指示の中で「その選手が元の打順から抜ける交代」も書かれているなら、
-      // 打順そのものの入れ替えとして筋が通るので受け付ける
-      const paired = subs.some((o) => o !== s && o.outId === s.inId && orderOf(o.outId) === own.order);
+      // 同じ回に「その選手が元の打順から抜ける交代」も書かれているなら、
+      // 打順そのものの入れ替えとして筋が通るので受け付ける。
+      // 回を問わずに探すと、あとの回の無関係な交代(6回に別の選手と代わる等)を
+      // 根拠にしてしまい、打順の乗っ取りが素通りする
+      const paired = subs.some((o) => o !== s && o.outId === s.inId
+        && o.inning === s.inning && orderOf(o.outId) === own.order);
       if (paired) return true;
       // 出場中の選手が別の位置に就く話なので、交代ではなく「自分の打順のままの
       // 守備位置の変更」として拾い直す。捨ててしまうと、投手交代のつもりで

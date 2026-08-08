@@ -255,8 +255,14 @@ export function parsePositionSwaps(rawText, players = []) {
     if (pairs.length !== 2) continue; // 3人以上の玉突きは扱わない(取り違えるより出さない)
     const [a, b] = pairs;
     if (a.pos === b.pos) continue;
-    out.push({ inning, toInning: inning, playerId: a.id, playerName: a.name, position: b.pos, swap: true });
-    out.push({ inning, toInning: inning, playerId: b.id, playerName: b.name, position: a.pos, swap: true });
+    // 「8番の後に」= 回の途中で代わった。投手が絡むとき、成績を分けるのに要る
+    let afterOppOrder = null;
+    if (/後/.test(seg)) {
+      const bm = seg.match(/(\d+)\s*番/);
+      if (bm) afterOppOrder = parseInt(bm[1], 10);
+    }
+    out.push({ inning, toInning: inning, playerId: a.id, playerName: a.name, position: b.pos, swap: true, afterOppOrder });
+    out.push({ inning, toInning: inning, playerId: b.id, playerName: b.name, position: a.pos, swap: true, afterOppOrder });
   }
   return out;
 }
