@@ -1400,6 +1400,31 @@ export function reducer(state, action) {
       insert({ order: effOrder, playerId, position, from: before });
       const slot = g.lineup.find((l) => l.order === effOrder);
       if (slot && slot.playerId === playerId) slot.position = position;
+      // マウンドへ移したなら、それは投手交代でもある。位置ログだけでは
+      // 投手成績が分かれない(rebuildPitchingStats は pitcher/sub ログしか見ない)ため、
+      // 継投の記録も残す。回の頭に置く=「その回から投げた」の意味。
+      if (position === '投') {
+        const prevPitcher = displaced.find((d) => d.position === '投')?.playerId
+          || (align.find((a) => a.position === '投' && a.playerId !== playerId)?.playerId ?? null);
+        if (prevPitcher !== playerId) {
+          g.playLogs = g.playLogs.filter((l) => !(l.kind === 'pitcher' && Number(l.inning) === Number(inning)
+            && l.payload?.in === playerId));
+          const plog = newPlayLog({
+            gameId: g.id, inning, isTop: !g.isHome, kind: 'pitcher',
+            text: '投手交代', payload: { in: playerId, out: prevPitcher },
+          });
+          // 回の途中で代わった指定(「8番の後に」)があれば、その相手打者の直後に置く。
+          // 回の頭に置くと、前の投手が投げた打者まで新しい投手の記録になってしまう
+          let at = -1;
+          if (action.afterOppOrder != null) {
+            const i = g.playLogs.findIndex((l) => l.kind === 'defense'
+              && Number(l.inning || 0) === Number(inning) && l.payload?.order === action.afterOppOrder);
+            if (i >= 0) at = i + 1;
+          }
+          if (at < 0) at = g.playLogs.findIndex((l) => Number(l.inning || 0) >= Number(inning));
+          if (at < 0) g.playLogs.push(plog); else g.playLogs.splice(at, 0, plog);
+        }
+      }
       g.updatedAt = Date.now();
       return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
     }

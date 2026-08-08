@@ -569,8 +569,24 @@ function NLCorrectionCard({ game }) {
       // 同じ指示の中で「その選手が元の打順から抜ける交代」も書かれているなら、
       // 打順そのものの入れ替えとして筋が通るので受け付ける
       const paired = subs.some((o) => o !== s && o.outId === s.inId && orderOf(o.outId) === own.order);
-      if (!paired) orderMoved.push(`${pair[1]}（${own.order}${t('gp.nlOrderSuffix')}）`);
-      return paired;
+      if (paired) return true;
+      // 出場中の選手が別の位置に就く話なので、交代ではなく「自分の打順のままの
+      // 守備位置の変更」として拾い直す。捨ててしまうと、投手交代のつもりで
+      // 書いた指示が何も起きずに消える
+      if (s.position) {
+        const inns = inningsToFix(s.inId, s.position, s.inning, s.inning);
+        if (inns.length) {
+          alignAppl.push({
+            inning: s.inning, toInning: s.inning, innings: inns,
+            playerId: s.inId, playerName: pair[1], position: s.position,
+            order: own.order, from: own.from,
+            // 回の途中の継投(「8番の後に」)は、投手成績を分けるために時刻を持ち越す
+            afterOppOrder: s.afterOppOrder ?? null,
+          });
+        }
+      }
+      orderMoved.push(`${pair[1]}（${own.order}${t('gp.nlOrderSuffix')}）`);
+      return false;
     });
 
     // 明示的な交代(守備/投手/代打…)。連鎖(A→B→C)は入った選手が打順を引き継ぐ。
@@ -785,12 +801,16 @@ function NLCorrectionCard({ game }) {
     subAppl.forEach(doSub);
     alignAppl.forEach((al) => (al.innings || [al.inning]).forEach((inn) => dispatch({
       type: 'RETRO_POSITION', gameId: game.id, order: al.order, playerId: al.playerId, position: al.position, inning: inn,
+      afterOppOrder: inn === al.inning ? (al.afterOppOrder ?? null) : null,
     })));
     delAppl.forEach((d) => dispatch({ type: 'DELETE_PLAY_LOG', gameId: game.id, logId: d.logId }));
     slotAppl.forEach((sb) => dispatch({ type: 'REASSIGN_ATBAT', gameId: game.id, logId: sb.logId, newPlayerId: sb.playerId }));
     reAppl.forEach((r) => dispatch({ type: 'REASSIGN_ATBAT', gameId: game.id, logId: r.logId, newPlayerId: r.newId }));
     resAppl.forEach((rc) => dispatch({ type: 'EDIT_PLAY_LOG', gameId: game.id, logId: rc.logId, patch: rc.patch }));
-    const hasPitcherChange = subAppl.some((s) => s.position === '投');
+    // 守備位置の変更でマウンドに立った場合も投手成績を作り直す
+    // (入れ替えで投手が代わっても、交代ログが無いままだと成績が分かれない)
+    const hasPitcherChange = subAppl.some((s) => s.position === '投')
+      || alignAppl.some((al) => al.position === '投');
     if (hasPitcherChange) dispatch({ type: 'RECOMPUTE_PITCHING', gameId: game.id });
 
     const notes = [];
