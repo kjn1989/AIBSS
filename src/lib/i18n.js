@@ -960,6 +960,11 @@ export const MESSAGES = {
     'gp.nlRebuildConfirm': '打席の並びから打順を、交代の記録から打者を割り当て直します。打撃結果は変わりません。よろしいですか?',
     'gp.nlAlreadyOk': '{list} は既にその守備位置です。変更は必要ありませんでした。',
     'gp.nlOrderSuffix': '番',
+    // 打順が動く交代は、取り違えると以後ずっと別人の打順になる。確認の先頭で名指しする
+    'gp.nlOrderMoveWarn': '⚠️ 打順が変わります。合っていなければキャンセルしてください。\n{list}\n\n',
+    'gp.nlOrderMoveItem': '　{name}：{from}番 → {to}番',
+    'gp.nlOrderKept': '打順を動かさない指示だったため、交代にせず守備位置の変更として扱いました（{list}）。',
+
     'gp.nlAiReason': '［{reason}］',
     'gp.nlAiNoResponse': 'AIから解釈結果が返りませんでした',
     'gp.nlAiQuota': ' ※無料枠の上限です。使用量が少なくても、モデルによっては1分/1日あたりの枠が小さく、すぐ上限になることがあります。アプリは自動で別のモデルも試します。しばらく時間をおいてから再度お試しください。',
@@ -2077,6 +2082,10 @@ export const MESSAGES = {
     'gp.nlRebuildConfirm': 'Rebuild the batting order from the at-bat sequence and reassign batters from the substitution log? Results are unchanged.',
     'gp.nlAlreadyOk': '{list} is already at that position. No change was needed.',
     'gp.nlOrderSuffix': '',
+    'gp.nlOrderMoveWarn': '⚠️ Batting order will change. Cancel if this is wrong.\n{list}\n\n',
+    'gp.nlOrderMoveItem': '　{name}: #{from} → #{to}',
+    'gp.nlOrderKept': 'The text said the batting order stays, so these were applied as position changes, not substitutions ({list}).',
+
     'gp.nlAiReason': ' [{reason}]',
     'gp.nlAiNoResponse': 'The AI returned no interpretation',
     'gp.nlAiQuota': ' Note: this is a free-tier rate limit. Even with light use, some models have small per-minute/per-day quotas. The app automatically tries other models too. Please try again after a while.',

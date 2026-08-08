@@ -16,10 +16,21 @@ function toHalf(s) {
   return (s || '').replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0));
 }
 
+// 箇条書きの番号(「1. 」「2．」)は文の区切りではない。ここで割ると
+// 「4. 6回表：…」が「4」と「6回表：…」に分かれ、回の引き継ぎまで狂う。
+// 数字に続くピリオドは、区切り文字から外してから分割する。
+const LIST_MARK = /(^|\n)\s*\d+\s*[.．]\s+/g;
 // 文(。．！？改行)に分割
 function splitSentences(text) {
-  return toHalf(text || '').split(/[。．.!！?？\n]+/).map((s) => s.trim()).filter(Boolean);
+  return toHalf(text || '').replace(LIST_MARK, '$1')
+    .split(/[。．.!！?？\n]+/).map((s) => s.trim()).filter(Boolean);
 }
+
+// 「打順変更なし」「打順はそのまま」= 守備位置だけの話。交代として読んではいけない。
+// これを無視すると、既に出場している選手が他人の打順へ入り、その打順の打席まで奪う。
+const KEEP_ORDER = /打順(は)?(を)?(その?まま|変更\s*(なし|無し)|変えず|変えない|変わらない|不変)|打順\s*(変更|移動)\s*(なし|無し)/;
+// 守備位置の「入れ替え」記号・語。交代(片方が退く)とは別物で、どちらも打順は動かない。
+const SWAP_MARK = /[⇄⇔↔⇆⇋]|入れ?替え?|交換|スイッチ|ポジションチェンジ/;
 
 // テキスト中に現れる登録選手名を、出現位置つきで拾う(長い名前優先・内包する短名は除外)。
 function findNameHits(text, players) {
@@ -92,6 +103,18 @@ export function isExplicitSubText(rawText, names = []) {
   return false;
 }
 
+// その2人について「打順は変えない」と本文に書かれているか。
+// 書かれていれば、打順が動く交代として適用してはいけない。
+export function keepsBattingOrder(rawText, names = []) {
+  const list = names.filter(Boolean);
+  if (!list.length) return false;
+  for (const seg of splitSentences(rawText)) {
+    if (!KEEP_ORDER.test(seg) && !SWAP_MARK.test(seg)) continue;
+    if (list.every((n) => seg.includes(n))) return true;
+  }
+  return false;
+}
+
 // テキスト中の守備位置ワードを出現位置つきで拾う(長い語を優先し、内包する短語は除外)。
 function findPositionHits(text) {
   const hits = [];
@@ -155,13 +178,19 @@ export function parseDefensiveAlignment(rawText, players = []) {
     if (!nameHits.length) continue;
     const distinct = [...new Set(nameHits.map((h) => h.id))];
 
+    // 入れ替え(⇄)は parsePositionSwaps の担当。ここで読むと、同じ文に位置が
+    // 2回ずつ出てくるぶん重複し、しかも交換前の位置をそのまま出してしまう
+    if (SWAP_MARK.test(seg)) continue;
     if (distinct.length >= 2) {
       // (A) 位置ワードの直後(次の位置ワードより前)に現れる選手名を対応づける
       if (posHits.length < 2) continue;
       for (const ph of posHits) {
         const next = posHits.find((x) => x.index > ph.index);
         const nm = nameHits.find((n) => n.index >= ph.span[1] && (!next || n.index < next.index));
-        if (nm) out.push({ inning, toInning, playerId: nm.id, playerName: nm.name, position: ph.code });
+        // 同じ選手を2回出さない(同じ文に同じ名前が繰り返し出ることがある)
+        if (nm && !out.some((o) => o.inning === inning && o.playerId === nm.id)) {
+          out.push({ inning, toInning, playerId: nm.id, playerName: nm.name, position: ph.code });
+        }
       }
     } else {
       // (B) 打席結果の記述(「レフト前ヒット」「中犠飛」等)は守備位置ではないので除く。
@@ -171,6 +200,40 @@ export function parseDefensiveAlignment(rawText, players = []) {
       if (to === '投') continue; // 投手への変更は継投の記録が要るので交代側に任せる
       out.push({ inning, toInning, playerId: nameHits[0].id, playerName: nameHits[0].name, position: to });
     }
+  }
+  return out;
+}
+
+// 守備位置の「入れ替え」を解釈する。
+//   「3回：三塁 本郷 ⇄ 捕手 宇田川」→ 本郷が捕手へ、宇田川が三塁へ(打順は動かさない)
+// 書かれている位置は「その選手の今の位置」で、2人がそれを交換する、と読む。
+//
+// これを交代として読むと、退く側の打順に入る側が入ってしまい、以後その選手の
+// 打順がずれ続ける(実際に「3番 宇田川」が「4番」になる事故が起きた)。
+// 戻り値は parseDefensiveAlignment と同じ形にして、同じ経路で反映させる。
+export function parsePositionSwaps(rawText, players = []) {
+  const out = [];
+  let lastInning = null;
+  for (const seg of splitSentences(rawText)) {
+    const range = parseInningRange(seg);
+    if (range) lastInning = range.from;
+    if (!SWAP_MARK.test(seg)) continue;
+    const inning = range ? range.from : lastInning;
+    if (inning == null) continue;
+    // 「位置＋名前」の組を、書かれた順に拾う
+    const posHits = findPositionHits(seg);
+    const nameHits = findNameHits(seg, players);
+    const pairs = [];
+    for (const ph of posHits) {
+      const next = posHits.find((x) => x.index > ph.index);
+      const nm = nameHits.find((n) => n.index >= ph.span[1] && (!next || n.index < next.index));
+      if (nm && !pairs.some((p) => p.id === nm.id)) pairs.push({ id: nm.id, name: nm.name, pos: ph.code });
+    }
+    if (pairs.length !== 2) continue; // 3人以上の玉突きは扱わない(取り違えるより出さない)
+    const [a, b] = pairs;
+    if (a.pos === b.pos) continue;
+    out.push({ inning, toInning: inning, playerId: a.id, playerName: a.name, position: b.pos, swap: true });
+    out.push({ inning, toInning: inning, playerId: b.id, playerName: b.name, position: a.pos, swap: true });
   }
   return out;
 }
@@ -194,7 +257,12 @@ export function parseSubstitution(rawText, players = []) {
   if (!position && pitcherCtx) position = '投';
   // 「◯◯に入っている左飛を△△につけて」は打席の付け替え(parseBatterReassignments の担当)
   if (isReassignPhrase(text)) return { ok: false, reason: 'notSub' };
-  const hasSubKw = SUB_KEYWORDS.test(text) || pitcherCtx;
+  // 守備位置の入れ替え(⇄)は、どちらも退かないので交代ではない(parsePositionSwaps の担当)
+  if (SWAP_MARK.test(text)) return { ok: false, reason: 'swap' };
+  // 「打順変更なし」と書いてあるなら、打順が動く交代として読んではいけない
+  if (KEEP_ORDER.test(text)) return { ok: false, reason: 'keepOrder' };
+  // 代打・代走は、守備位置が書かれていなくても交代である
+  const hasSubKw = SUB_KEYWORDS.test(text) || pitcherCtx || /代打|代走/.test(text);
   if (!hasSubKw && !position) return { ok: false, reason: 'notSub' }; // 交代ではなさそう→打者付け替えへ
   // 「◯回の守備はショート茂木、サード入交、セカンド宇田川」のように守備位置が複数並ぶ文は
   // 陣形の申告(parseDefensiveAlignment の担当)。交代として読むと先頭2名を勝手に
@@ -232,6 +300,11 @@ export function parseSubstitutions(rawText, players = []) {
   const out = [];
   let lastInning = null;
   for (const seg of segments) {
+    // 「6回裏：」のような見出しだけの行でも回は更新する。
+    // 成立した交代からしか引き継がないと、見出しの下の行が
+    // ずっと前の回(前回成立した回)に付いてしまう。
+    const head = parseInningRange(seg);
+    if (head) lastInning = head.from;
     let r = parseSubstitution(seg, players);
     if (!r.ok && r.reason === 'noInning' && lastInning != null) {
       r = parseSubstitution(`${lastInning}回 ${seg}`, players); // 回の省略を直前の回で補完

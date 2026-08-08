@@ -9,7 +9,7 @@ import { depthBand, isFoul } from '../lib/battedBall.js';
 const BATTED_BALL_RESULTS = new Set(['single', 'double', 'triple', 'hr', 'out', 'error', 'sacBunt', 'sacFly']);
 import { playLabel } from '../lib/voiceParser.js';
 import { computeBoxScore } from '../lib/boxscore.js';
-import { parseBatterCorrection, findTargetAtBat, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parseSlotBatters, parseAtBatDeletions, isExplicitSubText, inGamePlayerIds, preferInGamePlayers } from '../lib/correctionParser.js';
+import { parseBatterCorrection, findTargetAtBat, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parsePositionSwaps, parseSlotBatters, parseAtBatDeletions, isExplicitSubText, keepsBattingOrder, inGamePlayerIds, preferInGamePlayers } from '../lib/correctionParser.js';
 import { posFull, buildLineupRows, findPositionIssues, alignmentByInning } from '../lib/lineupBox.js';
 import { findDuplicateAtBats, canRebuildOrders, findOrderBreaks } from '../lib/battersRebuild.js';
 import { oppNameOf } from '../lib/oppBox.js';
@@ -372,7 +372,8 @@ function NLCorrectionCard({ game }) {
     reassigns: parseBatterReassignments(text, parsePlayers),
     resultCorrs: parseResultCorrections(text, parsePlayers),
     posCorrs: parsePositionCorrections(text, parsePlayers),
-    aligns: parseDefensiveAlignment(text, parsePlayers),
+    // 入れ替え(⇄)は守備位置の変更として扱う。交代にすると打順が動いてしまう
+    aligns: [...parseDefensiveAlignment(text, parsePlayers), ...parsePositionSwaps(text, parsePlayers)],
     slotBatters: parseSlotBatters(text, parsePlayers),
     deletions: parseAtBatDeletions(text, parsePlayers),
   });
@@ -406,13 +407,16 @@ function NLCorrectionCard({ game }) {
       // 同じ回・同じ選手の位置指定は1つにまとめ、範囲は広い方(AIと端末内で食い違うことがある)を採る
       slotBatters: uniq([...(a.slotBatters || []), ...(b.slotBatters || [])], (x) => `${x.inning}|${x.order}`),
       deletions: uniq([...(a.deletions || []), ...(b.deletions || [])], (x) => `${x.inning}|${x.playerId || ''}|${x.order || ''}|${x.ordinal || ''}`),
+      // 同じ回・同じ選手に複数の位置が出たら、あとに書かれた方を採る。
+      // 1つの回で2回入れ替えると(遊撃→投手→三塁)、先勝ちだと途中の位置で止まり、
+      // 「同じ回に投手が2人」のような矛盾した配置になる。回の終わりの姿を残す。
       aligns: (() => {
         const m = new Map();
         for (const al of [...(a.aligns || []), ...(b.aligns || [])]) {
           const k = `${al.inning}|${al.playerId}`;
           const cur = m.get(k);
-          if (!cur) m.set(k, al);
-          else cur.toInning = Math.max(Number(cur.toInning) || cur.inning, Number(al.toInning) || al.inning);
+          const to = Math.max(Number(al.toInning) || al.inning, Number(cur?.toInning) || cur?.inning || 0);
+          m.set(k, { ...al, toInning: to });
         }
         return [...m.values()];
       })(),
@@ -549,13 +553,24 @@ function NLCorrectionCard({ game }) {
     // それが無いものは採用しない。守備位置の変更としては別途 alignAppl で反映される。
     // ただし「AがBと交代しました」と文章にはっきり書かれている場合は、記録側の打順が
     // ズレているだけなので、そのまま交代として受け付ける(この訂正が本来の目的)。
+    const orderMoved = []; // 打順が動くため採用しなかったもの(黙って捨てると原因が分からない)
     subs = subs.filter((s) => {
       const own = slotOfPlayer(s.inId);
       if (!own) return true; // まだ出ていない選手=本当の交代
       const target = orderOf(s.outId);
       if (target == null || target === own.order) return true; // 自分の打順の中の話
-      if (isExplicitSubText(text, [s.outName || nameOf(s.outId), s.inName || nameOf(s.inId)])) return true;
-      return subs.some((o) => o !== s && o.outId === s.inId && orderOf(o.outId) === own.order);
+      const pair = [s.outName || nameOf(s.outId), s.inName || nameOf(s.inId)];
+      // 「打順変更なし」「⇄(入れ替え)」と書かれているなら、打順を動かしてはいけない。
+      // ここを見落とすと、守備位置の交換が「退く/入る」になり、入る側が相手の打順を
+      // 奪ってしまう(3番の選手が以後ずっと4番として扱われる事故が起きた)
+      if (keepsBattingOrder(text, pair)) {
+        orderMoved.push(`${pair[1]}（${own.order}${t('gp.nlOrderSuffix')}）`);
+        return false;
+      }
+      if (isExplicitSubText(text, pair)) return true;
+      const paired = subs.some((o) => o !== s && o.outId === s.inId && orderOf(o.outId) === own.order);
+      if (!paired) orderMoved.push(`${pair[1]}（${own.order}${t('gp.nlOrderSuffix')}）`);
+      return paired;
     });
 
     // 明示的な交代(守備/投手/代打…)。連鎖(A→B→C)は入った選手が打順を引き継ぐ。
@@ -749,7 +764,16 @@ function NLCorrectionCard({ game }) {
         });
       }),
     ];
-    if (!window.confirm(t('gp.nlConfirmOps', { list: lines.join('\n') }))) return;
+    // 打順が動く交代は、間違えると以後ずっと別人の打順として扱われる。
+    // 確認の先頭に「どの打順が誰のものになるか」を出し、取り違えに気づけるようにする。
+    const moves = [...subAppl, ...synthSubs].filter((s) => {
+      const own = slotOfPlayer(s.inId);
+      return own && own.order !== s.order;
+    }).map((s) => t('gp.nlOrderMoveItem', {
+      name: s.inName || nameOf(s.inId), from: slotOfPlayer(s.inId).order, to: s.order,
+    }));
+    const warn = moves.length ? t('gp.nlOrderMoveWarn', { list: moves.join('\n') }) : '';
+    if (!window.confirm(warn + t('gp.nlConfirmOps', { list: lines.join('\n') }))) return;
 
     const doSub = (s) => {
       const kindLabel = { ph: t('box.rolePh'), pr: t('box.rolePr'), def: t('gp.subDef') }[s.subKind] || t('gp.subDef');
@@ -770,6 +794,7 @@ function NLCorrectionCard({ game }) {
     if (hasPitcherChange) dispatch({ type: 'RECOMPUTE_PITCHING', gameId: game.id });
 
     const notes = [];
+    if (orderMoved.length) notes.push(t('gp.nlOrderKept', { list: [...new Set(orderMoved)].join('、') }));
     if (alignReentry.length) notes.push(t('gp.nlAlignReentry', { list: alignReentry.join('、') }));
     if (posUnresolved.length) notes.push(t('gp.nlPosNotStarterShort', { names: posUnresolved.join('、') }));
     if (subUnresolved.length) notes.push(t('gp.nlSubNoOrderShort', { names: subUnresolved.join('、') }));

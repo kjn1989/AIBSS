@@ -7,7 +7,7 @@ import { gameEndCheck, initialPresetIdFor, describeRules } from '../src/lib/rule
 import { aggregateBatting, aggregatePitching, battingMetrics, pitchingMetrics, titleLeaders, DETAIL_METRICS, detailRanking, defaultInningBasis } from '../src/lib/stats.js';
 import { translate } from '../src/lib/i18n.js';
 import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, parseDirectionOnly, parseContact, playLabel } from '../src/lib/voiceParser.js';
-import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parseInningRange, parseSlotBatters, parseAtBatDeletions, parseShortResult, isExplicitSubText, inGamePlayerIds, preferInGamePlayers } from '../src/lib/correctionParser.js';
+import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parsePositionSwaps, keepsBattingOrder, parseInningRange, parseSlotBatters, parseAtBatDeletions, parseShortResult, isExplicitSubText, inGamePlayerIds, preferInGamePlayers } from '../src/lib/correctionParser.js';
 import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarters, findPositionIssues } from '../src/lib/lineupBox.js';
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
 import { newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions, attendeesOf, lastAttendees, autoLineupFrom, subRank } from '../src/lib/model.js';
@@ -2266,4 +2266,81 @@ test('autoLineupFrom: メインはサブの順番より常に優先される', (
   ];
   const { lineup } = autoLineupFrom(ps);
   assert.equal(lineup.find((r) => r.playerId === 'メイン持ち').position, '二');
+});
+
+
+// ============================================================
+// 守備位置の入れ替え(⇄)を交代として読まない
+//
+// 実際に起きた事故の再現テスト。「3回：三塁 本郷 ⇄ 捕手 宇田川（守備交代のみ、
+// 打順変更なし）」が「本郷(4番)が退いて宇田川が入る」と読まれ、3番の宇田川が
+// 以後ずっと4番として扱われた。あわせて、箇条書き番号での寸断と
+// 回の引き継ぎ崩れも同じ指示文で起きていた。
+// ============================================================
+const SWAP_PLAYERS = ['佑一朗', '入交', '宇田川', '本郷', '髙島', '茂木', '磯野', '奥田', '境貴仁', '助っ人A', '助っ人B', '助っ人C']
+  .map((name, i) => ({ id: `sw${i}`, name }));
+const swId = (name) => SWAP_PLAYERS.find((p) => p.name === name).id;
+const SWAP_TEXT = `【スコア修正指示】
+■守備交代
+1. 3回：三塁 本郷 ⇄ 捕手 宇田川（守備交代のみ、打順変更なし）
+2. 5回裏開始：投手 髙島 ⇄ 遊撃 茂木（打順変更なし、髙島は5番のまま遊撃）
+3. 5回裏9番打者時：投手 茂木 ⇄ 三塁 宇田川（茂木→三塁、宇田川→投手）
+4. 6回表：3番 宇田川 → 助っ人A（代打出場）
+5. 6回裏：
+投手 宇田川 → 助っ人A
+三塁 茂木 → 助っ人B（打順6番を引き継ぎ）
+中堅 佑一朗 → 助っ人C（守備交代、打順1番を引き継ぎ）`;
+
+test('入れ替え(⇄)は交代にしない — 打順を奪わせない', () => {
+  const subs = parseSubstitutions(SWAP_TEXT, SWAP_PLAYERS);
+  // 本郷 が退いて 宇田川 が入る、という交代は作られてはいけない
+  assert.ok(
+    !subs.some((s) => s.outId === swId('本郷') && s.inId === swId('宇田川')),
+    '⇄ が「本郷→宇田川」の交代になっている(打順が奪われる)',
+  );
+  // 髙島⇄茂木、茂木⇄宇田川 も同様に交代ではない
+  assert.ok(!subs.some((s) => s.outId === swId('髙島') && s.inId === swId('茂木')));
+  assert.ok(!subs.some((s) => s.outId === swId('茂木') && s.inId === swId('宇田川')));
+});
+
+test('入れ替え(⇄)は「双方の守備位置の変更」として読む', () => {
+  const sw = parsePositionSwaps(SWAP_TEXT, SWAP_PLAYERS);
+  const at = (inn, name) => sw.filter((x) => x.inning === inn && x.playerId === swId(name)).map((x) => x.position);
+  // 書かれている位置は「今の位置」で、2人がそれを交換する
+  assert.deepEqual(at(3, '本郷'), ['捕'], '本郷は3回から捕手');
+  assert.deepEqual(at(3, '宇田川'), ['三'], '宇田川は3回から三塁');
+  assert.deepEqual(at(5, '髙島'), ['遊'], '髙島は5回から遊撃');
+  // 5回は2度入れ替えている(茂木: 遊→投→三)。両方の指示が残る
+  assert.deepEqual(at(5, '茂木'), ['投', '三']);
+  assert.deepEqual(at(5, '宇田川'), ['投']);
+});
+
+test('箇条書きの番号で文が寸断されない — 回が正しく付く', () => {
+  const subs = parseSubstitutions(SWAP_TEXT, SWAP_PLAYERS);
+  // 「5. 6回裏：」の下に並ぶ3件は、すべて6回でなければならない(以前は3回になっていた)
+  const helpers = subs.filter((s) => [swId('助っ人A'), swId('助っ人B'), swId('助っ人C')].includes(s.inId));
+  assert.ok(helpers.length >= 3, `助っ人の交代が3件以上取れる (${helpers.length}件)`);
+  for (const s of helpers) assert.equal(s.inning, 6, `${s.inName} が ${s.inning}回になっている`);
+});
+
+test('代打は守備位置が書かれていなくても交代として読む', () => {
+  const subs = parseSubstitutions('6回表：3番 宇田川 → 助っ人A（代打出場）', SWAP_PLAYERS);
+  const ph = subs.find((s) => s.subKind === 'ph');
+  assert.ok(ph, '代打が交代として取れていない');
+  assert.equal(ph.inning, 6);
+  assert.equal(ph.outId, swId('宇田川'));
+  assert.equal(ph.inId, swId('助っ人A'));
+});
+
+test('keepsBattingOrder: 打順を動かさない指示を見分ける', () => {
+  assert.ok(keepsBattingOrder(SWAP_TEXT, ['本郷', '宇田川']), '打順変更なし を読めていない');
+  assert.ok(keepsBattingOrder(SWAP_TEXT, ['髙島', '茂木']));
+  // 打順を引き継ぐ(=動かす)交代は対象外
+  assert.ok(!keepsBattingOrder(SWAP_TEXT, ['佑一朗', '助っ人C']));
+});
+
+test('入れ替え文から守備陣形の重複が出ない', () => {
+  const aligns = parseDefensiveAlignment(SWAP_TEXT, SWAP_PLAYERS);
+  const keys = aligns.map((a) => `${a.inning}|${a.playerId}`);
+  assert.equal(new Set(keys).size, keys.length, `同じ回・同じ選手が重複している: ${keys.join(', ')}`);
 });
