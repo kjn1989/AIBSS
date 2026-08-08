@@ -2388,3 +2388,36 @@ test('explicitOrderChange: 「交代」だけでは打順移動の根拠にし�
   assert.equal(explicitOrderChange('宇田川と本郷の打順が逆になっています', ['宇田川', '本郷']), true);
   assert.equal(explicitOrderChange('宇田川の打順を修正してください', ['宇田川']), true);
 });
+
+
+// ============================================================
+// 回の途中の継投で、投手成績が正しく分かれる
+//
+// 「5回、8番の後に投手の茂木と三塁の宇田川が入れ替え」を、打順を動かさずに
+// 反映しても、茂木(1〜8番)と宇田川(9番)に分かれなければならない。
+// RETRO_POSITION は位置ログしか作らず、投手成績が分かれない穴があった。
+// reducer は JSX 側にあるためここでは呼べない。同じ判定に使う
+// rebuildPitchingStats に、生成されるはずのログ列を与えて検証する。
+// ============================================================
+test('回の途中の継投: 相手8番の後で投手成績が分かれる', () => {
+  const OUTS = { 3: 1, 6: 1, 9: 1 }; // 茂木が2アウト、宇田川が1アウト
+  const logs = [];
+  logs.push({ id: 'pc1', gameId: 'g', inning: 5, isTop: false, kind: 'pitcher', text: '', payload: { in: '茂木', out: '髙島' } });
+  for (let o = 1; o <= 8; o++) {
+    logs.push({ id: `d${o}`, gameId: 'g', inning: 5, isTop: false, kind: 'defense', text: '',
+      payload: { order: o, result: OUTS[o] ? 'out' : 'single', outsOnPlay: OUTS[o] || 0, runs: 0 } });
+  }
+  logs.push({ id: 'pc2', gameId: 'g', inning: 5, isTop: false, kind: 'pitcher', text: '', payload: { in: '宇田川', out: '茂木' } });
+  logs.push({ id: 'd9', gameId: 'g', inning: 5, isTop: false, kind: 'defense', text: '',
+    payload: { order: 9, result: 'out', outsOnPlay: 1, runs: 0 } });
+
+  const game = {
+    id: 'g', isHome: true, playLogs: logs, atBats: [], pitchingRecords: [],
+    startingLineup: [{ order: 5, playerId: '髙島', position: '投' }],
+    lineup: [{ order: 5, playerId: '髙島', position: '投' }],
+  };
+  const { records } = rebuildPitchingStats(game);
+  const outsOf = (id) => records.find((r) => r.playerId === id)?.outsRecorded ?? null;
+  assert.equal(outsOf('茂木'), 2, '茂木は2/3回（1〜8番）');
+  assert.equal(outsOf('宇田川'), 1, '宇田川は1/3回（9番のみ）');
+});
