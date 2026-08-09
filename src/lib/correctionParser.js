@@ -414,6 +414,19 @@ export function parseBatterReassignments(rawText, players = []) {
 // 例:「7回の平川の打席は空欄にしてください」「7回の8番の打席を削除」
 // 打順が繰り上がって、実際には回ってこなかった打席が記録されている場合に使う。
 // 「空欄/削除/取り消し」等の語を必須にして、通常の訂正と取り違えないようにする。
+// 打者一巡した回では、同じ打者が同じ回に2打席立つ。どちらの打席かを言えるように
+// 「1打席目」「第2打席」を読む。指定が無ければ、書かれた順に1打席目・2打席目…と割り当てる。
+const KANJI_NUM = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+const NTH_PA = /(?:第\s*)?([0-9]+|[一二三四五六七八九])\s*打席目?/;
+function parseNthPa(clause) {
+  const m = clause.match(NTH_PA);
+  if (!m) return null;
+  const n = /^[0-9]+$/.test(m[1]) ? parseInt(m[1], 10) : KANJI_NUM[m[1]];
+  return n > 0 ? n : null;
+}
+// 「2打席目」の数字が打点や結果の判定に混ざらないよう、読み取った後は文から外す
+const stripNthPa = (s) => s.replace(new RegExp(NTH_PA.source, 'g'), ' ');
+
 const DELETE_WORDS = /空欄|空白|空席|削除|消して|消す|取り消|取消|無しに|なしに|打席なし|回ってい?ない|回らなかった/;
 
 export function parseAtBatDeletions(rawText, players = []) {
@@ -426,14 +439,15 @@ export function parseAtBatDeletions(rawText, players = []) {
     if (inning == null) continue;
     if (!DELETE_WORDS.test(seg)) continue;
     const hits = findNameHits(seg, players);
-    const ordM = seg.match(/第\s*(\d+)\s*打席/);
+    // 「第2打席」も「2打席目」も同じ意味として読む(結果修正側と表記を揃える)
+    const ord = parseNthPa(seg);
     const slotM = seg.match(/(\d+)\s*番/);
-    if (!hits.length && !ordM && !slotM) continue; // 誰の打席か分からないものは扱わない
+    if (!hits.length && ord == null && !slotM) continue; // 誰の打席か分からないものは扱わない
     out.push({
       inning,
       playerId: hits[0]?.id || null,
       playerName: hits[0]?.name || null,
-      ordinal: ordM ? parseInt(ordM[1], 10) : null,
+      ordinal: ord,
       order: slotM ? parseInt(slotM[1], 10) : null,
     });
   }
@@ -534,19 +548,6 @@ function parseRbi(phrase) {
   if (m) return parseInt(m[1], 10);
   return /打点\s*(?:は|を|が|に)?\s*(?:なし|無し|ゼロ|0)/.test(phrase) ? 0 : null;
 }
-
-// 打者一巡した回では、同じ打者が同じ回に2打席立つ。どちらの打席かを言えるように
-// 「1打席目」「第2打席」を読む。指定が無ければ、書かれた順に1打席目・2打席目…と割り当てる。
-const KANJI_NUM = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
-const NTH_PA = /(?:第\s*)?([0-9]+|[一二三四五六七八九])\s*打席目?/;
-function parseNthPa(clause) {
-  const m = clause.match(NTH_PA);
-  if (!m) return null;
-  const n = /^[0-9]+$/.test(m[1]) ? parseInt(m[1], 10) : KANJI_NUM[m[1]];
-  return n > 0 ? n : null;
-}
-// 「2打席目」の数字が打点や結果の判定に混ざらないよう、読み取った後は文から外す
-const stripNthPa = (s) => s.replace(new RegExp(NTH_PA.source, 'g'), ' ');
 
 export function parseResultCorrections(rawText, players = []) {
   const out = [];
