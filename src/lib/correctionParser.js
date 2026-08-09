@@ -617,6 +617,25 @@ export function parseResultCorrections(rawText, players = []) {
   return out;
 }
 
+// AI解釈と端末内解釈の結果修正を統合する。食い違ったときは端末内(local)を優先する。
+// 端末内はスコアシートの短縮表記(中2・三飛…)をそのまま読むため取り違えが起きにくい。
+// 打者一巡した回では同じ打者が同じ回に2打席立つ。回と打者だけで束ねると1打席目と
+// 2打席目が潰し合い、片方の指示が黙って消えるため、打席の通し番号まで見て束ねる。
+// 何打席目かの指定が無い側は、書かれた順(同じ回・同じ打者の中での出現順)を番号に使う。
+export function mergeResultCorrections(ai = [], local = []) {
+  const m = new Map();
+  for (const side of [ai, local]) {
+    const seen = new Map();
+    for (const rc of side) {
+      const who = `${rc.inning}|${rc.batterId || ''}`;
+      const n = (seen.get(who) || 0) + 1;
+      seen.set(who, n);
+      m.set(`${who}|${rc.nth ?? n}`, rc); // 後から入れる local が勝つ
+    }
+  }
+  return [...m.values()];
+}
+
 // 結果修正を、対象の打席ログへ割り当てる。
 // 打者一巡した回では同じ打者が同じ回に2打席立つ。候補を1件だけ見ると2打席目に手が届かず、
 // 2文書いても両方が1打席目に当たって上書きになるため、候補を全部集めてから選ぶ。

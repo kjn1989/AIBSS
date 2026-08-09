@@ -7,7 +7,7 @@ import { gameEndCheck, initialPresetIdFor, describeRules } from '../src/lib/rule
 import { aggregateBatting, aggregatePitching, battingMetrics, pitchingMetrics, titleLeaders, DETAIL_METRICS, detailRanking, defaultInningBasis } from '../src/lib/stats.js';
 import { translate } from '../src/lib/i18n.js';
 import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, parseDirectionOnly, parseContact, playLabel } from '../src/lib/voiceParser.js';
-import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, assignResultTargets, parsePositionCorrections, parseDefensiveAlignment, parsePositionSwaps, keepsBattingOrder, explicitOrderChange, stripInningFractions, parseInningRange, parseSlotBatters, parseAtBatDeletions, parseShortResult, isExplicitSubText, inGamePlayerIds, preferInGamePlayers } from '../src/lib/correctionParser.js';
+import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, assignResultTargets, mergeResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parsePositionSwaps, keepsBattingOrder, explicitOrderChange, stripInningFractions, parseInningRange, parseSlotBatters, parseAtBatDeletions, parseShortResult, isExplicitSubText, inGamePlayerIds, preferInGamePlayers } from '../src/lib/correctionParser.js';
 import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarters, findPositionIssues } from '../src/lib/lineupBox.js';
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
 import { newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions, attendeesOf, lastAttendees, autoLineupFrom, subRank } from '../src/lib/model.js';
@@ -464,6 +464,31 @@ test('assignResultTargets: 同じ回の2打席を1打席目・2打席目へ別�
   assert.deepEqual(assignResultTargets(logs, only2).map((h) => [h.logId, h.nth]), [['L3', 2]]);
   // 打者で特定できない分は null を返し、呼び出し側の手掛かりに委ねる
   assert.deepEqual(assignResultTargets(logs, [{ inning: 6, batterId: 'zz' }]), [null]);
+});
+
+// AI併用時、回と打者だけで束ねると1打席目と2打席目が潰し合い、
+// 「7件直すはずが5件しか入らない」形で片方の指示が黙って消えていた。
+test('mergeResultCorrections: 同じ回・同じ打者の2打席が潰し合わない', () => {
+  const PS = [{ id: 'i', name: '磯野' }, { id: 'o', name: '奥田' }];
+  const local = parseResultCorrections('6回の磯野は1打席目が左2、2打席目が中安です。6回の奥田は見逃し三振です。', PS);
+  // AIは打席目を返さないことがある。それでも両方の打席が残る
+  const ai = [
+    { inning: 6, batterId: 'i', nth: null, patch: { result: 'double' } },
+    { inning: 6, batterId: 'i', nth: null, patch: { result: 'single' } },
+    { inning: 6, batterId: 'o', nth: null, patch: { result: 'so' } },
+  ];
+  const merged = mergeResultCorrections(ai, local);
+  assert.equal(merged.length, 3);
+  // 食い違ったら端末内(local)が勝つ。磯野の2打席とも local の指示になっている
+  assert.deepEqual(merged.map((r) => [r.batterId, r.nth, r.patch.result, r.patch.direction]), [
+    ['i', 1, 'double', 'LF'], ['i', 2, 'single', 'CF'], ['o', null, 'so', null],
+  ]);
+  // 片側だけでも数は保たれる
+  assert.equal(mergeResultCorrections(ai, []).length, 3);
+  assert.equal(mergeResultCorrections([], local).length, 3);
+  // 打席目の指定が両側にあれば、その番号どうしで突き合わせる
+  const merged2 = mergeResultCorrections([{ inning: 6, batterId: 'i', nth: 2, patch: { result: 'hr' } }], local);
+  assert.deepEqual(merged2.filter((r) => r.batterId === 'i').map((r) => [r.nth, r.patch.result]), [[2, 'single'], [1, 'double']]);
 });
 
 test('parseResultCorrections: 打点の訂正(「7回の中犠飛は打点1に修正」)', () => {

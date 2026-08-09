@@ -153,18 +153,30 @@ export async function convertMemoToPlay({ apiKey, memo, situation }) {
 export async function interpretCorrection({ apiKey, text, players = [], lineup = [], atbats = [] }) {
   const pl = players.map((p) => (p.number ? `${p.name}(#${p.number})` : p.name)).join('、');
   const lu = lineup.map((l) => `${l.order}番 ${l.name}${l.position ? `(${l.position})` : ''}`).join('、');
-  const ab = atbats.map((a) => `${a.inning}回 ${a.order}番 ${a.batter}: ${a.result}`).join('\n');
+  // 同じ回に同じ打者が2打席立つ(打者一巡)ことがあるので、何打席目かを添えて曖昧さを消す
+  const paSeen = new Map();
+  const ab = atbats.map((a) => {
+    const k = `${a.inning}|${a.batter}`;
+    const n = (paSeen.get(k) || 0) + 1;
+    paSeen.set(k, n);
+    const dup = atbats.filter((x) => `${x.inning}|${x.batter}` === k).length > 1;
+    return `${a.inning}回 ${a.order}番 ${a.batter}${dup ? `(${n}打席目)` : ''}: ${a.result}`;
+  }).join('\n');
   const prompt = `あなたは野球のスコア記録を修正するアシスタントです。記録係の文章を読み、行うべき修正を厳密なJSONだけで出力してください(説明文は禁止)。選手は必ず下の登録名で参照します。
 出力形式:
 {"operations":[
  {"type":"reassign","inning":整数,"from":"元の打者(登録名)","to":"実際の打者(登録名)","ordinal":整数またはnull},
  {"type":"substitution","inning":整数,"out":"退く選手","in":"入る選手","position":"投|捕|一|二|三|遊|左|中|右|DH|null","role":"ph|pr|def","afterBatter":相手打者の打順(回の途中で交代した場合その打者の後)またはnull},
- {"type":"result","inning":整数,"batter":"打者(登録名)またはnull","result":"single|double|triple|hr|out|so|bb|hbp|error|sacBunt|sacFly","direction":"P|C|1B|2B|3B|SS|LF|CF|RF|null","outType":"ground|fly|liner|dp|null","contact":"weak|normal|hard|null","rbi":整数またはnull},
+ {"type":"result","inning":整数,"batter":"打者(登録名)またはnull","nth":整数またはnull,"result":"single|double|triple|hr|out|so|bb|hbp|error|sacBunt|sacFly","direction":"P|C|1B|2B|3B|SS|LF|CF|RF|null","outType":"ground|fly|liner|dp|null","soType":"swinging|looking|null","contact":"weak|normal|hard|null","rbi":整数またはnull},
+ {"type":"delete","inning":整数,"batter":"打者(登録名)","nth":整数またはnull},
  {"type":"position","player":"選手(登録名)","position":"投|捕|一|二|三|遊|左|中|右|DH"},
  {"type":"defense","inning":整数,"toInning":整数またはnull,"player":"選手(登録名)","position":"投|捕|一|二|三|遊|左|中|右|DH"}
 ],"questions":[{"text":"確認したいこと(日本語)","options":["答えの候補(そのまま修正文として使える一文)"]}]}
 【確認(questions)】文章だけでは決めきれない点があるときは、operations に無理に入れず questions に日本語の質問を入れる。判断がつかない例: 交代なのか守備位置の変更なのか分からない/どの回か書かれていない/同姓の選手が複数いる/守備位置が書かれていない。質問は最大2件、options には答えの候補を「そのまま修正文として使える一文」で入れる(例:「6回から山城は捕手です。」)。決められる場合は questions は空配列にする。
 【打球の強さ(contact)】「痛烈」「鋭い」「芯を食った」=hard、「ボテボテ」「詰まった」「ポテン」「当たり損ね」=weak、「平凡」=normal。強さに触れていない文では必ず null にする(記録済みの強さを消さないため)。outType(軌道)はヒットのときも書いてよい。
+【何打席目か(nth)】打者一巡した回では同じ打者が同じ回に2打席立つ。下の打席記録で同じ回に同じ打者が複数回出てくる場合は、nth に何打席目かを必ず入れる(1打席目=1)。「1打席目は左二、2打席目は中安」のように書かれていれば、その回のその打者について result を打席の数だけ出力し、それぞれに nth を付ける。1打席しか無い打者は nth を null にする。
+【三振の種類(soType)】「見逃し三振」「見三振」=looking、「空振り三振」=swinging。単に「三振」なら null。
+【打席の取り消し(delete)】「◯◯の打席は取り消し/削除/無し/回ってきていない」のように、記録されている打席そのものを消す指示があるときだけ delete を出力する。書かれていない打席を推測で消してはいけない(「1打席目は△△です」とだけ書かれていても、2打席目を消してはならない)。delete は operations の1つとして出力できるので、questions で「対応していない」と返してはいけない。
 規則: reassign=ある回の打者が実は別選手だった時の付け替え。substitution=交代の記録(role: ph=代打, pr=代走, def=守備交代や投手交代)。result=打席結果の訂正(方向directionは打球方向)。
 position=先発(スタメン)の守備位置そのものの登録ミスの訂正。「◯◯の先発守備位置が△△になっているが正しくは□□」のように回を伴わず、交代ではなく最初から誤って登録されていた場合に使う(positionには訂正後の正しい位置を入れる)。
 defense=その回からの守備位置の申告。「3〜6回はキャッチャーは山城だけです」のように回に幅がある場合は inning=3, toInning=6 のように範囲で出力する(1回だけなら toInning は null)。「7回の守備はショート茂木、サード入交、セカンド宇田川でした」のように、守備位置と選手の組が並ぶ文では、組の数だけ defense を出力する(この例なら茂木=遊、入交=三、宇田川=二 の3件)。選手の入れ替わりではなく守備位置の組み替えなので substitution にはしない。「AがBに代わって」「AからBに交代しました」のように退く選手と入る選手が書かれている場合だけ substitution を使う(この場合は打順の記録がズレていても、書かれたとおり substitution として出力する)。
