@@ -7,7 +7,7 @@ import { gameEndCheck, initialPresetIdFor, describeRules } from '../src/lib/rule
 import { aggregateBatting, aggregatePitching, battingMetrics, pitchingMetrics, titleLeaders, DETAIL_METRICS, detailRanking, defaultInningBasis } from '../src/lib/stats.js';
 import { translate } from '../src/lib/i18n.js';
 import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, parseDirectionOnly, parseContact, playLabel } from '../src/lib/voiceParser.js';
-import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parsePositionSwaps, keepsBattingOrder, explicitOrderChange, stripInningFractions, parseInningRange, parseSlotBatters, parseAtBatDeletions, parseShortResult, isExplicitSubText, inGamePlayerIds, preferInGamePlayers } from '../src/lib/correctionParser.js';
+import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, assignResultTargets, parsePositionCorrections, parseDefensiveAlignment, parsePositionSwaps, keepsBattingOrder, explicitOrderChange, stripInningFractions, parseInningRange, parseSlotBatters, parseAtBatDeletions, parseShortResult, isExplicitSubText, inGamePlayerIds, preferInGamePlayers } from '../src/lib/correctionParser.js';
 import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarters, findPositionIssues } from '../src/lib/lineupBox.js';
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
 import { newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions, attendeesOf, lastAttendees, autoLineupFrom, subRank } from '../src/lib/model.js';
@@ -420,6 +420,50 @@ test('parseResultCorrections: 1文に複数の打席(「山城は3回に中2、4
   // 方向・アウトの種類も短縮表記から取れる
   assert.equal(rs[0].patch.direction, 'CF');
   assert.deepEqual([rs[3].patch.direction, rs[3].patch.outType], ['3B', 'fly']);
+});
+
+// 打者一巡した回は同じ打者が同じ回に2打席立つ。どちらの打席かを言えないと、
+// 2打席目に手が届かず、2文書いても両方が1打席目に当たって上書きになる。
+test('parseResultCorrections: 打者一巡の回で1打席目/2打席目を撃ち分ける', () => {
+  const PS = [{ id: 'i', name: '磯野' }];
+  // 明示指定
+  const rs = parseResultCorrections('6回の磯野は1打席目が左2、2打席目が中安です', PS);
+  assert.deepEqual(rs.map((r) => [r.inning, r.batterId, r.nth, r.patch.result, r.patch.direction]), [
+    [6, 'i', 1, 'double', 'LF'], [6, 'i', 2, 'single', 'CF'],
+  ]);
+  // 「第2打席」「二打席目」も同じ意味として読む
+  assert.equal(parseResultCorrections('6回の磯野は第2打席が中安です', PS)[0].nth, 2);
+  assert.equal(parseResultCorrections('6回の磯野は二打席目が中安です', PS)[0].nth, 2);
+  // 「2打席目」の数字を打点として読んでしまわない
+  assert.equal(parseResultCorrections('6回の磯野は2打席目が中安です', PS)[0].patch.rbi, undefined);
+  // 打席目の指定が無ければ nth は付けず、書かれた順に割り当てる(適用側の役目)
+  const plain = parseResultCorrections('6回の磯野は左2、中安です', PS);
+  assert.deepEqual(plain.map((r) => [r.nth, r.patch.result]), [[null, 'double'], [null, 'single']]);
+});
+
+test('assignResultTargets: 同じ回の2打席を1打席目・2打席目へ別々に当てる', () => {
+  const PS = [{ id: 'i', name: '磯野' }];
+  // 6回に磯野が2打席、7回に1打席立っている試合
+  const logs = [
+    { id: 'L1', kind: 'atbat', inning: 6, payload: { playerId: 'i' } },
+    { id: 'L2', kind: 'defense', inning: 6, payload: {} },
+    { id: 'L3', kind: 'atbat', inning: 6, payload: { playerId: 'i' } },
+    { id: 'L4', kind: 'atbat', inning: 7, payload: { playerId: 'i' } },
+  ];
+  const text = '6回の磯野は左2、中安です。7回の磯野は三振です。';
+  const corrs = parseResultCorrections(text, PS);
+  assert.deepEqual(
+    assignResultTargets(logs, corrs).map((h) => [h.logId, h.nth]),
+    [['L1', 1], ['L3', 2], ['L4', null]], // 1打席しかない回は打席番号を付けない
+  );
+  // 打席目を明示しても同じ結果になる。順番を逆に書いても指定どおりの打席に当たる
+  const rev = parseResultCorrections('6回の磯野は2打席目が中安、1打席目が左2です', PS);
+  assert.deepEqual(assignResultTargets(logs, rev).map((h) => h.logId), ['L3', 'L1']);
+  // 2打席目だけを直す指示が、1打席目に当たってしまわない
+  const only2 = parseResultCorrections('6回の磯野の2打席目は中安です', PS);
+  assert.deepEqual(assignResultTargets(logs, only2).map((h) => [h.logId, h.nth]), [['L3', 2]]);
+  // 打者で特定できない分は null を返し、呼び出し側の手掛かりに委ねる
+  assert.deepEqual(assignResultTargets(logs, [{ inning: 6, batterId: 'zz' }]), [null]);
 });
 
 test('parseResultCorrections: 打点の訂正(「7回の中犠飛は打点1に修正」)', () => {

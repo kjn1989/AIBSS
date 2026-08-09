@@ -535,6 +535,19 @@ function parseRbi(phrase) {
   return /打点\s*(?:は|を|が|に)?\s*(?:なし|無し|ゼロ|0)/.test(phrase) ? 0 : null;
 }
 
+// 打者一巡した回では、同じ打者が同じ回に2打席立つ。どちらの打席かを言えるように
+// 「1打席目」「第2打席」を読む。指定が無ければ、書かれた順に1打席目・2打席目…と割り当てる。
+const KANJI_NUM = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+const NTH_PA = /(?:第\s*)?([0-9]+|[一二三四五六七八九])\s*打席目?/;
+function parseNthPa(clause) {
+  const m = clause.match(NTH_PA);
+  if (!m) return null;
+  const n = /^[0-9]+$/.test(m[1]) ? parseInt(m[1], 10) : KANJI_NUM[m[1]];
+  return n > 0 ? n : null;
+}
+// 「2打席目」の数字が打点や結果の判定に混ざらないよう、読み取った後は文から外す
+const stripNthPa = (s) => s.replace(new RegExp(NTH_PA.source, 'g'), ' ');
+
 export function parseResultCorrections(rawText, players = []) {
   const out = [];
   let lastInning = null;
@@ -555,8 +568,9 @@ export function parseResultCorrections(rawText, players = []) {
       if (innM) lastInning = parseInt(innM[1], 10);
       const inning = lastInning;
       if (inning == null) continue;
-      const parts = clause.split(/でなく|ではなく/);
-      const phrase = parts.length > 1 ? parts.slice(1).join('') : clause;
+      const nth = parseNthPa(clause);
+      const parts = stripNthPa(clause).split(/でなく|ではなく/);
+      const phrase = parts.length > 1 ? parts.slice(1).join('') : parts[0];
       // 打席結果を表す語も短縮表記(中安・三飛…)も、打点も強さも無い文は打撃の話ではない
       const short = parseShortResult(phrase);
       const rbi = parseRbi(phrase);
@@ -570,7 +584,7 @@ export function parseResultCorrections(rawText, players = []) {
         if (rbi == null && contact == null) continue;
         const only = findNameHits(clause, players)[0] || lastBatter;
         out.push({
-          inning, batterId: only?.id || null, batterName: only?.name || null,
+          inning, nth, batterId: only?.id || null, batterName: only?.name || null,
           patch: { ...(rbi != null ? { rbi } : {}), ...(contact ? { contact } : {}) },
         });
         continue;
@@ -579,6 +593,7 @@ export function parseResultCorrections(rawText, players = []) {
       const result = top?.result || short.result;
       out.push({
         inning,
+        nth,
         batterId: hit?.id || null,
         batterName: hit?.name || null,
         patch: {
@@ -600,6 +615,32 @@ export function parseResultCorrections(rawText, players = []) {
     }
   }
   return out;
+}
+
+// 結果修正を、対象の打席ログへ割り当てる。
+// 打者一巡した回では同じ打者が同じ回に2打席立つ。候補を1件だけ見ると2打席目に手が届かず、
+// 2文書いても両方が1打席目に当たって上書きになるため、候補を全部集めてから選ぶ。
+//   ・「1打席目/第2打席」の指定があればその打席
+//   ・指定が無ければ、書かれた順に、まだ割り当てていない打席へ
+// 戻り値は corrections と同じ並びの [{ logId, nth } | null]。null は打者で特定できなかった分で、
+// 呼び出し側の別の手掛かり(その回の付け替え先・回内で1件だけ)に委ねる。
+export function assignResultTargets(playLogs = [], corrections = [], idsForName = null) {
+  const used = new Set();
+  return corrections.map((rc) => {
+    const pool = playLogs.filter((x) => x.kind === 'atbat' && Number(x.inning) === Number(rc.inning));
+    let cands = rc.batterId ? pool.filter((x) => x.payload?.playerId === rc.batterId) : [];
+    // IDで見つからないときは同名の選手すべてで探す(二重登録が残っている試合の救済)
+    if (!cands.length && rc.batterName && idsForName) {
+      const ids = idsForName(rc.batterName);
+      cands = pool.filter((x) => ids.has(x.payload?.playerId));
+    }
+    if (!cands.length) return null;
+    const pick = rc.nth ? cands[rc.nth - 1] : (cands.find((l) => !used.has(l.id)) || cands[0]);
+    if (!pick) return null;
+    used.add(pick.id);
+    // 打席が1つしかない回は「何打席目」と言う必要がないので付けない
+    return { logId: pick.id, nth: cands.length > 1 ? cands.indexOf(pick) + 1 : null };
+  });
 }
 
 // 解釈結果から、対象の打席ログ(kind:'atbat')を特定する。
