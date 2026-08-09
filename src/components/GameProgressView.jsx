@@ -9,7 +9,7 @@ import { depthBand, isFoul } from '../lib/battedBall.js';
 const BATTED_BALL_RESULTS = new Set(['single', 'double', 'triple', 'hr', 'out', 'error', 'sacBunt', 'sacFly']);
 import { playLabel } from '../lib/voiceParser.js';
 import { computeBoxScore } from '../lib/boxscore.js';
-import { parseBatterCorrection, findTargetAtBat, parseSubstitutions, parseBatterReassignments, parseResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parsePositionSwaps, parseSlotBatters, parseAtBatDeletions, isExplicitSubText, explicitOrderChange, inGamePlayerIds, preferInGamePlayers } from '../lib/correctionParser.js';
+import { parseBatterCorrection, findTargetAtBat, parseSubstitutions, parseBatterReassignments, parseResultCorrections, assignResultTargets, parsePositionCorrections, parseDefensiveAlignment, parsePositionSwaps, parseSlotBatters, parseAtBatDeletions, isExplicitSubText, explicitOrderChange, inGamePlayerIds, preferInGamePlayers } from '../lib/correctionParser.js';
 import { posFull, buildLineupRows, findPositionIssues, alignmentByInning } from '../lib/lineupBox.js';
 import { findDuplicateAtBats, canRebuildOrders, findOrderBreaks } from '../lib/battersRebuild.js';
 import { oppNameOf } from '../lib/oppBox.js';
@@ -744,25 +744,19 @@ function NLCorrectionCard({ game }) {
 
     // 結果修正を対象の打席ログへ解決(その回の付け替え対象、無ければ回内で1件のみのとき)
     const resAppl = [];
-    for (const rc of resultCorrs) {
-      // 打者名が書かれていればそれを最優先(同じ回に複数の打席があっても特定できる)
-      let logId = null;
-      if (rc.batterId) {
-        const l = (game.playLogs || []).find((x) => x.kind === 'atbat'
-          && Number(x.inning) === Number(rc.inning) && x.payload?.playerId === rc.batterId);
-        if (l) logId = l.id;
-      }
-      // IDで見つからないときは同名の選手すべてで探す(二重登録が残っている試合の救済)
-      if (!logId && rc.batterName) {
-        const sameName = new Set(state.players.filter((p) => p.name === rc.batterName).map((p) => p.id));
-        const l = (game.playLogs || []).find((x) => x.kind === 'atbat'
-          && Number(x.inning) === Number(rc.inning) && sameName.has(x.payload?.playerId));
-        if (l) logId = l.id;
-      }
+    // 打者一巡した回では同じ打者が同じ回に2打席立つ。1件目だけを見ると2打席目に
+    // 手が届かず、2文書いても両方1打席目に当たって上書きになるため、候補を全部集めて
+    // 「何打席目か」で選ぶ。指定が無ければ書かれた順に空いている打席へ割り当てる。
+    const byName = (name) => new Set(state.players.filter((p) => p.name === name).map((p) => p.id));
+    const targets = assignResultTargets(game.playLogs || [], resultCorrs, byName);
+    resultCorrs.forEach((rc, i) => {
+      const hit = targets[i];
+      let logId = hit?.logId || null;
+      // 打者で特定できなかった分は、その回の付け替え先・回内で1件だけ、の順に頼る
       if (!logId) logId = inningToLog.get(rc.inning);
       if (!logId) { const logs = (game.playLogs || []).filter((l) => l.kind === 'atbat' && l.inning === rc.inning); if (logs.length === 1) logId = logs[0].id; }
-      if (logId) resAppl.push({ ...rc, logId });
-    }
+      if (logId) resAppl.push({ ...rc, logId, nth: hit?.nth ?? null });
+    });
     // 同じ回で2つの打席の結果が入れ替わる指示のときは、打点とその打席で入った得点も
     // 一緒に入れ替える。打点は「その打撃が生んだもの」なので、結果だけ移すと
     // 凡打に打点が残るような食い違いが出る。
@@ -816,7 +810,9 @@ function NLCorrectionCard({ game }) {
       ...slotAppl.map((sb) => t('gp.nlSlotBatterItem', { inning: sb.inning, order: sb.order, name: sb.playerName || nameOf(sb.playerId) })),
       ...reAppl.map((r) => t('gp.nlReItem', { inning: r.inning, name: r.newName })),
       ...resAppl.map((rc) => {
-        const who = rc.batterId ? ` ${rc.batterName || nameOf(rc.batterId)}` : '';
+        // 同じ回に2打席ある打者は、どちらの打席を直すのかを添えて取り違えを防ぐ
+        const who = (rc.batterId ? ` ${rc.batterName || nameOf(rc.batterId)}` : '')
+          + (rc.nth ? t('gp.nlResNth', { n: rc.nth }) : '');
         // 打点だけの修正は、打席結果を書かずに打点だけを示す
         if (rc.patch.result === undefined) return t('gp.nlResRbiItem', { inning: rc.inning, who, n: rc.patch.rbi });
         return t('gp.nlResItem', {
