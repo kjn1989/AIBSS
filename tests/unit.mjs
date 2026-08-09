@@ -563,6 +563,11 @@ test('parseAtBatDeletions: 打席の取り消し(「7回の平川の打席は空
   // 打順や「第◯打席」でも指せる
   assert.deepEqual(parseAtBatDeletions('7回の8番の打席を削除', PS).map((d) => [d.inning, d.order]), [[7, 8]]);
   assert.equal(parseAtBatDeletions('7回の平川の第2打席を消してください', PS)[0].ordinal, 2);
+  // 「2打席目」も「第2打席」と同じ意味。結果修正側と表記が揃っていないと、
+  // 同じ書き方が片方でだけ通らず、打者一巡の回でどの打席か指せなくなる
+  assert.equal(parseAtBatDeletions('7回の平川の2打席目は取り消してください', PS)[0].ordinal, 2);
+  assert.equal(parseAtBatDeletions('7回の平川の二打席目を削除', PS)[0].ordinal, 2);
+  assert.equal(parseAtBatDeletions('7回の平川の打席は空欄に', PS)[0].ordinal, null);
   // 取り消しの語が無い文は対象外(通常の訂正と取り違えない)
   assert.deepEqual(parseAtBatDeletions('7回の8番は奥田です', PS), []);
   assert.deepEqual(parseAtBatDeletions('7回の平川は四球です', PS), []);
