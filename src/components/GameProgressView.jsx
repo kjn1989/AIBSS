@@ -9,7 +9,7 @@ import { depthBand, isFoul } from '../lib/battedBall.js';
 const BATTED_BALL_RESULTS = new Set(['single', 'double', 'triple', 'hr', 'out', 'error', 'sacBunt', 'sacFly']);
 import { playLabel } from '../lib/voiceParser.js';
 import { computeBoxScore } from '../lib/boxscore.js';
-import { parseBatterCorrection, findTargetAtBat, parseSubstitutions, parseBatterReassignments, parseResultCorrections, assignResultTargets, parsePositionCorrections, parseDefensiveAlignment, parsePositionSwaps, parseSlotBatters, parseAtBatDeletions, isExplicitSubText, explicitOrderChange, inGamePlayerIds, preferInGamePlayers } from '../lib/correctionParser.js';
+import { parseBatterCorrection, findTargetAtBat, parseSubstitutions, parseBatterReassignments, parseResultCorrections, assignResultTargets, mergeResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parsePositionSwaps, parseSlotBatters, parseAtBatDeletions, isExplicitSubText, explicitOrderChange, inGamePlayerIds, preferInGamePlayers } from '../lib/correctionParser.js';
 import { posFull, buildLineupRows, findPositionIssues, alignmentByInning } from '../lib/lineupBox.js';
 import { findDuplicateAtBats, canRebuildOrders, findOrderBreaks } from '../lib/battersRebuild.js';
 import { oppNameOf } from '../lib/oppBox.js';
@@ -327,7 +327,7 @@ function NLCorrectionCard({ game }) {
 
   // AIの操作配列 → 中間表現(regexパスと同形 { subs, reassigns, resultCorrs })
   const aiOpsToIntermediate = (ops) => {
-    const subs = []; const reassigns = []; const resultCorrs = []; const posCorrs = []; const aligns = [];
+    const subs = []; const reassigns = []; const resultCorrs = []; const posCorrs = []; const aligns = []; const deletions = [];
     const num = (v) => (v == null || v === 'null' || v === '' ? null : Number(v)); // AIの文字列数値に備える
     for (const op of ops || []) {
       const inning = num(op.inning);
@@ -352,9 +352,10 @@ function NLCorrectionCard({ game }) {
         const batted = BATTED_BALL_RESULTS.has(op.result);
         const traj = clean(op.outType);
         const cont = clean(op.contact);
-        resultCorrs.push({ inning, batterId: idByName(op.batter), patch: {
+        resultCorrs.push({ inning, batterId: idByName(op.batter), batterName: op.batter || null, nth: num(op.nth), patch: {
           result: op.result, direction: clean(op.direction),
-          soType: op.result === 'so' ? 'swinging' : null,
+          // 「見逃し」と書かれていれば見逃し三振。指定が無い三振は空振り扱い(従来どおり)
+          soType: op.result === 'so' ? (clean(op.soType) || 'swinging') : null,
           ...(batted
             ? {
               ...(op.result === 'out' || traj ? { outType: traj || 'ground' } : {}),
@@ -363,9 +364,13 @@ function NLCorrectionCard({ game }) {
             : { outType: null, contact: null, hitAngle: null, hitDepth: null }),
           ...(num(op.rbi) != null ? { rbi: num(op.rbi) } : {}),
         } });
+      } else if (op.type === 'delete' && inning) {
+        // 記録されている打席そのものの取り消し(端末内解析の parseAtBatDeletions と同じ形)
+        const pid = idByName(op.batter);
+        if (pid) deletions.push({ inning, playerId: pid, playerName: op.batter, ordinal: num(op.nth), order: null });
       }
     }
-    return { subs, reassigns, resultCorrs, posCorrs, aligns };
+    return { subs, reassigns, resultCorrs, posCorrs, aligns, deletions };
   };
   const produceRegex = () => ({
     subs: parseSubstitutions(text, parsePlayers),
@@ -396,13 +401,10 @@ function NLCorrectionCard({ game }) {
       // 同じ回・同じ打者への結果指示は1つにまとめる。
       // AI(a)と端末内(b)で食い違ったときは端末内を優先する。端末内はスコアシートの
       // 短縮表記(中2・三飛…)をそのまま読むため、この形の文では取り違えが起きにくい。
-      resultCorrs: (() => {
-        const m = new Map();
-        for (const rc of [...(a.resultCorrs || []), ...(b.resultCorrs || [])]) {
-          m.set(`${rc.inning}|${rc.batterId || ''}`, rc); // 後から入れる b が勝つ
-        }
-        return [...m.values()];
-      })(),
+      // ただし打者一巡した回では同じ打者が同じ回に2打席立つ。回と打者だけで束ねると
+      // 1打席目と2打席目が潰し合い、片方の指示が黙って消える。
+      // 何打席目かの指定が無い側でも、書かれた順(同じ打者の中での通し番号)で対応付ける。
+      resultCorrs: mergeResultCorrections(a.resultCorrs || [], b.resultCorrs || []),
       posCorrs: uniq([...(a.posCorrs || []), ...(b.posCorrs || [])], (pc) => `${pc.playerId}`),
       // 同じ回・同じ選手の位置指定は1つにまとめ、範囲は広い方(AIと端末内で食い違うことがある)を採る
       slotBatters: uniq([...(a.slotBatters || []), ...(b.slotBatters || [])], (x) => `${x.inning}|${x.order}`),
