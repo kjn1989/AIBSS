@@ -223,6 +223,43 @@ try {
   await page.click('.ss-editbtn');
   await page.waitForTimeout(300);
 
+  // --- 投手成績: 記録から計算した値と並べ、手で直した値は人の判断を優先する ---
+  await page.click('.ss-editbtn');
+  await page.waitForTimeout(400);
+  const pitBtn = page.locator('.ss-table:not(.ss-matrix):not(.ss-line) .ss-row-btn').first();
+  check('投手欄が押せる', (await pitBtn.count()) > 0, `n=${await pitBtn.count()}`);
+  await pitBtn.click();
+  await page.waitForTimeout(600);
+  const pf = page.locator('.sheet').last();
+  check('投手成績のシートが開く', (await pf.innerText()).includes('投手成績を直す'));
+  check('記録どおりと言うだけ', (await page.locator('.pf-box').innerText()).includes('記録どおり'),
+    await page.locator('.pf-box').innerText());
+  check('記録どおりなら振り直しを勧めない', (await page.locator('.pf-box button').count()) === 0);
+  check('記録どおりなら戻す道は出さない', (await page.locator('.pf-undo').count()) === 0);
+  check('主ボタンは保存', (await page.locator('.sheet-actions button.primary').innerText()).trim() === '保存',
+    await page.locator('.sheet-actions button.primary').innerText());
+
+  // 手で直すと、その判断を優先する言い方に変わる
+  await page.locator('.pf-field .stepper button').last().click();
+  await page.waitForTimeout(300);
+  check('手で決めた値と言う', (await page.locator('.pf-box').innerText()).includes('手で決めた値'),
+    await page.locator('.pf-box').innerText());
+  check('このままで大丈夫と言う', (await page.locator('.pf-box').innerText()).includes('このままで大丈夫'));
+  check('箱にボタンを置かない', (await page.locator('.pf-box button').count()) === 0);
+  check('主ボタンが「この内容で直す」', (await page.locator('.sheet-actions button.primary').innerText()).trim() === 'この内容で直す',
+    await page.locator('.sheet-actions button.primary').innerText());
+  check('戻す道は薄文字で下に', (await page.locator('.pf-undo').count()) === 1);
+  const undoY = await page.locator('.pf-undo').evaluate((e) => e.getBoundingClientRect().top);
+  const saveY = await page.locator('.sheet-actions button.primary').evaluate((e) => e.getBoundingClientRect().top);
+  check('戻すは主ボタンより下', undoY > saveY, `undo=${undoY} save=${saveY}`);
+
+  // 保存すると表の数字が変わる
+  await page.click('.sheet-actions button.primary');
+  await page.waitForTimeout(700);
+  check('投手シートが閉じる', (await page.locator('.sheet').count()) === 0);
+  await page.click('.ss-editbtn');
+  await page.waitForTimeout(300);
+
   // --- 横はみ出しがない ---
   const over = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   check('横はみ出しなし', !over);

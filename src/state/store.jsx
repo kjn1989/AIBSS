@@ -950,6 +950,20 @@ export function reducer(state, action) {
       g.updatedAt = Date.now();
       return { ...state, games: { ...state.games, [g.id]: g } };
     }
+    // 相手投手の成績は打席記録から導いているだけで、実体が無い。
+    // 記録に入っていない打席がある場合に人が決めた値を残せるよう、上書きだけを持つ。
+    case 'ADJUST_OPP_PITCHING': {
+      const g = deep(state.games[action.gameId]);
+      if (!action.letter) return state;
+      const fix = { ...(g.oppPitchingFix || {}) };
+      const patch = action.patch || {};
+      if (Object.keys(patch).length) fix[action.letter] = patch;
+      else delete fix[action.letter];
+      g.oppPitchingFix = fix;
+      g.updatedAt = Date.now();
+      return { ...state, games: { ...state.games, [g.id]: g } };
+    }
+
     case 'SET_DECISION': {
       // 勝利投手/セーブ/ホールドの付与 (win/saveは1試合1人=exclusive、holdは複数可)
       const g = deep(state.games[action.gameId]);
