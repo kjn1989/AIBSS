@@ -176,6 +176,53 @@ try {
   await page.click('.sheet-actions button:has-text("キャンセル")');
   await page.waitForTimeout(400);
 
+  // --- 守備・交代: 何を直すかを先に選ばせる ---
+  // 前のブロックで修正モードに入ったままなので、ここでは切り替えない
+  check('選手名のマスが押せる', (await page.locator('.ss-row-btn').count()) > 0,
+    `n=${await page.locator('.ss-row-btn').count()}`);
+  await page.locator('.ss-row-btn').nth(1).click();
+  await page.waitForTimeout(600);
+  check('守備・交代のシートが開く', (await page.locator('.sheet').last().innerText()).includes('守備・交代を直す'));
+  check('3つから選ばせる', (await page.locator('.df-card').count()) === 3,
+    `n=${await page.locator('.df-card').count()}`);
+  check('選ぶまで保存を出さない', (await page.locator('.sheet .sheet-actions button:has-text("保存")').count()) === 0);
+
+  // 先発の登録ミスは回を聞かない
+  await page.locator('.df-card').first().click();
+  await page.waitForTimeout(300);
+  check('先発の訂正は回を聞かない', !(await page.locator('.sheet').last().innerText()).includes('何回から'));
+  check('正しい守備位置を聞く', (await page.locator('.sheet').last().innerText()).includes('正しい守備位置'));
+  await page.click('.sheet .chips-row button:has-text("右")');
+  await page.waitForTimeout(250);
+  check('何が起きるかを先に言う', (await page.locator('.df-preview').innerText()).includes('先発の位置'),
+    await page.locator('.df-preview').innerText());
+  check('交代は作らないと明記', (await page.locator('.keep-box').innerText()).includes('交代の記録は作りません'));
+
+  // 途中からの位置変更は回を聞く / 打順は動かないと明記
+  await page.locator('.df-card').nth(1).click();
+  await page.waitForTimeout(300);
+  check('途中からは回を聞く', (await page.locator('.sheet').last().innerText()).includes('何回から'));
+  check('打順は動かないと明記', (await page.locator('.keep-box').innerText()).includes('打順は動きません'));
+
+  // 交代は入る選手も聞く
+  await page.locator('.df-card').nth(2).click();
+  await page.waitForTimeout(300);
+  check('交代は入る選手も聞く', (await page.locator('.sheet select').count()) > 0);
+  check('名簿と出場中を分ける', (await page.locator('.sheet optgroup').count()) >= 1,
+    `n=${await page.locator('.sheet optgroup').count()}`);
+
+  // 先発の守備位置を実際に直す
+  await page.locator('.df-card').first().click();
+  await page.waitForTimeout(300);
+  const posBefore = (await page.locator('.ss-matrix').first().innerText()).slice(0, 200);
+  await page.click('.sheet .chips-row button:has-text("右")');
+  await page.click('.sheet-actions button:has-text("保存")');
+  await page.waitForTimeout(700);
+  check('シートが閉じる', (await page.locator('.sheet').count()) === 0);
+  check('位置欄が変わる', (await page.locator('.ss-matrix').first().innerText()).slice(0, 200) !== posBefore);
+  await page.click('.ss-editbtn');
+  await page.waitForTimeout(300);
+
   // --- 横はみ出しがない ---
   const over = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   check('横はみ出しなし', !over);

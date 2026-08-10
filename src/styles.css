@@ -1320,7 +1320,38 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 }
 .ss-inn-btn:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
 .ss-inn-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ss-row-btn {
+  border: 0; background: transparent; color: inherit; font: inherit;
+  padding: 1px 3px; border-radius: 4px; cursor: pointer; max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.ss-row-btn:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.ss-row-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 @media print { .ss-cell-btn { box-shadow: none; } .ss-cell-add { display: none; } }
+
+/* ---- 守備・交代を直す ----
+   何を直すのかを先に選ばせる。1つのフォームに混ぜると、
+   「回を入れたのに先発が変わった」「位置だけ直したいのに交代が作られた」が起きる。 */
+.df-cards { display: flex; flex-direction: column; gap: 8px; }
+.df-card {
+  display: block; width: 100%; text-align: left; border: 1px solid var(--border);
+  background: var(--bg-3); color: var(--text); border-radius: 12px; padding: 11px 13px;
+}
+.df-card.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.df-card b { display: block; font-size: 13.5px; margin-bottom: 4px; }
+.df-card span { display: block; font-size: 11.5px; line-height: 1.55; color: var(--text-dim); }
+.chips-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips-row button { min-width: 40px; }
+.df-preview {
+  margin-top: 14px; padding: 11px 13px; border-radius: 10px; font-size: 13px; line-height: 1.6;
+  background: var(--bg-3); border: 1px solid var(--border);
+}
+.keep-box {
+  margin-top: 10px; padding: 10px 12px; border-radius: 10px; font-size: 12px; line-height: 1.6;
+  background: color-mix(in srgb, var(--green) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--green) 32%, transparent);
+}
 
 /* ---- 回の流れ ----
    交代は打席と打席の「間」に起きるのでマス目では表せない。
