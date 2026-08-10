@@ -9,11 +9,16 @@ import Sheet from './Sheet.jsx';
 // ---- 過去プレイの事後編集シート ----
 // 結果種別・方向・打点を後から修正/削除できる(成績は自動で再計算)。
 // スコア・走者・投手成績はここでは変えず、必要なら手動修正機能を案内する。
-export default function EditPlaySheet({ game, log, onClose }) {
+// draft を渡すと「まだ存在しない打席」を作るシートになる。
+// 保存するまで何も書き込まないので、閉じれば無かったことになる。
+export default function EditPlaySheet({ game, log, draft, onClose }) {
   const { state, dispatch } = useStore();
   const t = useT();
   const lang = state.settings.lang || 'ja';
-  const p = log.payload || {};
+  const isNew = !!draft;
+  const p = isNew
+    ? { result: 'single', playerId: draft.playerId, order: draft.order, direction: null }
+    : (log.payload || {});
   const [result, setResult] = useState(p.result);
   const [direction, setDirection] = useState(p.direction || null);
   const [outType, setOutType] = useState(p.outType || 'ground');
@@ -27,10 +32,21 @@ export default function EditPlaySheet({ game, log, onClose }) {
   // 直しに来た時点では方向は入っているので畳んでおく(シートを短くする)
   const [dirOpen, setDirOpen] = useState(!p.direction);
   const [rbi, setRbi] = useState(p.rbi ?? null);
-  const isAtBat = log.kind === 'atbat';
+  const isAtBat = isNew || log.kind === 'atbat';
   const [playerId, setPlayerId] = useState(p.playerId || null);
 
   const save = () => {
+    if (isNew) {
+      dispatch({
+        type: 'ADD_RETRO_ATBAT', gameId: game.id,
+        inning: draft.inning, playerId, order: draft.order,
+        result, direction, outType, soType, contact, rbi: rbi || 0,
+        hitAngle: point ? point.angle : null,
+        hitDepth: point ? point.depth : null,
+      });
+      onClose();
+      return;
+    }
     // 打者の付け替え(リエントリー対応)は結果編集より先に反映する
     if (isAtBat && playerId && playerId !== p.playerId) {
       dispatch({ type: 'REASSIGN_ATBAT', gameId: game.id, logId: log.id, newPlayerId: playerId });
@@ -56,7 +72,12 @@ export default function EditPlaySheet({ game, log, onClose }) {
   };
 
   return (
-    <Sheet title={t('gp.editTitle', { inning: log.inning, half: t(log.isTop ? 'half.top' : 'half.bottom') })} onClose={onClose}>
+    <Sheet
+      title={isNew
+        ? t('ss.addTitle', { inning: draft.inning })
+        : t('gp.editTitle', { inning: log.inning, half: t(log.isTop ? 'half.top' : 'half.bottom') })}
+      onClose={onClose}
+    >
       {isAtBat && (
         <>
           <div className="section-title" style={{ marginTop: 0 }}>{t('gp.reassignBatter')}</div>
@@ -144,10 +165,10 @@ export default function EditPlaySheet({ game, log, onClose }) {
       )}
 
       <div className="warn-box mt12">
-        {t('gp.editWarn')}
+        {isNew ? t('ss.addWarn') : t('gp.editWarn')}
       </div>
 
-      <button className="ghost danger mt8" style={{ width: '100%' }} onClick={remove}>{t('gp.deletePlay')}</button>
+      {!isNew && <button className="ghost danger mt8" style={{ width: '100%' }} onClick={remove}>{t('gp.deletePlay')}</button>}
       <div className="sheet-actions">
         <button className="ghost" onClick={onClose}>{t('action.cancel')}</button>
         <button className="primary" onClick={save}>{t('action.save')}</button>

@@ -1304,7 +1304,15 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 }
 .ss-cell-btn:hover, .ss-cell-btn:active { background: color-mix(in srgb, var(--accent) 18%, transparent); }
 .ss-cell-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-@media print { .ss-cell-btn { box-shadow: none; } }
+.ss-cell-add {
+  border: 1px dashed color-mix(in srgb, var(--accent) 50%, transparent);
+  background: transparent; color: color-mix(in srgb, var(--accent) 70%, transparent);
+  font: inherit; font-size: 10px; line-height: 1;
+  padding: 3px 5px; border-radius: 4px; cursor: pointer;
+}
+.ss-cell-add:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+.ss-cell-add:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+@media print { .ss-cell-btn { box-shadow: none; } .ss-cell-add { display: none; } }
 /* スコアシートのセル色分け(画面・PDF共通) */
 .ss-cell { font-weight: 700; }
 .ss-cell.hit { color: var(--green); }

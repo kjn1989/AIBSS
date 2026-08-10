@@ -125,6 +125,7 @@ export default function ScoreSheetView({ game, onClose }) {
   // 明示的に入ったときだけ表全体を触れるようにする(見せている最中の誤タップを防ぐ)
   const [editing, setEditing] = useState(false);
   const [editLog, setEditLog] = useState(null);
+  const [draft, setDraft] = useState(null); // まだ存在しない打席を足すとき
   const logById = new Map((game.playLogs || []).map((l) => [l.id, l]));
   const logByAtBat = new Map();
   for (const l of game.playLogs || []) {
@@ -137,6 +138,17 @@ export default function ScoreSheetView({ game, onClose }) {
   };
   // マス1つ=打席1つ。マスの中の表記をそのまま押せるようにして、
   // 「何打席目か」を言葉で特定する工程を無くす
+  // 空のマスからは、記録されていなかった打席を足せる。
+  // 1巡して回ってきた打席の書き漏らしや、打順を飛ばしそびれた穴を埋めるため。
+  const addNode = (playerId, order, inning) => (
+    <button
+      type="button"
+      className="ss-cell-add"
+      onClick={() => setDraft({ inning, playerId, order })}
+      aria-label={t('ss.addCell', { inning })}
+    >＋</button>
+  );
+
   const cellNode = (c, key) => (editing ? (
     <button
       key={key}
@@ -260,6 +272,7 @@ export default function ScoreSheetView({ game, onClose }) {
                             {cellNode(c, ci)}
                           </React.Fragment>
                         ))}
+                        {editing && !(pr.byInning[i] || []).length && addNode(pr.playerId, pr.primaryOrder ?? s.order, i)}
                       </td>
                     ))}
                     {/* 集約先でない行は空欄。打撃成績はその選手の主たる行(位置欄の←印の打順)にまとめている */}
@@ -367,6 +380,7 @@ export default function ScoreSheetView({ game, onClose }) {
         </div>
       </div>
       {editLog && <EditPlaySheet game={game} log={editLog} onClose={() => setEditLog(null)} />}
+      {draft && <EditPlaySheet game={game} draft={draft} onClose={() => setDraft(null)} />}
     </FullscreenView>
   );
 }

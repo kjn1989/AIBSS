@@ -122,6 +122,33 @@ try {
   check('完了で押せなくなる', (await page.locator('.ss-cell-btn').count()) === 0);
   check('ヒントも消える', (await page.locator('.ss-edithint').count()) === 0);
 
+  // --- 空のマスから、記録されていなかった打席を足せる ---
+  await page.click('.ss-editbtn');
+  await page.waitForTimeout(400);
+  const before = await filled().count();
+  check('空マスに＋が出る', (await page.locator('.ss-cell-add').count()) > 0,
+    `n=${await page.locator('.ss-cell-add').count()}`);
+  await page.locator('.ss-cell-add').first().click();
+  await page.waitForTimeout(600);
+  check('打席を足すシートが開く', (await page.locator('.sheet').last().innerText()).includes('打席を足す'));
+  check('新規では削除ボタンを出さない', (await page.locator('.sheet button:has-text("このプレイを削除")').count()) === 0);
+  // 閉じただけでは何も増えない(保存するまで書き込まない)
+  await page.click('.sheet-actions button:has-text("キャンセル")');
+  await page.waitForTimeout(500);
+  check('閉じただけでは増えない', (await filled().count()) === before, `${before} → ${await filled().count()}`);
+
+  await page.locator('.ss-cell-add').first().click();
+  await page.waitForTimeout(600);
+  await page.click('.sheet button:has-text("四球")');
+  await page.waitForTimeout(300);
+  await page.click('.sheet-actions button:has-text("保存")');
+  await page.waitForTimeout(700);
+  check('打席が1つ増える', (await filled().count()) === before + 1, `${before} → ${await filled().count()}`);
+  check('足した打席が表に出る',
+    (await page.locator('.ss-matrix').first().innerText()).includes('四球'));
+  await page.click('.ss-editbtn');
+  await page.waitForTimeout(300);
+
   // --- 横はみ出しがない ---
   const over = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   check('横はみ出しなし', !over);
