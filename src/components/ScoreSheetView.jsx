@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useStore, usePlayerName, useT } from '../state/store.jsx';
 import { RESULTS, DIRECTIONS, formatIP, resultCategory, multiOutLabel } from '../lib/model.js';
 import { computeBoxScore } from '../lib/boxscore.js';
 import { buildLineupRows, assignAtBatsByPlayer } from '../lib/lineupBox.js';
 import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf } from '../lib/oppBox.js';
 import FullscreenView from './FullscreenView.jsx';
+import EditPlaySheet from './EditPlaySheet.jsx';
 
 // 打席結果の超短縮表記(スコアシートのセル用): 例「中安」「遊ゴ」「左本」「四球」/ 英語は "LF1B" 等。
 // editionが少年野球のときは 併殺→ゲ, エラー→エ の親しみ表記。
@@ -102,6 +103,7 @@ export default function ScoreSheetView({ game, onClose }) {
           txt: shortLabel(ab, edition, lang, t),
           cat: resultCategory(ab.result),
           multi: multiOutLabel(ab.outsOnPlay || 0),
+          abId: ab.id, // 押されたマスから打席ログを一意に引くための手掛かり
         });
       }
       return {
@@ -119,6 +121,36 @@ export default function ScoreSheetView({ game, onClose }) {
     slots.push({ order, playerRows });
   }
 
+  // 修正モード。押せるのは「戻る・印刷」だけ、という状態を既定にして、
+  // 明示的に入ったときだけ表全体を触れるようにする(見せている最中の誤タップを防ぐ)
+  const [editing, setEditing] = useState(false);
+  const [editLog, setEditLog] = useState(null);
+  const logById = new Map((game.playLogs || []).map((l) => [l.id, l]));
+  const logByAtBat = new Map();
+  for (const l of game.playLogs || []) {
+    if (l.kind === 'atbat' && l.payload?.atBatId) logByAtBat.set(l.payload.atBatId, l);
+  }
+  // 押されたマスから編集対象のログを引く。旧データで atBatId が無い場合は開かない
+  const openCell = (c) => {
+    const log = c.logId ? logById.get(c.logId) : logByAtBat.get(c.abId);
+    if (log) setEditLog(log);
+  };
+  // マス1つ=打席1つ。マスの中の表記をそのまま押せるようにして、
+  // 「何打席目か」を言葉で特定する工程を無くす
+  const cellNode = (c, key) => (editing ? (
+    <button
+      key={key}
+      type="button"
+      className={`ss-cell ss-cell-btn ${c.cat}`}
+      onClick={() => openCell(c)}
+      aria-label={t('ss.editCell', { label: c.txt })}
+    >
+      {c.txt}{c.multi ? <b className="ss-mp" title={c.multi}>⚡</b> : ''}
+    </button>
+  ) : (
+    <span key={key} className={`ss-cell ${c.cat}`}>{c.txt}{c.multi ? <b className="ss-mp" title={c.multi}>⚡</b> : ''}</span>
+  ));
+
   const records = [...game.pitchingRecords].sort((a, b) => a.appearanceOrder - b.appearanceOrder);
 
   // ---- 相手チーム: 記号(A〜T)で記録された打席を、同じ打順マトリクスに組む ----
@@ -135,6 +167,7 @@ export default function ScoreSheetView({ game, onClose }) {
       txt: shortLabel(p, edition, lang, t),
       cat: resultCategory(p.result),
       multi: multiOutLabel(p.outsOnPlay || 0),
+      logId: l.id,
     });
     oppCells.set(p.letter, m);
   }
@@ -158,10 +191,15 @@ export default function ScoreSheetView({ game, onClose }) {
       <header className="fullscreen-header no-print">
         <button className="ghost small" onClick={onClose}>{t('action.back')}</button>
         <h2>{t('ss.title')}</h2>
-        <button className="primary small" onClick={() => window.print()}>{t('ss.print')}</button>
+        <button className="ghost small" onClick={() => window.print()}>{t('ss.print')}</button>
+        <button
+          className={`small ss-editbtn${editing ? ' on' : ''}`}
+          onClick={() => setEditing((v) => !v)}
+        >{editing ? t('ss.editDone') : t('ss.editStart')}</button>
       </header>
+      {editing && <div className="ss-edithint no-print">{t('ss.editHint')}</div>}
       <div className="fullscreen-body">
-        <div className="scoresheet-root">
+        <div className={`scoresheet-root${editing ? ' ss-edit' : ''}`}>
           <div className="ss-title">
             <b>{teamName} vs {oppName}</b>
             <span>{game.date} / {game.status === 'finished' ? t('ss.finished') : t('score.logInning', { inning: game.inning, half: t(game.isTop ? 'half.top' : 'half.bottom') })}</span>
@@ -219,7 +257,7 @@ export default function ScoreSheetView({ game, onClose }) {
                         {(pr.byInning[i] || []).map((c, ci) => (
                           <React.Fragment key={ci}>
                             {ci > 0 && <span className="ss-sep">/</span>}
-                            <span className={`ss-cell ${c.cat}`}>{c.txt}{c.multi ? <b className="ss-mp" title={c.multi}>⚡</b> : ''}</span>
+                            {cellNode(c, ci)}
                           </React.Fragment>
                         ))}
                       </td>
@@ -257,7 +295,7 @@ export default function ScoreSheetView({ game, onClose }) {
                           {(pr.byInning[i] || []).map((c, ci) => (
                             <React.Fragment key={ci}>
                               {ci > 0 && <span className="ss-sep">/</span>}
-                              <span className={`ss-cell ${c.cat}`}>{c.txt}{c.multi ? <b className="ss-mp" title={c.multi}>⚡</b> : ''}</span>
+                              {cellNode(c, ci)}
                             </React.Fragment>
                           ))}
                         </td>
@@ -328,6 +366,7 @@ export default function ScoreSheetView({ game, onClose }) {
           <div className="ss-footer">{t('ss.footer')}</div>
         </div>
       </div>
+      {editLog && <EditPlaySheet game={game} log={editLog} onClose={() => setEditLog(null)} />}
     </FullscreenView>
   );
 }

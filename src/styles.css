@@ -1283,6 +1283,28 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 /* 結果セルは1文字ずつ縦に折り返して細い列に収める(中安→中/安) */
 .ss-matrix td .ss-cell { display: inline-block; word-break: break-all; line-height: 1.15; }
 .ss-footer { text-align: center; font-size: 10px; color: var(--text-dim); }
+
+/* ---- スコアシートの修正モード ----
+   シートは見るだけだったので、直すには別画面を探すか文章で頼むしかなかった。
+   押したマスがそのまま対象になるので、「何打席目か」を言葉で特定する工程が要らない。 */
+.ss-editbtn {
+  background: var(--accent-2); border: 1px solid var(--accent-2); color: #fff;
+  font-weight: 800; white-space: nowrap;
+}
+.ss-editbtn.on { background: var(--green); border-color: var(--green); color: #06210f; }
+.ss-edithint {
+  padding: 9px 14px; font-size: 12px; line-height: 1.5;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-bottom: 1px solid var(--border);
+}
+.ss-cell-btn {
+  border: 0; background: transparent; color: inherit; font: inherit;
+  padding: 1px 3px; border-radius: 4px; cursor: pointer;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.ss-cell-btn:hover, .ss-cell-btn:active { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.ss-cell-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+@media print { .ss-cell-btn { box-shadow: none; } }
 /* スコアシートのセル色分け(画面・PDF共通) */
 .ss-cell { font-weight: 700; }
 .ss-cell.hit { color: var(--green); }
