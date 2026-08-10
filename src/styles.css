@@ -925,6 +925,7 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
 /* ファイル選択をボタン風に見せる(label + 非表示input) */
 .file-btn {
   display: flex; align-items: center; justify-content: center;
@@ -1312,7 +1313,45 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 }
 .ss-cell-add:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
 .ss-cell-add:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ss-inn-btn {
+  border: 0; background: transparent; color: var(--accent); font: inherit; font-weight: 800;
+  padding: 2px 6px; border-radius: 4px; cursor: pointer;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 62%, transparent);
+}
+.ss-inn-btn:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.ss-inn-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 @media print { .ss-cell-btn { box-shadow: none; } .ss-cell-add { display: none; } }
+
+/* ---- 回の流れ ----
+   交代は打席と打席の「間」に起きるのでマス目では表せない。
+   ここでは起きた順に並べ、交代の行の位置=タイミングとして直せるようにする。 */
+.flow-half {
+  display: flex; gap: 4px; background: var(--bg); border: 1px solid var(--border);
+  border-radius: 10px; padding: 3px; margin-bottom: 12px;
+}
+.flow-half button { flex: 1; border: 0; background: transparent; color: var(--text-dim); font-size: 13px; font-weight: 700; padding: 9px 4px; }
+.flow-half button.primary { background: var(--accent-2); color: #fff; }
+.flow-list { display: flex; flex-direction: column; gap: 7px; }
+.flow-ev {
+  display: flex; align-items: center; gap: 9px; width: 100%; text-align: left;
+  border: 1px solid var(--border); background: var(--bg-3); color: var(--text);
+  border-radius: 10px; padding: 9px 10px;
+}
+.flow-ev.open { border-color: var(--accent); }
+.flow-ev .fe-ic { width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; font-size: 11px; flex: none; background: var(--bg-2); }
+.flow-ev .fe-who { font-size: 13px; font-weight: 700; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flow-ev .fe-res { font-size: 13px; font-weight: 800; flex: none; }
+.flow-ev .fe-tag { font-size: 10px; color: var(--text-dim); flex: none; }
+.flow-ev.k-sub, .flow-ev.k-pitcher, .flow-ev.k-oppsub, .flow-ev.k-opppitcher {
+  border-color: color-mix(in srgb, var(--purple) 55%, transparent);
+  background: color-mix(in srgb, var(--purple) 13%, transparent);
+}
+.flow-ev.k-sub .fe-ic, .flow-ev.k-pitcher .fe-ic,
+.flow-ev.k-oppsub .fe-ic, .flow-ev.k-opppitcher .fe-ic { background: var(--purple); color: #1a0c2e; }
+.flow-ev.k-run { border-color: color-mix(in srgb, var(--green) 55%, transparent); background: color-mix(in srgb, var(--green) 12%, transparent); }
+.flow-ev.k-run .fe-ic { background: var(--green); color: #06210f; }
+.flow-ev.k-sb .fe-ic { background: var(--accent); color: #04121f; }
+.flow-box { padding: 11px 12px; border-radius: 10px; background: var(--bg-2); border: 1px dashed var(--accent); }
 /* スコアシートのセル色分け(画面・PDF共通) */
 .ss-cell { font-weight: 700; }
 .ss-cell.hit { color: var(--green); }

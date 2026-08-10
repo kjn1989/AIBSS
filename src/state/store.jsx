@@ -11,6 +11,7 @@ import {
 } from '../lib/model.js';
 import { generateDemoData } from '../lib/demo.js';
 import { rebuildPitchingStats } from '../lib/pitchingRebuild.js';
+import { swapTargetIndex } from '../lib/logOrder.js';
 import { resolveStarters, alignmentByInning, findPositionIssues } from '../lib/lineupBox.js';
 
 // 1人しか就けない守備位置(「打」=全員打ち・「控」は複数人可)。位置変更の入れ替え判定に使う。
@@ -1357,6 +1358,32 @@ export function reducer(state, action) {
       const nxt = g.playLogs[idx + 1];
       if (nxt && nxt.kind === 'run' && nxt.payload?.playerId === oldId) {
         nxt.payload = { ...nxt.payload, playerId: newId };
+      }
+      g.updatedAt = Date.now();
+      return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
+    }
+
+    // ===== 回の中の出来事を1つ動かす(交代のタイミングを直す) =====
+    // 交代は打席と打席の「間」に起きるので、マス目では表せない。
+    // ログの並び順そのものが「どの打席の後か」なので、隣と入れ替えることで直す。
+    // 打席同士は動かさない。打順は野球のルールで決まっていて人が並べ替えるものではなく、
+    // 動かせるようにすると打順の並びを壊す操作を用意することになる。
+    case 'MOVE_PLAY_LOG': {
+      const g = deep(state.games[action.gameId]);
+      const idx = g.playLogs.findIndex((l) => l.id === action.logId);
+      if (idx < 0) return state;
+      const me = g.playLogs[idx];
+      const to = swapTargetIndex(g.playLogs, action.logId, action.dir);
+      if (to < 0) return state;
+      g.playLogs[idx] = g.playLogs[to];
+      g.playLogs[to] = me;
+      // 継投の位置が変わると投球回の割り振りが変わる
+      if (me.kind === 'pitcher' || me.kind === 'sub' || g.playLogs[idx].kind === 'pitcher') {
+        const { records, lastPitcherId } = rebuildPitchingStats(g);
+        if (records.length) {
+          g.pitchingRecords = records;
+          g.currentPitcherId = lastPitcherId || g.currentPitcherId;
+        }
       }
       g.updatedAt = Date.now();
       return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };

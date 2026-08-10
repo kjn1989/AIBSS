@@ -149,6 +149,33 @@ try {
   await page.click('.ss-editbtn');
   await page.waitForTimeout(300);
 
+  // --- 回の流れ: 交代のタイミングを直せる ---
+  await page.click('.ss-editbtn');
+  await page.waitForTimeout(400);
+  check('イニングの数字が押せる', (await page.locator('.ss-inn-btn').count()) > 0,
+    `n=${await page.locator('.ss-inn-btn').count()}`);
+  await page.locator('.ss-inn-btn').first().click();
+  await page.waitForTimeout(600);
+  const flow = page.locator('.sheet').last();
+  check('回の流れが開く', (await flow.innerText()).includes('回の流れ'));
+  check('攻撃と守備を切り替えられる', (await page.locator('.flow-half button').count()) === 2);
+  check('出来事が並ぶ', (await page.locator('.flow-ev').count()) > 0,
+    `n=${await page.locator('.flow-ev').count()}`);
+
+  // 打席の行には上下移動を出さない(打順を壊す操作をこちらから用意しない)
+  await page.locator('.flow-ev.k-atbat').first().click();
+  await page.waitForTimeout(300);
+  check('打席は上下に動かせない', (await page.locator('.flow-box button:has-text("1つ上へ")').count()) === 0);
+  check('打席は編集へ飛べる', (await page.locator('.flow-box button:has-text("この打席を直す")').count()) === 1);
+  check('動かせない理由が書いてある', (await page.locator('.flow-box').innerText()).includes('打順で決まる'));
+
+  // 打席の行から編集シートへ繋がる
+  await page.click('.flow-box button:has-text("この打席を直す")');
+  await page.waitForTimeout(600);
+  check('流れから打席編集へ飛べる', (await page.locator('.sheet').last().innerText()).includes('回'));
+  await page.click('.sheet-actions button:has-text("キャンセル")');
+  await page.waitForTimeout(400);
+
   // --- 横はみ出しがない ---
   const over = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   check('横はみ出しなし', !over);
