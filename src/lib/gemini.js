@@ -184,7 +184,7 @@ defense=その回からの守備位置の申告。「3〜6回はキャッチャ�
 複数の交代・登板があれば全て漏れなく列挙する。該当が無ければ operations は空配列。登録名に無い選手名は使わない。回や打者は下記の記録から特定する。
 【登録選手】${pl}
 【現在の打順】${lu}
-【自軍の打席記録】\n${ab}
+【自チームの打席記録】\n${ab}
 【文章】${text}`;
   const r = await callGeminiJSON(apiKey, prompt, { maxOutputTokens: 1536, temperature: 0.15 });
   if (!r || r.error) return r;

@@ -60,7 +60,7 @@ export default function MatchupCard({ games, onOpenPlayer }) {
       <h2>{t('matchup.title')}</h2>
 
       {/* 見る向きの切り替え。3つ並べる形式ではなく2択なので左右に並べる */}
-      <div className="seg-control" style={{ marginBottom: 8 }}>
+      <div className="seg-control tight" style={{ marginBottom: 8 }}>
         <button className={side === 'batting' ? 'on' : ''} onClick={() => setSide('batting')}>{t('matchup.sideBat')}</button>
         <button className={side === 'pitching' ? 'on' : ''} onClick={() => setSide('pitching')}>{t('matchup.sidePit')}</button>
       </div>
