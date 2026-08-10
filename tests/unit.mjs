@@ -7,6 +7,7 @@ import { gameEndCheck, initialPresetIdFor, describeRules } from '../src/lib/rule
 import { aggregateBatting, aggregatePitching, battingMetrics, pitchingMetrics, titleLeaders, DETAIL_METRICS, detailRanking, defaultInningBasis } from '../src/lib/stats.js';
 import { translate } from '../src/lib/i18n.js';
 import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, parseDirectionOnly, parseContact, playLabel } from '../src/lib/voiceParser.js';
+import { swapTargetIndex, timingAnchor } from '../src/lib/logOrder.js';
 import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, assignResultTargets, mergeResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parsePositionSwaps, keepsBattingOrder, explicitOrderChange, stripInningFractions, parseInningRange, parseSlotBatters, parseAtBatDeletions, parseShortResult, isExplicitSubText, inGamePlayerIds, preferInGamePlayers } from '../src/lib/correctionParser.js';
 import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarters, findPositionIssues } from '../src/lib/lineupBox.js';
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
@@ -424,6 +425,42 @@ test('parseResultCorrections: 1文に複数の打席(「山城は3回に中2、4
 
 // 打者一巡した回は同じ打者が同じ回に2打席立つ。どちらの打席かを言えないと、
 // 2打席目に手が届かず、2文書いても両方が1打席目に当たって上書きになる。
+// 交代は打席と打席の「間」に起きる。並び順そのものがタイミングなので、
+// 隣と入れ替えて直す。打席を動かせるようにすると打順の並びを壊す操作を用意することになる。
+test('swapTargetIndex: 交代だけを、同じ回の中で動かす', () => {
+  const L = [
+    { id: 'a1', kind: 'atbat', inning: 5, isTop: true },
+    { id: 's1', kind: 'pitcher', inning: 5, isTop: true },
+    { id: 'a2', kind: 'atbat', inning: 5, isTop: true },
+    { id: 'c1', kind: 'change', inning: 5, isTop: false },
+    { id: 'a3', kind: 'atbat', inning: 6, isTop: true },
+  ];
+  assert.equal(swapTargetIndex(L, 's1', -1), 0);
+  assert.equal(swapTargetIndex(L, 's1', 1), 2);
+  // 打席は動かせない
+  assert.equal(swapTargetIndex(L, 'a1', 1), -1);
+  assert.equal(swapTargetIndex(L, 'a2', -1), -1);
+  // 表裏や回はまたがない
+  assert.equal(swapTargetIndex(L, 'c1', -1), -1);
+  assert.equal(swapTargetIndex(L, 'c1', 1), -1);
+  // 端やIDなしは動かない
+  assert.equal(swapTargetIndex(L, 'zz', 1), -1);
+});
+
+test('timingAnchor: 直前の打席が「どの打席の後か」になる', () => {
+  const rows = [
+    { id: 'a1', kind: 'atbat' },
+    { id: 'r1', kind: 'run' },
+    { id: 's1', kind: 'pitcher' },
+    { id: 'a2', kind: 'atbat' },
+  ];
+  // 得点をまたいでも、直前の「打席」を指す
+  assert.equal(timingAnchor(rows, 2).id, 'a1');
+  // 回の先頭に置かれていれば拠り所は無い
+  assert.equal(timingAnchor(rows, 0), null);
+  assert.equal(timingAnchor([{ id: 's', kind: 'sub' }, { id: 'a', kind: 'atbat' }], 0), null);
+});
+
 test('parseResultCorrections: 打者一巡の回で1打席目/2打席目を撃ち分ける', () => {
   const PS = [{ id: 'i', name: '磯野' }];
   // 明示指定

@@ -6,6 +6,7 @@ import { buildLineupRows, assignAtBatsByPlayer } from '../lib/lineupBox.js';
 import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf } from '../lib/oppBox.js';
 import FullscreenView from './FullscreenView.jsx';
 import EditPlaySheet from './EditPlaySheet.jsx';
+import InningFlowSheet from './InningFlowSheet.jsx';
 
 // 打席結果の超短縮表記(スコアシートのセル用): 例「中安」「遊ゴ」「左本」「四球」/ 英語は "LF1B" 等。
 // editionが少年野球のときは 併殺→ゲ, エラー→エ の親しみ表記。
@@ -126,6 +127,7 @@ export default function ScoreSheetView({ game, onClose }) {
   const [editing, setEditing] = useState(false);
   const [editLog, setEditLog] = useState(null);
   const [draft, setDraft] = useState(null); // まだ存在しない打席を足すとき
+  const [flowInn, setFlowInn] = useState(null); // 回の流れ(交代のタイミングを直す)
   const logById = new Map((game.playLogs || []).map((l) => [l.id, l]));
   const logByAtBat = new Map();
   for (const l of game.playLogs || []) {
@@ -148,6 +150,12 @@ export default function ScoreSheetView({ game, onClose }) {
       aria-label={t('ss.addCell', { inning })}
     >＋</button>
   );
+
+  // イニングの数字から「回の流れ」を開く。交代は打席の間に起きるので、
+  // マス目だけでは「何番の後で代わったか」を永久に直せない
+  const innHead = (i) => (editing ? (
+    <button type="button" className="ss-inn-btn" onClick={() => setFlowInn(i)} aria-label={t('flow.title', { inning: i })}>{i}</button>
+  ) : i);
 
   const cellNode = (c, key) => (editing ? (
     <button
@@ -249,7 +257,7 @@ export default function ScoreSheetView({ game, onClose }) {
               <thead>
                 <tr>
                   <th>{t('ss.order')}</th><th>{t('box.pos')}</th><th className="ss-name">{t('stats.player')}</th>
-                  {innings.map((i) => <th key={i}>{i}</th>)}
+                  {innings.map((i) => <th key={i}>{innHead(i)}</th>)}
                   <th>{t('ss.ab')}</th><th>{t('ss.hits')}</th><th>{t('ss.rbi')}</th>
                 </tr>
               </thead>
@@ -293,7 +301,7 @@ export default function ScoreSheetView({ game, onClose }) {
                 <thead>
                   <tr>
                     <th>{t('ss.order')}</th><th>{t('box.pos')}</th><th className="ss-name">{t('stats.player')}</th>
-                    {innings.map((i) => <th key={i}>{i}</th>)}
+                    {innings.map((i) => <th key={i}>{innHead(i)}</th>)}
                     <th>{t('ss.ab')}</th><th>{t('ss.hits')}</th><th>{t('ss.rbi')}</th>
                   </tr>
                 </thead>
@@ -381,6 +389,14 @@ export default function ScoreSheetView({ game, onClose }) {
       </div>
       {editLog && <EditPlaySheet game={game} log={editLog} onClose={() => setEditLog(null)} />}
       {draft && <EditPlaySheet game={game} draft={draft} onClose={() => setDraft(null)} />}
+      {flowInn != null && (
+        <InningFlowSheet
+          game={game}
+          inning={flowInn}
+          onClose={() => setFlowInn(null)}
+          onEditLog={(l) => { setFlowInn(null); setEditLog(l); }}
+        />
+      )}
     </FullscreenView>
   );
 }
