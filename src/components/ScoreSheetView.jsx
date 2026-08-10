@@ -8,6 +8,7 @@ import FullscreenView from './FullscreenView.jsx';
 import EditPlaySheet from './EditPlaySheet.jsx';
 import InningFlowSheet from './InningFlowSheet.jsx';
 import DefenseFixSheet from './DefenseFixSheet.jsx';
+import PitchingFixSheet from './PitchingFixSheet.jsx';
 
 // 打席結果の超短縮表記(スコアシートのセル用): 例「中安」「遊ゴ」「左本」「四球」/ 英語は "LF1B" 等。
 // editionが少年野球のときは 併殺→ゲ, エラー→エ の親しみ表記。
@@ -130,6 +131,7 @@ export default function ScoreSheetView({ game, onClose }) {
   const [draft, setDraft] = useState(null); // まだ存在しない打席を足すとき
   const [flowInn, setFlowInn] = useState(null); // 回の流れ(交代のタイミングを直す)
   const [defFix, setDefFix] = useState(null); // 守備・交代(何を直すかを先に選ばせる)
+  const [pitFix, setPitFix] = useState(null); // 投手成績(記録から計算した値と並べて見せる)
   const logById = new Map((game.playLogs || []).map((l) => [l.id, l]));
   const logByAtBat = new Map();
   for (const l of game.playLogs || []) {
@@ -206,7 +208,11 @@ export default function ScoreSheetView({ game, onClose }) {
   })).filter((s) => s.playerRows.length);
   const hasOpp = oppCells.size > 0;
   // 相手投手: 球数は記録済み、その他は自軍の打席から逆算(自責点は追えないので出さない)
-  const oppPit = oppPitchingStats(game).filter((r) => r.bf > 0 || r.pitches > 0);
+  // 相手投手の成績は打席記録から導いているだけなので、人が決めた値は上書きとして持つ
+  const oppFix = game.oppPitchingFix || {};
+  const oppPit = oppPitchingStats(game)
+    .map((r) => ({ ...r, ...(oppFix[r.letter] || {}), fixed: !!oppFix[r.letter] }))
+    .filter((r) => r.bf > 0 || r.pitches > 0 || oppFix[r.letter]);
 
   return (
     <FullscreenView>
@@ -361,7 +367,13 @@ export default function ScoreSheetView({ game, onClose }) {
               <tbody>
                 {records.map((pr) => (
                   <tr key={pr.id}>
-                    <td className="ss-name" title={nameOf(pr.playerId)}>{nameOf(pr.playerId)}</td>
+                    <td className="ss-name" title={nameOf(pr.playerId)}>
+                      {editing ? (
+                        <button type="button" className="ss-row-btn" onClick={() => setPitFix({ side: 'own', id: pr.playerId })} aria-label={t('pf.title')}>
+                          {nameOf(pr.playerId)}
+                        </button>
+                      ) : nameOf(pr.playerId)}
+                    </td>
                     <td>{formatIP(pr.outsRecorded)}</td>
                     <td>{pr.runs}</td>
                     <td>{pr.earnedRuns}</td>
@@ -388,7 +400,13 @@ export default function ScoreSheetView({ game, onClose }) {
                 <tbody>
                   {oppPit.map((r) => (
                     <tr key={r.letter}>
-                      <td className="ss-name" title={oppNameOf(game, r.letter)}>{oppNameOf(game, r.letter)}</td>
+                      <td className="ss-name" title={oppNameOf(game, r.letter)}>
+                        {editing ? (
+                          <button type="button" className="ss-row-btn" onClick={() => setPitFix({ side: 'opp', id: r.letter })} aria-label={t('pf.title')}>
+                            {oppNameOf(game, r.letter)}{r.fixed ? ' ✎' : ''}
+                          </button>
+                        ) : <>{oppNameOf(game, r.letter)}{r.fixed ? ' ✎' : ''}</>}
+                      </td>
                       <td>{formatIP(r.outs)}</td>
                       <td>{r.runs}</td>
                       <td>{r.h}</td>
@@ -414,6 +432,15 @@ export default function ScoreSheetView({ game, onClose }) {
           order={defFix.order}
           currentPos={defFix.pos}
           onClose={() => setDefFix(null)}
+        />
+      )}
+      {pitFix && (
+        <PitchingFixSheet
+          game={game}
+          side={pitFix.side}
+          id={pitFix.id}
+          onClose={() => setPitFix(null)}
+          onOpenFlow={(n) => { setPitFix(null); setFlowInn(n); }}
         />
       )}
       {flowInn != null && (
