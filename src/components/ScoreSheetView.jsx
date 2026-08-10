@@ -7,6 +7,7 @@ import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingS
 import FullscreenView from './FullscreenView.jsx';
 import EditPlaySheet from './EditPlaySheet.jsx';
 import InningFlowSheet from './InningFlowSheet.jsx';
+import DefenseFixSheet from './DefenseFixSheet.jsx';
 
 // 打席結果の超短縮表記(スコアシートのセル用): 例「中安」「遊ゴ」「左本」「四球」/ 英語は "LF1B" 等。
 // editionが少年野球のときは 併殺→ゲ, エラー→エ の親しみ表記。
@@ -128,6 +129,7 @@ export default function ScoreSheetView({ game, onClose }) {
   const [editLog, setEditLog] = useState(null);
   const [draft, setDraft] = useState(null); // まだ存在しない打席を足すとき
   const [flowInn, setFlowInn] = useState(null); // 回の流れ(交代のタイミングを直す)
+  const [defFix, setDefFix] = useState(null); // 守備・交代(何を直すかを先に選ばせる)
   const logById = new Map((game.playLogs || []).map((l) => [l.id, l]));
   const logByAtBat = new Map();
   for (const l of game.playLogs || []) {
@@ -267,11 +269,27 @@ export default function ScoreSheetView({ game, onClose }) {
                     <td>{ri === 0 ? s.order : ''}</td>
                     {/* 打順を移った選手は「←8」「→9」で移動元/先を示し、途中出場と区別できるようにする */}
                     <td className="ss-pos">
-                      {pr.notation}
+                      {editing ? (
+                        <button
+                          type="button"
+                          className="ss-row-btn"
+                          onClick={() => setDefFix({ playerId: pr.playerId, order: pr.primaryOrder ?? s.order, pos: pr.posCode || '' })}
+                          aria-label={t('df.title')}
+                        >{pr.notation}</button>
+                      ) : pr.notation}
                       {pr.fromOrder != null && <span className="ss-move" title={t('box.fromOrder', { n: pr.fromOrder })}>←{pr.fromOrder}</span>}
                       {pr.toOrder != null && <span className="ss-move" title={t('box.toOrder', { n: pr.toOrder })}>→{pr.toOrder}</span>}
                     </td>
-                    <td className="ss-name" title={nameOf(pr.playerId)}>{nameOf(pr.playerId)}</td>
+                    <td className="ss-name" title={nameOf(pr.playerId)}>
+                      {editing ? (
+                        <button
+                          type="button"
+                          className="ss-row-btn"
+                          onClick={() => setDefFix({ playerId: pr.playerId, order: pr.primaryOrder ?? s.order, pos: pr.posCode || '' })}
+                          aria-label={t('df.title')}
+                        >{nameOf(pr.playerId)}</button>
+                      ) : nameOf(pr.playerId)}
+                    </td>
                     {innings.map((i) => (
                       <td key={i}>
                         {(pr.byInning[i] || []).map((c, ci) => (
@@ -389,6 +407,15 @@ export default function ScoreSheetView({ game, onClose }) {
       </div>
       {editLog && <EditPlaySheet game={game} log={editLog} onClose={() => setEditLog(null)} />}
       {draft && <EditPlaySheet game={game} draft={draft} onClose={() => setDraft(null)} />}
+      {defFix && (
+        <DefenseFixSheet
+          game={game}
+          playerId={defFix.playerId}
+          order={defFix.order}
+          currentPos={defFix.pos}
+          onClose={() => setDefFix(null)}
+        />
+      )}
       {flowInn != null && (
         <InningFlowSheet
           game={game}
