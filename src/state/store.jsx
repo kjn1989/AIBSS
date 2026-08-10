@@ -1362,6 +1362,53 @@ export function reducer(state, action) {
       return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
     }
 
+    // ===== 記録されていなかった打席をあとから足す =====
+    // 打順を飛ばしそびれた・1巡して回ってきた打席を書き漏らした、といった穴を埋める。
+    // 走者と得点はこの操作では動かさない(何が起きたかは分からないため)。
+    // 打った結果と打点だけを残し、成績は他と同じように再計算に任せる。
+    case 'ADD_RETRO_ATBAT': {
+      const g = deep(state.games[action.gameId]);
+      const inning = Number(action.inning);
+      const isTop = !g.isHome;
+      const ab = newAtBat({
+        gameId: g.id,
+        playerId: action.playerId,
+        order: action.order ?? null,
+        snapshot: { runners: { 1: null, 2: null, 3: null }, outs: 0, inning, isTop, scoreDiff: 0 },
+      });
+      ab.result = action.result;
+      ab.outType = action.outType ?? null;
+      ab.soType = action.result === 'so' ? (action.soType || null) : null;
+      ab.direction = action.direction ?? null;
+      ab.rbi = action.rbi || 0;
+      ab.contact = action.contact ?? null;
+      ab.hitAngle = action.hitAngle ?? null;
+      ab.hitDepth = action.hitDepth ?? null;
+      g.atBats.push(ab);
+      const label = (action.result === 'so' && SO_TYPES[action.soType]) || RESULTS[action.result]?.label || action.result;
+      const plog = newPlayLog({
+        gameId: g.id, inning, isTop, kind: 'atbat',
+        text: `${playerNameOf(state, action.playerId)} ${DIRECTIONS[action.direction] || ''}${label}`,
+        payload: {
+          atBatId: ab.id, playerId: action.playerId, order: action.order ?? null,
+          result: action.result, outType: action.outType ?? null,
+          soType: action.result === 'so' ? (action.soType || null) : null,
+          direction: action.direction ?? null, contact: action.contact ?? null,
+          hitAngle: action.hitAngle ?? null, hitDepth: action.hitDepth ?? null,
+          rbi: action.rbi || 0, runs: 0, outsOnPlay: 0,
+        },
+      });
+      // その回の中に入れる(回をまたいで末尾に付くと、流れの並びが崩れる)
+      let at = -1;
+      for (let i = g.playLogs.length - 1; i >= 0; i--) {
+        if (Number(g.playLogs[i].inning) === inning) { at = i + 1; break; }
+      }
+      if (at < 0) at = g.playLogs.findIndex((l) => Number(l.inning || 0) > inning);
+      if (at < 0) g.playLogs.push(plog); else g.playLogs.splice(at, 0, plog);
+      g.updatedAt = Date.now();
+      return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
+    }
+
     // ===== 文章での守備位置変更(あとから「◯回からこの位置」を差し込む) =====
     // 交代ではなく、既に出場している選手の守備位置だけが変わったケース
     // (例: 7回からショート茂木・サード入交・セカンド宇田川、という内野の組み替え)。
