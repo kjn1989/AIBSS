@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { useStore, useT } from '../state/store.jsx';
 import {
-  currentRules, diffLiveRules, describeRulePatch, runnersPlaced,
-  FIELD_COUNT_MIN, FIELD_COUNT_MAX, ALL_BAT_MIN, ALL_BAT_MAX, TIEBREAK_RUNNERS, TIEBREAK_ORDERS,
+  currentRules, diffLiveRules, describeRulePatch, runnersPlaced, DEFAULT_TIEBREAK,
+  FIELD_COUNT_MIN, FIELD_COUNT_MAX, ALL_BAT_MIN, ALL_BAT_MAX,
+  TIEBREAK_RUNNERS, TIEBREAK_ORDERS, TIEBREAK_OUTS,
 } from '../lib/rules.js';
 import Sheet from './Sheet.jsx';
 
@@ -80,12 +81,13 @@ export default function LiveRulesSheet({ game, draft, onDraft, onClose, defaultI
   const innLabel = (n) => t('lr.inningN', { n });
   const runnerName = (k) => t(`lr.runner.${k}`);
   const orderName = (k) => t(`lr.order.${k}`);
+  const outsName = (k) => t(`lr.outs.${k}`);
 
   // タイブレークは規定回を投げ切った後から始まるのがふつう(7回制なら8回)。
   // 試合中に決めるなら、少なくとも今の回より先から。
   const regulation = Number(regulationInnings || game?.rules?.innings) || 7;
   const setTbOn = (on) => setTb(on
-    ? { fromInning: clampInt(Math.max(regulation + 1, lastInning + 1), 1, 99), runners: '2', order: 'cont' }
+    ? { fromInning: clampInt(Math.max(regulation + 1, lastInning + 1), 1, 99), ...DEFAULT_TIEBREAK }
     : null);
   const setAllOn = (on) => setAllBat(on ? { size: ALL_BAT_MIN } : null);
 
@@ -165,6 +167,12 @@ export default function LiveRulesSheet({ game, draft, onDraft, onClose, defaultI
             onChange={(v) => setTb({ ...tb, fromInning: v })}
             items={tbInnings.map((n) => ({ k: n, n: innLabel(n) }))}
           />
+          <label className="small dim mt8" style={{ display: 'block' }}>{t('lr.tb.outs')}</label>
+          <Chips
+            label={t('lr.tb.outs')} value={Number(tb.outs) || 0}
+            onChange={(v) => setTb({ ...tb, outs: v })}
+            items={TIEBREAK_OUTS.map((k) => ({ k, n: outsName(k) }))}
+          />
           <label className="small dim mt8" style={{ display: 'block' }}>{t('lr.tb.runners')}</label>
           <Chips
             label={t('lr.tb.runners')} value={tb.runners}
@@ -185,19 +193,6 @@ export default function LiveRulesSheet({ game, draft, onDraft, onClose, defaultI
         </div>
       )}
 
-      {/* ---- 守備の人数 ---- */}
-      <div className="section-title">{t('lr.fc.title')}</div>
-      <p className="small dim" style={{ marginTop: -4 }}>{t('lr.fc.sub')}</p>
-      <Chips
-        label={t('lr.fc.title')} value={fieldCount} onChange={setFieldCount}
-        items={range(FIELD_COUNT_MIN, FIELD_COUNT_MAX).map((n) => ({ k: n, n: t('lr.peopleN', { n }) }))}
-      />
-      <div className="keep-box">
-        {fieldCount === 9 ? t('lr.fc.normal')
-          : fieldCount < 9 ? <><b>{t('lr.effect')}</b> {t('lr.fc.short', { n: 9 - fieldCount })}</>
-            : <><b>{t('lr.effect')}</b> {t('lr.fc.extra')}</>}
-      </div>
-
       {/* ---- 全員打ち ---- */}
       <div className="section-title">{t('lr.ab.title')}</div>
       <p className="small dim" style={{ marginTop: -4 }}>{t('lr.ab.sub')}</p>
@@ -214,10 +209,23 @@ export default function LiveRulesSheet({ game, draft, onDraft, onClose, defaultI
         </div>
       )}
 
+      {/* ---- 守備の人数 ---- */}
+      <div className="section-title">{t('lr.fc.title')}</div>
+      <p className="small dim" style={{ marginTop: -4 }}>{t('lr.fc.sub')}</p>
+      <Chips
+        label={t('lr.fc.title')} value={fieldCount} onChange={setFieldCount}
+        items={range(FIELD_COUNT_MIN, FIELD_COUNT_MAX).map((n) => ({ k: n, n: t('lr.peopleN', { n }) }))}
+      />
+      <div className="keep-box">
+        {fieldCount === 9 ? t('lr.fc.normal')
+          : fieldCount < 9 ? <><b>{t('lr.effect')}</b> {t('lr.fc.short', { n: 9 - fieldCount })}</>
+            : <><b>{t('lr.effect')}</b> {t('lr.fc.extra')}</>}
+      </div>
+
       {/* ---- 保存前のまとめ ---- */}
       <div className="lr-sum">
         <b>{t('lr.summary')}</b>
-        <div>{tb ? t('lr.sum.tbOn', { n: tb.fromInning, r: runnerName(tb.runners), o: orderName(tb.order) }) : t('lr.sum.tbOff')}</div>
+        <div>{tb ? t('lr.sum.tbOn', { n: tb.fromInning, o: outsName(Number(tb.outs) || 0), r: runnerName(tb.runners), b: orderName(tb.order) }) : t('lr.sum.tbOff')}</div>
         <div>{fieldCount === 9 ? t('lr.sum.fcNormal') : t('lr.sum.fc', { n: fieldCount, from: preGame ? 1 : from })}</div>
         <div>{allBat ? t('lr.sum.abOn', { n: allBat.size, from: preGame ? 1 : from }) : t('lr.sum.abOff')}</div>
         {!preGame && changed && <div className="dim">{t('lr.sum.keepBefore', { n: Math.max(1, from - 1) })}</div>}

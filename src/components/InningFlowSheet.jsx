@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useStore, usePlayerName, useT } from '../state/store.jsx';
 import { oppNameOf } from '../lib/oppBox.js';
 import { isPlateAppearance, timingAnchor } from '../lib/logOrder.js';
+import { isTiebreakInning, rulesAtInning, runnersPlaced, placedRunsScored } from '../lib/rules.js';
 import Sheet from './Sheet.jsx';
 
 // ---- 回の流れ ----
@@ -53,6 +54,16 @@ export default function InningFlowSheet({ game, inning, onClose, onEditLog }) {
     return a ? t('flow.afterWho', { who: whoOf(a) }) : t('flow.atHead');
   };
 
+  // タイブレークの自責点。自チームが守る半回でだけ聞く(相手投手の自責点は持っていない)
+  const isFieldingHalf = !!half === !!game.isHome;
+  const isTiebreak = isTiebreakInning(game, inning);
+  const tb = isTiebreak ? rulesAtInning(game, inning).tiebreak : null;
+  const placedCount = tb ? runnersPlaced(tb.runners) : 0;
+  const said = placedRunsScored(game, inning, half);
+  // 人が入れていないときの見立て: 走者は塁上の順に還るので、失点の先頭から置いた走者とみなす
+  const halfRuns = logs.reduce((s, l) => s + (l.kind === 'defense' ? (l.payload?.runs || 0) : 0), 0);
+  const guessed = Math.min(placedCount, halfRuns);
+
   const move = (log, dir) => {
     dispatch({ type: 'MOVE_PLAY_LOG', gameId: game.id, logId: log.id, dir });
     setOpenId(null);
@@ -71,6 +82,28 @@ export default function InningFlowSheet({ game, inning, onClose, onEditLog }) {
         <button className={half === offTop ? 'primary' : ''} onClick={() => setHalf(offTop)}>{t('flow.offense')}</button>
         <button className={half !== offTop ? 'primary' : ''} onClick={() => setHalf(!offTop)}>{t('flow.defense')}</button>
       </div>
+
+      {/* タイブレークで自チームが守る半回だけ。置いた走者が還った分は自責点にならない
+          (投手が打たれて出した走者ではないため)。記録からは追えないので人に聞く。 */}
+      {isTiebreak && isFieldingHalf && (
+        <div className="flow-tb">
+          <b>{t('flow.tbTitle')}</b>
+          <p>{t('flow.tbBody', { n: placedCount })}</p>
+          <div className="chips-row">
+            {Array.from({ length: placedCount + 1 }, (_, n) => (
+              <button
+                key={n} className={`small${said === n ? ' primary' : ''}`} aria-pressed={said === n}
+                onClick={() => dispatch({ type: 'SET_TIEBREAK_SCORED', gameId: game.id, inning, isTop: half, count: n })}
+              >
+                {t('flow.tbN', { n })}
+              </button>
+            ))}
+          </div>
+          {said === null
+            ? <p className="dim">{t('flow.tbGuess', { n: guessed })}</p>
+            : <button className="flow-tb-undo" onClick={() => dispatch({ type: 'SET_TIEBREAK_SCORED', gameId: game.id, inning, isTop: half, count: null })}>{t('flow.tbAuto')}</button>}
+        </div>
+      )}
 
       {logs.length === 0 && <p className="small dim mt12">{t('flow.empty')}</p>}
 

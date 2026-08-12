@@ -68,11 +68,18 @@ try {
   check('試合前は効かせる回を聞かない',
     !(await sheet().innerText()).includes('この変更を何回から効かせるか'));
 
-  // --- 守備の人数 ---
-  const fcSection = () => page.locator('.sheet .chips-row').nth(0);
-  await page.click('.sheet button:has-text("8人")');
-  await page.waitForTimeout(300);
+  // 並び: タイブレーク → 全員打ち → 守備の人数(いちばん下)
+  // 前書きに3つとも名前が出るので、本文ではなく見出しの並びで見る
   let txt = await sheet().innerText();
+  const titles = (await page.locator('.sheet .section-title').allInnerTexts()).map((x) => x.trim());
+  check('カードの並びが タイブレーク→全員打ち→守備の人数',
+    JSON.stringify(titles) === JSON.stringify(['タイブレーク', '全員打ち', '守備の人数']),
+    JSON.stringify(titles));
+
+  // --- 守備の人数 ---
+  await page.locator('.sheet button:has-text("8人")').first().click();
+  await page.waitForTimeout(300);
+  txt = await sheet().innerText();
   check('8人にすると効き方の説明が変わる', txt.includes('1つ空いた'), txt.slice(0, 200));
   check('サマリに守備8人が出る', /守備の人数 8人/.test(txt), txt.slice(-400));
 
@@ -81,24 +88,31 @@ try {
   await page.waitForTimeout(350);
   txt = await sheet().innerText();
   check('タイブレークの詳細が開く', txt.includes('タイブレークを始める回'));
-  check('走者の既定は二塁', /タイブレーク .*回から／走者 二塁/.test(txt), txt.slice(-400));
-  check('自責点の説明が出る', txt.includes('自責点から外します'));
+  check('走者の既定は一・二塁', /タイブレーク \d+回から／ノーアウト一・二塁/.test(txt), txt.slice(-400));
+  check('アウトカウントを選べる', txt.includes('アウトカウント') && txt.includes('ワンアウト'));
+  check('満塁が選べる', txt.includes('満塁'));
+  check('自責点にならない理由が書いてある',
+    txt.includes('投手が打たれて出した走者ではない') && txt.includes('失点には入ります'), txt.slice(0, 600));
   // 見出しが重複していないこと(「何回から」が2つあると、どちらを触ったか分からなくなる)
   const heads = await page.locator('.sheet .section-title, .sheet label').allInnerTexts();
   const dupHeads = heads.filter((h, i) => h.trim() && heads.indexOf(h) !== i);
   check('同じ見出しが2つ無い', dupHeads.length === 0, dupHeads.join(', '));
 
-  // 走者を一・二塁に
-  await page.click('.sheet button:has-text("一・二塁")');
+  // 1アウト満塁(中学・一部アマチュア)にする
+  await page.click('.sheet button:has-text("ワンアウト")');
+  await page.waitForTimeout(200);
+  await page.click('.sheet button:has-text("満塁")');
   await page.waitForTimeout(250);
   txt = await sheet().innerText();
-  check('走者の変更がサマリに出る', txt.includes('走者 一・二塁'));
+  check('1アウト満塁がサマリに出る', /ワンアウト満塁/.test(txt), txt.slice(-400));
+  check('満塁は3点まで自責点から外れると出る', /最大3点/.test(txt), txt.slice(0, 900));
 
   // --- 全員打ち ---
   await page.click('.sheet .lr-sw[aria-label="全員打ちにする"]');
   await page.waitForTimeout(350);
   txt = await sheet().innerText();
   check('全員打ちの詳細が開く', txt.includes('打順の人数'));
+  check('全員打ちは18人まで選べる', txt.includes('18人'), txt.slice(0, 900));
   await page.click('.sheet button:has-text("12人")');
   await page.waitForTimeout(250);
   txt = await sheet().innerText();
@@ -128,6 +142,15 @@ try {
   await page.click('.sheet-actions button:has-text("確定")');
   await page.waitForTimeout(500);
 
+  // 入力している最中に「人が帰った」が起きるので、スコア入力画面からも開ける
+  const fromScore = page.locator('button:has-text("試合ルールを決める")');
+  check('スコア入力画面からも開ける', (await fromScore.count()) >= 1);
+  await fromScore.first().click();
+  await page.waitForTimeout(500);
+  check('入力画面から開いたシートは試合中の形', (await sheet().innerText()).includes('この変更を何回から効かせるか'));
+  await page.click('.sheet .sheet-actions button.ghost');
+  await page.waitForTimeout(400);
+
   await page.click('nav button:has-text("試合結果")');
   await page.waitForTimeout(500);
   await page.click('button:has-text("スコアシートを開く")');
@@ -148,8 +171,7 @@ try {
   // 守備を9人に戻す(人が戻ってきた)
   const scope = page.locator('.sheet .chips-row').first();
   check('効かせる回が選べる', (await scope.locator('button').count()) >= 2);
-  await page.click('.sheet .section-title:has-text("守備の人数") ~ .chips-row button:has-text("9人")')
-    .catch(async () => { await page.locator('.sheet button:has-text("9人")').first().click(); });
+  await page.locator('.sheet button:has-text("9人")').first().click();
   await page.waitForTimeout(300);
   txt = await sheet().innerText();
   check('9人に戻すとふつうの説明になる', txt.includes('ふつうの9人守備'), txt.slice(0, 400));

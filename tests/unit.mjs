@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { proposeMoves, judgeAdvance, batterDestOptions } from '../src/lib/plays.js';
-import { gameEndCheck, initialPresetIdFor, describeRules, rulesAtInning, currentRules, fieldCountAt, isTiebreakInning, diffLiveRules, describeRulePatch, runnersPlaced } from '../src/lib/rules.js';
+import { gameEndCheck, initialPresetIdFor, describeRules, rulesAtInning, currentRules, fieldCountAt, isTiebreakInning, diffLiveRules, describeRulePatch, runnersPlaced, placedRunsScored, halfKeyOf, DEFAULT_TIEBREAK, ALL_BAT_MAX, TIEBREAK_RUNNERS } from '../src/lib/rules.js';
 import { aggregateBatting, aggregatePitching, battingMetrics, pitchingMetrics, titleLeaders, DETAIL_METRICS, detailRanking, defaultInningBasis } from '../src/lib/stats.js';
 import { translate } from '../src/lib/i18n.js';
 import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, parseDirectionOnly, parseContact, playLabel } from '../src/lib/voiceParser.js';
@@ -2546,7 +2546,7 @@ test('rulesAtInning: 変更は指定した回から効き、前の回には効�
     rules: { innings: 7, mercy: [], fieldCount: 9 },
     ruleChanges: [
       { id: 'c1', at: 2, fromInning: 6, patch: { fieldCount: 8 } },
-      { id: 'c2', at: 3, fromInning: 8, patch: { tiebreak: { fromInning: 8, runners: '2', order: 'cont' } } },
+      { id: 'c2', at: 3, fromInning: 8, patch: { tiebreak: { fromInning: 8, runners: '2', order: 'cont', outs: 0 } } },
     ],
   };
   assert.equal(fieldCountAt(game, 5), 9, '5回はまだ9人');
@@ -2584,7 +2584,7 @@ test('diffLiveRules: 変わった項目だけを取り出す', () => {
   const prev = { fieldCount: 9, tiebreak: null, allBat: null };
   assert.deepEqual(diffLiveRules(prev, { ...prev }), {}, '同じなら空');
   assert.deepEqual(diffLiveRules(prev, { ...prev, fieldCount: 8 }), { fieldCount: 8 });
-  const tb = { fromInning: 8, runners: '2', order: 'cont' };
+  const tb = { fromInning: 8, runners: '2', order: 'cont', outs: 0 };
   assert.deepEqual(diffLiveRules(prev, { ...prev, tiebreak: tb }), { tiebreak: tb });
   // 走者だけ変えても差分になる
   assert.deepEqual(
@@ -2600,7 +2600,7 @@ test('describeRulePatch: 履歴の1行', () => {
   assert.match(describeRulePatch({ fieldCount: 9 }), /9人に戻した/);
   assert.match(describeRulePatch({ allBat: { size: 12 } }), /全員打ち 12人/);
   assert.match(describeRulePatch({ allBat: null }), /やめた/);
-  assert.match(describeRulePatch({ tiebreak: { fromInning: 8, runners: '12', order: 'top' } }), /一・二塁.*先頭/);
+  assert.match(describeRulePatch({ tiebreak: { fromInning: 8, runners: '12', order: 'top', outs: 0 } }), /一・二塁.*先頭/);
   assert.match(describeRulePatch({ fieldCount: 8 }, 'en'), /8 fielders/);
 });
 
@@ -2608,6 +2608,26 @@ test('runnersPlaced: 置く走者の人数', () => {
   assert.equal(runnersPlaced('2'), 1);
   assert.equal(runnersPlaced('12'), 2);
   assert.equal(runnersPlaced('23'), 2);
+  assert.equal(runnersPlaced('123'), 3, '満塁は3人');
+});
+
+test('タイブレークの選択肢: 満塁とアウトカウント', () => {
+  // 中学は満塁、一部アマチュアは1アウト満塁もある
+  assert.ok(TIEBREAK_RUNNERS.includes('123'), '満塁が選べる');
+  assert.equal(DEFAULT_TIEBREAK.runners, '12', '既定は一・二塁');
+  assert.equal(DEFAULT_TIEBREAK.outs, 0, '既定はノーアウト');
+  assert.equal(ALL_BAT_MAX, 18, '全員打ちは18人まで');
+  assert.match(describeRulePatch({ tiebreak: { fromInning: 8, runners: '123', order: 'cont', outs: 1 } }), /ワンアウト満塁/);
+  assert.match(describeRulePatch({ tiebreak: { fromInning: 8, runners: '12', order: 'cont', outs: 0 } }), /ノーアウト一・二塁/);
+});
+
+test('diffLiveRules: アウトカウントだけ変えても差分になる', () => {
+  const prev = { fieldCount: 9, tiebreak: { fromInning: 8, runners: '12', order: 'cont', outs: 0 }, allBat: null };
+  const next = { ...prev, tiebreak: { ...prev.tiebreak, outs: 1 } };
+  assert.deepEqual(Object.keys(diffLiveRules(prev, next)), ['tiebreak']);
+  // キーの並びが違うだけなら差分ではない
+  const reordered = { ...prev, tiebreak: { outs: 0, order: 'cont', runners: '12', fromInning: 8 } };
+  assert.deepEqual(diffLiveRules(prev, reordered), {});
 });
 
 // ---- 守備位置の警告を、宣言した人数に合わせて止める ----
@@ -2690,11 +2710,53 @@ test('タイブレークの回は、置いた走者ぶんが自責点から外�
   assert.equal(plain.runs, 3);
   assert.equal(plain.earnedRuns, 3, '宣言前は失点=自責点');
 
-  const tb = rebuildPitchingStats(mk([{ id: 'c', at: 1, fromInning: 8, patch: { tiebreak: { fromInning: 8, runners: '2', order: 'cont' } } }]));
+  const tb = rebuildPitchingStats(mk([{ id: 'c', at: 1, fromInning: 8, patch: { tiebreak: { fromInning: 8, runners: '2', order: 'cont', outs: 0 } } }]));
   const rec = tb.records[0];
   assert.equal(rec.runs, 3, '失点は変わらない');
   assert.equal(rec.earnedRuns, 2, '置いた走者1人ぶんが自責点から外れる');
   assert.equal(tb.unearnedExcluded, 1);
+
+  // 満塁なら3人ぶん。3失点すべてが自責点から外れる
+  const loaded = rebuildPitchingStats(mk([{ id: 'c', at: 1, fromInning: 8, patch: { tiebreak: { fromInning: 8, runners: '123', order: 'cont', outs: 1 } } }]));
+  assert.equal(loaded.records[0].runs, 3);
+  assert.equal(loaded.records[0].earnedRuns, 0, '満塁は置いた走者3人ぶん');
+});
+
+// 置いた走者が塁上でアウトになると見立てが外れる。半回ごとに実数を入れて上書きできる。
+test('タイブレーク: 置いた走者が何人還ったかを人が入れられる', () => {
+  const mk = (scored) => ({
+    id: 'g', isHome: true, atBats: [], pitchingRecords: [],
+    startingLineup: [{ order: 1, playerId: 'P', position: '投' }],
+    lineup: [{ order: 1, playerId: 'P', position: '投' }],
+    playLogs: [
+      { id: 'd1', gameId: 'g', inning: 8, isTop: true, kind: 'defense', text: '', payload: { order: 1, result: 'single', runs: 2, outsOnPlay: 0 } },
+      { id: 'd2', gameId: 'g', inning: 8, isTop: true, kind: 'defense', text: '', payload: { order: 2, result: 'out', runs: 1, outsOnPlay: 3 } },
+    ],
+    rules: {}, tiebreakScored: scored,
+    ruleChanges: [{ id: 'c', at: 1, fromInning: 8, patch: { tiebreak: { fromInning: 8, runners: '12', order: 'cont', outs: 0 } } }],
+  });
+  // 見立てのまま: 2人置いたので先の2点が自責点から外れる
+  assert.equal(rebuildPitchingStats(mk(undefined)).records[0].earnedRuns, 1);
+  // 置いた走者は1人しか還らなかった(もう1人は塁上でアウト)
+  assert.equal(rebuildPitchingStats(mk({ '8T': 1 })).records[0].earnedRuns, 2);
+  // 誰も還らなかった → 3点すべて自責点
+  assert.equal(rebuildPitchingStats(mk({ '8T': 0 })).records[0].earnedRuns, 3);
+  // 置いた人数を超える値は置いた人数で頭打ち
+  assert.equal(rebuildPitchingStats(mk({ '8T': 9 })).records[0].earnedRuns, 1);
+  // 別の半回の指定は効かない
+  assert.equal(rebuildPitchingStats(mk({ '8B': 0 })).records[0].earnedRuns, 1);
+  // 失点はどの場合も変わらない
+  assert.equal(rebuildPitchingStats(mk({ '8T': 0 })).records[0].runs, 3);
+});
+
+test('halfKeyOf / placedRunsScored', () => {
+  assert.equal(halfKeyOf(8, true), '8T');
+  assert.equal(halfKeyOf(8, false), '8B');
+  const g = { tiebreakScored: { '8T': 0, '9B': 2 } };
+  assert.equal(placedRunsScored(g, 8, true), 0, '0は「見立てに任せる」ではなく「0人還った」');
+  assert.equal(placedRunsScored(g, 9, false), 2);
+  assert.equal(placedRunsScored(g, 7, true), null, '入れていなければ null');
+  assert.equal(placedRunsScored({}, 8, true), null);
 });
 
 test('タイブレークでも、宣言した回より前は自責点が変わらない', () => {
@@ -2707,7 +2769,7 @@ test('タイブレークでも、宣言した回より前は自責点が変わ�
     startingLineup: [{ order: 1, playerId: 'P', position: '投' }],
     lineup: [{ order: 1, playerId: 'P', position: '投' }],
     rules: {},
-    ruleChanges: [{ id: 'c', at: 1, fromInning: 8, patch: { tiebreak: { fromInning: 8, runners: '23', order: 'top' } } }],
+    ruleChanges: [{ id: 'c', at: 1, fromInning: 8, patch: { tiebreak: { fromInning: 8, runners: '23', order: 'top', outs: 0 } } }],
   };
   const rec = rebuildPitchingStats(game).records[0];
   assert.equal(rec.runs, 4);

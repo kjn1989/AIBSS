@@ -75,11 +75,14 @@ export function presetById(id) {
 export const FIELD_COUNT_MIN = 7;
 export const FIELD_COUNT_MAX = 10;
 export const ALL_BAT_MIN = 10;
-export const ALL_BAT_MAX = 15;
-export const TIEBREAK_RUNNERS = ['2', '12', '23'];
+export const ALL_BAT_MAX = 18;
+// 大会によって置き方が違う。中学は満塁、一部アマチュアは1アウト満塁もある。
+export const TIEBREAK_RUNNERS = ['2', '12', '23', '123'];
 export const TIEBREAK_ORDERS = ['cont', 'top'];
+export const TIEBREAK_OUTS = [0, 1];
+export const DEFAULT_TIEBREAK = { runners: '12', order: 'cont', outs: 0 };
 // 置く走者の人数(自責点から外す上限に使う)
-export const runnersPlaced = (r) => (r === '2' ? 1 : 2);
+export const runnersPlaced = (r) => String(r || '').length;
 
 const LIVE_KEYS = ['tiebreak', 'fieldCount', 'allBat'];
 
@@ -103,6 +106,26 @@ export function currentRules(game) {
   return rulesAtInning(game, Math.max(Number(game?.inning) || 1, ...innings, 1));
 }
 
+// ------------------------------------------------------------
+// タイブレークの自責点
+//
+// タイブレーク開始時に置かれている走者は、投手が打たれて出したのではないので、
+// その走者が還っても自責点にはならない(失点にはなる)。
+// 投手が自分で出した走者が還った分は、これまでどおり自責点になる。
+//
+// 記録から「置いた走者が還ったか」を追うことはできない。ただし走者は塁上の順に
+// 還るので、その回に点が入れば置いた走者から先に還っているのがふつう。
+// 置いた走者が塁上でアウトになった場合だけこの見立てが外れるので、
+// 半回ごとに人が「置いた走者のうち何人還ったか」を上書きできるようにしてある。
+// ------------------------------------------------------------
+export const halfKeyOf = (inning, isTop) => `${Number(inning) || 0}${isTop ? 'T' : 'B'}`;
+
+// その半回で置いた走者が何人還ったか。人が入れていれば その値、無ければ null(=見立てに任せる)
+export function placedRunsScored(game, inning, isTop) {
+  const v = (game?.tiebreakScored || {})[halfKeyOf(inning, isTop)];
+  return Number.isFinite(Number(v)) && v !== '' && v !== null ? Number(v) : null;
+}
+
 // 守備人数。未指定(旧データ含む)は9人として扱う
 export function fieldCountAt(game, inning) {
   const n = Number(rulesAtInning(game, inning)?.fieldCount);
@@ -123,9 +146,16 @@ export function describeRulePatch(patch = {}, lang = 'ja') {
     const tb = patch.tiebreak;
     if (!tb) parts.push(en ? 'Tiebreak off' : 'タイブレークをやめた');
     else {
-      const r = { 2: en ? 'runner on 2nd' : '走者 二塁', 12: en ? 'runners on 1st & 2nd' : '走者 一・二塁', 23: en ? 'runners on 2nd & 3rd' : '走者 二・三塁' }[tb.runners] || tb.runners;
+      // 「ノーアウト一・二塁」と続けて読めるよう、日本語では「走者」を付けない
+      const r = {
+        2: en ? 'runner on 2nd' : '二塁',
+        12: en ? 'runners on 1st & 2nd' : '一・二塁',
+        23: en ? 'runners on 2nd & 3rd' : '二・三塁',
+        123: en ? 'bases loaded' : '満塁',
+      }[tb.runners] || tb.runners;
+      const outs = Number(tb.outs) === 1 ? (en ? '1 out' : 'ワンアウト') : (en ? 'no outs' : 'ノーアウト');
       const o = tb.order === 'top' ? (en ? 'order restarts' : 'その回の先頭から') : (en ? 'order continues' : '前の回の続き');
-      parts.push(en ? `Tiebreak (${r}, ${o})` : `タイブレーク（${r}・${o}）`);
+      parts.push(en ? `Tiebreak (${outs}, ${r}, ${o})` : `タイブレーク（${outs}${r}・${o}）`);
     }
   }
   if ('fieldCount' in patch) {
@@ -145,7 +175,13 @@ export function describeRulePatch(patch = {}, lang = 'ja') {
 // 変えていないのに保存したときに、同じ内容が履歴に積まれるのを防ぐ。
 export function diffLiveRules(prev = {}, next = {}) {
   const patch = {};
-  const norm = (k, v) => (k === 'fieldCount' ? (Number(v) || 9) : (v ? JSON.stringify(v) : ''));
+  // 比べるためだけの並び。JSON.stringify はキーの順に左右されるので、順を固定して作る
+  const norm = (k, v) => {
+    if (k === 'fieldCount') return Number(v) || 9;
+    if (!v) return '';
+    if (k === 'tiebreak') return [v.fromInning, v.runners, v.order, Number(v.outs) || 0].join('|');
+    return JSON.stringify(v);
+  };
   for (const k of LIVE_KEYS) {
     if (norm(k, prev?.[k]) !== norm(k, next?.[k])) patch[k] = next?.[k] ?? (k === 'fieldCount' ? 9 : null);
   }
