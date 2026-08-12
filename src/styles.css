@@ -1349,8 +1349,18 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 .df-card.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .df-card b { display: block; font-size: 13.5px; margin-bottom: 4px; }
 .df-card span { display: block; font-size: 11.5px; line-height: 1.55; color: var(--text-dim); }
-.chips-row { display: flex; flex-wrap: wrap; gap: 6px; }
-.chips-row button { min-width: 40px; }
+/* 回・人数を選ぶ小さなボタンの並び。数が多くて折り返すので、
+   上下を詰めないと選択肢の塊だけで画面が埋まる。横は数字が読める幅を保つ。 */
+.chips-row { display: flex; flex-wrap: wrap; gap: 5px; }
+.chips-row button,
+.chips-row button.small {
+  min-width: 44px;
+  min-height: 30px;
+  padding: 2px 10px;
+  font-size: 12.5px;
+  line-height: 1.2;
+  border-radius: 8px;
+}
 .df-preview {
   margin-top: 14px; padding: 11px 13px; border-radius: 10px; font-size: 13px; line-height: 1.6;
   background: var(--bg-3); border: 1px solid var(--border);
@@ -2183,10 +2193,16 @@ button.manage-open {
 .lr-sw[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 30%, transparent); border-color: var(--accent); }
 .lr-sw[aria-pressed="true"]::after { left: 25px; background: var(--accent); }
 .lr-detail {
-  margin-top: 8px; padding: 12px; border-radius: 12px;
+  margin-top: 8px; padding: 11px 12px; border-radius: 12px;
   background: var(--bg-3); border: 1px solid var(--border);
 }
-.lr-detail > label:first-child { display: block; margin-bottom: 6px; }
+.lr-detail > label { display: block; margin-bottom: 5px; }
+/* 見出しと選択肢の間は詰め、項目と項目の間だけ空ける */
+.lr-detail > label.mt8 { margin-top: 12px; }
+/* 二択(打順の start/continue)も、チップと同じ高さに揃えて重くしない */
+.lr-detail .toggle-row { margin-bottom: 0; padding: 2px; }
+.lr-detail .toggle-row button { min-height: 32px; font-size: 12.5px; }
+.lr-row { padding: 9px 0; }
 /* 保存する前に、何がどう効くかを全部並べて見せる */
 .lr-sum {
   margin-top: 16px; padding: 11px 13px; border-radius: 10px; font-size: 12.5px; line-height: 1.65;
