@@ -2204,3 +2204,16 @@ button.manage-open {
 .lr-histrow > b { color: var(--accent); flex: none; }
 .lr-histrow > span { flex: 1; min-width: 0; }
 @media (prefers-reduced-motion: reduce) { .lr-sw::after { transition: none; } }
+
+/* タイブレークの自責点。置いた走者が還ったかは記録から追えないので人に聞く */
+.flow-tb {
+  margin-bottom: 12px; padding: 11px 13px; border-radius: 10px; font-size: 12.5px; line-height: 1.6;
+  background: color-mix(in srgb, var(--amber) 11%, transparent); border: 1px solid var(--amber);
+}
+.flow-tb > b { display: block; color: var(--amber); margin-bottom: 4px; }
+.flow-tb > p { margin: 0 0 8px; }
+.flow-tb > p.dim { margin: 8px 0 0; color: var(--text-dim); font-size: 11.5px; }
+.flow-tb-undo {
+  display: block; width: 100%; margin-top: 8px; background: transparent; border: 0;
+  color: var(--text-dim); font-size: 12px; text-decoration: underline; padding: 5px;
+}

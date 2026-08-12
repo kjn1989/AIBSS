@@ -12,7 +12,7 @@ import {
 import { generateDemoData } from '../lib/demo.js';
 import { rebuildPitchingStats } from '../lib/pitchingRebuild.js';
 import { swapTargetIndex } from '../lib/logOrder.js';
-import { describeRulePatch } from '../lib/rules.js';
+import { describeRulePatch, halfKeyOf } from '../lib/rules.js';
 import { resolveStarters, alignmentByInning, findPositionIssues } from '../lib/lineupBox.js';
 
 // 1人しか就けない守備位置(「打」=全員打ち・「控」は複数人可)。位置変更の入れ替え判定に使う。
@@ -987,6 +987,21 @@ export function reducer(state, action) {
         const { records } = rebuildPitchingStats(g);
         if (records.length) g.pitchingRecords = records;
       }
+      g.updatedAt = Date.now();
+      return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
+    }
+    // タイブレークの回で「置いた走者のうち何人還ったか」。
+    // 記録からは追えず、置いた走者が塁上でアウトになると見立てが外れるので、
+    // 半回ごとに人が実数を入れられるようにしてある。null で見立てに戻す。
+    case 'SET_TIEBREAK_SCORED': {
+      const g = deep(state.games[action.gameId]);
+      const key = halfKeyOf(action.inning, action.isTop);
+      const map = { ...(g.tiebreakScored || {}) };
+      if (action.count === null || action.count === undefined) delete map[key];
+      else map[key] = Math.max(0, Number(action.count) || 0);
+      g.tiebreakScored = map;
+      const { records } = rebuildPitchingStats(g);
+      if (records.length) g.pitchingRecords = records;
       g.updatedAt = Date.now();
       return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
     }

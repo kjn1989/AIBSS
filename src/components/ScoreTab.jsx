@@ -829,6 +829,11 @@ export default function ScoreTab() {
             {t('score.manualChange')}
           </button>
           <button onClick={() => setSheet({ kind: 'scoreAdjust' })}>{t('score.adjustScore')}</button>
+          {/* 「人が帰って8人になった」「延長はタイブレークで」は入力している最中に決まる。
+              スコアシートまで辿らせず、その場で宣言できるようにする */}
+          <button style={{ gridColumn: '1 / -1' }} onClick={() => setSheet({ kind: 'liveRules' })}>
+            {t('lr.open')}
+          </button>
           <button style={{ gridColumn: '1 / -1' }} onClick={() => setSheet({ kind: 'note' })}>
             {t('score.noteBtn')}
           </button>
@@ -861,6 +866,7 @@ export default function ScoreTab() {
 
       <VoiceControl game={game} />
       {showProgress && <GameProgressView game={game} onClose={() => setShowProgress(false)} />}
+      {sheet?.kind === 'liveRules' && <LiveRulesSheet game={game} onClose={() => setSheet(null)} />}
       {defenseCheck && (
         <DefenseCheckView game={game} newPlayerIds={defenseCheck.playerIds} onClose={() => setDefenseCheck(null)} />
       )}

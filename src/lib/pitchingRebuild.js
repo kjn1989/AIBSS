@@ -16,13 +16,16 @@
 // 記録していない試合)には架空のアウトを足さない(下記 outs>0 のガード)。
 //
 // 注: 自責点は近似(全失点を自責として仮置き)。勝利/セーブ/ホールドは保持する。
-// ただしタイブレークの回だけは、置いた走者が還った分を自責点から外す。
-// 置いた走者が実際に還ったかまでは記録から追えないので、その回の失点のうち
-// 置いた走者の人数ぶんを上限として外す(走者が残塁したのに他の走者で失点した場合は
-// 引きすぎになる)。人が直せるよう、投手成績の修正シートから手で上書きできる。
+//
+// ただしタイブレークの回は別扱いにする。開始時に置かれている走者は投手が打たれて
+// 出したのではないので、還っても自責点にはならない(失点にはなる)。
+// 記録から「置いた走者が還ったか」は追えないが、走者は塁上の順に還るので、
+// その半回の失点のうち先の分から置いた走者とみなす。置いた走者が塁上でアウトに
+// なった回だけこの見立てが外れるので、半回ごとに人が実数を入れて上書きできる
+// (game.tiebreakScored)。
 // ============================================================
 import { RESULTS, newPitchingRecord } from './model.js';
-import { isTiebreakInning, rulesAtInning, runnersPlaced } from './rules.js';
+import { isTiebreakInning, rulesAtInning, runnersPlaced, placedRunsScored } from './rules.js';
 
 // 投手交代を表すログか(kind:'pitcher' または 守備位置'投'のsub)
 export const isPitcherChangeLog = (l) => l.kind === 'pitcher' || (l.kind === 'sub' && l.payload?.position === '投');
@@ -72,11 +75,14 @@ export function rebuildPitchingStats(game) {
     const k = halfKey(l.inning, l.isTop);
     let h = halves.get(k);
     if (!h) {
-      // タイブレークの回は、置いた走者の人数ぶんを自責点から外せる枠として持つ
+      // タイブレークの回は、置いた走者が還った分を自責点から外せる枠として持つ。
+      // 人が実数を入れていればその数、無ければ置いた人数を上限とした見立て。
       const tb = isTiebreakInning(game, l.inning) ? rulesAtInning(game, l.inning).tiebreak : null;
+      const cap = tb ? runnersPlaced(tb.runners) : 0;
+      const said = tb ? placedRunsScored(game, l.inning, l.isTop) : null;
       h = {
         pos: halfPos(l.inning, l.isTop), outs: 0, lastPitcherId: pid || null,
-        unearnedLeft: tb ? runnersPlaced(tb.runners) : 0,
+        unearnedLeft: said === null ? cap : Math.max(0, Math.min(said, cap)),
       };
       halves.set(k, h);
     }
