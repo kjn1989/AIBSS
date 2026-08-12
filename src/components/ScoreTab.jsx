@@ -20,7 +20,7 @@ import { POSITIONS, OPP_LETTERS, resultCategory, multiOutLabel, positionLabel, a
 import { playLabel } from '../lib/voiceParser.js';
 import { convertMemoToPlay, guessPlayFromMemo, maskNames } from '../lib/gemini.js';
 import { canWriteCloud } from '../lib/officialCloud.js';
-import { RULE_PRESETS, presetById, presetLabel, describeRules, initialPresetIdFor, gameEndCheck, pitchLimitCheck, timeLimitCheck } from '../lib/rules.js';
+import { RULE_PRESETS, presetById, presetLabel, describeRules, initialPresetIdFor, gameEndCheck, pitchLimitCheck, timeLimitCheck, lineupSlotsFor } from '../lib/rules.js';
 import LiveRulesSheet from './LiveRulesSheet.jsx';
 
 // 投手名は6文字までを基準サイズで、長い名前(カタカナ等)はフォントを縮めて枠内に収める
@@ -693,7 +693,10 @@ export default function ScoreTab() {
   const quickLineup = () => {
     const active = state.players.filter((p) => !p.id.startsWith('demo-'));
     const here = attendeesOf(game, active.length ? active : state.players);
-    const { lineup } = autoLineupFrom(here.length ? here : state.players);
+    const pool = here.length ? here : state.players;
+    // 全員打ちなら打順は9人より多い。守備に付かない人は「控」ではなく「打」
+    const max = lineupSlotsFor(game, pool.length);
+    const { lineup } = autoLineupFrom(pool, { max, benchPosition: max > 9 ? '打' : '控' });
     if (!lineup.length) return;
     dispatch({ type: 'SET_LINEUP', gameId: game.id, lineup });
   };

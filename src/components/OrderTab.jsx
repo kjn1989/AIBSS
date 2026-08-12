@@ -3,6 +3,7 @@ import { useStore, useT, useCurrentGame, usePlayerName } from '../state/store.js
 import { POSITIONS, positionLabel, attendeesOf } from '../lib/model.js';
 import { isArchived } from '../lib/year.js';
 import { canWriteCloud } from '../lib/officialCloud.js';
+import { allBatSize } from '../lib/rules.js';
 import Sheet from './Sheet.jsx';
 import LineupWizard from './LineupWizard.jsx';
 import OppOrderCard, { OppSubstituteSheet } from './OppOrderCard.jsx';
@@ -143,6 +144,13 @@ export default function OrderTab() {
     );
   }
 
+  // 全員打ちで宣言した人数に対し、打順に何人足りないか
+  const abHere = attendeesOf(game, state.players.filter((p) => !p.archived));
+  const abIn = new Set(game.lineup.map((l) => l.playerId).filter(Boolean));
+  const abShort = allBatSize(game) > 9
+    ? Math.max(0, Math.min(allBatSize(game) - game.lineup.length, abHere.filter((p) => !abIn.has(p.id)).length))
+    : 0;
+
   const rebuildLineup = () => {
     if (!window.confirm(t('order.rebuildConfirm'))) return;
     dispatch({ type: 'SET_LINEUP', gameId: game.id, lineup: [] });
@@ -190,6 +198,19 @@ export default function OrderTab() {
             onDone={(ids) => { dispatch({ type: 'SET_ATTENDEES', gameId: game.id, attendees: ids }); setAttOpen(false); }}
             onClose={() => setAttOpen(false)}
           />
+        )}
+        {/* 全員打ちを宣言したのに打順が足りていないとき。
+            メンバーを後から足した・宣言より打順が短いままだった場合に効く */}
+        {abShort > 0 && (
+          <div className="warn-box mt8">
+            {t('order.allBatShort', { n: abShort, size: allBatSize(game) })}
+            <button
+              className="small mt8"
+              onClick={() => dispatch({ type: 'FILL_ALL_BAT_LINEUP', gameId: game.id })}
+            >
+              {t('order.allBatFill', { n: abShort })}
+            </button>
+          </div>
         )}
         {game.lineup.map((slot, i) => (
           <div className="row" key={slot.order}>

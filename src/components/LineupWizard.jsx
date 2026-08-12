@@ -3,6 +3,7 @@ import { useStore, usePlayerName, useT } from '../state/store.jsx';
 import { isArchived } from '../lib/year.js';
 import { positionLabel, attendeesOf } from '../lib/model.js';
 import { FIELD_SPOTS } from '../lib/fieldSpots.js';
+import { lineupSlotsFor } from '../lib/rules.js';
 import Sheet from './Sheet.jsx';
 
 // 配列の要素を from→to へ移動した新配列を返す(純関数・テスト容易)
@@ -121,6 +122,7 @@ export default function LineupWizard({ game }) {
           pastGames={pastGames}
           onToggle={toggle}
           onAutoSelect={autoSelectN}
+          defaultN={lineupSlotsFor(game, players.length)}
           onLoadPast={loadFromPast}
           onNext={() => setStep(2)}
           useDH={useDH}
@@ -173,7 +175,7 @@ function StepHeader({ step }) {
 }
 
 // ---- ステップ1: 選手をタップで打順順に選択 ----
-function SelectStep({ players, selected, selectedIds, nameOf, numberOf, pastGames, onToggle, onAutoSelect, onLoadPast, onNext, useDH, onToggleDH, pitcherId, onPitcher }) {
+function SelectStep({ players, selected, selectedIds, nameOf, numberOf, pastGames, onToggle, onAutoSelect, onLoadPast, onNext, useDH, onToggleDH, pitcherId, onPitcher, defaultN = 9 }) {
   const t = useT();
   const orderOf = (pid) => selected.findIndex((s) => s.playerId === pid) + 1;
   const benchForPitcher = players.filter((p) => !selectedIds.has(p.id)); // 打順に入っていない選手=投手候補
@@ -224,7 +226,7 @@ function SelectStep({ players, selected, selectedIds, nameOf, numberOf, pastGame
         </div>
       )}
       <div className="grid2 mt8">
-        <button className="small" onClick={() => onAutoSelect(9)} disabled={players.length === 0}>{t('lw.auto9')}</button>
+        <button className="small" onClick={() => onAutoSelect(defaultN)} disabled={players.length === 0}>{t('lw.autoN', { n: defaultN })}</button>
         <button className="small" onClick={() => onAutoSelect(Math.min(20, players.length))} disabled={players.length === 0}>{t('lw.autoAll')}</button>
       </div>
 

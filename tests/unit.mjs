@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { proposeMoves, judgeAdvance, batterDestOptions } from '../src/lib/plays.js';
-import { gameEndCheck, initialPresetIdFor, describeRules, rulesAtInning, currentRules, fieldCountAt, isTiebreakInning, diffLiveRules, describeRulePatch, runnersPlaced, placedRunsScored, halfKeyOf, DEFAULT_TIEBREAK, ALL_BAT_MAX, TIEBREAK_RUNNERS } from '../src/lib/rules.js';
+import { gameEndCheck, initialPresetIdFor, describeRules, rulesAtInning, currentRules, fieldCountAt, isTiebreakInning, diffLiveRules, describeRulePatch, runnersPlaced, placedRunsScored, halfKeyOf, DEFAULT_TIEBREAK, ALL_BAT_MAX, TIEBREAK_RUNNERS, allBatSize, lineupSlotsFor } from '../src/lib/rules.js';
 import { aggregateBatting, aggregatePitching, battingMetrics, pitchingMetrics, titleLeaders, DETAIL_METRICS, detailRanking, defaultInningBasis } from '../src/lib/stats.js';
 import { translate } from '../src/lib/i18n.js';
 import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, parseDirectionOnly, parseContact, playLabel } from '../src/lib/voiceParser.js';
@@ -2775,4 +2775,48 @@ test('タイブレークでも、宣言した回より前は自責点が変わ�
   assert.equal(rec.runs, 4);
   // 7回は2点とも自責、8回は2点のうち走者2人ぶんが外れて0
   assert.equal(rec.earnedRuns, 2);
+});
+
+
+// ============================================================
+// 全員打ち: 宣言した人数ぶんの打順が組めること
+//
+// 「全員打ち18人」と宣言しても打順が9人のままなら、ルールは何も起きていないのと同じ。
+// 打順を組む側が9人固定だったので、宣言が効いていなかった。
+// ============================================================
+test('allBatSize: 宣言した打順の人数', () => {
+  assert.equal(allBatSize({}), 9, '宣言が無ければ9');
+  assert.equal(allBatSize({ rules: { allBat: { size: 12 } }, inning: 1 }), 12);
+  // 試合中に宣言した分も見る
+  assert.equal(allBatSize({
+    inning: 5, rules: {},
+    ruleChanges: [{ id: 'a', at: 1, fromInning: 3, patch: { allBat: { size: 14 } } }],
+  }), 14);
+  // 9以下の指定は打順を縮めない
+  assert.equal(allBatSize({ rules: { allBat: { size: 8 } } }), 9);
+});
+
+test('lineupSlotsFor: 来ている人数を超えては組めない', () => {
+  const g = { rules: { allBat: { size: 18 } }, inning: 1 };
+  assert.equal(lineupSlotsFor(g, 12), 12, '18人と宣言しても12人しか来ていなければ12人打順');
+  assert.equal(lineupSlotsFor(g, 20), 18, '宣言した人数が上限');
+  assert.equal(lineupSlotsFor(g, 5), 9, '9人は下回らない');
+  assert.equal(lineupSlotsFor({}, 12), 9, '宣言が無ければ9人打順のまま');
+});
+
+test('autoLineupFrom: 全員打ちでは9人を超えて組み、余った人は「打」', () => {
+  // 守備位置を登録していない選手ばかりの名簿(草野球でよくある)
+  const players = Array.from({ length: 12 }, (_, i) => newPlayer({ name: `P${i + 1}` }));
+  const normal = autoLineupFrom(players);
+  assert.equal(normal.lineup.length, 9, 'ふつうは9人打順');
+  assert.ok(normal.lineup.every((l) => l.position !== '打'), 'ふつうの試合で「打」は作らない');
+
+  const all = autoLineupFrom(players, { max: 12, benchPosition: '打' });
+  assert.equal(all.lineup.length, 12, '全員打ちは12人打順');
+  assert.deepEqual(all.lineup.map((l) => l.order), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+  assert.ok(all.lineup.some((l) => l.position === '打'), '守備に付かない人は「打」');
+  assert.equal(all.lineup.filter((l) => l.position === '控').length, 0, '全員打ちに「控」は出さない');
+
+  // 来ている人数が宣言に満たなければ、その人数まで
+  assert.equal(autoLineupFrom(players.slice(0, 10), { max: 12, benchPosition: '打' }).lineup.length, 10);
 });
