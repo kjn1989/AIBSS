@@ -7,12 +7,12 @@
 import React, { createContext, useContext, useReducer, useEffect, useRef } from 'react';
 import {
   newPlayer, newMember, newGame, newAtBat, newPitch, newPlayLog, newPitchingRecord, RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES,
-  OPP_LETTERS, DEFAULT_EDITION, normalizeEdition, multiOutLabel, uid,
+  OPP_LETTERS, DEFAULT_EDITION, normalizeEdition, multiOutLabel, uid, attendeesOf,
 } from '../lib/model.js';
 import { generateDemoData } from '../lib/demo.js';
 import { rebuildPitchingStats } from '../lib/pitchingRebuild.js';
 import { swapTargetIndex } from '../lib/logOrder.js';
-import { describeRulePatch, halfKeyOf } from '../lib/rules.js';
+import { describeRulePatch, halfKeyOf, allBatSize } from '../lib/rules.js';
 import { resolveStarters, alignmentByInning, findPositionIssues } from '../lib/lineupBox.js';
 
 // 1人しか就けない守備位置(「打」=全員打ち・「控」は複数人可)。位置変更の入れ替え判定に使う。
@@ -274,6 +274,31 @@ function makeSnapshot(game) {
     isTop: game.isTop,
     scoreDiff: game.myScore - game.oppScore,
   };
+}
+
+// 全員打ちの宣言に打順を合わせる。
+// 「全員打ち18人」と宣言しても打順が9人のままなら、ルールは何も起きていないのと同じ。
+// 来ているのに打順に入っていない人を、守備に付かない打者(「打」)として後ろに足す。
+// 既にある打順は動かさない(打席の記録がその打順に紐づいているため)。
+// 宣言人数より来ている人が少ないときは、来ている人数までしか足せない。
+function extendLineupForAllBat(g, state) {
+  const size = allBatSize(g);
+  const lineup = g.lineup || [];
+  if (size <= 9 || !lineup.length) return 0;
+  const inLineup = new Set(lineup.map((l) => l.playerId).filter(Boolean));
+  const here = attendeesOf(g, (state.players || []).filter((p) => !p.archived));
+  let next = Math.max(0, ...lineup.map((l) => Number(l.order) || 0));
+  let added = 0;
+  for (const p of here) {
+    if (lineup.length >= size) break;
+    if (inLineup.has(p.id)) continue;
+    next += 1;
+    lineup.push({ order: next, playerId: p.id, position: '打' });
+    inLineup.add(p.id);
+    added += 1;
+  }
+  if (added) g.lineup = lineup;
+  return added;
 }
 
 // 未開始なら pending(進行中打席バッファ) を用意
@@ -982,6 +1007,9 @@ export function reducer(state, action) {
           id: uid(), at: Date.now(), fromInning: from, patch, text: action.text || describeRulePatch(patch),
         }];
       }
+      // 全員打ちは「来ている人が全員打つ」ルール。宣言しただけで打順が9人のままなら
+      // 何も起きていないのと同じなので、来ているのに打順に入っていない人を足す。
+      if ('allBat' in patch) extendLineupForAllBat(g, state);
       // タイブレークは自責点の数え方を変えるので、投手成績を振り直す
       if ('tiebreak' in patch) {
         const { records } = rebuildPitchingStats(g);
@@ -1002,6 +1030,14 @@ export function reducer(state, action) {
       g.tiebreakScored = map;
       const { records } = rebuildPitchingStats(g);
       if (records.length) g.pitchingRecords = records;
+      g.updatedAt = Date.now();
+      return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
+    }
+    // 全員打ちで宣言した人数まで打順を埋める。
+    // メンバーを後から足したときなど、宣言のあとで足りなくなった分を入れる。
+    case 'FILL_ALL_BAT_LINEUP': {
+      const g = deep(state.games[action.gameId]);
+      if (!extendLineupForAllBat(g, state)) return state;
       g.updatedAt = Date.now();
       return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
     }

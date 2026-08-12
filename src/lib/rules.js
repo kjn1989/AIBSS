@@ -126,6 +126,21 @@ export function placedRunsScored(game, inning, isTop) {
   return Number.isFinite(Number(v)) && v !== '' && v !== null ? Number(v) : null;
 }
 
+// 全員打ちで宣言した打順の人数。宣言が無ければ9。
+export function allBatSize(game, inning) {
+  const n = Number(rulesAtInning(game, inning ?? game?.inning ?? 1)?.allBat?.size);
+  return Number.isFinite(n) && n > 9 ? n : 9;
+}
+
+// 打順を何枠にするか。全員打ちでも「来ている人数」を超えては組めない。
+// 18人と宣言していても12人しか来ていなければ12人打順になる。
+export function lineupSlotsFor(game, attendeeCount) {
+  const declared = allBatSize(game);
+  const here = Number(attendeeCount) || 0;
+  if (declared <= 9) return 9;
+  return Math.max(9, Math.min(declared, here || declared));
+}
+
 // 守備人数。未指定(旧データ含む)は9人として扱う
 export function fieldCountAt(game, inning) {
   const n = Number(rulesAtInning(game, inning)?.fieldCount);

@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { useStore, useT } from '../state/store.jsx';
+import { attendeesOf } from '../lib/model.js';
 import {
-  currentRules, diffLiveRules, describeRulePatch, runnersPlaced, DEFAULT_TIEBREAK,
+  currentRules, diffLiveRules, describeRulePatch, runnersPlaced, DEFAULT_TIEBREAK, lineupSlotsFor,
   FIELD_COUNT_MIN, FIELD_COUNT_MAX, ALL_BAT_MIN, ALL_BAT_MAX,
   TIEBREAK_RUNNERS, TIEBREAK_ORDERS, TIEBREAK_OUTS,
 } from '../lib/rules.js';
@@ -51,7 +52,7 @@ function SwitchRow({ on, onToggle, title, hint }) {
 }
 
 export default function LiveRulesSheet({ game, draft, onDraft, onClose, defaultInning, regulationInnings }) {
-  const { dispatch } = useStore();
+  const { state, dispatch } = useStore();
   const t = useT();
   const preGame = !game;
   const base = useMemo(() => (preGame ? (draft || {}) : currentRules(game) || {}), [game, draft, preGame]);
@@ -113,6 +114,16 @@ export default function LiveRulesSheet({ game, draft, onDraft, onClose, defaultI
     }
     onClose();
   };
+
+  // 全員打ちにしたとき、打順に足りるのは何人か。宣言だけして打順が9人のままにはしない
+  const here = game ? attendeesOf(game, (state.players || []).filter((p) => !p.archived)) : [];
+  const inLineup = new Set((game?.lineup || []).map((l) => l.playerId).filter(Boolean));
+  const willAdd = allBat && game
+    ? Math.max(0, Math.min(
+      Number(allBat.size) - (game.lineup || []).length,
+      here.filter((p) => !inLineup.has(p.id)).length,
+    ))
+    : 0;
 
   const changes = [...(game?.ruleChanges || [])].sort((a, b) => (a.fromInning - b.fromInning) || (a.at - b.at));
 
@@ -205,7 +216,15 @@ export default function LiveRulesSheet({ game, draft, onDraft, onClose, defaultI
             onChange={(v) => setAllBat({ size: v })}
             items={range(ALL_BAT_MIN, ALL_BAT_MAX).map((n) => ({ k: n, n: t('lr.peopleN', { n }) }))}
           />
-          <div className="keep-box"><b>{t('lr.effect')}</b> {t('lr.ab.effect')}</div>
+          <div className="keep-box">
+            <b>{t('lr.effect')}</b> {t('lr.ab.effect')}
+            {/* 宣言しただけで打順が9人のままでは何も起きていないのと同じ。何人足すのかを先に言う */}
+            {!preGame && (willAdd > 0
+              ? <><br />{t('lr.ab.willAdd', { n: willAdd, size: allBat.size })}</>
+              : (here.length < allBat.size
+                ? <><br />{t('lr.ab.notEnough', { size: allBat.size, here: here.length })}</>
+                : null))}
+          </div>
         </div>
       )}
 

@@ -201,7 +201,9 @@ export function lastAttendees(games = []) {
 // 候補の少ない位置から先に決める。捕手が1人しかいないのに、その人を先に
 // 別の位置へ入れてしまうと捕手が空くため。
 // 戻り値: { lineup: [{ playerId, position }], unfilled: [位置] }
-export function autoLineupFrom(players = [], { max = 9 } = {}) {
+// max: 打順の枠数(全員打ちでは9より多い)
+// benchPosition: 守備に付かなかった人の位置。全員打ちでは打つので '打'、ふつうは '控'
+export function autoLineupFrom(players = [], { max = 9, benchPosition = '控' } = {}) {
   const taken = new Set();
   const assigned = {}; // 位置 -> playerId
   const remaining = new Set(FIELD_POSITIONS);
@@ -250,7 +252,7 @@ export function autoLineupFrom(players = [], { max = 9 } = {}) {
   }
   for (const p of players) {
     if (lineup.length >= max) break;
-    if (!taken.has(p.id)) lineup.push({ playerId: p.id, position: '控' });
+    if (!taken.has(p.id)) lineup.push({ playerId: p.id, position: benchPosition });
   }
   return {
     lineup: lineup.slice(0, max).map((x, i) => ({ order: i + 1, ...x })),

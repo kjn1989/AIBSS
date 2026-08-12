@@ -117,13 +117,15 @@ try {
   await page.waitForTimeout(250);
   txt = await sheet().innerText();
   check('全員打ち12人がサマリに出る', /全員打ち 12人打順/.test(txt), txt.slice(-400));
+  // ここでは切っておく。試合中に入れて打順が伸びるかを後で見る
+  await page.click('.sheet .lr-sw[aria-label="全員打ちにする"]');
+  await page.waitForTimeout(300);
 
   await page.click('.sheet .sheet-actions button.primary');
   await page.waitForTimeout(500);
   check('ルールシートが閉じる', (await page.locator('.sheet:has-text("試合ルール")').count()) === 0);
   const setupTxt = await page.locator('.card').first().innerText();
-  check('決めた内容が試合前の画面に出る', /守備の人数 8人/.test(setupTxt) && /全員打ち 12人/.test(setupTxt),
-    setupTxt.slice(0, 400));
+  check('決めた内容が試合前の画面に出る', /守備の人数 8人/.test(setupTxt), setupTxt.slice(0, 400));
 
   // ============================================================
   // 試合を始めて、試合中に変える
@@ -203,6 +205,46 @@ try {
 
   await page.click('.sheet .sheet-actions button.ghost');
   await page.waitForTimeout(400);
+  // スコアシートは全画面なので、閉じないとタブを押せない
+  await page.click('.fullscreen-header button:has-text("戻る")');
+  await page.waitForTimeout(500);
+
+  // ============================================================
+  // 全員打ちにしたら、打順がその人数になる
+  // 「18人にしたのに9人しか打者が居ない」= 宣言が打順に効いていなかった
+  // ============================================================
+  await page.click('nav button:has-text("オーダー")');
+  await page.waitForTimeout(600);
+  const orderRows = () => page.locator('.card .row .rank-badge');
+  const before = await orderRows().count();
+  check('宣言前の打順は9人', before === 9, `n=${before}`);
+
+  await page.click('nav button:has-text("スコア入力")');
+  await page.waitForTimeout(500);
+  await page.locator('button:has-text("試合ルールを決める")').first().click();
+  await page.waitForTimeout(600);
+  await page.click('.sheet .lr-sw[aria-label="全員打ちにする"]');
+  await page.waitForTimeout(400);
+  await page.locator('.sheet button:has-text("12人")').first().click();
+  await page.waitForTimeout(350);
+  txt = await sheet().innerText();
+  check('何人足すのかを先に言う', /打順の後ろに足します/.test(txt), txt.slice(0, 1200));
+  await page.click('.sheet .sheet-actions button.primary');
+  await page.waitForTimeout(800);
+
+  await page.click('nav button:has-text("オーダー")');
+  await page.waitForTimeout(700);
+  const after = await orderRows().count();
+  check('全員打ち12人にすると打順が12人になる', after === 12, `n=${after}`);
+  const badges = await orderRows().allInnerTexts();
+  check('打順が1から通しで振られている',
+    JSON.stringify(badges.map(Number)) === JSON.stringify([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]),
+    JSON.stringify(badges));
+  // 足した人は守備に就かない打者
+  const opts = await page.locator('.card .row select').nth(11).inputValue();
+  check('足した打者は「打」', opts === '打', `pos=${opts}`);
+  // 足りているので案内は出ない
+  check('足りていれば案内は出ない', !(await page.locator('body').innerText()).includes('足りていません'));
 
   // --- 横はみ出しがない ---
   const over = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
