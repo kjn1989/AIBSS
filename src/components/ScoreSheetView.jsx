@@ -9,6 +9,7 @@ import EditPlaySheet from './EditPlaySheet.jsx';
 import InningFlowSheet from './InningFlowSheet.jsx';
 import DefenseFixSheet from './DefenseFixSheet.jsx';
 import PitchingFixSheet from './PitchingFixSheet.jsx';
+import LiveRulesSheet from './LiveRulesSheet.jsx';
 
 // 打席結果の超短縮表記(スコアシートのセル用): 例「中安」「遊ゴ」「左本」「四球」/ 英語は "LF1B" 等。
 // editionが少年野球のときは 併殺→ゲ, エラー→エ の親しみ表記。
@@ -132,6 +133,7 @@ export default function ScoreSheetView({ game, onClose }) {
   const [flowInn, setFlowInn] = useState(null); // 回の流れ(交代のタイミングを直す)
   const [defFix, setDefFix] = useState(null); // 守備・交代(何を直すかを先に選ばせる)
   const [pitFix, setPitFix] = useState(null); // 投手成績(記録から計算した値と並べて見せる)
+  const [rulesOpen, setRulesOpen] = useState(false); // 試合ルール(9人でないのが正しい試合はここで宣言する)
   const logById = new Map((game.playLogs || []).map((l) => [l.id, l]));
   const logByAtBat = new Map();
   for (const l of game.playLogs || []) {
@@ -225,7 +227,14 @@ export default function ScoreSheetView({ game, onClose }) {
           onClick={() => setEditing((v) => !v)}
         >{editing ? t('ss.editDone') : t('ss.editStart')}</button>
       </header>
-      {editing && <div className="ss-edithint no-print">{t('ss.editHint')}</div>}
+      {editing && (
+        <div className="ss-edithint no-print">
+          {t('ss.editHint')}
+          {/* 「9人揃っていない」「同じ位置に2人」は記録の誤りではなくルールのことがある */}
+          <button className="small" onClick={() => setRulesOpen(true)}>{t('lr.open')}</button>
+        </div>
+      )}
+      {rulesOpen && <LiveRulesSheet game={game} onClose={() => setRulesOpen(false)} />}
       <div className="fullscreen-body">
         <div className={`scoresheet-root${editing ? ' ss-edit' : ''}`}>
           <div className="ss-title">

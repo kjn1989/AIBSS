@@ -1300,10 +1300,12 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 }
 .ss-editbtn.on { background: var(--green); border-color: var(--green); color: #06210f; }
 .ss-edithint {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   padding: 9px 14px; font-size: 12px; line-height: 1.5;
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   border-bottom: 1px solid var(--border);
 }
+.ss-edithint > button { flex: none; }
 .ss-cell-btn {
   border: 0; background: transparent; color: inherit; font: inherit;
   padding: 1px 3px; border-radius: 4px; cursor: pointer;
@@ -2162,3 +2164,43 @@ button.manage-open {
 @media (prefers-reduced-motion: reduce) {
   .bf-ping { animation: none; opacity: .5; }
 }
+
+/* ---- 試合ルール(タイブレーク・守備人数・全員打ち) ----
+   試合前に決まっていることが多いが、当日その場で決まることもある。
+   だから「何回から」が要る。効かせる回と、タイブレークが始まる回は別物。 */
+.lr-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; }
+.lr-row .lr-t { flex: 1; min-width: 0; }
+.lr-row .lr-t b { display: block; font-size: 13.5px; }
+.lr-row .lr-t span { display: block; font-size: 11.5px; color: var(--text-dim); line-height: 1.5; margin-top: 2px; }
+.lr-sw {
+  flex: none; width: 52px; height: 30px; border-radius: 15px; border: 1px solid var(--border);
+  background: var(--bg-3); position: relative; padding: 0;
+}
+.lr-sw::after {
+  content: ''; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px;
+  border-radius: 11px; background: var(--text-dim); transition: left .15s, background .15s;
+}
+.lr-sw[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 30%, transparent); border-color: var(--accent); }
+.lr-sw[aria-pressed="true"]::after { left: 25px; background: var(--accent); }
+.lr-detail {
+  margin-top: 8px; padding: 12px; border-radius: 12px;
+  background: var(--bg-3); border: 1px solid var(--border);
+}
+.lr-detail > label:first-child { display: block; margin-bottom: 6px; }
+/* 保存する前に、何がどう効くかを全部並べて見せる */
+.lr-sum {
+  margin-top: 16px; padding: 11px 13px; border-radius: 10px; font-size: 12.5px; line-height: 1.65;
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, transparent);
+}
+.lr-sum > b { display: block; color: var(--accent); margin-bottom: 5px; }
+.lr-sum > div { padding: 3px 0; border-top: 1px solid color-mix(in srgb, var(--accent) 20%, transparent); }
+.lr-sum > div:first-of-type { border-top: 0; }
+.lr-hist { display: flex; flex-direction: column; gap: 6px; }
+.lr-histrow {
+  display: flex; align-items: center; gap: 9px; padding: 8px 10px; font-size: 12px;
+  border-radius: 9px; background: var(--bg-3); border: 1px solid var(--border);
+}
+.lr-histrow > b { color: var(--accent); flex: none; }
+.lr-histrow > span { flex: 1; min-width: 0; }
+@media (prefers-reduced-motion: reduce) { .lr-sw::after { transition: none; } }

@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { proposeMoves, judgeAdvance, batterDestOptions } from '../src/lib/plays.js';
-import { gameEndCheck, initialPresetIdFor, describeRules } from '../src/lib/rules.js';
+import { gameEndCheck, initialPresetIdFor, describeRules, rulesAtInning, currentRules, fieldCountAt, isTiebreakInning, diffLiveRules, describeRulePatch, runnersPlaced } from '../src/lib/rules.js';
 import { aggregateBatting, aggregatePitching, battingMetrics, pitchingMetrics, titleLeaders, DETAIL_METRICS, detailRanking, defaultInningBasis } from '../src/lib/stats.js';
 import { translate } from '../src/lib/i18n.js';
 import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, parseDirectionOnly, parseContact, playLabel } from '../src/lib/voiceParser.js';
@@ -2531,4 +2531,186 @@ test('回の途中の継投: 相手8番の後で投手成績が分かれる', ()
   const outsOf = (id) => records.find((r) => r.playerId === id)?.outsRecorded ?? null;
   assert.equal(outsOf('茂木'), 2, '茂木は2/3回（1〜8番）');
   assert.equal(outsOf('宇田川'), 1, '宇田川は1/3回（9番のみ）');
+});
+
+
+// ============================================================
+// 試合中に変わるルール(タイブレーク・守備人数・全員打ち)
+//
+// 草野球では「人が帰って8人になる」「時間が押して延長はタイブレーク」が
+// 試合の途中で起きる。宣言した回より前の記録には効かせてはいけない。
+// ============================================================
+test('rulesAtInning: 変更は指定した回から効き、前の回には効かない', () => {
+  const game = {
+    inning: 8,
+    rules: { innings: 7, mercy: [], fieldCount: 9 },
+    ruleChanges: [
+      { id: 'c1', at: 2, fromInning: 6, patch: { fieldCount: 8 } },
+      { id: 'c2', at: 3, fromInning: 8, patch: { tiebreak: { fromInning: 8, runners: '2', order: 'cont' } } },
+    ],
+  };
+  assert.equal(fieldCountAt(game, 5), 9, '5回はまだ9人');
+  assert.equal(fieldCountAt(game, 6), 8, '6回から8人');
+  assert.equal(fieldCountAt(game, 7), 8, '以降も8人');
+  assert.equal(isTiebreakInning(game, 7), false, '7回はタイブレークではない');
+  assert.equal(isTiebreakInning(game, 8), true, '8回からタイブレーク');
+  // 土台のルールは消えない
+  assert.equal(rulesAtInning(game, 8).innings, 7);
+  assert.equal(currentRules(game).fieldCount, 8);
+});
+
+test('rulesAtInning: 同じ項目を2度変えると後の回のものが勝つ', () => {
+  const game = {
+    inning: 9,
+    rules: { fieldCount: 9 },
+    ruleChanges: [
+      { id: 'a', at: 1, fromInning: 3, patch: { fieldCount: 8 } },
+      { id: 'b', at: 2, fromInning: 6, patch: { fieldCount: 9 } },
+    ],
+  };
+  assert.equal(fieldCountAt(game, 2), 9);
+  assert.equal(fieldCountAt(game, 3), 8);
+  assert.equal(fieldCountAt(game, 6), 9, '6回で9人に戻る');
+});
+
+test('rulesAtInning: 変更が無い試合・旧データでも壊れない', () => {
+  assert.equal(fieldCountAt({}, 3), 9);
+  assert.equal(fieldCountAt({ rules: { innings: 7 } }, 3), 9);
+  assert.equal(isTiebreakInning({}, 9), false);
+  assert.equal(rulesAtInning(null, 1), null);
+});
+
+test('diffLiveRules: 変わった項目だけを取り出す', () => {
+  const prev = { fieldCount: 9, tiebreak: null, allBat: null };
+  assert.deepEqual(diffLiveRules(prev, { ...prev }), {}, '同じなら空');
+  assert.deepEqual(diffLiveRules(prev, { ...prev, fieldCount: 8 }), { fieldCount: 8 });
+  const tb = { fromInning: 8, runners: '2', order: 'cont' };
+  assert.deepEqual(diffLiveRules(prev, { ...prev, tiebreak: tb }), { tiebreak: tb });
+  // 走者だけ変えても差分になる
+  assert.deepEqual(
+    diffLiveRules({ ...prev, tiebreak: tb }, { ...prev, tiebreak: { ...tb, runners: '12' } }),
+    { tiebreak: { ...tb, runners: '12' } },
+  );
+  // やめたときは null
+  assert.deepEqual(diffLiveRules({ ...prev, allBat: { size: 12 } }, prev), { allBat: null });
+});
+
+test('describeRulePatch: 履歴の1行', () => {
+  assert.match(describeRulePatch({ fieldCount: 8 }), /守備 8人/);
+  assert.match(describeRulePatch({ fieldCount: 9 }), /9人に戻した/);
+  assert.match(describeRulePatch({ allBat: { size: 12 } }), /全員打ち 12人/);
+  assert.match(describeRulePatch({ allBat: null }), /やめた/);
+  assert.match(describeRulePatch({ tiebreak: { fromInning: 8, runners: '12', order: 'top' } }), /一・二塁.*先頭/);
+  assert.match(describeRulePatch({ fieldCount: 8 }, 'en'), /8 fielders/);
+});
+
+test('runnersPlaced: 置く走者の人数', () => {
+  assert.equal(runnersPlaced('2'), 1);
+  assert.equal(runnersPlaced('12'), 2);
+  assert.equal(runnersPlaced('23'), 2);
+});
+
+// ---- 守備位置の警告を、宣言した人数に合わせて止める ----
+// 打順9人・守備8人(遊撃が居ない)の布陣を、6回から8人と宣言した試合で作る。
+function eightManGame(ruleChanges) {
+  const POS = ['投', '捕', '一', '二', '三', '左', '中', '右'];
+  const startingLineup = POS.map((position, i) => ({ order: i + 1, playerId: 'p' + i, position }));
+  startingLineup.push({ order: 9, playerId: 'p8', position: '控' });
+  return {
+    id: 'g', isHome: true, atBats: [], pitchingRecords: [], startingLineup,
+    lineup: startingLineup.map((l) => ({ ...l })),
+    playLogs: [1, 2, 3, 4, 5, 6, 7].map((inning) => ({
+      id: 'a' + inning, gameId: 'g', inning, isTop: true, kind: 'atbat', text: '',
+      payload: { order: 1, playerId: 'p0', result: 'out' },
+    })),
+    rules: { fieldCount: 9 },
+    ruleChanges,
+  };
+}
+
+test('守備人数を宣言すると「守る人が居ない」警告が止まる', () => {
+  // 宣言なし: 遊撃が不在という警告が出る(9人の布陣とみなされる)
+  const before = findPositionIssues(eightManGame([]));
+  assert.ok(before.missing.some((m) => m.position === '遊'), '宣言前は遊撃不在の警告が出る');
+  // 6回から8人と宣言: 6回以降は出ないが、5回までは残る
+  const after = findPositionIssues(eightManGame([{ id: 'c', at: 1, fromInning: 6, patch: { fieldCount: 8 } }]));
+  const ss = after.missing.filter((m) => m.position === '遊');
+  assert.ok(ss.length, '宣言より前の回の警告は残る');
+  assert.ok(ss.every((m) => m.to <= 5), `6回以降に警告が残っている: ${JSON.stringify(ss)}`);
+});
+
+test('10人守備を宣言すると「同じ位置に2人」警告が止まる', () => {
+  const POS = ['投', '捕', '一', '二', '三', '遊', '左', '中', '右'];
+  const mk = (ruleChanges) => {
+    const startingLineup = POS.map((position, i) => ({ order: i + 1, playerId: 'p' + i, position }));
+    startingLineup.push({ order: 10, playerId: 'p9', position: '中' }); // 4外野
+    return {
+      id: 'g', isHome: true, atBats: [], pitchingRecords: [], startingLineup,
+      lineup: startingLineup.map((l) => ({ ...l })),
+      playLogs: [{ id: 'a1', gameId: 'g', inning: 1, isTop: true, kind: 'atbat', text: '', payload: { order: 1, playerId: 'p0', result: 'out' } }],
+      rules: { fieldCount: 9 }, ruleChanges,
+    };
+  };
+  assert.ok(findPositionIssues(mk([])).duplicates.length, '宣言前は重複の警告が出る');
+  assert.equal(
+    findPositionIssues(mk([{ id: 'c', at: 1, fromInning: 1, patch: { fieldCount: 10 } }])).duplicates.length, 0,
+    '10人守備を宣言したら重複の警告は出ない',
+  );
+});
+
+test('全員打ち(12人打順)でも守備位置の不在警告が出ない', () => {
+  const POS = ['投', '捕', '一', '二', '三', '遊', '左', '中', '右'];
+  const startingLineup = POS.map((position, i) => ({ order: i + 1, playerId: 'p' + i, position }));
+  for (let i = 0; i < 3; i++) startingLineup.push({ order: 10 + i, playerId: 'b' + i, position: '打' });
+  const game = {
+    id: 'g', isHome: true, atBats: [], pitchingRecords: [], startingLineup,
+    lineup: startingLineup.map((l) => ({ ...l })),
+    playLogs: [{ id: 'a1', gameId: 'g', inning: 1, isTop: true, kind: 'atbat', text: '', payload: { order: 1, playerId: 'p0', result: 'out' } }],
+    rules: { fieldCount: 9, allBat: { size: 12 } }, ruleChanges: [],
+  };
+  const issues = findPositionIssues(game);
+  assert.equal(issues.missing.length, 0, '守備は9つ埋まっているので不在は無い');
+  assert.equal(issues.duplicates.length, 0, '「打」は重複として見ない');
+});
+
+// ---- タイブレークの自責点 ----
+// 8回に3失点。うち置いた走者(二塁=1人)ぶんは自責点から外れる。
+test('タイブレークの回は、置いた走者ぶんが自責点から外れる', () => {
+  const mk = (ruleChanges) => ({
+    id: 'g', isHome: true, atBats: [], pitchingRecords: [],
+    startingLineup: [{ order: 1, playerId: 'P', position: '投' }],
+    lineup: [{ order: 1, playerId: 'P', position: '投' }],
+    playLogs: [
+      { id: 'd1', gameId: 'g', inning: 8, isTop: true, kind: 'defense', text: '', payload: { order: 1, result: 'single', runs: 2, outsOnPlay: 0 } },
+      { id: 'd2', gameId: 'g', inning: 8, isTop: true, kind: 'defense', text: '', payload: { order: 2, result: 'out', runs: 1, outsOnPlay: 3 } },
+    ],
+    rules: {}, ruleChanges,
+  });
+  const plain = rebuildPitchingStats(mk([])).records[0];
+  assert.equal(plain.runs, 3);
+  assert.equal(plain.earnedRuns, 3, '宣言前は失点=自責点');
+
+  const tb = rebuildPitchingStats(mk([{ id: 'c', at: 1, fromInning: 8, patch: { tiebreak: { fromInning: 8, runners: '2', order: 'cont' } } }]));
+  const rec = tb.records[0];
+  assert.equal(rec.runs, 3, '失点は変わらない');
+  assert.equal(rec.earnedRuns, 2, '置いた走者1人ぶんが自責点から外れる');
+  assert.equal(tb.unearnedExcluded, 1);
+});
+
+test('タイブレークでも、宣言した回より前は自責点が変わらない', () => {
+  const logs = [7, 8].map((inning) => ({
+    id: 'd' + inning, gameId: 'g', inning, isTop: true, kind: 'defense', text: '',
+    payload: { order: 1, result: 'single', runs: 2, outsOnPlay: 3 },
+  }));
+  const game = {
+    id: 'g', isHome: true, atBats: [], pitchingRecords: [], playLogs: logs,
+    startingLineup: [{ order: 1, playerId: 'P', position: '投' }],
+    lineup: [{ order: 1, playerId: 'P', position: '投' }],
+    rules: {},
+    ruleChanges: [{ id: 'c', at: 1, fromInning: 8, patch: { tiebreak: { fromInning: 8, runners: '23', order: 'top' } } }],
+  };
+  const rec = rebuildPitchingStats(game).records[0];
+  assert.equal(rec.runs, 4);
+  // 7回は2点とも自責、8回は2点のうち走者2人ぶんが外れて0
+  assert.equal(rec.earnedRuns, 2);
 });

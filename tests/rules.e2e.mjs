@@ -1,0 +1,194 @@
+// 試合ルールe2e: タイブレーク・守備人数・全員打ちを試合前と試合中に決める
+// 実行: npm run test:e2e
+// 守りたいこと:
+//  - 試合前にも試合中にも決められる(草野球では当日その場で変わる)
+//  - 「何回から」が2種類あるが混ざらない
+//    変更を効かせる回 / タイブレークが始まる回
+//  - 宣言した回より前の記録には効かない(履歴にその回が残る)
+//  - 9人でないのが正しい試合では、記録ではなくルールを直す道がある
+import { chromium } from 'playwright-core';
+import { spawn } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const PORT = 4177;
+const URL_ = `http://localhost:${PORT}/`;
+
+function resolveChromium() {
+  const base = '/opt/pw-browsers';
+  const candidates = [path.join(base, 'chromium')];
+  for (const d of fs.existsSync(base) ? fs.readdirSync(base) : []) {
+    if (d.startsWith('chromium-')) candidates.push(path.join(base, d, 'chrome-linux', 'chrome'));
+  }
+  for (const c of candidates) if (fs.existsSync(c) && fs.statSync(c).isFile()) return c;
+  return undefined;
+}
+
+const server = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { cwd: root, stdio: 'ignore' });
+for (let i = 0; i < 60; i++) {
+  try { if ((await fetch(URL_)).ok) break; } catch { /* まだ起動中 */ }
+  await new Promise((r) => setTimeout(r, 500));
+}
+
+let failures = 0;
+const check = (name, cond, detail = '') => {
+  console.log(`${cond ? 'ok' : 'not ok'} - ${name}${cond ? '' : ` :: ${detail}`}`);
+  if (!cond) failures++;
+};
+
+const browser = await chromium.launch({ executablePath: resolveChromium() });
+try {
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  page.on('pageerror', (err) => { console.log('PAGE EXCEPTION:', err.message); failures++; });
+
+  await page.goto(URL_, { waitUntil: 'load' });
+  await page.waitForTimeout(800);
+
+  await page.click('button[aria-label="設定"]');
+  await page.waitForTimeout(400);
+  const demo = page.locator('button:has-text("デモデータを投入")');
+  if (await demo.count()) { await demo.click(); await page.waitForTimeout(400); }
+  await page.click('nav button:has-text("スコア入力")');
+  await page.waitForTimeout(400);
+
+  // ============================================================
+  // 試合前に決める
+  // ============================================================
+  await page.fill('input[placeholder="対戦相手名"]', 'ルール確認');
+  const openBtn = page.locator('button:has-text("試合ルールを決める")');
+  check('試合前にルールを決める入口がある', (await openBtn.count()) === 1);
+  await openBtn.click();
+  await page.waitForTimeout(500);
+
+  const sheet = () => page.locator('.sheet').last();
+  check('ルールシートが開く', (await page.locator('.sheet:has-text("試合ルール")').count()) >= 1);
+  // 試合前は「変更を効かせる回」を出さない(1回からに決まっているので選ばせる意味がない)
+  check('試合前は効かせる回を聞かない',
+    !(await sheet().innerText()).includes('この変更を何回から効かせるか'));
+
+  // --- 守備の人数 ---
+  const fcSection = () => page.locator('.sheet .chips-row').nth(0);
+  await page.click('.sheet button:has-text("8人")');
+  await page.waitForTimeout(300);
+  let txt = await sheet().innerText();
+  check('8人にすると効き方の説明が変わる', txt.includes('1つ空いた'), txt.slice(0, 200));
+  check('サマリに守備8人が出る', /守備の人数 8人/.test(txt), txt.slice(-400));
+
+  // --- タイブレーク ---
+  await page.click('.sheet .lr-sw[aria-label="タイブレークを使う"]');
+  await page.waitForTimeout(350);
+  txt = await sheet().innerText();
+  check('タイブレークの詳細が開く', txt.includes('タイブレークを始める回'));
+  check('走者の既定は二塁', /タイブレーク .*回から／走者 二塁/.test(txt), txt.slice(-400));
+  check('自責点の説明が出る', txt.includes('自責点から外します'));
+  // 見出しが重複していないこと(「何回から」が2つあると、どちらを触ったか分からなくなる)
+  const heads = await page.locator('.sheet .section-title, .sheet label').allInnerTexts();
+  const dupHeads = heads.filter((h, i) => h.trim() && heads.indexOf(h) !== i);
+  check('同じ見出しが2つ無い', dupHeads.length === 0, dupHeads.join(', '));
+
+  // 走者を一・二塁に
+  await page.click('.sheet button:has-text("一・二塁")');
+  await page.waitForTimeout(250);
+  txt = await sheet().innerText();
+  check('走者の変更がサマリに出る', txt.includes('走者 一・二塁'));
+
+  // --- 全員打ち ---
+  await page.click('.sheet .lr-sw[aria-label="全員打ちにする"]');
+  await page.waitForTimeout(350);
+  txt = await sheet().innerText();
+  check('全員打ちの詳細が開く', txt.includes('打順の人数'));
+  await page.click('.sheet button:has-text("12人")');
+  await page.waitForTimeout(250);
+  txt = await sheet().innerText();
+  check('全員打ち12人がサマリに出る', /全員打ち 12人打順/.test(txt), txt.slice(-400));
+
+  await page.click('.sheet .sheet-actions button.primary');
+  await page.waitForTimeout(500);
+  check('ルールシートが閉じる', (await page.locator('.sheet:has-text("試合ルール")').count()) === 0);
+  const setupTxt = await page.locator('.card').first().innerText();
+  check('決めた内容が試合前の画面に出る', /守備の人数 8人/.test(setupTxt) && /全員打ち 12人/.test(setupTxt),
+    setupTxt.slice(0, 400));
+
+  // ============================================================
+  // 試合を始めて、試合中に変える
+  // ============================================================
+  await page.click('button:has-text("試合開始")');
+  await page.waitForTimeout(600);
+  const att = page.locator('.sheet').filter({ hasText: '今日のメンバー' });
+  if (await att.count()) { await page.click('.sheet-actions button.primary'); await page.waitForTimeout(600); }
+  await page.waitForTimeout(400);
+  const autoSet = page.locator('button:has-text("登録選手から打順を自動セット")');
+  if (await autoSet.count()) { await autoSet.click(); await page.waitForTimeout(400); }
+
+  // 1打席だけ記録して、シートを開けるようにする
+  await page.click('.result-pad button:has-text("四球")');
+  await page.waitForTimeout(300);
+  await page.click('.sheet-actions button:has-text("確定")');
+  await page.waitForTimeout(500);
+
+  await page.click('nav button:has-text("試合結果")');
+  await page.waitForTimeout(500);
+  await page.click('button:has-text("スコアシートを開く")');
+  await page.waitForTimeout(700);
+  await page.click('.ss-editbtn');
+  await page.waitForTimeout(400);
+
+  const openMid = page.locator('.ss-edithint button:has-text("試合ルールを決める")');
+  check('修正モードからルールを開ける', (await openMid.count()) === 1);
+  await openMid.click();
+  await page.waitForTimeout(500);
+
+  txt = await sheet().innerText();
+  check('試合中は効かせる回を聞く', txt.includes('この変更を何回から効かせるか'));
+  check('効かせる回とタイブレークの回を分けて説明している', txt.includes('何回から始まるか'));
+  check('試合前に決めた守備8人が引き継がれている', /守備の人数 8人/.test(txt), txt.slice(-500));
+
+  // 守備を9人に戻す(人が戻ってきた)
+  const scope = page.locator('.sheet .chips-row').first();
+  check('効かせる回が選べる', (await scope.locator('button').count()) >= 2);
+  await page.click('.sheet .section-title:has-text("守備の人数") ~ .chips-row button:has-text("9人")')
+    .catch(async () => { await page.locator('.sheet button:has-text("9人")').first().click(); });
+  await page.waitForTimeout(300);
+  txt = await sheet().innerText();
+  check('9人に戻すとふつうの説明になる', txt.includes('ふつうの9人守備'), txt.slice(0, 400));
+
+  await page.click('.sheet .sheet-actions button.primary');
+  await page.waitForTimeout(600);
+  check('変更後にシートが閉じる', (await page.locator('.sheet:has-text("試合ルール")').count()) === 0);
+
+  // --- 履歴に残っているか ---
+  await openMid.click();
+  await page.waitForTimeout(500);
+  txt = await sheet().innerText();
+  check('ルール変更の履歴が残る', txt.includes('この試合のルール変更'), txt.slice(-500));
+  check('履歴に何回からかが出る', /\d+回から/.test(txt));
+  check('履歴の中身が読める', txt.includes('9人に戻した'), txt.slice(-500));
+
+  // 変えずに保存しても履歴は増えない
+  const rowsBefore = await page.locator('.lr-histrow').count();
+  await page.click('.sheet .sheet-actions button.primary');
+  await page.waitForTimeout(400);
+  txt = await sheet().innerText();
+  check('変えていないときは何も起きない', txt.includes('変えたところがありません'), txt.slice(-300));
+  check('履歴が増えない', (await page.locator('.lr-histrow').count()) === rowsBefore);
+
+  // 履歴は消せる(間違えて入れた宣言を取り消せないと詰む)
+  await page.locator('.lr-histrow button').first().click();
+  await page.waitForTimeout(400);
+  check('履歴を消せる', (await page.locator('.lr-histrow').count()) === rowsBefore - 1);
+
+  await page.click('.sheet .sheet-actions button.ghost');
+  await page.waitForTimeout(400);
+
+  // --- 横はみ出しがない ---
+  const over = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+  check('横はみ出しなし', !over);
+} finally {
+  await browser.close();
+  server.kill();
+}
+
+console.log(failures === 0 ? '\n✓ rules PASS' : `\n✗ rules FAIL (${failures})`);
+process.exit(failures === 0 ? 0 : 1);
