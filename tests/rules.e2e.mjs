@@ -57,7 +57,8 @@ try {
   // 試合前に決める
   // ============================================================
   await page.fill('input[placeholder="対戦相手名"]', 'ルール確認');
-  const openBtn = page.locator('button:has-text("試合ルールを決める")');
+  const openBtn = page.locator('button:has-text("ルールを決める（タイブレーク等）")');
+  check('入口の名前が3か所で共通', (await page.locator('button:has-text("ルールを決める")').count()) === 1);
   check('試合前にルールを決める入口がある', (await openBtn.count()) === 1);
   await openBtn.click();
   await page.waitForTimeout(500);
@@ -97,6 +98,23 @@ try {
   const heads = await page.locator('.sheet .section-title, .sheet label').allInnerTexts();
   const dupHeads = heads.filter((h, i) => h.trim() && heads.indexOf(h) !== i);
   check('同じ見出しが2つ無い', dupHeads.length === 0, dupHeads.join(', '));
+
+  // 選択ボタンの見た目: 数が多くて折り返すので、上下が緩いと選択肢だけで画面が埋まる。
+  // 押せる大きさは保ちつつ詰める(28〜34px)。
+  const chipBox = await page.evaluate(() => {
+    const out = { tall: [], tiny: [], clipped: [] };
+    document.querySelectorAll('.sheet .chips-row button').forEach((e) => {
+      const r = e.getBoundingClientRect();
+      const label = e.textContent.trim();
+      if (r.height > 34) out.tall.push(`${label}:${Math.round(r.height)}`);
+      if (r.height < 28) out.tiny.push(`${label}:${Math.round(r.height)}`);
+      if (e.scrollWidth > e.clientWidth + 1) out.clipped.push(label);
+    });
+    return out;
+  });
+  check('選択ボタンの上下が詰まっている', chipBox.tall.length === 0, chipBox.tall.join(', '));
+  check('選択ボタンが小さすぎない', chipBox.tiny.length === 0, chipBox.tiny.join(', '));
+  check('選択ボタンの文字が切れていない', chipBox.clipped.length === 0, chipBox.clipped.join(', '));
 
   // 1アウト満塁(中学・一部アマチュア)にする
   await page.click('.sheet button:has-text("ワンアウト")');
@@ -145,7 +163,7 @@ try {
   await page.waitForTimeout(500);
 
   // 入力している最中に「人が帰った」が起きるので、スコア入力画面からも開ける
-  const fromScore = page.locator('button:has-text("試合ルールを決める")');
+  const fromScore = page.locator('button:has-text("ルールを決める（タイブレーク等）")');
   check('スコア入力画面からも開ける', (await fromScore.count()) >= 1);
   await fromScore.first().click();
   await page.waitForTimeout(500);
@@ -160,7 +178,7 @@ try {
   await page.click('.ss-editbtn');
   await page.waitForTimeout(400);
 
-  const openMid = page.locator('.ss-edithint button:has-text("試合ルールを決める")');
+  const openMid = page.locator('.ss-edithint button:has-text("ルールを決める（タイブレーク等）")');
   check('修正モードからルールを開ける', (await openMid.count()) === 1);
   await openMid.click();
   await page.waitForTimeout(500);
@@ -221,7 +239,7 @@ try {
 
   await page.click('nav button:has-text("スコア入力")');
   await page.waitForTimeout(500);
-  await page.locator('button:has-text("試合ルールを決める")').first().click();
+  await page.locator('button:has-text("ルールを決める（タイブレーク等）")').first().click();
   await page.waitForTimeout(600);
   await page.click('.sheet .lr-sw[aria-label="全員打ちにする"]');
   await page.waitForTimeout(400);
