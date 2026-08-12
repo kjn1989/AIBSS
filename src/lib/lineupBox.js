@@ -14,6 +14,14 @@
 // ============================================================
 
 // 守備位置コード→フル表記(カード表示用)。例: 投→投手 / 遊→遊撃 / DH→指名打者。
+import { rulesAtInning } from './rules.js';
+
+// その回に宣言されている守備人数。宣言が無ければ null(旧データ・未設定)。
+function declaredFieldCount(game, inning) {
+  const n = Number(rulesAtInning(game, inning)?.fieldCount);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 const POS_FULL_JA = { 投: '投手', 捕: '捕手', 一: '一塁', 二: '二塁', 三: '三塁', 遊: '遊撃', 左: '左翼', 中: '中堅', 右: '右翼', DH: '指名打者' };
 const POS_FULL_EN = { 投: 'P', 捕: 'C', 一: '1B', 二: '2B', 三: '3B', 遊: 'SS', 左: 'LF', 中: 'CF', 右: 'RF', DH: 'DH' };
 export function posFull(code, lang = 'ja') {
@@ -283,9 +291,13 @@ export function findPositionIssues(game) {
       for (const o of orders) e.orders.add(o);
       e.innings.push(inn);
     }
+    // その回に宣言されている守備人数。10人守備(4外野)なら同じ位置に2人が正常、
+    // 8人以下なら守備位置が空くのが正常。宣言はイニング単位で効く(途中で人が帰る)。
+    const declared = declaredFieldCount(game, inn);
     for (const [position, playerIds] of byPos) {
       // 「打」(全員打ち)や「控」は複数人が正常なので守備位置の重複としては見ない
       if (!FIELD_POSITIONS.has(position)) continue;
+      if (declared > 9) continue; // 10人守備を宣言しているなら重複は正常
       // 同じ選手が2枠に居るだけの場合は「2人が同じ位置」ではない(上の slotSeen で扱う)
       const distinct = [...new Set(playerIds)];
       if (distinct.length < 2) continue;
@@ -293,8 +305,11 @@ export function findPositionIssues(game) {
       if (!dupSeen.has(key)) dupSeen.set(key, { position, playerIds: distinct, innings: [] });
       dupSeen.get(key).innings.push(inn);
     }
-    // 守備位置が9つ揃うはずの布陣のときだけ「不在」を見る(DHや人数不足の試合で誤警告しない)
-    if (slots.length >= 9) {
+    // 守備位置が9つ揃うはずの布陣のときだけ「不在」を見る(DHや人数不足の試合で誤警告しない)。
+    // 人数を宣言していればそれに従い、宣言が無い試合(旧データ含む)は
+    // これまでどおり打順の枠数から推し量る。
+    const expectAll = declared ? declared >= 9 : slots.length >= 9;
+    if (expectAll) {
       for (const p of STANDARD_POSITIONS) {
         if (byPos.has(p)) continue;
         if (!missSeen.has(p)) missSeen.set(p, []);

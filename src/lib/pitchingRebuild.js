@@ -16,8 +16,13 @@
 // 記録していない試合)には架空のアウトを足さない(下記 outs>0 のガード)。
 //
 // 注: 自責点は近似(全失点を自責として仮置き)。勝利/セーブ/ホールドは保持する。
+// ただしタイブレークの回だけは、置いた走者が還った分を自責点から外す。
+// 置いた走者が実際に還ったかまでは記録から追えないので、その回の失点のうち
+// 置いた走者の人数ぶんを上限として外す(走者が残塁したのに他の走者で失点した場合は
+// 引きすぎになる)。人が直せるよう、投手成績の修正シートから手で上書きできる。
 // ============================================================
 import { RESULTS, newPitchingRecord } from './model.js';
+import { isTiebreakInning, rulesAtInning, runnersPlaced } from './rules.js';
 
 // 投手交代を表すログか(kind:'pitcher' または 守備位置'投'のsub)
 export const isPitcherChangeLog = (l) => l.kind === 'pitcher' || (l.kind === 'sub' && l.payload?.position === '投');
@@ -66,9 +71,26 @@ export function rebuildPitchingStats(game) {
     if (!isFieldingHalf(game, l.isTop)) return null;
     const k = halfKey(l.inning, l.isTop);
     let h = halves.get(k);
-    if (!h) { h = { pos: halfPos(l.inning, l.isTop), outs: 0, lastPitcherId: pid || null }; halves.set(k, h); }
+    if (!h) {
+      // タイブレークの回は、置いた走者の人数ぶんを自責点から外せる枠として持つ
+      const tb = isTiebreakInning(game, l.inning) ? rulesAtInning(game, l.inning).tiebreak : null;
+      h = {
+        pos: halfPos(l.inning, l.isTop), outs: 0, lastPitcherId: pid || null,
+        unearnedLeft: tb ? runnersPlaced(tb.runners) : 0,
+      };
+      halves.set(k, h);
+    }
     if (pid) h.lastPitcherId = pid; // その回を締めた投手(記録漏れアウトの帰属先)
     return h;
+  };
+  // 失点のうち自責点として数える分。タイブレークの回は置いた走者ぶんを先に外す。
+  let unearnedExcluded = 0;
+  const earnedOf = (h, runs) => {
+    if (!h || !runs || h.unearnedLeft <= 0) return runs;
+    const off = Math.min(h.unearnedLeft, runs);
+    h.unearnedLeft -= off;
+    unearnedExcluded += off;
+    return runs - off;
   };
 
   let cur = startPitcher;
@@ -97,11 +119,12 @@ export function rebuildPitchingStats(game) {
       if (p.result === 'so') pr.strikeouts += 1;
       pr.outsRecorded += p.outsOnPlay || 0;
       pr.runs += p.runs || 0;
-      pr.earnedRuns += p.runs || 0; // 近似(自責=失点)。手動調整で補正可
       pr.pitches += p.pitchCount || 0;
       if (p.pitchCount) { const k = String(l.inning); pr.pitchesByInning[k] = (pr.pitchesByInning[k] || 0) + p.pitchCount; }
       l.payload = { ...p, pitcherId: cur }; // どの投手が投げたかを再設定(対左右split用)
       const h = touchHalf(l, cur);
+      // 近似(自責=失点)。タイブレークで置いた走者ぶんだけ外す。手動調整で補正可
+      pr.earnedRuns += earnedOf(h, p.runs || 0);
       if (h) h.outs += p.outsOnPlay || 0;
     } else if (l.kind === 'runner' || l.kind === 'sb') {
       // 走塁アウト(盗塁死・牽制死等)。守備側のときだけ投手のアウトに数える。
@@ -125,5 +148,5 @@ export function rebuildPitchingStats(game) {
     filledOuts += 3 - h.outs;
   }
 
-  return { records: [...recs.values()], lastPitcherId: lastPid || null, filledOuts };
+  return { records: [...recs.values()], lastPitcherId: lastPid || null, filledOuts, unearnedExcluded };
 }

@@ -7,11 +7,12 @@
 import React, { createContext, useContext, useReducer, useEffect, useRef } from 'react';
 import {
   newPlayer, newMember, newGame, newAtBat, newPitch, newPlayLog, newPitchingRecord, RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES,
-  OPP_LETTERS, DEFAULT_EDITION, normalizeEdition, multiOutLabel,
+  OPP_LETTERS, DEFAULT_EDITION, normalizeEdition, multiOutLabel, uid,
 } from '../lib/model.js';
 import { generateDemoData } from '../lib/demo.js';
 import { rebuildPitchingStats } from '../lib/pitchingRebuild.js';
 import { swapTargetIndex } from '../lib/logOrder.js';
+import { describeRulePatch } from '../lib/rules.js';
 import { resolveStarters, alignmentByInning, findPositionIssues } from '../lib/lineupBox.js';
 
 // 1人しか就けない守備位置(「打」=全員打ち・「控」は複数人可)。位置変更の入れ替え判定に使う。
@@ -962,6 +963,42 @@ export function reducer(state, action) {
       g.oppPitchingFix = fix;
       g.updatedAt = Date.now();
       return { ...state, games: { ...state.games, [g.id]: g } };
+    }
+
+    // ===== 試合中に変わるルール(タイブレーク・守備人数・全員打ち) =====
+    // 試合前に決めた rules は土台として残し、「何回から何を変えたか」を積む。
+    // fromInning より前の回の記録には効かないので、終わった回を指定して
+    // 「宣言し忘れていた」を後から入れることもできる。
+    case 'SET_LIVE_RULES': {
+      const g = deep(state.games[action.gameId]);
+      const patch = action.patch || {};
+      if (!Object.keys(patch).length) return state;
+      const from = Math.max(1, Number(action.fromInning) || 1);
+      if (action.preGame) {
+        // 試合前は土台そのものを書き換える(履歴に積まない)
+        g.rules = { ...(g.rules || {}), ...patch };
+      } else {
+        g.ruleChanges = [...(g.ruleChanges || []), {
+          id: uid(), at: Date.now(), fromInning: from, patch, text: action.text || describeRulePatch(patch),
+        }];
+      }
+      // タイブレークは自責点の数え方を変えるので、投手成績を振り直す
+      if ('tiebreak' in patch) {
+        const { records } = rebuildPitchingStats(g);
+        if (records.length) g.pitchingRecords = records;
+      }
+      g.updatedAt = Date.now();
+      return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
+    }
+    case 'REMOVE_RULE_CHANGE': {
+      const g = deep(state.games[action.gameId]);
+      const before = (g.ruleChanges || []).length;
+      g.ruleChanges = (g.ruleChanges || []).filter((c) => c.id !== action.changeId);
+      if (g.ruleChanges.length === before) return state;
+      const { records } = rebuildPitchingStats(g);
+      if (records.length) g.pitchingRecords = records;
+      g.updatedAt = Date.now();
+      return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
     }
 
     case 'SET_DECISION': {

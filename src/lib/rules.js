@@ -8,7 +8,18 @@
 //   mercy: [{ after: 5, diff: 7 }],  // コールド条件(after回以降にdiff点差) 複数可・空配列=なし
 //   pitchLimit: { perGame: 70, warnAt: 60 } | null, // 投手の球数制限(1試合あたり)
 //   timeLimitMin: 90 | null,         // 時間制限(分)。草野球で多い「90分・時間切れ後は新しい回に入らない」等
+//   tiebreak: { fromInning: 8, runners: '2'|'12'|'23', order: 'cont'|'top' } | null,
+//   fieldCount: 9,                   // 自チームが守りに就く人数(7..10)。9以外なら守備位置の警告を止める
+//   allBat: { size: 12 } | null,     // 全員打ち(打順の人数)。守備に就かない打者を正常として扱う
 // }
+//
+// タイブレーク・守備人数・全員打ちは「試合中に変わる」ことがある(人が帰って8人になる、
+// 時間が押して延長はタイブレーク、途中から全員打ちにする)。そのため試合前に決めた
+// rules を土台に、game.ruleChanges で「何回から何を変えたか」を積む形にしてある。
+//
+// game.ruleChanges = [{ id, at, fromInning, patch: { fieldCount: 8 }, text }]
+//   - fromInning より前の回の記録には影響しない(遡って宣言し忘れを直すのにも使う)
+//   - ある回に効いているルールは rulesAtInning(game, inning) で引く
 //
 // 方針:
 // - ルールエンジンは「強制終了」しない。条件成立を検知して提案バナーを出すだけで、
@@ -56,6 +67,91 @@ export function presetById(id) {
   return RULE_PRESETS.find((p) => p.id === id) || null;
 }
 
+// ------------------------------------------------------------
+// 試合中に変わるルール(タイブレーク・守備人数・全員打ち)
+// ------------------------------------------------------------
+
+// 守るのは最大10人(4外野まで)。11人以上を打順に入れるのは「全員打ち」の話。
+export const FIELD_COUNT_MIN = 7;
+export const FIELD_COUNT_MAX = 10;
+export const ALL_BAT_MIN = 10;
+export const ALL_BAT_MAX = 15;
+export const TIEBREAK_RUNNERS = ['2', '12', '23'];
+export const TIEBREAK_ORDERS = ['cont', 'top'];
+// 置く走者の人数(自責点から外す上限に使う)
+export const runnersPlaced = (r) => (r === '2' ? 1 : 2);
+
+const LIVE_KEYS = ['tiebreak', 'fieldCount', 'allBat'];
+
+// ある回に効いているルール。試合前に決めた rules に、fromInning <= inning の変更を順に重ねる。
+export function rulesAtInning(game, inning) {
+  const base = game?.rules || null;
+  const changes = game?.ruleChanges || [];
+  if (!changes.length) return base;
+  const n = Number(inning) || 1;
+  const out = { ...(base || {}) };
+  for (const c of [...changes].sort((a, b) => (a.fromInning - b.fromInning) || (a.at - b.at))) {
+    if (Number(c.fromInning) > n) continue;
+    for (const k of LIVE_KEYS) if (k in (c.patch || {})) out[k] = c.patch[k];
+  }
+  return out;
+}
+
+// 試合の最後まで効いているルール(表示・既定値の初期化用)
+export function currentRules(game) {
+  const innings = (game?.ruleChanges || []).map((c) => Number(c.fromInning) || 1);
+  return rulesAtInning(game, Math.max(Number(game?.inning) || 1, ...innings, 1));
+}
+
+// 守備人数。未指定(旧データ含む)は9人として扱う
+export function fieldCountAt(game, inning) {
+  const n = Number(rulesAtInning(game, inning)?.fieldCount);
+  return Number.isFinite(n) && n > 0 ? n : 9;
+}
+
+// その回がタイブレークか
+export function isTiebreakInning(game, inning) {
+  const tb = rulesAtInning(game, inning)?.tiebreak;
+  return !!tb && Number(inning) >= Number(tb.fromInning || 0);
+}
+
+// 変更内容を1行で。履歴表示に使う(保存時に text として焼き込む)
+export function describeRulePatch(patch = {}, lang = 'ja') {
+  const en = lang === 'en';
+  const parts = [];
+  if ('tiebreak' in patch) {
+    const tb = patch.tiebreak;
+    if (!tb) parts.push(en ? 'Tiebreak off' : 'タイブレークをやめた');
+    else {
+      const r = { 2: en ? 'runner on 2nd' : '走者 二塁', 12: en ? 'runners on 1st & 2nd' : '走者 一・二塁', 23: en ? 'runners on 2nd & 3rd' : '走者 二・三塁' }[tb.runners] || tb.runners;
+      const o = tb.order === 'top' ? (en ? 'order restarts' : 'その回の先頭から') : (en ? 'order continues' : '前の回の続き');
+      parts.push(en ? `Tiebreak (${r}, ${o})` : `タイブレーク（${r}・${o}）`);
+    }
+  }
+  if ('fieldCount' in patch) {
+    parts.push(patch.fieldCount === 9
+      ? (en ? 'Back to 9 fielders' : '守備を9人に戻した')
+      : (en ? `${patch.fieldCount} fielders` : `守備 ${patch.fieldCount}人`));
+  }
+  if ('allBat' in patch) {
+    parts.push(patch.allBat
+      ? (en ? `Bat-around lineup of ${patch.allBat.size}` : `全員打ち ${patch.allBat.size}人打順`)
+      : (en ? 'Bat-around off' : '全員打ちをやめた'));
+  }
+  return parts.join(en ? ' / ' : '／');
+}
+
+// 変更前後を比べて「変わった項目だけ」を取り出す。
+// 変えていないのに保存したときに、同じ内容が履歴に積まれるのを防ぐ。
+export function diffLiveRules(prev = {}, next = {}) {
+  const patch = {};
+  const norm = (k, v) => (k === 'fieldCount' ? (Number(v) || 9) : (v ? JSON.stringify(v) : ''));
+  for (const k of LIVE_KEYS) {
+    if (norm(k, prev?.[k]) !== norm(k, next?.[k])) patch[k] = next?.[k] ?? (k === 'fieldCount' ? 9 : null);
+  }
+  return patch;
+}
+
 // プリセットの表示ラベル(言語別)。保存値(id/rules)は不変。
 export function presetLabel(p, lang) {
   return lang === 'en' && p.en ? p.en : p.label;
@@ -84,6 +180,9 @@ export function describeRules(rules, lang = 'ja') {
   if (rules.timeLimitMin) parts.push(en ? `${rules.timeLimitMin}-min limit` : `${rules.timeLimitMin}分時間制限`);
   for (const m of rules.mercy || []) parts.push(en ? `mercy ${m.diff}+ after ${m.after}` : `${m.after}回${m.diff}点差コールド`);
   if (rules.pitchLimit?.perGame) parts.push(en ? `${rules.pitchLimit.perGame}-pitch limit` : `球数${rules.pitchLimit.perGame}球制限`);
+  if (rules.tiebreak) parts.push(en ? `tiebreak from ${rules.tiebreak.fromInning}` : `${rules.tiebreak.fromInning}回からタイブレーク`);
+  if (rules.fieldCount && rules.fieldCount !== 9) parts.push(en ? `${rules.fieldCount} fielders` : `守備${rules.fieldCount}人`);
+  if (rules.allBat) parts.push(en ? `bat-around ${rules.allBat.size}` : `全員打ち${rules.allBat.size}人`);
   return parts.join(en ? ' · ' : '・');
 }
 
