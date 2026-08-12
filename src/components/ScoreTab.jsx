@@ -21,6 +21,7 @@ import { playLabel } from '../lib/voiceParser.js';
 import { convertMemoToPlay, guessPlayFromMemo, maskNames } from '../lib/gemini.js';
 import { canWriteCloud } from '../lib/officialCloud.js';
 import { RULE_PRESETS, presetById, presetLabel, describeRules, initialPresetIdFor, gameEndCheck, pitchLimitCheck, timeLimitCheck } from '../lib/rules.js';
+import LiveRulesSheet from './LiveRulesSheet.jsx';
 
 // 投手名は6文字までを基準サイズで、長い名前(カタカナ等)はフォントを縮めて枠内に収める
 function pitcherFont(name) {
@@ -107,6 +108,15 @@ function customFromRules(rules) {
   };
 }
 
+// タイブレーク・守備人数・全員打ちを決めたかどうかの1行。何も決めていなければ空。
+function liveSummary(live, t) {
+  const parts = [];
+  if (live.tiebreak) parts.push(t('lr.sum.tbOn', { n: live.tiebreak.fromInning, r: t(`lr.runner.${live.tiebreak.runners}`), o: t(`lr.order.${live.tiebreak.order}`) }));
+  if (live.fieldCount && live.fieldCount !== 9) parts.push(t('lr.fc.title') + ' ' + t('lr.peopleN', { n: live.fieldCount }));
+  if (live.allBat) parts.push(t('lr.ab.title') + ' ' + t('lr.peopleN', { n: live.allBat.size }));
+  return parts.join('／');
+}
+
 // ルール選択UI(プリセット選択+カスタム入力+説明)。作成時・変更時で共用。
 function RulePicker({ presetId, custom, edition, onPresetChange, setCustom, allowReentry, setAllowReentry }) {
   const t = useT();
@@ -190,6 +200,9 @@ function GameSetup() {
   const recall = lastOppRoster(allGames, opponent);
   const [carryOver, setCarryOver] = useState(true);
   const [att, setAtt] = useState(false); // 「今日のメンバー」を開いているか
+  // タイブレーク・守備人数・全員打ちは試合前に決めておける(当日その場で変わったら試合中にも変えられる)
+  const [live, setLive] = useState({ tiebreak: null, fieldCount: 9, allBat: null });
+  const [liveOpen, setLiveOpen] = useState(false);
   const matched = pastOpponents.find((o) => o.key === normalizeName(opponent));
 
   const onPresetChange = (id) => {
@@ -207,7 +220,7 @@ function GameSetup() {
       payload: {
         // 表記ゆれを入口で止める: 過去に対戦した相手なら、その書き方に揃える
         opponent: matched ? matched.name : opponent.trim(),
-        isHome, season: season.trim(), rules: resolveRulesFrom(presetId, custom), allowReentry,
+        isHome, season: season.trim(), rules: { ...resolveRulesFrom(presetId, custom), ...live }, allowReentry,
         attendees,
         oppRoster: carryOver && recall ? recall : null,
       },
@@ -270,10 +283,24 @@ function GameSetup() {
           allowReentry={allowReentry} setAllowReentry={setAllowReentry}
         />
 
+        <button className="mt8" style={{ width: '100%' }} onClick={() => setLiveOpen(true)}>
+          {t('lr.open')}
+        </button>
+        <p className="small dim mt8">{liveSummary(live, t)}</p>
+
         <button className="primary" style={{ width: '100%' }} onClick={() => setAtt(true)}>
           {t('gamesetup.start')}
         </button>
       </div>
+
+      {liveOpen && (
+        <LiveRulesSheet
+          draft={live}
+          regulationInnings={resolveRulesFrom(presetId, custom)?.innings}
+          onDraft={(next) => setLive({ tiebreak: next.tiebreak, fieldCount: next.fieldCount, allBat: next.allBat })}
+          onClose={() => setLiveOpen(false)}
+        />
+      )}
 
       {att && (
         <AttendanceSheet

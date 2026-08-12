@@ -11,6 +11,7 @@ import { playLabel } from '../lib/voiceParser.js';
 import { computeBoxScore } from '../lib/boxscore.js';
 import { parseBatterCorrection, findTargetAtBat, parseSubstitutions, parseBatterReassignments, parseResultCorrections, assignResultTargets, mergeResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parsePositionSwaps, parseSlotBatters, parseAtBatDeletions, isExplicitSubText, explicitOrderChange, inGamePlayerIds, preferInGamePlayers } from '../lib/correctionParser.js';
 import { posFull, buildLineupRows, findPositionIssues, alignmentByInning } from '../lib/lineupBox.js';
+import LiveRulesSheet from './LiveRulesSheet.jsx';
 import { findDuplicateAtBats, canRebuildOrders, findOrderBreaks } from '../lib/battersRebuild.js';
 import { oppNameOf } from '../lib/oppBox.js';
 import { interpretCorrection } from '../lib/gemini.js';
@@ -135,6 +136,7 @@ function NLCorrectionCard({ game }) {
   const [msg, setMsg] = useState(null); // { kind:'ok'|'err', text }
   const [asks, setAsks] = useState([]); // 聞き返し: [{ id, text, options:[{label, sentence}] }]
   const [busy, setBusy] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false); // 試合ルール(タイブレーク・守備人数・全員打ち)
   // 付け替えの重ねがけで壊れた打席の検出(同じ回に2打順で打席 / 打順の並びのズレ)
   const dupAtBats = findDuplicateAtBats(game);
   const orderBreaks = canRebuildOrders(game) ? findOrderBreaks(game) : 0;
@@ -843,8 +845,11 @@ function NLCorrectionCard({ game }) {
             </div>
           ))}
           <div className="small dim mt8">{t('gp.nlPosFixHint')}</div>
+          {/* 9人でないのが正しい試合(人が帰った・4外野)では、直すべきは記録ではなくルール */}
+          <button className="small mt8" onClick={() => setRulesOpen(true)}>{t('lr.openFromWarn')}</button>
         </div>
       )}
+      {rulesOpen && <LiveRulesSheet game={game} onClose={() => setRulesOpen(false)} />}
       {msg && (msg.kind === 'ok'
         ? <div className="small mt8" style={{ color: 'var(--green)', fontWeight: 700 }}>✅ {msg.text}</div>
         : <div className="warn-box mt8">⚠️ {msg.text}</div>
