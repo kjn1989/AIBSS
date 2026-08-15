@@ -2365,6 +2365,9 @@ button.manage-open {
 .fv-lead b { font-size: 15px; font-variant-numeric: tabular-nums; }
 .fv-lead b.up { color: var(--green); }
 .fv-lead b.down { color: var(--amber); }
+/* すぐ上に勝率(%)が並ぶので、この%が何の割合かを実数で必ず添える */
+.fv-lead u { display: block; text-decoration: none; font-size: 9.5px; color: var(--text-dim); }
+.fv-lead-title { text-align: center; }
 
 /* 流れの線のすぐ下に線分スコア。落ちている回とその回の失点を目で結びつける。
    延長までいくと列が増えるので、はみ出す前にここだけ横スクロールさせる */

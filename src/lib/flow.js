@@ -398,7 +398,9 @@ export function weShape(series = []) {
   const pct = (x) => Math.round((x / n) * 100);
   return {
     lowest, highest, n,
-    // 母数は両チームの全打席。経過時間は記録していないので「時間」では言えない
+    // 母数は両チームの全打席。経過時間は記録していないので「時間」では言えない。
+    // 割合だけを勝率の近くに置くと勝率と読み違えられるので、実数も一緒に返す
+    ahead, tied, behind,
     aheadPct: pct(ahead), tiedPct: pct(tied), behindPct: pct(behind),
   };
 }

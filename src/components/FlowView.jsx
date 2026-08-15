@@ -348,13 +348,27 @@ export default function FlowView({ game, onClose }) {
                 <span>{t('fv.highPoint', { inn: innOf(shape.highest), v: Math.round(shape.highest.we * 100) })}</span>
               </div>
               {/* 割合は点差だけで決まるので、どちらが先攻でも偏らない。
-                  勝率のほうは後攻が最後に打つぶん同点でも50%を割るので、割合には使わない */}
+                  勝率のほうは後攻が最後に打つぶん同点でも50%を割るので、割合には使わない。
+                  すぐ上に勝率(%)が並ぶので、この%が何の割合かを見出しと実数で必ず示す */}
+              <div className="section-title fv-lead-title">{t('fv.leadTitle', { n: shape.n })}</div>
               <div className="fv-lead">
-                <span><i>{t('fv.leadAhead')}</i><b className="up">{shape.aheadPct}%</b></span>
-                <span><i>{t('fv.leadTied')}</i><b>{shape.tiedPct}%</b></span>
-                <span><i>{t('fv.leadBehind')}</i><b className="down">{shape.behindPct}%</b></span>
+                <span>
+                  <i>{t('fv.leadAhead')}</i>
+                  <b className="up">{shape.aheadPct}%</b>
+                  <u>{t('fv.leadPa', { n: shape.ahead })}</u>
+                </span>
+                <span>
+                  <i>{t('fv.leadTied')}</i>
+                  <b>{shape.tiedPct}%</b>
+                  <u>{t('fv.leadPa', { n: shape.tied })}</u>
+                </span>
+                <span>
+                  <i>{t('fv.leadBehind')}</i>
+                  <b className="down">{shape.behindPct}%</b>
+                  <u>{t('fv.leadPa', { n: shape.behind })}</u>
+                </span>
               </div>
-              <div className="small dim">{t(over ? 'fv.leadNote.end' : 'fv.leadNote.now', { n: shape.n })}</div>
+              <div className="small dim">{t('fv.leadNote')}</div>
             </div>
           )}
 

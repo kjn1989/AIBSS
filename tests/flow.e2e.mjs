@@ -146,6 +146,18 @@ try {
   check('三者凡退の回は安打欄が空', hits[1]?.hit === '', JSON.stringify(hits[1]));
   check('得点と安打が別の数字として出ている', hits[0]?.run === '4' && hits[0]?.hit === '4', JSON.stringify(hits[0]));
 
+  // --- 点差の内訳が勝率と読み違えられない ---
+  // すぐ上に「勝率 7%」が並ぶので、この%が何の割合かを見出しと実数で示す
+  const leadTxt = await page.locator('.fv-now').innerText();
+  check('点差の内訳だと見出しに書いてある', leadTxt.includes('点差の内訳'), leadTxt);
+  check('割合に打席数が添えてある', /\d+打席/.test(leadTxt), leadTxt);
+  check('勝率とは別だと書いてある', leadTxt.includes('上の勝率とは別'), leadTxt);
+  const tiles = await page.evaluate(() => [...document.querySelectorAll('.fv-lead > span')]
+    .map((x) => ({ pct: x.querySelector('b')?.textContent, pa: x.querySelector('u')?.textContent })));
+  check('3つとも割合と打席数の両方が出ている',
+    tiles.length === 3 && tiles.every((x) => /%$/.test(x.pct || '') && /打席$/.test(x.pa || '')),
+    JSON.stringify(tiles));
+
   // --- 打席を押すと前後の勝率が読める ---
   const box = await page.locator('.fv-chart svg').boundingBox();
   await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
