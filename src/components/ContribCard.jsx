@@ -5,6 +5,7 @@ import { buildRunDists, buildWinModel } from '../lib/winExp.js';
 import { currentRules } from '../lib/rules.js';
 import { halfStartKeyOf } from '../lib/tiebreak.js';
 import { aggregateContrib, rankContrib, formatContrib } from '../lib/contrib.js';
+import ReTableSheet from './ReTableSheet.jsx';
 
 // ---- 勝利貢献 / 得点貢献 ----
 // 打率も打点も「どの場面だったか」を捨てている。9回2死同点の一打も、
@@ -22,6 +23,8 @@ export default function ContribCard({ games }) {
   const nameOf = usePlayerName();
   const [side, setSide] = useState('bat');
   const [open, setOpen] = useState(false);
+  // 数字の土台になっている24通りの表そのものを、いつでも開けるようにする
+  const [showRe, setShowRe] = useState(false);
 
   const { bat, pit } = useMemo(() => {
     const real = (games || []).filter((g) => g && !String(g.id).startsWith('demo-'));
@@ -93,6 +96,10 @@ export default function ContribCard({ games }) {
       <p className="small dim mt8">{t('cc.note.wpa')}</p>
       <p className="small dim">{t(`cc.note.${side}`)}</p>
       <p className="small dim">{t('cc.noWar')}</p>
+      <button className="small mt8" style={{ width: '100%' }} onClick={() => setShowRe(true)}>
+        {t('ret.open')}
+      </button>
+      {showRe && <ReTableSheet games={games} onClose={() => setShowRe(false)} />}
     </div>
   );
 }

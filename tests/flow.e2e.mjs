@@ -196,6 +196,37 @@ try {
   check('投手側は0が「場面どおり」だと書いてある', pitTxt.includes('場面どおり'), pitTxt.slice(-500));
   check('切り替えたら打者の表は消えている', (await page.locator('.cc-table tbody tr').count()) === 0);
 
+  // --- 24通りの表の解説が開ける ---
+  // 数字の土台になっている表を見せずに値だけ出すと、当たっているか誰も確かめられない
+  await cc.locator('button:has-text("打者")').click();
+  await page.waitForTimeout(300);
+  await cc.locator('button:has-text("期待得点・期待失点とは")').click();
+  await page.waitForTimeout(800);
+  const ret = page.locator('.sheet:has-text("期待得点・期待失点とは")');
+  check('解説シートが開く', (await ret.count()) >= 1);
+  const cells = await page.evaluate(() =>
+    [...document.querySelectorAll('.ret-table tbody tr')].map((tr) => tr.querySelectorAll('td.num').length));
+  check('24通りが並んでいる', cells.length === 8 && cells.every((c) => c === 3),
+    `行=${cells.length} 列=${JSON.stringify(cells)}`);
+  const retTxt = await ret.innerText();
+  check('走者なしから満塁まで全部ある',
+    ['走者なし', '一塁', '二塁', '三塁', '一二塁', '一三塁', '二三塁', '満塁'].every((x) => retTxt.includes(x)),
+    retTxt.slice(0, 400));
+  check('期待得点と期待失点が同じ表だと書いてある', retTxt.includes('同じ表'), retTxt.slice(0, 600));
+  check('打席の数え方(式)が書いてある', retTxt.includes('打席前の期待得点'), retTxt.slice(0, 900));
+  check('回数を併記している', /\d+回/.test(retTxt), retTxt.slice(0, 400));
+  // 走者が進むほど・アウトが少ないほど期待値は高い(表が壊れていないこと)
+  const grid = await page.evaluate(() =>
+    [...document.querySelectorAll('.ret-table tbody tr')]
+      .map((tr) => [...tr.querySelectorAll('td.num b')].map((b) => parseFloat(b.textContent))));
+  check('アウトが増えるほど期待値は下がる',
+    grid.every((row) => row[0] > row[1] && row[1] > row[2]), JSON.stringify(grid));
+  check('走者なしより満塁のほうが高い', grid[7][0] > grid[0][0], JSON.stringify([grid[0][0], grid[7][0]]));
+  const retOver = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+  check('解説シートも横あふれなし', !retOver);
+  await ret.locator('.sheet-actions button:has-text("閉じる")').click();
+  await page.waitForTimeout(500);
+
   // --- 横あふれなし ---
   const over = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   check('横あふれなし', !over);

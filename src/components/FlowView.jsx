@@ -6,6 +6,7 @@ import { currentRules } from '../lib/rules.js';
 import { halfStartKeyOf } from '../lib/tiebreak.js';
 import { aggregateScorers, scorerName } from '../lib/scorers.js';
 import ScorerPicker from './ScorerPicker.jsx';
+import ReTableSheet from './ReTableSheet.jsx';
 import { computeBoxScore, hitsByInning } from '../lib/boxscore.js';
 import Sheet from './Sheet.jsx';
 
@@ -271,6 +272,8 @@ function Chart({ series, tags, order, t, linescore }) {
 export default function FlowView({ game, onClose }) {
   const { state, dispatch } = useStore();
   const t = useT();
+  // 線の土台になっている24通りの表そのものを、ここからも開けるようにする
+  const [showRe, setShowRe] = useState(false);
 
   // 得点期待値は「自分たちの試合」から作る。相手の打席も材料になる。
   const edition = state.settings.edition || '草野球';
@@ -454,9 +457,14 @@ export default function FlowView({ game, onClose }) {
                 n: KOSHIEN_SOURCE.states, data: KOSHIEN_SOURCE.data, where: KOSHIEN_SOURCE.where,
               })}</>
             )}
+            <button className="small mt8" style={{ width: '100%' }} onClick={() => setShowRe(true)}>
+              {t('ret.open')}
+            </button>
           </div>
         </>
       )}
+
+      {showRe && <ReTableSheet onClose={() => setShowRe(false)} />}
 
       <div className="sheet-actions">
         <button className="primary" onClick={onClose}>{t('action.close')}</button>
