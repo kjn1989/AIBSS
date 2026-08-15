@@ -1,6 +1,8 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { useStore, useT } from '../state/store.jsx';
-import { buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, formatRate, flowShape, KOSHIEN_RE, KOSHIEN_SOURCE } from '../lib/flow.js';
+import { buildRunExpectancy, weSeries, flowRuns, judgeFlowTags, formatRate, weShape, KOSHIEN_RE, KOSHIEN_SOURCE } from '../lib/flow.js';
+import { buildRunDists, buildWinModel } from '../lib/winExp.js';
+import { currentRules } from '../lib/rules.js';
 import { aggregateScorers, scorerName } from '../lib/scorers.js';
 import ScorerPicker from './ScorerPicker.jsx';
 import Sheet from './Sheet.jsx';
@@ -20,19 +22,17 @@ const PADB = 16;    // 回のラベルを置く余白
 
 function Chart({ series, tags, order, t }) {
   const svgRef = useRef(null);
-  // 押した打席。線を見て「ここは何点ぶん?」と思ったときに読めるようにする
+  // 押した打席。線を見て「ここは何%?」と思ったときに読めるようにする
   const [sel, setSel] = useState(null);
   if (!series.length) return null;
-  const vals = series.map((s) => s.cum);
-  const hi = Math.max(0.5, ...vals);
-  const lo = Math.min(-0.5, ...vals);
-  const span = hi - lo;
+  // 縦軸は勝率なので 0〜100% で固定する。試合ごとに目盛りが伸び縮みしないので、
+  // 別の試合の線と同じ目で見られる
   const x = (i) => PADL + (series.length < 2 ? W / 2 : (i / (series.length - 1)) * W);
-  const y = (v) => ((hi - v) / span) * H;
-  const zero = y(0);
+  const y = (v) => (1 - Math.max(0, Math.min(1, v))) * H;
+  const half = y(0.5);
 
-  const line = series.map((s, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(s.cum).toFixed(1)}`).join('');
-  const area = `${line}L${x(series.length - 1).toFixed(1)},${zero.toFixed(1)}L${x(0).toFixed(1)},${zero.toFixed(1)}Z`;
+  const line = series.map((s, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(s.we).toFixed(1)}`).join('');
+  const area = `${line}L${x(series.length - 1).toFixed(1)},${half.toFixed(1)}L${x(0).toFixed(1)},${half.toFixed(1)}Z`;
 
   const marks = tags.map((tg) => {
     const at = order.get(tg.id) ?? 0;
@@ -48,14 +48,11 @@ function Chart({ series, tags, order, t }) {
       bounds.push({ i, s: series[i] });
     }
   }
-  // 縦軸に置く数字。上端・0・下端の3つで足りるが、
-  // 片側にしか振れていない試合では下端と0が重なるので、近すぎるものは省く
-  const ticks = [hi, 0, lo].filter((v, i, a) => a.findIndex((u) => Math.abs(y(u) - y(v)) < 14) === i);
+  const ticks = [1, 0.5, 0];
 
   // ---- 横軸のラベル ----
   // 延長までいくと半回は20を超える。全部に「10表」と書くと文字が重なって読めない。
   // まず半回すべてに間隔が取れるか見て、取れなければ回の頭(表)だけの数字に落とす。
-  // それでも詰まるなら、間隔が取れる回だけを残す(必ず重ならない側に倒す)。
   const halves = [{ i: 0, s: series[0] }, ...bounds];
   const spaced = (list, min) => {
     const out = [];
@@ -83,7 +80,8 @@ function Chart({ series, tags, order, t }) {
   };
 
   const cur = sel === null ? null : series[sel];
-  const signed = (v) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(2)}`;
+  const pct = (v) => `${Math.round(v * 100)}%`;
+  const signedPt = (v) => `${v >= 0 ? '+' : '−'}${Math.abs(Math.round(v * 100))}pt`;
 
   return (
     <div className="fv-chart">
@@ -96,18 +94,18 @@ function Chart({ series, tags, order, t }) {
             <stop offset="0%" stopColor="var(--green)" stopOpacity="0.32" />
             <stop offset="100%" stopColor="var(--green)" stopOpacity="0" />
           </linearGradient>
-          <clipPath id="fvTop"><rect x="0" y="0" width={PADL + W + 6} height={zero} /></clipPath>
-          <clipPath id="fvBot"><rect x="0" y={zero} width={PADL + W + 6} height={H - zero} /></clipPath>
+          <clipPath id="fvTop"><rect x="0" y="0" width={PADL + W + 6} height={half} /></clipPath>
+          <clipPath id="fvBot"><rect x="0" y={half} width={PADL + W + 6} height={H - half} /></clipPath>
         </defs>
 
-        {/* 縦軸: 数字と目安の線 */}
+        {/* 縦軸: 勝率。50%が互角の線 */}
         {ticks.map((v) => (
           <g key={v}>
             <line x1={PADL} y1={y(v)} x2={PADL + W} y2={y(v)}
-              stroke="var(--border)" strokeWidth="1" strokeDasharray={v === 0 ? '0' : '2 4'} />
+              stroke="var(--border)" strokeWidth="1" strokeDasharray={v === 0.5 ? '0' : '2 4'} />
             <text x={PADL - 5} y={y(v) + 3.5} fontSize="9" textAnchor="end"
               fill="var(--text-dim)" style={{ fontVariantNumeric: 'tabular-nums' }}>
-              {v > 0 ? `+${v.toFixed(1)}` : v.toFixed(1)}
+              {pct(v)}
             </text>
           </g>
         ))}
@@ -128,10 +126,10 @@ function Chart({ series, tags, order, t }) {
           strokeLinejoin="round" strokeLinecap="round" />
         {marks.map(({ tg, i }) => (
           <g key={tg.id}>
-            <line x1={x(i)} y1={y(series[i].cum)} x2={x(i)} y2={tg.payload?.dir === 'down' ? H : 0}
+            <line x1={x(i)} y1={y(series[i].we)} x2={x(i)} y2={tg.payload?.dir === 'down' ? H : 0}
               stroke={tg.payload?.dir === 'down' ? 'var(--amber)' : 'var(--green)'}
               strokeWidth="1" strokeOpacity="0.5" />
-            <circle cx={x(i)} cy={y(series[i].cum)} r="3.5"
+            <circle cx={x(i)} cy={y(series[i].we)} r="3.5"
               fill={tg.payload?.dir === 'down' ? 'var(--amber)' : 'var(--green)'} />
           </g>
         ))}
@@ -140,7 +138,7 @@ function Chart({ series, tags, order, t }) {
         {cur && (
           <g pointerEvents="none">
             <line x1={x(sel)} y1="0" x2={x(sel)} y2={H} stroke="var(--text)" strokeWidth="1" strokeOpacity="0.55" />
-            <circle cx={x(sel)} cy={y(cur.cum)} r="5" fill="var(--bg)" stroke="var(--accent)" strokeWidth="2" />
+            <circle cx={x(sel)} cy={y(cur.we)} r="5" fill="var(--bg)" stroke="var(--accent)" strokeWidth="2" />
           </g>
         )}
       </svg>
@@ -158,12 +156,12 @@ function Chart({ series, tags, order, t }) {
           </div>
           <div className="fv-read-nums">
             <span>
-              {t('fv.thisPa')}
-              <b className={cur.delta >= 0 ? 'up' : 'down'}>{signed(cur.delta)}</b>
+              {t('fv.winProb')}
+              <b className={cur.we >= 0.5 ? 'up' : 'down'}>{pct(cur.we)}</b>
             </span>
             <span>
-              {t('fv.soFar')}
-              <b className={cur.cum >= 0 ? 'up' : 'down'}>{signed(cur.cum)}</b>
+              {t('fv.thisPa')}
+              <b className={cur.delta >= 0 ? 'up' : 'down'}>{signedPt(cur.delta)}</b>
             </span>
           </div>
         </div>
@@ -186,9 +184,23 @@ export default function FlowView({ game, onClose }) {
   }, [state.games, game, edition]);
   const usesKoshien = edition === 'ブカツ(中高大)';
 
-  const series = useMemo(() => flowSeries(game, re), [game, re]);
-  const judged = useMemo(() => judgeFlowTags(game, series), [game, series]);
-  const swings = useMemo(() => flowRuns(series, 0.6).slice(0, 3), [series]);
+  // 勝率モデル。得点分布も「自分たちの試合」から作る(相手の打席も材料になる)
+  const winExp = useMemo(() => {
+    const games = Object.values(state.games || {}).filter((g) => g && !String(g.id).startsWith('demo-'));
+    const { dists } = buildRunDists(games.length ? games : [game], edition, re);
+    return buildWinModel({
+      dists,
+      isHome: !!game.isHome,
+      regulation: currentRules(game)?.innings || 7,
+    });
+  }, [state.games, game, edition, re]);
+
+  // 線の縦軸は勝率。50%が互角で、基準線が動かない
+  const series = useMemo(() => weSeries(game, winExp), [game, winExp]);
+  // しきい値は勝率(0〜1)の単位。1本のヒットで5%前後動くので、
+  // 「大きく動いた」は12%、「もう動いていた」は7%あたりに置く
+  const judged = useMemo(() => judgeFlowTags(game, series, { minSwing: 0.12, reactSwing: 0.07 }), [game, series]);
+  const swings = useMemo(() => flowRuns(series, 0.12).slice(0, 3), [series]);
 
   const order = useMemo(() => {
     const m = new Map();
@@ -200,10 +212,10 @@ export default function FlowView({ game, onClose }) {
   const career = useMemo(() => {
     if (!game.scorerId) return null;
     const games = Object.values(state.games || {}).filter((g) => g && !String(g.id).startsWith('demo-'));
-    return aggregateScorers(games, re)[game.scorerId] || null;
-  }, [state.games, game.scorerId, re]);
+    return aggregateScorers(games, winExp)[game.scorerId] || null;
+  }, [state.games, game.scorerId, winExp]);
 
-  const shape = useMemo(() => flowShape(series), [series]);
+  const shape = useMemo(() => weShape(series), [series]);
   const over = game.status === 'finished';
   const VD = { pre: t('fv.pre'), post: t('fv.post'), miss: t('fv.miss') };
   const innOf = (s) => t(s.isTop ? 'scoreboard.top' : 'scoreboard.bottom', { n: s.inning });
@@ -231,18 +243,18 @@ export default function FlowView({ game, onClose }) {
               「どこが底で、どこまで押し返したか」なので、そこを言う */}
           {shape && (
             <div className="fv-now">
-              <b className={`fv-lean ${shape.lean}`}>
-                {t(`fv.lean.${shape.lean}.${over ? 'end' : 'now'}`, { p: shape.leanPct, n: shape.n })}
-              </b>
               <div className="fv-peaks">
-                {shape.lowest.cum < -0.3 && (
-                  <span>{t('fv.lowPoint', { inn: innOf(shape.lowest), v: Math.abs(shape.lowest.cum).toFixed(1) })}</span>
-                )}
-                {shape.highest.cum > 0.3 && (
-                  <span>{t('fv.highPoint', { inn: innOf(shape.highest), v: shape.highest.cum.toFixed(1) })}</span>
-                )}
+                <span>{t('fv.lowPoint', { inn: innOf(shape.lowest), v: Math.round(shape.lowest.we * 100) })}</span>
+                <span>{t('fv.highPoint', { inn: innOf(shape.highest), v: Math.round(shape.highest.we * 100) })}</span>
               </div>
-              <div className="small dim">{t('fv.scaleNote')}</div>
+              {/* 割合は点差だけで決まるので、どちらが先攻でも偏らない。
+                  勝率のほうは後攻が最後に打つぶん同点でも50%を割るので、割合には使わない */}
+              <div className="fv-lead">
+                <span><i>{t('fv.leadAhead')}</i><b className="up">{shape.aheadPct}%</b></span>
+                <span><i>{t('fv.leadTied')}</i><b>{shape.tiedPct}%</b></span>
+                <span><i>{t('fv.leadBehind')}</i><b className="down">{shape.behindPct}%</b></span>
+              </div>
+              <div className="small dim">{t(over ? 'fv.leadNote.end' : 'fv.leadNote.now', { n: shape.n })}</div>
             </div>
           )}
 
@@ -254,7 +266,7 @@ export default function FlowView({ game, onClose }) {
                 {swings.map((sw) => (
                   <div className={`fv-swing ${sw.dir > 0 ? 'up' : 'down'}`} key={sw.from.id}>
                     <b>{innOf(sw.from) === innOf(sw.to) ? innOf(sw.from) : `${innOf(sw.from)}〜${innOf(sw.to)}`}</b>
-                    <span>{t(sw.dir > 0 ? 'fv.swingUs' : 'fv.swingThem', { n: sw.n, v: Math.abs(sw.swing).toFixed(1) })}</span>
+                    <span>{t(sw.dir > 0 ? 'fv.swingUs' : 'fv.swingThem', { n: sw.n, v: Math.round(Math.abs(sw.swing) * 100) })}</span>
                   </div>
                 ))}
               </div>

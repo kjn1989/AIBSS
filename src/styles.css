@@ -2352,8 +2352,11 @@ button.manage-open {
 
 /* 線の形をひとことで言う欄。終値(=点差と同じ値)は出さず、
    どちらに傾いていた時間が長いか・底と頂点を言う */
-.fv-lean { display: block; }
-.fv-lean.us { color: var(--green); }
-.fv-lean.them { color: var(--amber); }
-.fv-lean.even { color: var(--text); }
-.fv-peaks { display: flex; flex-direction: column; gap: 2px; margin: 6px 0 4px; font-size: 12px; color: var(--text-dim); }
+.fv-peaks { display: flex; flex-direction: column; gap: 3px; margin: 0 0 8px; font-size: 13px; }
+/* 点差の内訳。勝率とちがい先攻・後攻で偏らないので、割合はこちらで出す */
+.fv-lead { display: flex; gap: 10px; }
+.fv-lead > span { flex: 1; text-align: center; padding: 6px 4px; border-radius: 8px; background: var(--bg-3); border: 1px solid var(--border); }
+.fv-lead i { display: block; font-style: normal; font-size: 10.5px; color: var(--text-dim); }
+.fv-lead b { font-size: 15px; font-variant-numeric: tabular-nums; }
+.fv-lead b.up { color: var(--green); }
+.fv-lead b.down { color: var(--amber); }
