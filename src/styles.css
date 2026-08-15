@@ -2286,3 +2286,4 @@ button.manage-open {
   background: var(--bg-3); border: 1px solid var(--border); color: var(--text-dim);
 }
 .fv-src > b { display: block; color: var(--text); margin-bottom: 3px; font-size: 12px; }
+.fv-axis .fv-unit { color: var(--text-dim); font-weight: 400; }
