@@ -15,6 +15,35 @@
 
 // 守備位置コード→フル表記(カード表示用)。例: 投→投手 / 遊→遊撃 / DH→指名打者。
 import { rulesAtInning } from './rules.js';
+import { isPitcherChangeLog, resolveStartPitcher } from './pitchingRebuild.js';
+
+// 各回の投手。投手はスタメン表に「投」として載っているとは限らない。
+// スコア入力画面の投手欄(SET_PITCHER)で選んだだけの場合、打順の守備位置は
+// 空のままなので、そのままでは「投手を守る人が居ない」と誤って警告してしまう。
+function pitcherByInning(game, maxInning) {
+  const out = new Map();
+  let cur = resolveStartPitcher(game) || game?.currentPitcherId || null;
+  const logs = (game?.playLogs || []).filter(isPitcherChangeLog);
+  let i = 0;
+  for (let inn = 1; inn <= maxInning; inn++) {
+    while (i < logs.length && (Number(logs[i].inning) || 1) <= inn) {
+      if (logs[i].payload?.in) cur = logs[i].payload.in;
+      i += 1;
+    }
+    out.set(inn, cur);
+  }
+  return out;
+}
+
+// その回の守備に、投手を「投」として足す。
+// すでに誰かが「投」に就いているときは触らない(記録を上書きしない)。
+// 打順に居る投手はその枠を「投」にし、打順外(DH等)は枠の無い守備として足す。
+function withPitcher(arr, pitcherId) {
+  if (!pitcherId || arr.some((s) => s.position === '投')) return arr;
+  const slot = arr.find((s) => s.playerId === pitcherId);
+  if (slot) return arr.map((s) => (s === slot ? { ...s, position: '投' } : s));
+  return [...arr, { order: null, playerId: pitcherId, position: '投' }];
+}
 
 // その回に宣言されている守備人数。宣言が無ければ null(旧データ・未設定)。
 function declaredFieldCount(game, inning) {
@@ -232,6 +261,7 @@ export function alignmentByInning(game) {
   }
   const logs = (game.playLogs || []).filter((l) => l.kind === 'sub' || l.kind === 'position');
   const maxInning = Math.max(1, ...(game.playLogs || []).map((l) => Number(l.inning) || 1));
+  const pitchers = pitcherByInning(game, maxInning);
   const out = new Map();
   let i = 0;
   for (let inn = 1; inn <= maxInning; inn++) {
@@ -246,11 +276,17 @@ export function alignmentByInning(game) {
       }
       i += 1;
     }
-    out.set(inn, [...slots.entries()].filter(([, v]) => v.playerId && v.position).map(([order, v]) => ({ order, ...v })));
+    const arr = [...slots.entries()].filter(([, v]) => v.playerId && v.position).map(([order, v]) => ({ order, ...v }));
+    out.set(inn, withPitcher(arr, pitchers.get(inn)));
   }
   // 最終回は現lineupを正とする(位置ログが残っていない変更を取りこぼさない)
   const last = (game.lineup || []).filter((l) => l.playerId && l.position);
-  if (last.length) out.set(maxInning, last.map((l) => ({ order: l.order, playerId: l.playerId, position: l.position })));
+  if (last.length) {
+    out.set(maxInning, withPitcher(
+      last.map((l) => ({ order: l.order, playerId: l.playerId, position: l.position })),
+      pitchers.get(maxInning),
+    ));
+  }
   return out;
 }
 
@@ -308,7 +344,8 @@ export function findPositionIssues(game) {
     // 守備位置が9つ揃うはずの布陣のときだけ「不在」を見る(DHや人数不足の試合で誤警告しない)。
     // 人数を宣言していればそれに従い、宣言が無い試合(旧データ含む)は
     // これまでどおり打順の枠数から推し量る。
-    const expectAll = declared ? declared >= 9 : slots.length >= 9;
+    const realSlots = slots.filter((s) => s.order != null).length;
+    const expectAll = declared ? declared >= 9 : realSlots >= 9;
     if (expectAll) {
       for (const p of STANDARD_POSITIONS) {
         if (byPos.has(p)) continue;
