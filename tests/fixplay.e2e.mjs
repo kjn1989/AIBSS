@@ -36,6 +36,31 @@ await p.click('button:has-text("試合開始")'); await p.waitForTimeout(700);
 const att=p.locator('.sheet').filter({hasText:'今日のメンバー'});
 if(await att.count()){await p.click('.sheet-actions button.primary');await p.waitForTimeout(700);}
 const auto=p.locator('button:has-text("登録選手から打順を自動セット")'); if(await auto.count()){await auto.click();await p.waitForTimeout(500);}
+// 単打の走者の既定は打球方向で変わる。レフト前の二塁走者は三塁で止まるのが普通
+const selDest = () => p.evaluate(() => {
+  const btns = [...document.querySelectorAll('.sheet button')]
+    .filter((b) => ['そのまま', '三塁へ', '得点', 'アウト'].includes(b.textContent.trim()));
+  return btns.filter((b) => b.className.includes('sel')).map((b) => b.textContent.trim());
+});
+const hitTo = async (label, posName) => {
+  await p.locator(`.result-pad button:has-text("${label}")`).first().click(); await p.waitForTimeout(350);
+  const c = p.locator('.pad-coach button'); if (await c.count()) { await c.click(); await p.waitForTimeout(150); }
+  const pos = p.locator(`.field-pad button.field-pos:has-text("${posName}")`);
+  if (await pos.count()) await pos.first().click(); else await p.locator('.field-pad button.field-pos').first().click();
+  await p.waitForTimeout(700);
+};
+// 走者を二塁に置いてから、レフト前ヒット
+await hitTo('ツーベース', '中');
+await p.locator('.sheet-actions button:has-text("確定")').click(); await p.waitForTimeout(600);
+await hitTo('ヒット', '左');
+ok('レフト前の二塁走者は三塁が既定', (await selDest()).includes('三塁へ'), JSON.stringify(await selDest()));
+await p.locator('.sheet-actions button:has-text("キャンセル")').click(); await p.waitForTimeout(400);
+// ライト前なら生還
+await hitTo('ヒット', '右');
+ok('ライト前の二塁走者は生還が既定', (await selDest()).includes('得点'), JSON.stringify(await selDest()));
+await p.locator('.sheet-actions button:has-text("キャンセル")').click(); await p.waitForTimeout(400);
+
+
 // 打席を1つ作る(ヒット)
 await p.click('.result-pad button:has-text("ヒット")'); await p.waitForTimeout(350);
 const c=p.locator('.pad-coach button'); if(await c.count()){await c.click();await p.waitForTimeout(150);}

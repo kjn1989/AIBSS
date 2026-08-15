@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import Sheet from './Sheet.jsx';
 import { useStore, useT, usePlayerName, isMyTeamBatting } from '../state/store.jsx';
 import { RESULTS, DIRECTIONS, SO_TYPES, outTypeLabel, allowsFoul } from '../lib/model.js';
@@ -32,7 +32,7 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
   const myBatting = isMyTeamBatting(game);
 
   const runnersOn = { 1: !!game.runners[1], 2: !!game.runners[2], 3: !!game.runners[3] };
-  const proposal = useMemo(() => proposeMoves(result, runnersOn), [result]);
+  const [dirTouched, setDirTouched] = useState(false); // 走者を手で動かしたか
 
   // 併殺打が成立しうるか。打者アウト + 走者アウトで2つ取るので、
   // 既に2アウトなら起こりえない(1つ目のアウトでその回が終わる)。
@@ -40,6 +40,12 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
   const dpPossible = result === 'out' && (runnersOn[1] || runnersOn[2] || runnersOn[3]) && game.outs < 2;
 
   const [direction, setDirection] = useState(initial.direction || null);
+  // 走者の既定は打球方向で変わる(レフト前の二塁走者は三塁、など)。
+  // シート内で方向を選び直したときも組み直すが、走者を手で触っていれば尊重する
+  const proposal = useMemo(
+    () => proposeMoves(result, runnersOn, direction),
+    [result, direction],
+  );
   // 打点の極座標(角度・深さ)。方向チップだけを押した場合もここに入る
   const [point, setPoint] = useState(
     initial.hitAngle != null ? { angle: initial.hitAngle, depth: initial.hitDepth } : null,
@@ -73,6 +79,23 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
     return d;
   });
   const [batterTo, setBatterTo] = useState(initial.batterTo ?? proposal.batterTo);
+
+  // 方向を選び直したら走者の既定を組み直す(レフト前↔ライト前で二塁走者が変わる)。
+  // ただし走者を手で動かしたあとは、その判断を上書きしない
+  const firstDir = useRef(true);
+  useEffect(() => {
+    if (firstDir.current) { firstDir.current = false; return; }
+    if (dirTouched || initial.outType === 'dp') return;
+    setDests(() => {
+      const d = {};
+      for (const b of [1, 2, 3]) {
+        if (!runnersOn[b]) continue;
+        const mv = proposal.moves.find((m) => m.from === b);
+        d[b] = mv ? mv.to : b;
+      }
+      return d;
+    });
+  }, [direction]);
   const [rbiOverride, setRbiOverride] = useState(null);
   const [advOverride, setAdvOverride] = useState(null);
   // 守備時: 自責点の帰属(継投跨ぎ走者) と 非自責フラグ
@@ -281,7 +304,7 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
                   <button
                     key={String(to)}
                     className={dests[b] === to ? `sel${to === 'out' ? ' out' : ''}` : ''}
-                    onClick={() => setDests({ ...dests, [b]: to })}
+                    onClick={() => { setDirTouched(true); setDests({ ...dests, [b]: to }); }}
                   >
                     {destLabel(b)(to)}
                   </button>

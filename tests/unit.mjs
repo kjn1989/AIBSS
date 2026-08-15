@@ -3396,3 +3396,51 @@ test('流れタグ: 本当に何も動かなければ「動かず」のまま', 
   ] };
   assert.equal(judgeFlowTags(g, flowSeries(g, null)).verdict.tag, 'miss', '三者凡退なら動かず');
 });
+
+
+// ============================================================
+// 単打の走者の既定は、打球方向で変わる
+//
+// レフト前ヒットの二塁走者は三塁で止まるのが普通(左翼は三塁に近く、
+// 本塁への送球も短い)。方向を見ずに一律で生還させていた。
+// ============================================================
+test('単打: レフト前の二塁走者は三塁が既定', () => {
+  const on2 = { 1: false, 2: true, 3: false };
+  const to = (dir) => proposeMoves('single', on2, dir).moves.find((m) => m.from === 2)?.to;
+  assert.equal(to('LF'), 3, 'レフト前は三塁で止まる');
+  assert.equal(to('CF'), 4, 'センター前は生還');
+  assert.equal(to('RF'), 4, 'ライト前は生還');
+});
+
+test('単打: 内野安打なら走者は1つずつ', () => {
+  const loaded = { 1: true, 2: true, 3: true };
+  for (const dir of ['P', 'C', '1B', '2B', '3B', 'SS']) {
+    const mv = proposeMoves('single', loaded, dir).moves;
+    assert.deepEqual(mv, [{ from: 3, to: 4 }, { from: 2, to: 3 }, { from: 1, to: 2 }], `${dir}: 外野へ抜けていないので1つずつ`);
+  }
+});
+
+test('単打: 外野へ抜ければ三塁走者は生還、一塁走者は二塁', () => {
+  const loaded = { 1: true, 2: true, 3: true };
+  assert.deepEqual(proposeMoves('single', loaded, 'RF').moves,
+    [{ from: 3, to: 4 }, { from: 2, to: 4 }, { from: 1, to: 2 }]);
+  // レフト前は二塁走者だけが止まる
+  assert.deepEqual(proposeMoves('single', loaded, 'LF').moves,
+    [{ from: 3, to: 4 }, { from: 2, to: 3 }, { from: 1, to: 2 }]);
+});
+
+test('単打: 方向が分からないときは今までどおり(生還)', () => {
+  const on2 = { 1: false, 2: true, 3: false };
+  assert.equal(proposeMoves('single', on2).moves[0].to, 4, '引数を省いても壊れない');
+  assert.equal(proposeMoves('single', on2, null).moves[0].to, 4);
+});
+
+test('単打以外は方向で変わらない', () => {
+  const on2 = { 1: false, 2: true, 3: false };
+  for (const r of ['double', 'triple', 'hr']) {
+    assert.equal(proposeMoves(r, on2, 'LF').moves[0].to, 4, `${r} は二塁走者が生還`);
+    assert.equal(proposeMoves(r, on2, 'RF').moves[0].to, 4);
+  }
+  // 四球は押し出しのみ(方向は無関係)
+  assert.deepEqual(proposeMoves('bb', on2, 'LF').moves, [], '走者二塁だけなら四球で動かない');
+});
