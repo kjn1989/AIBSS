@@ -11,6 +11,7 @@ import { swapTargetIndex, timingAnchor } from '../src/lib/logOrder.js';
 import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, assignResultTargets, mergeResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parsePositionSwaps, keepsBattingOrder, explicitOrderChange, stripInningFractions, parseInningRange, parseSlotBatters, parseAtBatDeletions, parseShortResult, isExplicitSubText, inGamePlayerIds, preferInGamePlayers } from '../src/lib/correctionParser.js';
 import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarters, findPositionIssues } from '../src/lib/lineupBox.js';
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
+import { stateKey, buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, formatRate, BASE_RE, reOf } from '../src/lib/flow.js';
 import { newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions, attendeesOf, lastAttendees, autoLineupFrom, subRank } from '../src/lib/model.js';
 import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf, oppLettersInGame, oppBaserunning } from '../src/lib/oppBox.js';
 import { remapPlayerInGame, fillPlayerGaps } from '../src/lib/mergePlayers.js';
@@ -2819,4 +2820,169 @@ test('autoLineupFrom: 全員打ちでは9人を超えて組み、余った人は
 
   // 来ている人数が宣言に満たなければ、その人数まで
   assert.equal(autoLineupFrom(players.slice(0, 10), { max: 12, benchPosition: '打' }).lineup.length, 10);
+});
+
+
+// ============================================================
+// 試合の流れ(得点期待値ベース)
+// ============================================================
+// 打席ログを組み立てる小道具。beforeRunners/outsBefore は実際の記録と同じ形。
+function paLog(i, { inning = 1, isTop = true, kind = 'atbat', r = [0,0,0], outs = 0, runs = 0 } = {}) {
+  return {
+    id: 'p' + i, gameId: 'g', inning, isTop, kind, text: '',
+    payload: { beforeRunners: { 1: !!r[0], 2: !!r[1], 3: !!r[2] }, outsBefore: outs, runs },
+  };
+}
+
+test('stateKey: 24状態のキー', () => {
+  assert.equal(stateKey({ 1: false, 2: false, 3: false }, 0), '000|0');
+  assert.equal(stateKey({ 1: true, 2: true, 3: false }, 1), '110|1');
+  assert.equal(stateKey({ 1: true, 2: true, 3: true }, 2), '111|2');
+  assert.equal(Object.keys(BASE_RE).length, 24, '基準表は24状態');
+});
+
+test('基準表: 走者が進むほど・アウトが少ないほど期待値が高い', () => {
+  // 形が壊れていると、流れの符号が逆になる場面が出る
+  for (const outs of [0, 1, 2]) {
+    assert.ok(BASE_RE[`000|${outs}`] < BASE_RE[`100|${outs}`], `${outs}死: 走者なし < 一塁`);
+    assert.ok(BASE_RE[`100|${outs}`] < BASE_RE[`010|${outs}`], `${outs}死: 一塁 < 二塁`);
+    assert.ok(BASE_RE[`110|${outs}`] < BASE_RE[`111|${outs}`], `${outs}死: 一二塁 < 満塁`);
+  }
+  for (const st of ['000', '100', '010', '111']) {
+    assert.ok(BASE_RE[`${st}|0`] > BASE_RE[`${st}|1`], `${st}: 無死 > 1死`);
+    assert.ok(BASE_RE[`${st}|1`] > BASE_RE[`${st}|2`], `${st}: 1死 > 2死`);
+  }
+});
+
+test('buildRunExpectancy: 自分たちの記録から作り、回数が少ないうちは基準表寄り', () => {
+  // 無死走者なしから始まり、その回に3点入った半回を10回ぶん
+  const logs = [];
+  let i = 0;
+  for (let inn = 1; inn <= 10; inn++) {
+    logs.push(paLog(i++, { inning: inn, r: [0,0,0], outs: 0, runs: 3 }));
+    logs.push(paLog(i++, { inning: inn, r: [0,0,0], outs: 1, runs: 0 }));
+    logs.push(paLog(i++, { inning: inn, r: [0,0,0], outs: 2, runs: 0 }));
+  }
+  const { re, samples, total, ownShare } = buildRunExpectancy([{ id: 'g', playLogs: logs }]);
+  assert.equal(samples.get('000|0'), 10, '回数を持っている');
+  assert.equal(total, 30);
+  // 自前は3.0だが10回しかないので、基準表(0.48)との間に来る
+  const v = re.get('000|0');
+  assert.ok(v > BASE_RE['000|0'] && v < 3.0, `寄せがかかる: ${v}`);
+  assert.ok(ownShare > 0 && ownShare < 0.5, `まだ基準表の影響が大きい: ${ownShare}`);
+  // 記録が無い状態は基準表のまま
+  assert.equal(Number(re.get('111|0').toFixed(2)), BASE_RE['111|0']);
+});
+
+test('buildRunExpectancy: タイブレークの回は混ぜない', () => {
+  const mk = (ruleChanges) => ({
+    id: 'g', rules: {}, ruleChanges,
+    playLogs: [paLog(1, { inning: 8, r: [1,1,0], outs: 0, runs: 2 })],
+  });
+  assert.equal(buildRunExpectancy([mk([])]).samples.get('110|0'), 1);
+  // 8回からタイブレーク = 無死一二塁は置いた走者なので、状態の意味が違う
+  const tb = [{ id: 'c', at: 1, fromInning: 8, patch: { tiebreak: { fromInning: 8, runners: '12', order: 'cont', outs: 0 } } }];
+  assert.equal(buildRunExpectancy([mk(tb)]).samples.get('110|0'), 0, 'タイブレークの状態は数えない');
+});
+
+test('flowSeries: 打席の前後で動いた分を、自チームから見た向きに揃える', () => {
+  const re = null; // 基準表で計算
+  // 自チームの攻撃: 無死走者なし(0.48) → 単打で無死一塁(0.86)。得点0
+  const g1 = { id: 'g', playLogs: [
+    paLog(1, { kind: 'atbat', r: [0,0,0], outs: 0, runs: 0 }),
+    paLog(2, { kind: 'atbat', r: [1,0,0], outs: 0, runs: 0 }),
+  ] };
+  const s1 = flowSeries(g1, re);
+  assert.ok(s1[0].delta > 0, '自チームが出塁したらプラス');
+  assert.equal(Number(s1[0].delta.toFixed(2)), Number((BASE_RE['100|0'] - BASE_RE['000|0']).toFixed(2)));
+
+  // 同じ動きでも守備側なら符号が反転する
+  const g2 = { id: 'g', playLogs: [
+    paLog(1, { kind: 'defense', r: [0,0,0], outs: 0, runs: 0 }),
+    paLog(2, { kind: 'defense', r: [1,0,0], outs: 0, runs: 0 }),
+  ] };
+  assert.ok(flowSeries(g2, re)[0].delta < 0, '相手が出塁したらマイナス');
+
+  // 得点は動きに足される
+  const g3 = { id: 'g', playLogs: [
+    paLog(1, { kind: 'atbat', r: [0,1,0], outs: 0, runs: 1 }),
+    paLog(2, { kind: 'atbat', r: [0,0,0], outs: 0, runs: 0 }),
+  ] };
+  const s3 = flowSeries(g3, re);
+  assert.equal(Number(s3[0].delta.toFixed(2)),
+    Number((BASE_RE['000|0'] + 1 - BASE_RE['010|0']).toFixed(2)), '得点ぶんが乗る');
+
+  // 積み上げ
+  assert.equal(Number(s1[s1.length - 1].cum.toFixed(3)),
+    Number(s1.reduce((t, x) => t + x.delta, 0).toFixed(3)));
+});
+
+test('flowSeries: 回が終わったら打席後の期待値は0', () => {
+  // 2死走者なしで凡退 → 次の打席が無い = 回が終わった
+  const g = { id: 'g', playLogs: [paLog(1, { kind: 'atbat', r: [0,0,0], outs: 2, runs: 0 })] };
+  const s = flowSeries(g, null);
+  assert.equal(Number(s[0].delta.toFixed(2)), Number((0 - BASE_RE['000|2']).toFixed(2)));
+  assert.ok(s[0].delta < 0, '回が終わればマイナス');
+});
+
+test('flowRuns: 同じ向きに続いた区間をまとめる', () => {
+  const series = [
+    { id: 'a', delta: 0.4 }, { id: 'b', delta: 0.5 },   // 続けてプラス = 0.9
+    { id: 'c', delta: -0.8 }, { id: 'd', delta: -0.9 }, // 続けてマイナス = -1.7
+    { id: 'e', delta: 0.1 },                             // 小さいので拾わない
+  ];
+  const runs = flowRuns(series, 0.6);
+  assert.equal(runs.length, 2, `区間は2つ: ${JSON.stringify(runs.map((r) => r.swing))}`);
+  assert.ok(Math.abs(runs[0].swing) > Math.abs(runs[1].swing), '大きい順');
+  assert.equal(runs[0].dir, -1, '一番大きいのはマイナス側');
+  assert.equal(runs[0].n, 2, '2打席ぶん');
+});
+
+test('judgeFlowTags: 一致ではなく順番で測る', () => {
+  // 打席1で大きくプラスに動く。その「前」に押した=予兆、「後」に押した=反応
+  const mk = (tagAt) => {
+    const logs = [];
+    if (tagAt === 'before') logs.push({ id: 'tag', kind: 'flow', inning: 1, isTop: true, payload: { dir: 'up' } });
+    logs.push(paLog(1, { kind: 'atbat', r: [0,1,0], outs: 0, runs: 2 }));
+    logs.push(paLog(2, { kind: 'atbat', r: [0,0,0], outs: 0, runs: 0 }));
+    if (tagAt === 'after') logs.push({ id: 'tag', kind: 'flow', inning: 1, isTop: true, payload: { dir: 'up' } });
+    return { id: 'g', playLogs: logs };
+  };
+  const before = mk('before');
+  const jb = judgeFlowTags(before, flowSeries(before, null));
+  assert.equal(jb.verdict.tag, 'pre', '動く前に押したら予兆');
+  assert.equal(jb.counts.pre, 1);
+
+  const after = mk('after');
+  const ja = judgeFlowTags(after, flowSeries(after, null));
+  assert.equal(ja.verdict.tag, 'post', '動いた後に押したら反応(なぞっただけ)');
+  assert.equal(ja.hitRate, 0, '読み当て率は上がらない');
+});
+
+test('judgeFlowTags: 何も起きなければ空振り、押さなければ察知率が下がる', () => {
+  const logs = [
+    { id: 'tag', kind: 'flow', inning: 1, isTop: true, payload: { dir: 'up' } },
+    paLog(1, { kind: 'atbat', r: [0,0,0], outs: 0, runs: 0 }),
+    paLog(2, { kind: 'atbat', r: [0,0,0], outs: 1, runs: 0 }),
+  ];
+  const g = { id: 'g', playLogs: logs };
+  const j = judgeFlowTags(g, flowSeries(g, null));
+  assert.equal(j.verdict.tag, 'miss', '動かなければ空振り');
+  assert.equal(j.hitRate, 0);
+
+  // 押さずに大きく動いた試合 = 察知率0
+  const g2 = { id: 'g', playLogs: [
+    paLog(1, { kind: 'atbat', r: [0,1,0], outs: 0, runs: 3 }),
+    paLog(2, { kind: 'atbat', r: [0,0,0], outs: 0, runs: 0 }),
+  ] };
+  const j2 = judgeFlowTags(g2, flowSeries(g2, null));
+  assert.equal(j2.hitRate, null, '押していなければ読み当て率は出さない');
+  assert.equal(j2.catchRate, 0, '動いたのに押していないので察知率は0');
+});
+
+test('formatRate: 打率と同じ書き方', () => {
+  assert.equal(formatRate(1), '1.000');
+  assert.equal(formatRate(0.5), '.500');
+  assert.equal(formatRate(0), '.000');
+  assert.equal(formatRate(null), '—');
 });

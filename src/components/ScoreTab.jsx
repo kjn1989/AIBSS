@@ -22,6 +22,7 @@ import { convertMemoToPlay, guessPlayFromMemo, maskNames } from '../lib/gemini.j
 import { canWriteCloud } from '../lib/officialCloud.js';
 import { RULE_PRESETS, presetById, presetLabel, describeRules, initialPresetIdFor, gameEndCheck, pitchLimitCheck, timeLimitCheck, lineupSlotsFor } from '../lib/rules.js';
 import LiveRulesSheet from './LiveRulesSheet.jsx';
+import FlowView from './FlowView.jsx';
 
 // 投手名は6文字までを基準サイズで、長い名前(カタカナ等)はフォントを縮めて枠内に収める
 function pitcherFont(name) {
@@ -852,6 +853,9 @@ export default function ScoreTab() {
         </div>
         {flowMsg && <div className={`ft-flash ${flowMsg}`}>{t(`flowtag.saved.${flowMsg}`, { sit: flowSit })}</div>}
         {flowCount > 0 && <div className="small dim mt8">{t('flowtag.count', { n: flowCount })}</div>}
+        <button className="small mt8" style={{ width: '100%' }} onClick={() => setSheet({ kind: 'flowView' })}>
+          {t('fv.open')}
+        </button>
       </div>
 
       <div className="card">
@@ -905,6 +909,7 @@ export default function ScoreTab() {
       <VoiceControl game={game} />
       {showProgress && <GameProgressView game={game} onClose={() => setShowProgress(false)} />}
       {sheet?.kind === 'liveRules' && <LiveRulesSheet game={game} onClose={() => setSheet(null)} />}
+      {sheet?.kind === 'flowView' && <FlowView game={game} onClose={() => setSheet(null)} />}
       {defenseCheck && (
         <DefenseCheckView game={game} newPlayerIds={defenseCheck.playerIds} onClose={() => setDefenseCheck(null)} />
       )}
