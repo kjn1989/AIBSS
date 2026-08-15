@@ -3,6 +3,7 @@ import { useStore, usePlayerName, useT } from '../state/store.jsx';
 import { aggregateBatting, aggregatePitching, pitchingMetrics, DETAIL_METRICS, detailRanking, battingMetrics, fmtAvg, mLabel, defaultInningBasis } from '../lib/stats.js';
 import { formatIP } from '../lib/model.js';
 import GameScopeToggle, { scopedGames } from './GameScopeToggle.jsx';
+import TeamPowerCard from './TeamPowerCard.jsx';
 import { tenureByPlayer, isArchived, DEFAULT_YEAR_START_MONTH } from '../lib/year.js';
 import PlayerView from './PlayerView.jsx';
 import MemberSection from './MemberSection.jsx';
@@ -56,6 +57,9 @@ export default function StatsTab() {
 
       {/* タイトルホルダー(👑)。ホームから移設 */}
       <TitleCards games={games} />
+
+      {/* チーム力: 他チームではなく「その場面」と比べるので順位表が要らない */}
+      <TeamPowerCard games={games} />
 
       <div className="section-title">{t('stats.battingMetrics')}</div>
       <div className="grid3">

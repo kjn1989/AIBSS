@@ -12,6 +12,7 @@ import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstit
 import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarters, findPositionIssues } from '../src/lib/lineupBox.js';
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
 import { stateKey, buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, formatRate, BASE_RE, reOf, KOSHIEN_RE, baseReFor } from '../src/lib/flow.js';
+import { teamPower, mostOff, formatPower } from '../src/lib/teamPower.js';
 import { newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions, attendeesOf, lastAttendees, autoLineupFrom, subRank } from '../src/lib/model.js';
 import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf, oppLettersInGame, oppBaserunning } from '../src/lib/oppBox.js';
 import { remapPlayerInGame, fillPlayerGaps } from '../src/lib/mergePlayers.js';
@@ -3039,4 +3040,170 @@ test('buildRunExpectancy: エディションごとに土台が変わる', () => 
   const empty = [{ id: 'g', playLogs: [] }];
   assert.equal(Number(buildRunExpectancy(empty, 'ブカツ(中高大)').re.get('100|0').toFixed(2)), 0.79);
   assert.equal(Number(buildRunExpectancy(empty, '草野球').re.get('100|0').toFixed(2)), BASE_RE['100|0']);
+});
+
+
+// ============================================================
+// チーム力(順位表なしで読める指標)
+// ============================================================
+// 半回を組み立てる小道具。r=[一,二,三], o=アウト, res=結果, runs=その打席で入った点
+function half(inning, isTop, kind, rows) {
+  return rows.map((r, i) => ({
+    id: `${kind}${inning}${isTop ? 'T' : 'B'}${i}`, gameId: 'g', inning, isTop, kind, text: '',
+    payload: {
+      beforeRunners: { 1: !!r.r[0], 2: !!r.r[1], 3: !!r.r[2] },
+      outsBefore: r.o, result: r.res || 'out', runs: r.runs || 0,
+    },
+  }));
+}
+const rowOf = (rows, key) => rows.find((r) => r.key === key);
+
+test('決定力: 場面どおりなら1.00前後、返せなければ下がる', () => {
+  // 無死一塁(0.86)から2ランで返した = 場面以上
+  const good = { id: 'g', playLogs: [
+    ...half(1, true, 'atbat', [
+      { r: [1,0,0], o: 0, res: 'hr', runs: 2 },
+      { r: [0,0,0], o: 0, res: 'out' },
+    ]),
+  ] };
+  const g1 = rowOf(teamPower([good]), 'off.conversion');
+  assert.ok(g1.value > 1, `場面以上に返したので1.00超: ${g1.value}`);
+  assert.equal(g1.n, 1, '走者が居た打席だけ数える(2打席目は走者なし)');
+
+  // 無死一塁から、何も起きずに回が終わった = 好機を潰した
+  const bad = { id: 'g', playLogs: [
+    ...half(1, true, 'atbat', [{ r: [1,0,0], o: 0, res: 'out' }]),
+  ] };
+  const b1 = rowOf(teamPower([bad]), 'off.conversion');
+  assert.equal(b1.value, 0, '回が終われば分子は0');
+
+  // 走者を置いたまま回を終えた = 残塁。1.00を下回る
+  const stranded = { id: 'g', playLogs: [
+    ...half(1, true, 'atbat', [
+      { r: [1,0,0], o: 0, res: 'single' },
+      { r: [1,1,0], o: 0, res: 'out' },
+    ]),
+  ] };
+  assert.ok(rowOf(teamPower([stranded]), 'off.conversion').value < 1, '残塁は1.00未満');
+});
+
+test('決定力: 走者が居ない打席は好機に数えない', () => {
+  const g = { id: 'g', playLogs: [
+    ...half(1, true, 'atbat', [{ r: [0,0,0], o: 0, res: 'out' }, { r: [0,0,0], o: 1, res: 'out' }]),
+  ] };
+  assert.equal(rowOf(teamPower([g]), 'off.conversion').n, 0, '走者なしは母数に入らない');
+  assert.equal(rowOf(teamPower([g]), 'off.conversion').value, null, '母数0なら値を出さない');
+});
+
+test('火消し力: 止めたほうが高くなる向きに揃っている', () => {
+  // 相手が無死一塁から2点returned = 火消しできていない
+  const leaky = { id: 'g', playLogs: [
+    ...half(1, true, 'defense', [{ r: [1,0,0], o: 0, res: 'double', runs: 2 }]),
+  ] };
+  // 相手が無死一塁から無得点で回が終わった = 止めた
+  const tight = { id: 'g', playLogs: [
+    ...half(1, true, 'defense', [{ r: [1,0,0], o: 2, res: 'out' }]),
+  ] };
+  const a = rowOf(teamPower([leaky]), 'def.conversion').value;
+  const b = rowOf(teamPower([tight]), 'def.conversion').value;
+  assert.ok(b > a, `止めたほうが高い: 止めた${b} > 止めない${a}`);
+  // 完全に抑えた回でも値が出る(割り算が壊れない)ことが要点
+  assert.equal(b, 2, '完全に抑えたら上限の2.00');
+  assert.ok(a < 1, `場面以上に返されたら1.00未満: ${a}`);
+});
+
+test('火消し力: 相手が場面どおりなら1.00になる', () => {
+  // 無死一塁(0.86)から、次が無死一二塁(1.44)…は場面以上。
+  // 場面どおり = 打席後の期待値+得点が打席前と釣り合うケースを作る
+  const g = { id: 'g', playLogs: [
+    ...half(1, true, 'defense', [
+      { r: [1,0,0], o: 0, res: 'out' },   // 0.86 → 次 100|1 = 0.51
+      { r: [1,0,0], o: 1, res: 'out' },   // 0.51 → 次 100|2 = 0.22
+      { r: [1,0,0], o: 2, res: 'out' },   // 0.22 → 回終わり 0
+    ]),
+  ] };
+  const v = rowOf(teamPower([g]), 'def.conversion').value;
+  assert.ok(v > 1, `三者凡退で走者を還さなければ1.00超: ${v}`);
+  assert.ok(v <= 2, '上限は2.00');
+});
+
+test('先頭出塁率と先頭封じ率が鏡になっている', () => {
+  const g = { id: 'g', playLogs: [
+    ...half(1, true, 'atbat', [{ r: [0,0,0], o: 0, res: 'single' }]),   // 先頭出塁 ○
+    ...half(2, true, 'atbat', [{ r: [0,0,0], o: 0, res: 'out' }]),      // ×
+    ...half(1, false, 'defense', [{ r: [0,0,0], o: 0, res: 'single' }]),// 相手先頭に出塁された
+    ...half(2, false, 'defense', [{ r: [0,0,0], o: 0, res: 'out' }]),   // 抑えた
+  ] };
+  const rows = teamPower([g]);
+  assert.equal(rowOf(rows, 'off.leadoff').value, 0.5, '自チームは2回中1回出塁');
+  assert.equal(rowOf(rows, 'def.leadoff').value, 0.5, '相手先頭は2回中1回抑えた');
+  // 「抑えた」側を数えているので、出塁されるほど下がる
+  const leaky = { id: 'g', playLogs: [
+    ...half(1, false, 'defense', [{ r: [0,0,0], o: 0, res: 'single' }]),
+    ...half(2, false, 'defense', [{ r: [0,0,0], o: 0, res: 'bb' }]),
+  ] };
+  assert.equal(rowOf(teamPower([leaky]), 'def.leadoff').value, 0, '毎回出塁されたら0');
+});
+
+test('畳みかけ率 / 立ち直り率', () => {
+  const g = { id: 'g', playLogs: [
+    // 攻撃: 1回に得点 → 2回も得点(畳みかけ成功) → 3回は無得点(失敗)
+    ...half(1, true, 'atbat', [{ r: [0,1,0], o: 0, res: 'single', runs: 1 }]),
+    ...half(2, true, 'atbat', [{ r: [0,1,0], o: 0, res: 'single', runs: 1 }]),
+    ...half(3, true, 'atbat', [{ r: [0,0,0], o: 0, res: 'out' }]),
+    // 守備: 1回に失点 → 2回は無失点(立ち直り成功) → 3回も無失点だが直前が無失点なので母数外
+    ...half(1, false, 'defense', [{ r: [0,1,0], o: 0, res: 'single', runs: 1 }]),
+    ...half(2, false, 'defense', [{ r: [0,0,0], o: 0, res: 'out' }]),
+    ...half(3, false, 'defense', [{ r: [0,0,0], o: 0, res: 'out' }]),
+  ] };
+  const rows = teamPower([g]);
+  const pile = rowOf(rows, 'off.pileOn');
+  assert.equal(pile.n, 2, '得点した回の次だけが母数(1回の次と2回の次)');
+  assert.equal(pile.hit, 1, '2回は得点、3回は無得点');
+  const bounce = rowOf(rows, 'def.bounceBack');
+  assert.equal(bounce.n, 1, '失点した回の次だけが母数');
+  assert.equal(bounce.value, 1, '2回を無失点で抑えた');
+});
+
+test('二死からの得点率: 二死まで行った回だけを母数にする', () => {
+  const g = { id: 'g', playLogs: [
+    // 二死から得点
+    ...half(1, true, 'atbat', [{ r: [0,1,0], o: 2, res: 'single', runs: 1 }]),
+    // 二死まで行ったが無得点
+    ...half(2, true, 'atbat', [{ r: [0,0,0], o: 2, res: 'out' }]),
+    // 二死まで行っていない(母数外)
+    ...half(3, true, 'atbat', [{ r: [0,0,0], o: 0, res: 'out' }]),
+  ] };
+  const r = rowOf(teamPower([g]), 'off.twoOut');
+  assert.equal(r.n, 2, '二死まで行った2回だけ');
+  assert.equal(r.value, 0.5);
+});
+
+test('タイブレークの回はチーム力に混ぜない', () => {
+  const mk = (ruleChanges) => ({
+    id: 'g', rules: {}, ruleChanges,
+    playLogs: half(8, true, 'atbat', [{ r: [1,1,0], o: 0, res: 'single', runs: 1 }]),
+  });
+  assert.equal(rowOf(teamPower([mk([])]), 'off.conversion').n, 1);
+  const tb = [{ id: 'c', at: 1, fromInning: 8, patch: { tiebreak: { fromInning: 8, runners: '12', order: 'cont', outs: 0 } } }];
+  assert.equal(rowOf(teamPower([mk(tb)]), 'off.conversion').n, 0, '置いた走者は好機ではない');
+});
+
+test('mostOff: 回数が足りないものは前に出さない', () => {
+  const rows = [
+    { pair: 'conv', key: 'a', side: 'off', value: 0.10, n: 3, kind: 'index' },   // 大きくずれるが3回だけ
+    { pair: 'conv', key: 'b', side: 'def', value: 0.80, n: 50, kind: 'index' },
+    { pair: 'lead', key: 'c', side: 'off', value: 0.50, n: 40, kind: 'pct' },
+    { pair: 'lead', key: 'd', side: 'def', value: 0.50, n: 40, kind: 'pct' },
+  ];
+  const top = mostOff(rows, { minSamples: 10, top: 3 });
+  assert.ok(!top.some((r) => r.key === 'a'), '回数が少ないものは出さない');
+  assert.equal(top[0].key, 'b', '1.00から一番離れているもの');
+});
+
+test('formatPower: 1.00基準は小数2桁、割合は打率表記', () => {
+  assert.equal(formatPower({ value: 0.85, kind: 'index' }), '0.85');
+  assert.equal(formatPower({ value: 0.5, kind: 'pct' }), '.500');
+  assert.equal(formatPower({ value: 1, kind: 'pct' }), '1.000');
+  assert.equal(formatPower({ value: null }), '—');
 });

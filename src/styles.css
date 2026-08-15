@@ -2287,3 +2287,27 @@ button.manage-open {
 }
 .fv-src > b { display: block; color: var(--text); margin-bottom: 3px; font-size: 12px; }
 .fv-axis .fv-unit { color: var(--text-dim); font-weight: 400; }
+
+/* ---- チーム力 ----
+   比べる相手が「その場面」なので、1.00(=場面どおり)が基準線になる。
+   バーは基準からどちらへどれだけ離れているかを見せる。 */
+.tp-list, .tp-pairs { display: flex; flex-direction: column; gap: 12px; }
+.tp-pair { border-top: 1px solid var(--border); padding-top: 10px; }
+.tp-pair:first-child { border-top: 0; padding-top: 0; }
+.tp-pairname { font-size: 11px; color: var(--text-dim); font-weight: 700; margin-bottom: 8px; }
+.tp-mirror { display: flex; flex-direction: column; gap: 10px; }
+.tp-row.thin { opacity: 0.62; }
+.tp-head { display: flex; align-items: baseline; gap: 8px; }
+.tp-head > b { flex: 1; font-size: 13.5px; }
+.tp-val { font-size: 19px; font-weight: 800; letter-spacing: -.01em; }
+.tp-bar {
+  position: relative; height: 7px; border-radius: 4px; margin: 6px 0 5px;
+  background: var(--bg-3); border: 1px solid var(--border); overflow: hidden;
+}
+.tp-bar > i { position: absolute; top: 0; bottom: 0; display: block; }
+.tp-mid { left: 50%; width: 1px; background: var(--text-dim); opacity: .6; z-index: 1; }
+.tp-fill.good { background: var(--green); }
+.tp-fill.bad { background: var(--amber); }
+.tp-note { font-size: 11px; color: var(--text-dim); line-height: 1.55; }
+.tp-note .tp-n { white-space: nowrap; }
+.tp-thin { font-size: 10.5px; color: var(--amber); margin-top: 3px; }
