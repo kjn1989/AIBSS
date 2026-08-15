@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { useStore, useT } from '../state/store.jsx';
-import { buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, formatRate } from '../lib/flow.js';
+import { buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, formatRate, KOSHIEN_RE, KOSHIEN_SOURCE } from '../lib/flow.js';
 import Sheet from './Sheet.jsx';
 
 // ---- 試合の流れ ----
@@ -82,10 +82,12 @@ export default function FlowView({ game, onClose }) {
   const t = useT();
 
   // 得点期待値は「自分たちの試合」から作る。相手の打席も材料になる。
+  const edition = state.settings.edition || '草野球';
   const { re, total, ownShare } = useMemo(() => {
     const games = Object.values(state.games || {}).filter((g) => g && !String(g.id).startsWith('demo-'));
-    return buildRunExpectancy(games.length ? games : [game]);
-  }, [state.games, game]);
+    return buildRunExpectancy(games.length ? games : [game], edition);
+  }, [state.games, game, edition]);
+  const usesKoshien = edition === 'ブカツ(中高大)';
 
   const series = useMemo(() => flowSeries(game, re), [game, re]);
   const judged = useMemo(() => judgeFlowTags(game, series), [game, series]);
@@ -167,6 +169,11 @@ export default function FlowView({ game, onClose }) {
             {total > 0
               ? t('fv.srcOwn', { n: total, pct: Math.round(ownShare * 100) })
               : t('fv.srcBase')}
+            {usesKoshien && (
+              <><br />{t('fv.srcKoshien', {
+                n: KOSHIEN_SOURCE.states, data: KOSHIEN_SOURCE.data, where: KOSHIEN_SOURCE.where,
+              })}</>
+            )}
           </div>
         </>
       )}

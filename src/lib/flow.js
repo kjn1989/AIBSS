@@ -41,6 +41,41 @@ export const BASE_RE = {
   '110|2': 0.43, '101|2': 0.48, '011|2': 0.58, '111|2': 0.75,
 };
 
+// ---- 甲子園で実測されている4状況 ----
+// 明治大学 総合数理学部 2018年度卒業研究
+// 「夏の高校野球甲子園大会における得点期待値と走者生還率の分析」
+// 2015〜2017年 夏の甲子園 全144試合。
+//
+// 論文が出しているのは戦術別(ヒッティング/盗塁/バント)の値なので、
+// 同論文の実行回数で重みを付けて、戦術によらない得点期待値に直してある:
+//   無死一塁   (351×0.90 + 56×0.71 + 363×0.69) / 770 = 0.79
+//   無死一二塁 ( 62×1.24 +  1×1.00 +  67×1.09) / 130 = 1.16
+//   一死一塁   (481×0.54 + 74×0.66 +  74×0.49) / 629 = 0.55
+//   一死一二塁 (241×0.92 +  2×1.00 +  10×0.30) / 253 = 0.90
+//
+// 一般的な値と比べると、1アウトの状況はほぼ一致するのに(+7%, +2%)、
+// 無死だけ低い(-8%, -19%)。これは偶然ではなく、無死ではバントが半分近く
+// (無死一塁47%・無死一二塁52%)使われて自分から1アウトを差し出しているため。
+// 高校野球の実際の姿なので、この4状況はブカツ(中高大)の土台として採用する。
+//
+// 残り20状況は論文に無い。草野球・少年野球はバントがここまで多くなく、
+// 得点も甲子園より入りやすいので、この4つを他のエディションへは持ち込まない。
+export const KOSHIEN_RE = {
+  '100|0': 0.79, '110|0': 1.16, '100|1': 0.55, '110|1': 0.90,
+};
+export const KOSHIEN_SOURCE = {
+  title: '夏の高校野球甲子園大会における得点期待値と走者生還率の分析',
+  where: '明治大学 総合数理学部 2018年度卒業研究',
+  data: '2015〜2017年 夏の甲子園 全144試合',
+  states: Object.keys(KOSHIEN_RE).length,
+};
+
+// エディション別の土台。実測が無いところは一般的な形のまま。
+export function baseReFor(edition) {
+  if (edition === 'ブカツ(中高大)') return { ...BASE_RE, ...KOSHIEN_RE };
+  return BASE_RE;
+}
+
 // 回数が少ない状態を基準表側へ寄せる強さ。
 // K回ぶんの「基準表どおりの結果」を最初から持っていた、とみなす。
 export const SHRINK_K = 30;
@@ -52,7 +87,8 @@ const halfKey = (l) => `${Number(l.inning) || 0}${l.isTop ? 'T' : 'B'}`;
 // 得点期待値表を、渡された試合群から作る
 // 戻り値: { re(key)->点, samples(key)->回数, total, ownShare }
 // ------------------------------------------------------------
-export function buildRunExpectancy(games = []) {
+export function buildRunExpectancy(games = [], edition = null) {
+  const base = baseReFor(edition);
   const acc = new Map(); // key -> { n, runs }
   for (const g of games) {
     if (!g || !Array.isArray(g.playLogs)) continue;
@@ -85,16 +121,16 @@ export function buildRunExpectancy(games = []) {
   const samples = new Map();
   const re = new Map();
   let total = 0;
-  for (const key of Object.keys(BASE_RE)) {
+  for (const key of Object.keys(base)) {
     const a = acc.get(key) || { n: 0, runs: 0 };
     samples.set(key, a.n);
     total += a.n;
     // 回数が少ないほど基準表寄り、貯まるほど自分たちの数字へ
-    re.set(key, (a.runs + SHRINK_K * BASE_RE[key]) / (a.n + SHRINK_K));
+    re.set(key, (a.runs + SHRINK_K * base[key]) / (a.n + SHRINK_K));
   }
   // 自分たちの記録がどれだけ効いているか(0=基準表のまま, 1=完全に自前)
   const ownShare = total / (total + SHRINK_K * 24);
-  return { re, samples, total, ownShare };
+  return { re, samples, total, ownShare, base };
 }
 
 // 期待値を引く。表に無ければ基準表、それも無ければ0。
