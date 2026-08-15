@@ -301,6 +301,58 @@ function extendLineupForAllBat(g, state) {
   return added;
 }
 
+// ------------------------------------------------------------
+// 記録を直したとき、スコア入力画面に出ている状態も合わせる
+//
+// 打席の記録を直しても、アウトカウント・得点・走者はそのままだった。
+// 回の途中で「ヒットだと思ったら凡打だった」を直しても、画面は元のまま。
+//
+// アウトは各打席の outsOnPlay と走塁アウトの合計で決まるので、
+// 進行中の半回について足し直せば正確に出せる。
+// 得点は、直した打席で増えた/減った分だけ動かす(手で直したスコアを壊さない)。
+//
+// 塁上の走者だけは記録から作り直せない。どの走者がどこまで進んだかは
+// 打席ごとに人が選んでいて、その選択自体は保存していないため。
+// ここは黙って推測せず、確認をお願いする印を立てる。
+// ------------------------------------------------------------
+function recountOuts(g, inning, isTop) {
+  let outs = 0;
+  for (const l of g.playLogs || []) {
+    if (Number(l.inning) !== Number(inning) || !!l.isTop !== !!isTop) continue;
+    if (l.kind === 'atbat' || l.kind === 'defense') outs += Number(l.payload?.outsOnPlay) || 0;
+    else if (l.kind === 'runner' || l.kind === 'sb') outs += Number(l.payload?.outs) || 0;
+  }
+  return outs;
+}
+
+// runsDelta: その打席で増えた得点(減ったなら負)。mine=自チームの得点か
+function applyRunsDelta(g, inning, mine, runsDelta) {
+  if (!runsDelta) return;
+  const key = String(inning);
+  if (!g.linescore) g.linescore = {};
+  if (!g.linescore[key]) g.linescore[key] = { my: 0, opp: 0 };
+  const side = mine ? 'my' : 'opp';
+  g.linescore[key][side] = Math.max(0, g.linescore[key][side] + runsDelta);
+  if (mine) g.myScore = Math.max(0, (g.myScore || 0) + runsDelta);
+  else g.oppScore = Math.max(0, (g.oppScore || 0) + runsDelta);
+}
+
+// 直した打席が「いま進行中の半回」なら、アウトカウントを足し直す。
+// 3アウトに達したらその半回は終わり(実際に起きていたはずのことをそのまま起こす)。
+function syncLiveAfterEdit(g, log) {
+  if (!log || g.status !== 'ongoing') return;
+  if (Number(log.inning) !== Number(g.inning) || !!log.isTop !== !!g.isTop) return;
+  const outs = recountOuts(g, g.inning, g.isTop);
+  if (outs >= 3) {
+    changeHalf(g);
+    return;
+  }
+  const changed = outs !== g.outs;
+  g.outs = outs;
+  // 走者は作り直せないので、確認をお願いする
+  if (changed || g.runners[1] || g.runners[2] || g.runners[3]) g.runnerCheck = true;
+}
+
 // 未開始なら pending(進行中打席バッファ) を用意
 function ensurePending(game) {
   if (!game.pending) {
@@ -1069,6 +1121,14 @@ export function reducer(state, action) {
       return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
     }
 
+    // 走者の確認をお願いする印を下ろす
+    case 'CLEAR_RUNNER_CHECK': {
+      const g = deep(state.games[action.gameId]);
+      if (!g.runnerCheck) return state;
+      delete g.runnerCheck;
+      g.updatedAt = Date.now();
+      return { ...state, games: { ...state.games, [g.id]: g } };
+    }
     case 'SET_DECISION': {
       // 勝利投手/セーブ/ホールドの付与 (win/saveは1試合1人=exclusive、holdは複数可)
       const g = deep(state.games[action.gameId]);
@@ -1380,6 +1440,13 @@ export function reducer(state, action) {
       const dir = DIRECTIONS[direction] || '';
       // その打撃で入った得点。打席を入れ替えるときは打点と一緒に移す必要がある
       const newRuns = p.runs !== undefined ? p.runs : log.payload.runs;
+      const runsBefore = Number(log.payload?.runs) || 0; // 差分でスコアを動かすため
+      // 打者がアウトになる結果かどうかが変われば、その打席のアウト数も変わる。
+      // ヒット→凡打なら1つ増え、凡打→ヒットなら1つ減る。
+      // 走者が刺された分は打者の結果と無関係なので、差分だけを動かして残す。
+      const wasOut = !RESULTS[cur.result]?.onBase;
+      const nowOut = !RESULTS[result]?.onBase;
+      const outsOnPlay = Math.max(0, (Number(cur.outsOnPlay) || 0) + (nowOut ? 1 : 0) - (wasOut ? 1 : 0));
       if (log.kind === 'atbat') {
         const ab = g.atBats.find((a) => a.id === log.payload.atBatId);
         if (ab) {
@@ -1407,9 +1474,13 @@ export function reducer(state, action) {
         hitAngle,
         hitDepth,
         soType,
+        outsOnPlay,
         ...(p.rbi !== undefined ? { rbi: p.rbi } : {}),
         ...(p.runs !== undefined ? { runs: p.runs } : {}),
       };
+      // 直した内容をスコア入力画面の状態にも反映する
+      applyRunsDelta(g, log.inning, log.kind === 'atbat', (Number(newRuns) || 0) - runsBefore);
+      syncLiveAfterEdit(g, log);
       g.updatedAt = Date.now();
       return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
     }
@@ -1420,7 +1491,11 @@ export function reducer(state, action) {
       if (log.kind === 'atbat' && log.payload.atBatId) {
         g.atBats = g.atBats.filter((a) => a.id !== log.payload.atBatId);
       }
+      // 消した打席で入っていた点と、そのアウトも取り消す
+      const wasPa = log.kind === 'atbat' || log.kind === 'defense';
+      if (wasPa) applyRunsDelta(g, log.inning, log.kind === 'atbat', -(Number(log.payload?.runs) || 0));
       g.playLogs = g.playLogs.filter((l) => l.id !== action.logId);
+      if (wasPa) syncLiveAfterEdit(g, log);
       g.updatedAt = Date.now();
       return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
     }

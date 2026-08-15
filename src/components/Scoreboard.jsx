@@ -104,9 +104,9 @@ export default function Scoreboard({ game }) {
   const runOf = (side, i) => {
     // 終わった半回は0点でも数字を出す。linescore は点が入った回にしか
     // 作られないので、エントリの有無だけで判定すると無得点の半回が空になる
-    if (!halfPlayed(game, i, side)) return '';
     const e = game.linescore?.[String(i)];
     const v = side === 'away' ? (game.isHome ? e?.opp : e?.my) : (game.isHome ? e?.my : e?.opp);
+    if (!halfPlayed(game, i, side, v || 0)) return '';
     return v ?? 0;
   };
 

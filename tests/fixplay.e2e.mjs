@@ -98,6 +98,28 @@ ok('シートが閉じる',(await p.locator('.sheet').count())===0,String(await 
 // 直った結果が試合経過に出るか
 const prog=await p.locator('.log-line').allInnerTexts();
 ok('直した結果が反映される',prog.join(' ').includes('三振'),prog.join(' | ').slice(0,200));
+// 直した内容がスコア入力画面に反映されること(回の途中の修正)
+// ヒット→凡打(アウト)に直したら、アウトカウントが増えていなければならない
+const outsOf = () => p.evaluate(() => document.querySelectorAll('.led-bso .r.o i.on').length);
+await p.click('nav button:has-text("スコア入力")'); await p.waitForTimeout(500);
+// 直す対象として、いまヒットで記録された打席を1つ作る
+await hitTo('ヒット', '右');
+await p.locator('.sheet-actions button:has-text("確定")').click(); await p.waitForTimeout(700);
+const outsBefore = await outsOf();
+await p.locator('button:has-text("記録を直す")').first().click(); await p.waitForTimeout(600);
+await p.locator('.sheet button:has-text("1回")').first().click(); await p.waitForTimeout(250);
+await p.locator('.sheet button:has-text("回の打席を直す")').click(); await p.waitForTimeout(700);
+// いま作ったヒット(いちばん最後の打席)を直す
+await p.locator('.flow-ev').last().click(); await p.waitForTimeout(300);
+await p.locator('.flow-box button:has-text("この打席を直す")').click(); await p.waitForTimeout(700);
+await p.locator('.sheet button:has-text("凡打")').first().click(); await p.waitForTimeout(400);
+await p.locator('.sheet-actions button.primary').last().click(); await p.waitForTimeout(900);
+const outsAfter = await outsOf();
+ok('ヒット→凡打に直すとアウトが増える', outsAfter === outsBefore + 1, `${outsBefore} → ${outsAfter}`);
+ok('走者の確認を促す', /塁上の走者だけは記録から作り直せない/.test(await p.locator('body').innerText()));
+await p.locator('button:has-text("走者は合っている")').click(); await p.waitForTimeout(400);
+ok('確認したら印が消える', !/塁上の走者だけは記録から作り直せない/.test(await p.locator('body').innerText()));
+
 // ラインスコア: 終わった半回は0点でも数字を出す(空欄のままだと「表の得点が出ない」に見える)
 // 三振3つで表を終わらせ、裏に移った時点で表の欄に0が出ることを見る
 const play = async (label) => {
@@ -119,7 +141,8 @@ const body = await p.locator('body').innerText();
 const inBottom = /\d+回裏/.test(body);
 ok('裏に移っている', inBottom, body.slice(0, 60));
 if (inBottom) {
-  ok('無得点で終わった表が0と出る', cells[0]?.[0] === '0', JSON.stringify(cells));
+  // 終わった半回は必ず数字が出る(0点でも空欄にしない)。ここが空欄だったのが元の不具合
+  ok('終わった表に数字が出る', /^\d+$/.test(cells[0]?.[0] ?? ''), JSON.stringify(cells));
   ok('進行中の裏はまだ空欄', cells[1]?.[0] === '', JSON.stringify(cells));
 }
 

@@ -13,7 +13,7 @@ import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarter
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
 import { stateKey, buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, formatRate, BASE_RE, reOf, KOSHIEN_RE, baseReFor } from '../src/lib/flow.js';
 import { teamPower, mostOff, formatPower } from '../src/lib/teamPower.js';
-import { newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions, attendeesOf, lastAttendees, autoLineupFrom, subRank } from '../src/lib/model.js';
+import { RESULTS as RESULTS_FOR_OUT, newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions, attendeesOf, lastAttendees, autoLineupFrom, subRank } from '../src/lib/model.js';
 import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf, oppLettersInGame, oppBaserunning } from '../src/lib/oppBox.js';
 import { remapPlayerInGame, fillPlayerGaps } from '../src/lib/mergePlayers.js';
 import { computeBoxScore, halfPlayed } from '../src/lib/boxscore.js';
@@ -3217,35 +3217,42 @@ test('formatPower: 1.00基準は小数2桁、割合は打率表記', () => {
 // ============================================================
 test('halfPlayed: 表が終わって裏に移ったら、表は0点でも表示する', () => {
   const g = { inning: 3, isTop: false, linescore: { 1: { my: 0, opp: 0 }, 2: { my: 0, opp: 0 } } };
-  assert.equal(halfPlayed(g, 3, 'away'), true, '3回表は終わっている(裏に移った)');
-  assert.equal(halfPlayed(g, 3, 'home'), false, '3回裏は進行中なのでまだ');
-  assert.equal(halfPlayed(g, 2, 'away'), true, '過ぎた回は両方とも出す');
-  assert.equal(halfPlayed(g, 2, 'home'), true);
-  assert.equal(halfPlayed(g, 4, 'away'), false, 'まだ来ていない回は空');
-  assert.equal(halfPlayed(g, 4, 'home'), false);
+  assert.equal(halfPlayed(g, 3, 'away', 0), true, '3回表は終わっている(裏に移った)');
+  assert.equal(halfPlayed(g, 3, 'home', 0), false, '3回裏は進行中なのでまだ');
+  assert.equal(halfPlayed(g, 2, 'away', 0), true, '過ぎた回は両方とも出す');
+  assert.equal(halfPlayed(g, 2, 'home', 0), true);
+  assert.equal(halfPlayed(g, 4, 'away', 0), false, 'まだ来ていない回は空');
+  assert.equal(halfPlayed(g, 4, 'home', 0), false);
 });
 
 test('halfPlayed: 表が進行中なら、まだどちらも出さない(点が入るまで)', () => {
-  const g = { inning: 3, isTop: true, linescore: {} };
-  assert.equal(halfPlayed(g, 3, 'away'), false, '表が進行中で無得点なら空');
-  assert.equal(halfPlayed(g, 3, 'home'), false, '裏はまだ始まっていない');
+  const g = { inning: 3, isTop: true };
+  assert.equal(halfPlayed(g, 3, 'away', 0), false, '表が進行中で無得点なら空');
+  assert.equal(halfPlayed(g, 3, 'home', 0), false, '裏はまだ始まっていない');
   // 表の途中で点が入れば、その時点で出す
-  const scored = { inning: 3, isTop: true, linescore: { 3: { my: 2, opp: 0 } } };
-  assert.equal(halfPlayed(scored, 3, 'away'), true, '点が入れば途中でも出す');
+  assert.equal(halfPlayed(g, 3, 'away', 2), true, '点が入れば途中でも出す');
+});
+
+test('halfPlayed: 表が点を取っても、進行中の裏は空のまま', () => {
+  // 「その回に点が入ったか」で見ると、まだ戦っていない裏に0が出てしまう
+  const g = { inning: 3, isTop: false };
+  assert.equal(halfPlayed(g, 3, 'away', 1), true, '終わった表は出す');
+  assert.equal(halfPlayed(g, 3, 'home', 0), false, '進行中の裏は、自分が点を取るまで空');
+  assert.equal(halfPlayed(g, 3, 'home', 1), true, '裏が点を取れば出す');
 });
 
 test('halfPlayed: 試合終了時は打った半回を出す', () => {
-  const top = { inning: 7, isTop: true, status: 'finished', linescore: {} };
-  assert.equal(halfPlayed(top, 7, 'away'), true, '表で終わったら表は出す');
-  assert.equal(halfPlayed(top, 7, 'home'), false, '裏を戦っていないので出さない');
-  const bottom = { inning: 7, isTop: false, status: 'finished', linescore: {} };
-  assert.equal(halfPlayed(bottom, 7, 'away'), true);
-  assert.equal(halfPlayed(bottom, 7, 'home'), true, '裏まで終わったら両方出す');
+  const top = { inning: 7, isTop: true, status: 'finished' };
+  assert.equal(halfPlayed(top, 7, 'away', 0), true, '表で終わったら表は出す');
+  assert.equal(halfPlayed(top, 7, 'home', 0), false, '裏を戦っていないので出さない');
+  const bottom = { inning: 7, isTop: false, status: 'finished' };
+  assert.equal(halfPlayed(bottom, 7, 'away', 0), true);
+  assert.equal(halfPlayed(bottom, 7, 'home', 0), true, '裏まで終わったら両方出す');
 });
 
 test('halfPlayed: 旧データ・空のgameでも壊れない', () => {
-  assert.equal(halfPlayed({}, 1, 'away'), false);
-  assert.equal(halfPlayed({ inning: 2, isTop: false }, 1, 'home'), true);
+  assert.equal(halfPlayed({}, 1, 'away', 0), false);
+  assert.equal(halfPlayed({ inning: 2, isTop: false }, 1, 'home', 0), true);
 });
 
 
@@ -3443,4 +3450,39 @@ test('単打以外は方向で変わらない', () => {
   }
   // 四球は押し出しのみ(方向は無関係)
   assert.deepEqual(proposeMoves('bb', on2, 'LF').moves, [], '走者二塁だけなら四球で動かない');
+});
+
+
+// ============================================================
+// 記録を直したとき、アウトと得点も直った内容に合わせる
+//
+// 回の途中で「ヒットだと思ったら凡打だった」を直しても、
+// スコア入力画面のアウトカウント・得点はそのままだった。
+// reducer は JSX 側にあるので、ここでは判定に使う部品を確かめる。
+// ============================================================
+test('打者がアウトになる結果かどうかは onBase で決まる', () => {
+  // outsOnPlay の増減はこの判定で出している
+  for (const r of ['single', 'double', 'triple', 'hr', 'bb', 'hbp', 'error', 'interference', 'obstruction']) {
+    assert.equal(!RESULTS_FOR_OUT[r].onBase, false, `${r} は打者が出塁する`);
+  }
+  for (const r of ['out', 'so', 'sacBunt', 'sacFly', 'fieldInterference']) {
+    assert.equal(!RESULTS_FOR_OUT[r].onBase, true, `${r} は打者がアウトになる`);
+  }
+});
+
+test('結果を変えたときのアウト数の増減', () => {
+  // ヒット→凡打 なら +1、凡打→ヒット なら -1、走者が刺された分は残す
+  const delta = (before, after, was) => {
+    const wasOut = !RESULTS_FOR_OUT[before].onBase;
+    const nowOut = !RESULTS_FOR_OUT[after].onBase;
+    return Math.max(0, was + (nowOut ? 1 : 0) - (wasOut ? 1 : 0));
+  };
+  assert.equal(delta('single', 'out', 0), 1, 'ヒット→凡打で1つ増える');
+  assert.equal(delta('out', 'single', 1), 0, '凡打→ヒットで1つ減る');
+  assert.equal(delta('single', 'double', 0), 0, 'ヒット同士なら変わらない');
+  assert.equal(delta('out', 'so', 1), 1, 'アウト同士なら変わらない');
+  // 併殺(打者+走者で2つ)からヒットに直しても、走者を刺した1つは残る
+  assert.equal(delta('out', 'single', 2), 1, '走者を刺した分は残す');
+  // マイナスにはしない
+  assert.equal(delta('out', 'single', 0), 0);
 });

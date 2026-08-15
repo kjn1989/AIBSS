@@ -845,6 +845,20 @@ export default function ScoreTab() {
         )}
       </div>
 
+      {/* 記録を直したあと。アウトと得点は足し直せるが、塁上の走者は作り直せない
+          (どの走者がどこまで進んだかは打席ごとに人が選んでいて、保存していない) */}
+      {game.runnerCheck && (
+        <div className="warn-box mt8">
+          {t('score.runnerCheck')}
+          <button
+            className="small mt8"
+            onClick={() => dispatch({ type: 'CLEAR_RUNNER_CHECK', gameId: game.id })}
+          >
+            {t('score.runnerCheckOk')}
+          </button>
+        </div>
+      )}
+
       {/* 流れタグ: 感じた瞬間に押す。記録の本体には影響しないので、いつでも押せる */}
       <div className="card flow-card">
         <div className="flex">
