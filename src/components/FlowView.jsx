@@ -122,7 +122,8 @@ function Chart({ series, tags, order, t, linescore }) {
   const bounds = [];
   for (let i = 1; i < series.length; i++) {
     if (series[i].inning !== series[i - 1].inning || series[i].isTop !== series[i - 1].isTop) {
-      bounds.push({ i, s: series[i] });
+      // 回の変わり目は下の線分スコアの区切りとつながるので、半回の区切りより濃く引く
+      bounds.push({ i, s: series[i], newInning: series[i].inning !== series[i - 1].inning });
     }
   }
   const ticks = [1, 0.5, 0];
@@ -201,7 +202,8 @@ function Chart({ series, tags, order, t, linescore }) {
 
         {/* 横軸: 回の変わり目。線は全部に引き、数字は重ならない分だけ置く */}
         {bounds.map((b) => (
-          <line key={b.i} x1={x(b.i)} y1="0" x2={x(b.i)} y2={H} stroke="var(--border)" strokeWidth="1" />
+          <line key={b.i} x1={x(b.i)} y1="0" x2={x(b.i)} y2={H}
+            stroke="var(--border)" strokeWidth="1" strokeOpacity={b.newInning ? 1 : 0.45} />
         ))}
         {xLabels.map((c) => (
           <text key={c.i} x={x(c.i)} y={H + 11} fontSize="8.5" textAnchor="middle" fill="var(--text-dim)">
@@ -231,15 +233,16 @@ function Chart({ series, tags, order, t, linescore }) {
           </g>
         )}
       </svg>
+      {/* 線だけでは「何が起きて動いたのか」が分からない。見慣れた線分スコアを
+          線のすぐ下に置くと、落ちている回とその回の失点が目で結びつく。
+          回の区切り線が上下でつながって見えるよう、軸の説明より前に置く */}
+      {linescore ? linescore(cols) : null}
       <div className="fv-axis">
         <span style={{ color: 'var(--green)' }}>{t('fv.toUs')}</span>
         <span className="fv-unit">{t('fv.unit')}</span>
         <span style={{ color: 'var(--amber)' }}>{t('fv.toThem')}</span>
       </div>
       {inningsOnly && <p className="small dim fv-axis-note">{t('fv.axisInningsOnly')}</p>}
-      {/* 線だけでは「何が起きて動いたのか」が分からない。見慣れた線分スコアを
-          同じ枠の中に置くと、落ちている回とその回の失点が目で結びつく */}
-      {linescore ? linescore(cols) : null}
       {cur ? (
         <div className="fv-read">
           <div className="fv-read-head">

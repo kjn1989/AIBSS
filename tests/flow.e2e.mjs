@@ -115,6 +115,24 @@ try {
   check('打席数の多い回ほど列が広い',
     Math.max(...widths) - Math.min(...widths) > 8, widths.map((w) => w.toFixed(1)).join(', '));
 
+  // --- 回の区切り線が上下でつながっている ---
+  const divs = await page.evaluate(() => {
+    const svg = document.querySelector('.fv-chart svg');
+    const bounds = [...svg.querySelectorAll('line')]
+      .filter((l) => l.getAttribute('y1') === '0' && l.getAttribute('y2') === '132')
+      .map((l) => l.getBoundingClientRect().left);
+    // 表の区切りは、セルの左境界線(border-left)の位置 = セルの左端
+    const cells = [...document.querySelectorAll('.fvls-row:not(.head) .fvls-cell')].slice(1);
+    const borders = cells
+      .filter((c) => getComputedStyle(c).borderLeftWidth !== '0px')
+      .map((c) => c.getBoundingClientRect().left);
+    return { bounds, borders };
+  });
+  check('表にも回の区切り線が引かれている', divs.borders.length > 0, JSON.stringify(divs));
+  const lineGap = divs.borders.map((x) => Math.min(...divs.bounds.map((b) => Math.abs(b - x))));
+  check('表の区切り線がグラフの区切りと同じ位置',
+    lineGap.every((d) => d < 1.5), `ズレ=${lineGap.map((d) => d.toFixed(2)).join(', ')}px`);
+
   // --- 回別の安打数も出る(スコアボードと同じ置き方) ---
   const hits = await page.evaluate(() => {
     const row = document.querySelectorAll('.fvls-row:not(.head)')[0]; // 先攻(この試合では自チーム)
