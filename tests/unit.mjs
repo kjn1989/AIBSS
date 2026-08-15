@@ -16,7 +16,7 @@ import { teamPower, mostOff, formatPower } from '../src/lib/teamPower.js';
 import { newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions, attendeesOf, lastAttendees, autoLineupFrom, subRank } from '../src/lib/model.js';
 import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf, oppLettersInGame, oppBaserunning } from '../src/lib/oppBox.js';
 import { remapPlayerInGame, fillPlayerGaps } from '../src/lib/mergePlayers.js';
-import { computeBoxScore } from '../src/lib/boxscore.js';
+import { computeBoxScore, halfPlayed } from '../src/lib/boxscore.js';
 import { buildMatchups, opponentSummaries, oppPitcherByAtBat, oppPlayerKey, normalizeName, opponentTeams, lastOppRoster, oppPlayerAtBats, oppBatteryStats, oppOffenseStats } from '../src/lib/matchup.js';
 import { yearOfDate, yearOfGame, yearsInGames, tenureByPlayer, playedInYear, isArchived, yearLabel, currentYear, resolveYear, scopedGames,
   gradeOf, entryYearFromGrade, willGraduate, sortByGrade, usesGrade, defaultSchoolType, maxGradeOf,
@@ -3206,4 +3206,44 @@ test('formatPower: 1.00基準は小数2桁、割合は打率表記', () => {
   assert.equal(formatPower({ value: 0.5, kind: 'pct' }), '.500');
   assert.equal(formatPower({ value: 1, kind: 'pct' }), '1.000');
   assert.equal(formatPower({ value: null }), '—');
+});
+
+
+// ============================================================
+// ラインスコア: 終わった半回は0点でも数字を出す
+//
+// linescore は点が入った回にしか作られない。エントリの有無だけで
+// 判定していたので、無得点で終わった表が、裏に移っても空欄のままだった。
+// ============================================================
+test('halfPlayed: 表が終わって裏に移ったら、表は0点でも表示する', () => {
+  const g = { inning: 3, isTop: false, linescore: { 1: { my: 0, opp: 0 }, 2: { my: 0, opp: 0 } } };
+  assert.equal(halfPlayed(g, 3, 'away'), true, '3回表は終わっている(裏に移った)');
+  assert.equal(halfPlayed(g, 3, 'home'), false, '3回裏は進行中なのでまだ');
+  assert.equal(halfPlayed(g, 2, 'away'), true, '過ぎた回は両方とも出す');
+  assert.equal(halfPlayed(g, 2, 'home'), true);
+  assert.equal(halfPlayed(g, 4, 'away'), false, 'まだ来ていない回は空');
+  assert.equal(halfPlayed(g, 4, 'home'), false);
+});
+
+test('halfPlayed: 表が進行中なら、まだどちらも出さない(点が入るまで)', () => {
+  const g = { inning: 3, isTop: true, linescore: {} };
+  assert.equal(halfPlayed(g, 3, 'away'), false, '表が進行中で無得点なら空');
+  assert.equal(halfPlayed(g, 3, 'home'), false, '裏はまだ始まっていない');
+  // 表の途中で点が入れば、その時点で出す
+  const scored = { inning: 3, isTop: true, linescore: { 3: { my: 2, opp: 0 } } };
+  assert.equal(halfPlayed(scored, 3, 'away'), true, '点が入れば途中でも出す');
+});
+
+test('halfPlayed: 試合終了時は打った半回を出す', () => {
+  const top = { inning: 7, isTop: true, status: 'finished', linescore: {} };
+  assert.equal(halfPlayed(top, 7, 'away'), true, '表で終わったら表は出す');
+  assert.equal(halfPlayed(top, 7, 'home'), false, '裏を戦っていないので出さない');
+  const bottom = { inning: 7, isTop: false, status: 'finished', linescore: {} };
+  assert.equal(halfPlayed(bottom, 7, 'away'), true);
+  assert.equal(halfPlayed(bottom, 7, 'home'), true, '裏まで終わったら両方出す');
+});
+
+test('halfPlayed: 旧データ・空のgameでも壊れない', () => {
+  assert.equal(halfPlayed({}, 1, 'away'), false);
+  assert.equal(halfPlayed({ inning: 2, isTop: false }, 1, 'home'), true);
 });

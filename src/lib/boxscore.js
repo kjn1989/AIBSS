@@ -32,3 +32,32 @@ export function computeBoxScore(game) {
     opp: { r: game.oppScore, h: oppH, e: oppE },
   };
 }
+
+
+// ------------------------------------------------------------
+// ラインスコアのそのマスを表示してよいか
+//
+// 「まだ来ていない回」は空にするが、「終わった半回」は0点でも数字を出す。
+// linescore は点が入った回にしか作られないので、
+// 「その回のエントリがあるか」で判定すると、無得点で終わった半回が
+// 空欄のままになる(表が終わって裏に移っても表の欄が出ない)。
+//
+// side: 'away'(先攻=表に打つ) | 'home'(後攻=裏に打つ)
+// ------------------------------------------------------------
+export function halfPlayed(game, inning, side) {
+  const cur = Number(game?.inning) || 1;
+  const i = Number(inning) || 0;
+  if (i < cur) return true;   // 過ぎた回は両方とも終わっている
+  if (i > cur) return false;  // まだ来ていない
+  const hasEntry = !!game?.linescore?.[String(i)];
+  const finished = game?.status === 'finished';
+  // 試合は表から始まる。isTop が無い(旧データ)ときは表とみなす
+  const isTop = game?.isTop !== false;
+  if (side === 'away') {
+    // 先攻の半回(表)は、裏に移った時点で終わっている
+    return !isTop || finished || hasEntry;
+  }
+  // 後攻の半回(裏)は、この回が進行中のあいだは終わっていない。
+  // 点が入っていれば途中経過として出す(試合終了時も同じ)
+  return hasEntry || (finished && !isTop);
+}
