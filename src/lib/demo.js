@@ -122,9 +122,17 @@ export function generateDemoData() {
         }
         myScore += runs;
         g.atBats.push(ab);
+        // 打席前の状況(走者・アウト)と、その打席で入った点。
+        // 試合の流れ・チーム力はこれが無いと何も出せないので、デモにも持たせる
         g.playLogs.push(newPlayLog({
           gameId: g.id, inning, isTop: !g.isHome, kind: 'atbat',
-          text: `${p.name}: ${result}`, payload: { atBatId: ab.id, playerId: p.id, result },
+          text: `${p.name}: ${result}`,
+          payload: {
+            atBatId: ab.id, playerId: p.id, result,
+            beforeRunners: { ...ab.snapshot.runners }, outsBefore: ab.snapshot.outs,
+            runs, outsOnPlay: outs - ab.snapshot.outs,
+            scoreAfter: { my: myScore, opp: oppScore },
+          },
         }));
         if (outs >= 3) break;
         // たまに盗塁
