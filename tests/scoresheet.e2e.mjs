@@ -260,6 +260,31 @@ try {
   await page.click('.ss-editbtn');
   await page.waitForTimeout(300);
 
+  // ============================================================
+  // 試合の流れは、終わった試合でも見られる
+  // スコア入力画面にしか入口が無いと、終わった試合では二度と開けない
+  // ============================================================
+  const flowBtn = page.locator('button:has-text("試合の流れを見る")');
+  check('スコアシートから流れを開ける', (await flowBtn.count()) >= 1);
+  await flowBtn.first().click();
+  await page.waitForTimeout(700);
+  const fv = page.locator('.sheet:has-text("試合の流れ")');
+  check('流れシートが開く', (await fv.count()) >= 1);
+  const fvTxt = await fv.first().innerText();
+  check('記録員を決められる', fvTxt.includes('記録員'), fvTxt.slice(0, 400));
+  // グラフを押すと数字が出る
+  const chart = page.locator('.fv-chart svg');
+  if (await chart.count()) {
+    const box = await chart.first().boundingBox();
+    if (box) {
+      await page.mouse.click(box.x + box.width * 0.6, box.y + box.height * 0.5);
+      await page.waitForTimeout(400);
+    }
+  }
+  check('グラフを押すと打席の数字が出る', (await page.locator('.fv-read').count()) >= 1);
+  await page.locator('.sheet').last().locator('button:has-text("閉じる"), .sheet-close').first().click();
+  await page.waitForTimeout(500);
+
   // --- 横はみ出しがない ---
   const over = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   check('横はみ出しなし', !over);

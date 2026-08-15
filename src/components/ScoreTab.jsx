@@ -24,6 +24,7 @@ import { canWriteCloud } from '../lib/officialCloud.js';
 import { RULE_PRESETS, presetById, presetLabel, describeRules, initialPresetIdFor, gameEndCheck, pitchLimitCheck, timeLimitCheck, lineupSlotsFor } from '../lib/rules.js';
 import LiveRulesSheet from './LiveRulesSheet.jsx';
 import FlowView from './FlowView.jsx';
+import ScorerPicker from './ScorerPicker.jsx';
 import InningFlowSheet from './InningFlowSheet.jsx';
 import EditPlaySheet from './EditPlaySheet.jsx';
 
@@ -195,6 +196,9 @@ function GameSetup() {
   const [custom, setCustom] = useState(EMPTY_CUSTOM);
   // リエントリー(再出場)を認める試合か。前回の選択を初期値にする
   const [allowReentry, setAllowReentry] = useState(!!state.settings.lastAllowReentry);
+  // 記録員(スコアラー)。流れタグの読みを積み上げる相手なので、試合ごとに決める。
+  // 前回と同じ人が付けることがほとんどなので、前回の人を初期値にする
+  const [scorerId, setScorerId] = useState(state.settings.lastScorerId || null);
   const ongoing = Object.values(state.games).filter((g) => g.status === 'ongoing' && !g.id.startsWith('demo-'));
   // 既存試合で使われたシーズン名(サジェスト用)
   const knownSeasons = [...new Set(Object.values(state.games).map((g) => g.season).filter(Boolean))];
@@ -225,12 +229,12 @@ function GameSetup() {
         // 表記ゆれを入口で止める: 過去に対戦した相手なら、その書き方に揃える
         opponent: matched ? matched.name : opponent.trim(),
         isHome, season: season.trim(), rules: { ...resolveRulesFrom(presetId, custom), ...live }, allowReentry,
-        attendees,
+        attendees, scorerId,
         oppRoster: carryOver && recall ? recall : null,
       },
     });
     // 次の試合でも同じ設定から始められるよう、選択を覚えておく
-    dispatch({ type: 'UPDATE_SETTINGS', patch: { lastRulePresetId: presetId, lastAllowReentry: allowReentry } });
+    dispatch({ type: 'UPDATE_SETTINGS', patch: { lastRulePresetId: presetId, lastAllowReentry: allowReentry, lastScorerId: scorerId } });
   };
 
   return (
@@ -291,6 +295,9 @@ function GameSetup() {
           {t('lr.open')}
         </button>
         <p className="small dim mt8">{liveSummary(live, t)}</p>
+
+        <label className="small dim mt12" style={{ display: 'block' }}>{t('scorer.label')}</label>
+        <ScorerPicker value={scorerId} onChange={setScorerId} />
 
         <button className="primary" style={{ width: '100%' }} onClick={() => setAtt(true)}>
           {t('gamesetup.start')}
@@ -933,6 +940,17 @@ export default function ScoreTab() {
         </div>
         {flowMsg && <div className={`ft-flash ${flowMsg}`}>{t(`flowtag.saved.${flowMsg}`, { sit: flowSit })}</div>}
         {flowCount > 0 && <div className="small dim mt8">{t('flowtag.count', { n: flowCount })}</div>}
+        {/* 押しているのが誰かは、押している場所で決められないと後から埋まらない。
+            記録員が決まっていない試合は読みの実績に積み上がらないので、ここで言う */}
+        <div className="ft-scorer">
+          <span className="small dim">{t('scorer.label')}</span>
+          <ScorerPicker
+            compact
+            value={game.scorerId || null}
+            onChange={(id) => dispatch({ type: 'SET_GAME_SCORER', gameId: game.id, scorerId: id })}
+          />
+          {!game.scorerId && <p className="small dim mt8">{t('scorer.unsetHint')}</p>}
+        </div>
         <button className="small mt8" style={{ width: '100%' }} onClick={() => setSheet({ kind: 'flowView' })}>
           {t('fv.open')}
         </button>

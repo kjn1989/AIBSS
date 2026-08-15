@@ -62,6 +62,9 @@ export const initialState = {
     schoolType: null, // 'elementary'|'junior'|'high'|'university'。最終学年(卒業の判定)を決める。草野球はnull
     officialTeamId: null, // 公式クラウド(lib/officialCloud.js)のチームID。null=未接続
     officialRole: null, // 公式クラウドでの自分のロール(owner/scorer/viewer)。CloudSyncが接続時に更新
+    // 記録員(スコアラー)の名簿: [{ id, name }]。選手とは別に持つ
+    // (スコアラーは選手とは限らず、選手として登録すると打者一覧に出てしまう)
+    scorers: [],
   },
   demoLoaded: false,
   // 削除のトゥームストーン: ローカルで削除した項目のidを保持し、CloudSyncが
@@ -587,6 +590,36 @@ export function reducer(state, action) {
     case 'UPDATE_SETTINGS':
       return { ...state, settings: { ...state.settings, ...action.patch } };
 
+    // ===== 記録員(スコアラー) =====
+    // 流れタグは記録員の読みそのものなので、誰が付けた試合かを残さないと
+    // 当たったのか外したのかを積み上げられない。
+    case 'ADD_SCORER': {
+      const name = String(action.name || '').trim();
+      if (!name) return state;
+      const list = state.settings.scorers || [];
+      if (list.some((s) => s.name === name)) return state; // 同じ名前を二重に作らない
+      return { ...state, settings: { ...state.settings, scorers: [...list, { id: action.id || uid(), name }] } };
+    }
+    case 'RENAME_SCORER': {
+      const name = String(action.name || '').trim();
+      if (!name) return state;
+      const list = (state.settings.scorers || []).map((s) => (s.id === action.scorerId ? { ...s, name } : s));
+      return { ...state, settings: { ...state.settings, scorers: list } };
+    }
+    case 'REMOVE_SCORER': {
+      // 名簿から外すだけ。試合やタグに焼き込まれた記録員IDは触らない
+      // (過去の試合の「誰が付けたか」を後から消すのは記録の書き換えになる)
+      const list = (state.settings.scorers || []).filter((s) => s.id !== action.scorerId);
+      return { ...state, settings: { ...state.settings, scorers: list } };
+    }
+    case 'SET_GAME_SCORER': {
+      const g = deep(state.games[action.gameId]);
+      if (!g) return state;
+      g.scorerId = action.scorerId || null;
+      g.updatedAt = Date.now();
+      return { ...state, games: { ...state.games, [g.id]: g } };
+    }
+
     // ===== デモデータ =====
     case 'LOAD_DEMO': {
       const { players, games } = generateDemoData();
@@ -1070,7 +1103,9 @@ export function reducer(state, action) {
       g.playLogs.push(newPlayLog({
         gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'flow',
         text: dir === 'up' ? '▲ 流れ来た' : '▼ 流れ切れた',
-        payload: { dir, snapshot: makeSnapshot(g), memo: action.memo || '' },
+        // 押した時点の記録員を焼き込む。途中で記録員が代わっても、
+        // そのタグを押した人は変わらない
+        payload: { dir, snapshot: makeSnapshot(g), memo: action.memo || '', scorerId: g.scorerId || null },
       }));
       g.updatedAt = Date.now();
       return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };

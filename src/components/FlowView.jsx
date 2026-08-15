@@ -1,6 +1,8 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { useStore, useT } from '../state/store.jsx';
 import { buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, formatRate, KOSHIEN_RE, KOSHIEN_SOURCE } from '../lib/flow.js';
+import { aggregateScorers, scorerName } from '../lib/scorers.js';
+import ScorerPicker from './ScorerPicker.jsx';
 import Sheet from './Sheet.jsx';
 
 // ---- 試合の流れ ----
@@ -173,7 +175,7 @@ function Chart({ series, tags, order, t }) {
 }
 
 export default function FlowView({ game, onClose }) {
-  const { state } = useStore();
+  const { state, dispatch } = useStore();
   const t = useT();
 
   // 得点期待値は「自分たちの試合」から作る。相手の打席も材料になる。
@@ -193,6 +195,13 @@ export default function FlowView({ game, onClose }) {
     (game.playLogs || []).forEach((l, i) => m.set(l.id, i));
     return m;
   }, [game.playLogs]);
+
+  // その記録員のここまでの実績(この試合だけでは読みの当たり外れは分からない)
+  const career = useMemo(() => {
+    if (!game.scorerId) return null;
+    const games = Object.values(state.games || {}).filter((g) => g && !String(g.id).startsWith('demo-'));
+    return aggregateScorers(games, re)[game.scorerId] || null;
+  }, [state.games, game.scorerId, re]);
 
   const cum = series.length ? series[series.length - 1].cum : 0;
   const VD = { pre: t('fv.pre'), post: t('fv.post'), miss: t('fv.miss') };
@@ -238,6 +247,26 @@ export default function FlowView({ game, onClose }) {
 
           {/* 答え合わせ。測るのは一致ではなく順番 */}
           <div className="section-title">{t('fv.checkTitle')}</div>
+          {/* 流れタグは記録員の読みそのもの。誰の読みかが分からないと、
+              当たったのか外したのかが個人の実績として積み上がらない */}
+          <div className="fv-scorer">
+            <span className="small dim">{t('scorer.label')}</span>
+            <ScorerPicker
+              compact
+              value={game.scorerId || null}
+              onChange={(id) => dispatch({ type: 'SET_GAME_SCORER', gameId: game.id, scorerId: id })}
+            />
+            {career && career.tags > 0 && (
+              <p className="small dim mt8">
+                {t('scorer.career', {
+                  name: scorerName(state.settings, game.scorerId),
+                  n: career.tags,
+                  hit: formatRate(career.hitRate),
+                  catch: formatRate(career.catchRate),
+                })}
+              </p>
+            )}
+          </div>
           {judged.tags.length === 0 ? (
             <p className="small dim" style={{ marginTop: -2 }}>{t('fv.noTags')}</p>
           ) : (
