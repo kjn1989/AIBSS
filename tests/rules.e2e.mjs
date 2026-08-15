@@ -264,6 +264,38 @@ try {
   // 足りているので案内は出ない
   check('足りていれば案内は出ない', !(await page.locator('body').innerText()).includes('足りていません'));
 
+  // ============================================================
+  // タイブレークは「走者を置いて始める回」
+  // 宣言しただけで誰も置かれないと、画面はふつうの回のままで、
+  // ルールが何も起きていないのと同じになる
+  // ============================================================
+  await page.click('nav button:has-text("スコア入力")');
+  await page.waitForTimeout(500);
+  await page.locator('button:has-text("ルールを決める（タイブレーク等）")').first().click();
+  await page.waitForTimeout(600);
+  // 試合前に入れたままのことも、切ってあることもある。入っている状態にそろえる
+  const tbSw = page.locator('.sheet .lr-sw[aria-label="タイブレークを使う"]');
+  if ((await tbSw.getAttribute('aria-pressed')) !== 'true') { await tbSw.click(); await page.waitForTimeout(400); }
+  // いま進んでいる回からタイブレークにする(延長に入ってからその場で決めるのが実際の使い方)
+  await page.locator('.sheet .chips-row[aria-label="この変更を何回から効かせるか"] button').first().click();
+  await page.waitForTimeout(200);
+  await page.locator('.sheet .chips-row[aria-label="タイブレークを始める回"] button').first().click();
+  await page.waitForTimeout(200);
+  await page.locator('.sheet .chips-row[aria-label="アウトカウント"] button:has-text("ノーアウト")').click();
+  await page.waitForTimeout(200);
+  await page.locator('.sheet .chips-row[aria-label="走者をどこに置くか"] button:has-text("一・二塁")').click();
+  await page.waitForTimeout(250);
+  await page.click('.sheet .sheet-actions button.primary');
+  await page.waitForTimeout(800);
+
+  // 攻守が入れ替われば、その半回の頭で置かれる
+  page.once('dialog', (d) => d.accept());
+  await page.click('button:has-text("手動チェンジ")');
+  await page.waitForTimeout(900);
+  check('タイブレークの回は一塁に走者が置かれる', (await page.locator('.base.b1.occupied').count()) >= 1);
+  check('タイブレークの回は二塁に走者が置かれる', (await page.locator('.base.b2.occupied').count()) >= 1);
+  check('三塁には置かれない(一・二塁を選んだので)', (await page.locator('.base.b3.occupied').count()) === 0);
+
   // --- 横はみ出しがない ---
   const over = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   check('横はみ出しなし', !over);

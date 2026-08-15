@@ -154,7 +154,7 @@ export default function PlayerView({ playerId, games, onClose }) {
                 <div className="atbat-history">
                   {atBats.map((ab, i) => (
                     <span className="hist-chip" key={ab.id}>
-                      {i + 1}. {playLabel(ab.result, ab.direction, ab.outType, ab.soType, state.settings.edition, lang, { hitAngle: ab.hitAngle })}
+                      {i + 1}. {playLabel(ab.result, ab.direction, ab.outType, ab.soType, state.settings.edition, lang, { hitAngle: ab.hitAngle, intentional: ab.intentional })}
                       {ab.rbi > 0 && <b style={{ color: 'var(--gold)' }}>{t('pv.rbiSuffix', { n: ab.rbi })}</b>}
                     </span>
                   ))}

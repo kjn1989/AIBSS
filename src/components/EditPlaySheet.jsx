@@ -23,6 +23,7 @@ export default function EditPlaySheet({ game, log, draft, onClose }) {
   const [direction, setDirection] = useState(p.direction || null);
   const [outType, setOutType] = useState(p.outType || 'ground');
   const [soType, setSoType] = useState(p.soType || 'swinging');
+  const [intentional, setIntentional] = useState(!!p.intentional);
   // 打点(角度・深さ)と強さ。入力できるものは直せなければならない。
   // とくに方向だけ直して打点が古いままだと、分布図が直した方向と食い違う
   const [point, setPoint] = useState(
@@ -40,7 +41,7 @@ export default function EditPlaySheet({ game, log, draft, onClose }) {
       dispatch({
         type: 'ADD_RETRO_ATBAT', gameId: game.id,
         inning: draft.inning, playerId, order: draft.order,
-        result, direction, outType, soType, contact, rbi: rbi || 0,
+        result, direction, outType, soType, intentional, contact, rbi: rbi || 0,
         hitAngle: point ? point.angle : null,
         hitDepth: point ? point.depth : null,
       });
@@ -56,7 +57,7 @@ export default function EditPlaySheet({ game, log, draft, onClose }) {
       gameId: game.id,
       logId: log.id,
       patch: {
-        result, direction, outType, soType, contact,
+        result, direction, outType, soType, intentional, contact,
         hitAngle: point ? point.angle : null,
         hitDepth: point ? point.depth : null,
         ...(isAtBat && rbi !== null ? { rbi } : {}),
@@ -149,6 +150,19 @@ export default function EditPlaySheet({ game, log, draft, onClose }) {
             {Object.keys(SO_TYPES).map((k) => (
               <button key={k} className={`small ${soType === k ? 'primary' : ''}`} onClick={() => setSoType(k)}>{lang === 'ja' ? SO_TYPES[k] : t(`soType.${k}`)}</button>
             ))}
+          </div>
+        </>
+      )}
+      {result === 'bb' && (
+        <>
+          <div className="section-title">{t('playsheet.bbType')}</div>
+          <div className="grid2">
+            <button className={`small ${intentional ? '' : 'primary'}`} onClick={() => setIntentional(false)}>
+              {t('bbType.normal')}
+            </button>
+            <button className={`small ${intentional ? 'primary' : ''}`} onClick={() => setIntentional(true)}>
+              {t('bbType.intentional')}
+            </button>
           </div>
         </>
       )}

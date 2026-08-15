@@ -63,6 +63,8 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
   // 数え始めるとハードヒット率がすぐ嘘になるので、既定値は入れない
   const [contact, setContact] = useState(initial.contact || null);
   const [soType, setSoType] = useState(initial.soType || 'swinging');
+  // 敬遠(故意四球)。四球の内訳なので結果は 'bb' のまま
+  const [intentional, setIntentional] = useState(!!initial.intentional);
   const [dests, setDests] = useState(() => {
     const d = {};
     for (const b of [1, 2, 3]) {
@@ -120,6 +122,18 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
 
   const hadRunners = runnersOn[1] || runnersOn[2] || runnersOn[3];
   const isAdvTarget = result === 'out' && hadRunners;
+
+  // ---- 外野フライで走者が還ったら、それは犠牲フライ ----
+  // 記録規則 9.08(d): 2アウト未満・飛球が捕られ・走者が生還したら犠飛。
+  // 犠飛は打数に数えないので、凡打のまま残すと打率の分母が1つ多くなる。
+  // 押し間違いではなく規則どおりの記録なので既定で切り替えるが、
+  // 何が起きたかは見えるようにして、凡打のままにも戻せるようにしておく。
+  const OUTFIELD = ['LF', 'CF', 'RF'];
+  const [keepAsOut, setKeepAsOut] = useState(false);
+  const sacFlyShape = result === 'out' && outType === 'fly' && OUTFIELD.includes(direction)
+    && game.outs < 2 && [1, 2, 3].some((b) => runnersOn[b] && dests[b] === 4);
+  const asSacFly = sacFlyShape && !keepAsOut;
+  const finalResult = asSacFly ? 'sacFly' : result;
   const autoAdv = judgeAdvance(moves);
   const advSuccess = advOverride ?? autoAdv;
 
@@ -182,13 +196,15 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
   const summary = () => {
     const dir = direction ? (lang === 'ja' ? DIRECTIONS[direction] : t(`dir.${direction}`)) : '';
     // 強さまで選んでいれば「大飛球」のような呼び名で返す。選んでいなければ従来どおり
-    const ot = contact && outType && outType !== 'dp'
+    // 犠飛にするときは「フライ」を重ねない(「中堅フライ 犠牲フライ」になってしまう)
+    const ot = asSacFly ? '' : contact && outType && outType !== 'dp'
       ? t(`battedBall.${outType}.${contact}`)
       : result === 'out' && outType ? outLabel(outType) : '';
     const soLabel = lang === 'ja' ? SO_TYPES[soType] : t(`soType.${soType}`);
     const label = result === 'so'
       ? soLabel + (batterTo === 1 ? t('playsheet.dropThird') : '')
-      : result === 'out' ? '' : resultLabel;
+      : asSacFly ? (lang === 'ja' ? RESULTS.sacFly.label : t('result.sacFly'))
+        : result === 'out' ? '' : (result === 'bb' && intentional) ? t('result.ibb') : resultLabel;
     const runsSuffix = runs ? t('playsheet.runsSuffix', { n: runs }) : '';
     if (lang === 'ja') return `${[dir, ot, label].filter(Boolean).join(' ')}${runsSuffix}`;
     // 英語は語順が異なるため、空でない要素を半角スペースで連結
@@ -210,13 +226,14 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
       gameId: game.id,
       batterName: batterName || '',
       payload: {
-        result,
+        result: finalResult,
         // 軌道はヒットのときも残す(これまで捨てていた)。併殺はアウトのときだけ
         outType: outType === 'dp' && result !== 'out' ? null : outType,
         contact: needsDir ? contact : null,
         hitAngle: needsDir && point ? point.angle : null,
         hitDepth: needsDir && point ? point.depth : null,
         soType: result === 'so' ? soType : undefined,
+        intentional: result === 'bb' ? intentional : undefined,
         direction: needsDir ? direction : null,
         moves,
         batterTo,
@@ -272,6 +289,21 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
               </button>
             ))}
           </div>
+        </>
+      )}
+
+      {result === 'bb' && (
+        <>
+          <div className="section-title" style={needsDir ? undefined : { marginTop: 0 }}>{t('playsheet.bbType')}</div>
+          <div className="grid2">
+            <button className={intentional ? '' : 'primary'} onClick={() => setIntentional(false)}>
+              {t('bbType.normal')}
+            </button>
+            <button className={intentional ? 'primary' : ''} onClick={() => setIntentional(true)}>
+              {t('bbType.intentional')}
+            </button>
+          </div>
+          <p className="small dim mt8">{t('playsheet.bbTypeNote')}</p>
         </>
       )}
 
@@ -395,6 +427,15 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
             );
           })}
         </>
+      )}
+
+      {sacFlyShape && (
+        <div className="card mt12" style={{ padding: 12 }}>
+          <div className="small">{asSacFly ? t('playsheet.sacFlyAuto') : t('playsheet.sacFlyKept')}</div>
+          <button className="small ghost mt8" style={{ width: '100%' }} onClick={() => setKeepAsOut(!keepAsOut)}>
+            {asSacFly ? t('playsheet.sacFlyToOut') : t('playsheet.sacFlyToSac')}
+          </button>
+        </div>
       )}
 
       {collision && <div className="warn-box mt12">{t('playsheet.collision')}</div>}

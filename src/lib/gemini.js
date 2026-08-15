@@ -198,7 +198,7 @@ defense=その回からの守備位置の申告。「3〜6回はキャッチャ�
 export function guessPlayFromMemo(memo) {
   const t = (memo || '').toLowerCase();
   const has = (...ws) => ws.some((w) => memo.includes(w) || t.includes(w));
-  let result = null, outType = null, batterTo = 'out', why = 'キーワードからの簡易推定';
+  let result = null, outType = null, batterTo = 'out', intentional = false, why = 'キーワードからの簡易推定';
   if (has('弾', 'はじ', '後逸', 'トンネル', 'こぼ', 'エラー', '悪送球')) { result = 'error'; batterTo = 1; }
   else if (has('ゲッツー', '併殺', 'ダブルプレー', 'ゲツ')) { result = 'out'; outType = 'dp'; }
   else if (has('振り逃げ')) { result = 'so'; batterTo = 1; }
@@ -206,6 +206,7 @@ export function guessPlayFromMemo(memo) {
   else if (has('ホームラン', '本塁打', 'ホーマー')) { result = 'hr'; batterTo = 4; }
   else if (has('タイムリー', 'ヒット', '安打', 'シングル')) { result = 'single'; batterTo = 1; }
   else if (has('二塁打', 'ツーベース')) { result = 'double'; batterTo = 2; }
+  else if (has('敬遠', '故意四球')) { result = 'bb'; batterTo = 1; intentional = true; }
   else if (has('四球', 'フォアボール', 'フォア')) { result = 'bb'; batterTo = 1; }
   else if (has('死球', 'デッドボール')) { result = 'hbp'; batterTo = 1; }
   else if (has('犠', 'バント', 'スクイズ')) { result = 'sacBunt'; }
@@ -218,7 +219,7 @@ export function guessPlayFromMemo(memo) {
     for (const [k, v] of Object.entries(m)) if (memo.includes(k)) return v;
     return null;
   })();
-  return { result, outType, direction: dir, batterTo, why, confidence: 0.4 };
+  return { result, outType, direction: dir, batterTo, intentional, why, confidence: 0.4 };
 }
 
 // ---------------- AI選手名鑑(AIコーチコメント) ----------------

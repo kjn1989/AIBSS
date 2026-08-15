@@ -48,7 +48,7 @@ function findTopPitcher(pitching, nameOf) {
 function findExtraBaseHits(game, nameOf) {
   return game.atBats
     .filter((ab) => ['double', 'triple', 'hr'].includes(ab.result))
-    .map((ab) => `${inningLabel(ab)} ${nameOf(ab.playerId)} ${playLabel(ab.result, ab.direction, ab.outType, ab.soType)}`);
+    .map((ab) => `${inningLabel(ab)} ${nameOf(ab.playerId)} ${playLabel(ab.result, ab.direction, ab.outType, ab.soType, undefined, 'ja', { intentional: ab.intentional })}`);
 }
 
 export function computeHighlights(game, nameOf) {

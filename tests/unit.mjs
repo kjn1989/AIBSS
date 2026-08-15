@@ -11,9 +11,10 @@ import { swapTargetIndex, timingAnchor } from '../src/lib/logOrder.js';
 import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, assignResultTargets, mergeResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parsePositionSwaps, keepsBattingOrder, explicitOrderChange, stripInningFractions, parseInningRange, parseSlotBatters, parseAtBatDeletions, parseShortResult, isExplicitSubText, inGamePlayerIds, preferInGamePlayers } from '../src/lib/correctionParser.js';
 import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarters, findPositionIssues, alignmentByInning } from '../src/lib/lineupBox.js';
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
+import { tiebreakPlacement, backInOrder, halfHasPlays } from '../src/lib/tiebreak.js';
 import { stateKey, buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, formatRate, BASE_RE, reOf, KOSHIEN_RE, baseReFor } from '../src/lib/flow.js';
 import { teamPower, mostOff, formatPower } from '../src/lib/teamPower.js';
-import { RESULTS as RESULTS_FOR_OUT, newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions, attendeesOf, lastAttendees, autoLineupFrom, subRank } from '../src/lib/model.js';
+import { RESULTS as RESULTS_FOR_OUT, newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions, attendeesOf, lastAttendees, autoLineupFrom, subRank, resultLabelOf, isIntentionalBB } from '../src/lib/model.js';
 import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf, oppLettersInGame, oppBaserunning } from '../src/lib/oppBox.js';
 import { remapPlayerInGame, fillPlayerGaps } from '../src/lib/mergePlayers.js';
 import { computeBoxScore, halfPlayed } from '../src/lib/boxscore.js';
@@ -3583,4 +3584,144 @@ test('batterDrift: 打順に無い番号が記録されていても壊れない'
   // 打順を組み直した直後など、記録の打順が現在の打線に無いことがある
   assert.equal(expectedBatterIndex({ lineup: lineup9, playLogs: [paLogOf(15)] }), null);
   assert.equal(batterDrift({ lineup: lineup9, playLogs: [paLogOf(15)], batterIndex: 0 }, true), null, '判断できないときは黙る');
+});
+
+// ============================================================
+// 故意四球(敬遠)
+// ============================================================
+test('敬遠: 四球の内訳として扱う(結果は bb のまま)', () => {
+  assert.equal(resultLabelOf({ result: 'bb' }), '四球');
+  assert.equal(resultLabelOf({ result: 'bb', intentional: true }), '敬遠');
+  assert.equal(isIntentionalBB({ result: 'bb', intentional: true }), true);
+  assert.equal(isIntentionalBB({ result: 'hbp', intentional: true }), false, '死球は敬遠ではない');
+  // 三振の内訳はこれまでどおり
+  assert.equal(resultLabelOf({ result: 'so', soType: 'looking' }), '見逃し三振');
+  assert.equal(resultLabelOf({ result: 'single' }), 'ヒット');
+});
+
+test('敬遠: playLabel は方向を付けず呼び名だけ差し替える', () => {
+  assert.equal(playLabel('bb', null, null, null, undefined, 'ja', { intentional: true }), '敬遠');
+  assert.equal(playLabel('bb', null, null, null, undefined, 'ja'), '四球');
+  assert.equal(playLabel('bb', null, null, null, undefined, 'en', { intentional: true }), 'IBB');
+});
+
+test('敬遠: 四球にも数え、内訳としても数える(出塁率の分母は変わらない)', () => {
+  const mk = (intentional) => ({
+    atBats: [
+      { playerId: 'p1', result: 'bb', intentional, rbi: 0, snapshot: {} },
+      { playerId: 'p1', result: 'single', rbi: 0, snapshot: {} },
+    ],
+    playLogs: [],
+  });
+  const plain = aggregateBatting([mk(false)]).p1;
+  const ibb = aggregateBatting([mk(true)]).p1;
+  assert.equal(plain.bb, 1);
+  assert.equal(plain.ibb, 0);
+  assert.equal(ibb.bb, 1, '敬遠も四球に数える');
+  assert.equal(ibb.ibb, 1);
+  assert.equal(battingMetrics(ibb).obp, battingMetrics(plain).obp, '出塁率は変わらない');
+});
+
+test('敬遠: 与四球に数えたうえで与故意四球にも入る', () => {
+  const g = {
+    playLogs: [
+      { kind: 'pitcher', inning: 1, isTop: true, payload: { in: 'k1' } },
+      { kind: 'defense', inning: 1, isTop: true, payload: { result: 'bb', intentional: true, outsOnPlay: 0, runs: 0 } },
+      { kind: 'defense', inning: 1, isTop: true, payload: { result: 'bb', outsOnPlay: 0, runs: 0 } },
+    ],
+  };
+  const { records } = rebuildPitchingStats(g);
+  const pr = records.find((r) => r.playerId === 'k1');
+  assert.equal(pr.walks, 2);
+  assert.equal(pr.intentionalWalks, 1);
+});
+
+test('敬遠: 音声で「敬遠」と言えば四球+内訳として拾う', () => {
+  const cands = parseUtterance('ろぐ、敬遠');
+  const bb = cands.find((c) => c.result === 'bb');
+  assert.ok(bb, '四球として拾う');
+  assert.equal(bb.intentional, true);
+  assert.equal(bb.label, '敬遠');
+  const plain = parseUtterance('ろぐ、フォアボール').find((c) => c.result === 'bb');
+  assert.equal(plain.intentional, false);
+});
+
+// ============================================================
+// タイブレーク: 半回の頭に走者を置く
+// ============================================================
+const tbGame = (over = {}) => ({
+  status: 'ongoing', inning: 10, isTop: true, isHome: false,
+  runners: { 1: null, 2: null, 3: null }, outs: 0,
+  batterIndex: 2, oppBatterIndex: 4,
+  lineup: Array.from({ length: 9 }, (_, i) => ({ order: i + 1, playerId: 'p' + (i + 1) })),
+  oppLineup: Array.from({ length: 9 }, (_, i) => ({ order: i + 1, letter: 'ABCDEFGHI'[i] })),
+  playLogs: [],
+  rules: { tiebreak: { fromInning: 10, runners: '12', order: 'cont', outs: 0 } },
+  ...over,
+});
+
+test('タイブレーク: 継続打順なら先頭打者の前2人を一・二塁に置く', () => {
+  const plan = tiebreakPlacement(tbGame());
+  assert.ok(plan);
+  assert.equal(plan.runners[2].playerId, 'p2', '1人前が二塁');
+  assert.equal(plan.runners[1].playerId, 'p1', '2人前が一塁');
+  assert.equal(plan.runners[3], null);
+  assert.equal(plan.outs, 0);
+  assert.equal(plan.runners[2].placed, true, '置いた走者だと分かる印を残す');
+});
+
+test('タイブレーク: 打順をまたいでも戻れる', () => {
+  const plan = tiebreakPlacement(tbGame({ batterIndex: 0 }));
+  assert.equal(plan.runners[2].playerId, 'p9', '1番の1人前は9番');
+  assert.equal(plan.runners[1].playerId, 'p8');
+});
+
+test('タイブレーク: 満塁・1アウトも置ける', () => {
+  const g = tbGame({ rules: { tiebreak: { fromInning: 10, runners: '123', order: 'cont', outs: 1 } } });
+  const plan = tiebreakPlacement(g);
+  assert.equal(plan.runners[3].playerId, 'p2');
+  assert.equal(plan.runners[2].playerId, 'p1');
+  assert.equal(plan.runners[1].playerId, 'p9');
+  assert.equal(plan.outs, 1);
+});
+
+test('タイブレーク: 打順の先頭からなら1番に戻して9番・8番を置く', () => {
+  const plan = tiebreakPlacement(tbGame({ rules: { tiebreak: { fromInning: 10, runners: '12', order: 'top', outs: 0 } } }));
+  assert.equal(plan.batterIndex, 0);
+  assert.equal(plan.runners[2].playerId, 'p9');
+  assert.equal(plan.runners[1].playerId, 'p8');
+});
+
+test('タイブレーク: 裏(守備)の半回は相手の打順から置く', () => {
+  const plan = tiebreakPlacement(tbGame({ isTop: false, currentPitcherId: 'k1' }));
+  assert.equal(plan.runners[2].letter, 'D', '相手5番の1人前は4番=D');
+  assert.equal(plan.runners[1].letter, 'C');
+  assert.equal(plan.runners[2].playerId, null, '相手選手は記号で持つ');
+  assert.equal(plan.runners[2].pitcherId, 'k1');
+});
+
+test('タイブレーク: 前の回・タイブレーク外・すでに走者ありでは置かない', () => {
+  assert.equal(tiebreakPlacement(tbGame({ inning: 9 })), null, 'まだタイブレークの回ではない');
+  assert.equal(tiebreakPlacement(tbGame({ rules: {} })), null, 'タイブレークではない試合');
+  assert.equal(tiebreakPlacement(tbGame({ runners: { 1: null, 2: { playerId: 'p5' }, 3: null } })), null, 'すでに走者が居る');
+  assert.equal(tiebreakPlacement(tbGame({ status: 'finished' })), null, '終わった試合には置かない');
+});
+
+test('タイブレーク: もう打席が記録されている半回には置かない', () => {
+  const started = tbGame({ playLogs: [{ kind: 'atbat', inning: 10, isTop: true, payload: {} }] });
+  assert.equal(tiebreakPlacement(started), null);
+  // 相手の打席(守備側)は自分の攻撃の半回とは別物なので、判定を邪魔しない
+  const otherHalf = tbGame({ playLogs: [{ kind: 'defense', inning: 10, isTop: true, payload: {} }] });
+  assert.ok(tiebreakPlacement(otherHalf), '守備ログは自分の攻撃の半回を止めない');
+});
+
+test('タイブレーク: 回の途中で宣言しても、その回から効く(ruleChanges経由)', () => {
+  const g = tbGame({
+    rules: {},
+    inning: 11,
+    ruleChanges: [{ id: 'c1', fromInning: 10, patch: { tiebreak: { fromInning: 10, runners: '12', order: 'cont', outs: 0 } } }],
+  });
+  const plan = tiebreakPlacement(g);
+  assert.ok(plan, '10回から宣言したタイブレークは11回にも効く');
+  assert.equal(plan.runners[2].playerId, 'p2');
 });

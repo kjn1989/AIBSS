@@ -13,12 +13,12 @@
 // 交代ログの整合だけでは判定しきれない(正当な打順移動と誤った交代が同じ形になる)ため、
 // 実際に矛盾した打席が出たかどうかで判定するのが確実。
 // ============================================================
-import { RESULTS, SO_TYPES, DIRECTIONS } from './model.js';
+import { DIRECTIONS, resultLabelOf } from './model.js';
 import { resolveStarters } from './lineupBox.js';
 
 // 打席ログの表示テキストを組み立て直す(打者名が変わるため)
 function atBatText(nameOf, payload) {
-  const label = (payload.result === 'so' && SO_TYPES[payload.soType]) || RESULTS[payload.result]?.label || payload.result;
+  const label = resultLabelOf(payload);
   const dir = DIRECTIONS[payload.direction] || '';
   return `${nameOf(payload.playerId)} ${dir}${label}` + (payload.runs ? ` (${payload.runs}点)` : '');
 }

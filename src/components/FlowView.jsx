@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { useStore, useT } from '../state/store.jsx';
 import { buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, formatRate, KOSHIEN_RE, KOSHIEN_SOURCE } from '../lib/flow.js';
 import Sheet from './Sheet.jsx';
@@ -16,7 +16,10 @@ const H = 132;
 const PADL = 34;    // 縦軸の数字を置く余白
 const PADB = 16;    // 回のラベルを置く余白
 
-function Chart({ series, tags, order, t, innLabel }) {
+function Chart({ series, tags, order, t }) {
+  const svgRef = useRef(null);
+  // 押した打席。線を見て「ここは何点ぶん?」と思ったときに読めるようにする
+  const [sel, setSel] = useState(null);
   if (!series.length) return null;
   const vals = series.map((s) => s.cum);
   const hi = Math.max(0.5, ...vals);
@@ -47,10 +50,45 @@ function Chart({ series, tags, order, t, innLabel }) {
   // 片側にしか振れていない試合では下端と0が重なるので、近すぎるものは省く
   const ticks = [hi, 0, lo].filter((v, i, a) => a.findIndex((u) => Math.abs(y(u) - y(v)) < 14) === i);
 
+  // ---- 横軸のラベル ----
+  // 延長までいくと半回は20を超える。全部に「10表」と書くと文字が重なって読めない。
+  // まず半回すべてに間隔が取れるか見て、取れなければ回の頭(表)だけの数字に落とす。
+  // それでも詰まるなら、間隔が取れる回だけを残す(必ず重ならない側に倒す)。
+  const halves = [{ i: 0, s: series[0] }, ...bounds];
+  const spaced = (list, min) => {
+    const out = [];
+    let last = -Infinity;
+    for (const c of list) {
+      if (x(c.i) - last >= min) { out.push(c); last = x(c.i); }
+    }
+    return out;
+  };
+  const halfText = (s) => `${s.inning}${s.isTop ? t('fv.axisTop') : t('fv.axisBottom')}`;
+  const roomy = spaced(halves, 26);
+  const xLabels = roomy.length === halves.length
+    ? halves.map((c) => ({ i: c.i, text: halfText(c.s) }))
+    : spaced(halves.filter((c) => c.s.isTop), 16).map((c) => ({ i: c.i, text: String(c.s.inning) }));
+  const inningsOnly = xLabels.length !== halves.length;
+
+  // 押した位置にいちばん近い打席を選ぶ(指で押すので、点の上ぴったりは狙えない)
+  const pickAt = (clientX) => {
+    const rect = svgRef.current?.getBoundingClientRect();
+    if (!rect || !rect.width) return;
+    const ux = ((clientX - rect.left) / rect.width) * (PADL + W + 6);
+    const ratio = series.length < 2 ? 0 : (ux - PADL) / W;
+    const i = Math.round(ratio * (series.length - 1));
+    setSel(Math.max(0, Math.min(series.length - 1, i)));
+  };
+
+  const cur = sel === null ? null : series[sel];
+  const signed = (v) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(2)}`;
+
   return (
     <div className="fv-chart">
-      <svg viewBox={`0 0 ${PADL + W + 6} ${H + PADB}`} width="100%" height="164"
-        role="img" aria-label={t('fv.chartAlt')}>
+      <svg ref={svgRef} viewBox={`0 0 ${PADL + W + 6} ${H + PADB}`} width="100%" height="164"
+        role="img" aria-label={t('fv.chartAlt')} style={{ touchAction: 'none' }}
+        onPointerDown={(e) => { e.currentTarget.setPointerCapture?.(e.pointerId); pickAt(e.clientX); }}
+        onPointerMove={(e) => { if (e.buttons) pickAt(e.clientX); }}>
         <defs>
           <linearGradient id="fvUp" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="var(--green)" stopOpacity="0.32" />
@@ -72,18 +110,15 @@ function Chart({ series, tags, order, t, innLabel }) {
           </g>
         ))}
 
-        {/* 横軸: 回の変わり目 */}
+        {/* 横軸: 回の変わり目。線は全部に引き、数字は重ならない分だけ置く */}
         {bounds.map((b) => (
-          <g key={b.i}>
-            <line x1={x(b.i)} y1="0" x2={x(b.i)} y2={H} stroke="var(--border)" strokeWidth="1" />
-            <text x={x(b.i)} y={H + 11} fontSize="8.5" textAnchor="middle" fill="var(--text-dim)">
-              {b.s.inning}{b.s.isTop ? '表' : '裏'}
-            </text>
-          </g>
+          <line key={b.i} x1={x(b.i)} y1="0" x2={x(b.i)} y2={H} stroke="var(--border)" strokeWidth="1" />
         ))}
-        <text x={PADL} y={H + 11} fontSize="8.5" textAnchor="middle" fill="var(--text-dim)">
-          {series[0].inning}{series[0].isTop ? '表' : '裏'}
-        </text>
+        {xLabels.map((c) => (
+          <text key={c.i} x={x(c.i)} y={H + 11} fontSize="8.5" textAnchor="middle" fill="var(--text-dim)">
+            {c.text}
+          </text>
+        ))}
 
         <path d={area} fill="url(#fvUp)" clipPath="url(#fvTop)" />
         <path d={area} fill="var(--amber)" fillOpacity="0.18" clipPath="url(#fvBot)" />
@@ -98,12 +133,41 @@ function Chart({ series, tags, order, t, innLabel }) {
               fill={tg.payload?.dir === 'down' ? 'var(--amber)' : 'var(--green)'} />
           </g>
         ))}
+
+        {/* 押した打席 */}
+        {cur && (
+          <g pointerEvents="none">
+            <line x1={x(sel)} y1="0" x2={x(sel)} y2={H} stroke="var(--text)" strokeWidth="1" strokeOpacity="0.55" />
+            <circle cx={x(sel)} cy={y(cur.cum)} r="5" fill="var(--bg)" stroke="var(--accent)" strokeWidth="2" />
+          </g>
+        )}
       </svg>
       <div className="fv-axis">
         <span style={{ color: 'var(--green)' }}>{t('fv.toUs')}</span>
         <span className="fv-unit">{t('fv.unit')}</span>
         <span style={{ color: 'var(--amber)' }}>{t('fv.toThem')}</span>
       </div>
+      {inningsOnly && <p className="small dim fv-axis-note">{t('fv.axisInningsOnly')}</p>}
+      {cur ? (
+        <div className="fv-read">
+          <div className="fv-read-head">
+            <b>{t(cur.isTop ? 'scoreboard.top' : 'scoreboard.bottom', { n: cur.inning })}</b>
+            <span className="fv-read-text">{cur.log?.text || ''}</span>
+          </div>
+          <div className="fv-read-nums">
+            <span>
+              {t('fv.thisPa')}
+              <b className={cur.delta >= 0 ? 'up' : 'down'}>{signed(cur.delta)}</b>
+            </span>
+            <span>
+              {t('fv.soFar')}
+              <b className={cur.cum >= 0 ? 'up' : 'down'}>{signed(cur.cum)}</b>
+            </span>
+          </div>
+        </div>
+      ) : (
+        <p className="small dim fv-tap-hint">{t('fv.tapHint')}</p>
+      )}
     </div>
   );
 }

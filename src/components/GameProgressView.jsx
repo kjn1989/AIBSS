@@ -52,7 +52,7 @@ function PlayCard({ log, nameOf, numberOf, onEdit, edition, lang, t, oppName }) 
   const name = isDefense ? (oppName ? oppName(p.letter) : p.letter) : nameOf(p.playerId);
   const number = isDefense ? null : numberOf(p.playerId);
   const category = resultCategory(p.result);
-  const label = playLabel(p.result, p.direction, p.outType, p.soType, edition, lang, { hitAngle: p.hitAngle });
+  const label = playLabel(p.result, p.direction, p.outType, p.soType, edition, lang, { hitAngle: p.hitAngle, intentional: p.intentional });
   const multiOut = multiOutLabel(p.outsOnPlay || 0);
 
   return (
@@ -164,7 +164,7 @@ function NLCorrectionCard({ game }) {
     lineup: (game.lineup || []).map((l) => ({ order: l.order, name: nameOf(l.playerId), position: l.position || '' })),
     atbats: (game.playLogs || []).filter((l) => l.kind === 'atbat').map((l) => ({
       inning: l.inning, order: l.payload?.order, batter: nameOf(l.payload?.playerId),
-      result: playLabel(l.payload?.result, l.payload?.direction, l.payload?.outType, l.payload?.soType, state.settings.edition, lang, { hitAngle: l.payload?.hitAngle }),
+      result: playLabel(l.payload?.result, l.payload?.direction, l.payload?.outType, l.payload?.soType, state.settings.edition, lang, { hitAngle: l.payload?.hitAngle, intentional: l.payload?.intentional }),
     })),
   });
   // 同名で二重登録された選手がいる場合、この試合に既に出ている方を優先して選ぶ
@@ -674,7 +674,7 @@ function NLCorrectionCard({ game }) {
         return t('gp.nlResItem', {
           inning: rc.inning,
           who,
-          label: playLabel(rc.patch.result, rc.patch.direction, rc.patch.outType, rc.patch.soType, state.settings.edition, lang)
+          label: playLabel(rc.patch.result, rc.patch.direction, rc.patch.outType, rc.patch.soType, state.settings.edition, lang, { intentional: rc.patch.intentional })
             + (rc.patch.rbi !== undefined ? t('gp.nlResRbi', { n: rc.patch.rbi }) : ''),
         });
       }),
