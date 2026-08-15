@@ -2365,3 +2365,10 @@ button.manage-open {
 .fv-lead b { font-size: 15px; font-variant-numeric: tabular-nums; }
 .fv-lead b.up { color: var(--green); }
 .fv-lead b.down { color: var(--amber); }
+
+/* 流れの線のすぐ下に線分スコア。落ちている回とその回の失点を目で結びつける。
+   延長までいくと列が増えるので、はみ出す前にここだけ横スクロールさせる */
+.fv-line-score { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); overflow-x: auto; }
+.fv-line-score .linescore-table.compact { min-width: 260px; }
+.fv-line-score .linescore-table.compact th:first-child,
+.fv-line-score .linescore-table.compact td:first-child { width: 24%; }
