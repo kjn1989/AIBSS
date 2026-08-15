@@ -2311,3 +2311,7 @@ button.manage-open {
 .tp-note { font-size: 11px; color: var(--text-dim); line-height: 1.55; }
 .tp-note .tp-n { white-space: nowrap; }
 .tp-thin { font-size: 10.5px; color: var(--amber); margin-top: 3px; }
+
+/* 相手の控え。記号を選ばせず、名前を入れれば空いている記号を自動で割り当てる */
+.opp-bench { margin-top: 6px; border-top: 1px solid var(--border); padding-top: 4px; }
+.opp-bench .row { padding: 6px 0; }

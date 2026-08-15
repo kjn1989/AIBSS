@@ -46,7 +46,76 @@ export default function OppOrderCard({ game, onSubstitute }) {
           <button className="small" onClick={() => onSubstitute(slot)}>{t('order.change')}</button>
         </div>
       ))}
+      <OppBench game={game} onEdit={setEditing} />
+
       {editing && <OppNameSheet game={game} letter={editing} onClose={() => setEditing(null)} />}
+    </div>
+  );
+}
+
+// ---- 相手の控え選手 ----
+// これまでは交代のときに「まだ使っていない記号(J,K…)」を選んでから名前を直していた。
+// 記号を選ぶのは記録の都合であって、人がやりたいことではない。
+// ここで先に名前だけ入れておけば、記号は空いている順に自動で割り当てられ、
+// 交代のときは名前を選ぶだけで済む。
+function OppBench({ game, onEdit }) {
+  const { dispatch } = useStore();
+  const t = useT();
+  const [name, setName] = useState('');
+
+  const inLineup = new Set((game.oppLineup || []).map((l) => l.letter));
+  const free = OPP_LETTERS.filter((l) => !inLineup.has(l));
+  // 打順に入っていないのに名前が付いている = 控えとして登録済み
+  const bench = free.filter((l) => oppHasName(game, l));
+  const nextLetter = free.find((l) => !oppHasName(game, l)) || null;
+
+  const add = () => {
+    const v = name.trim();
+    if (!v || !nextLetter) return;
+    dispatch({ type: 'SET_OPP_NAME', gameId: game.id, letter: nextLetter, name: v });
+    setName('');
+  };
+
+  return (
+    <div className="opp-bench">
+      <div className="section-title">{t('order.oppBench')}</div>
+      <p className="small dim" style={{ marginTop: -4 }}>{t('order.oppBenchHint')}</p>
+
+      {bench.map((l) => (
+        <div className="row" key={l}>
+          <button className="grow opp-row-name" onClick={() => onEdit(l)}>
+            <b>{oppNameOf(game, l)}</b>
+            <span className="dim small"> {l}</span>
+            <span className="dim small" aria-hidden> ✎</span>
+            {game.oppUsedLetters?.includes(l) && (
+              <span className="pill amber" style={{ marginLeft: 6 }}>{t('order.oppBenchUsed')}</span>
+            )}
+          </button>
+          <button
+            className="small ghost"
+            aria-label={t('order.oppBenchRemove', { name: oppNameOf(game, l) })}
+            onClick={() => dispatch({ type: 'SET_OPP_NAME', gameId: game.id, letter: l, name: '' })}
+          >
+            {t('action.delete')}
+          </button>
+        </div>
+      ))}
+
+      {nextLetter ? (
+        <div className="flex mt8" style={{ gap: 8 }}>
+          <input
+            className="grow"
+            value={name}
+            placeholder={t('order.oppBenchPlaceholder')}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') add(); }}
+            aria-label={t('order.oppBench')}
+          />
+          <button className="small primary" disabled={!name.trim()} onClick={add}>{t('order.oppBenchAdd')}</button>
+        </div>
+      ) : (
+        <p className="small dim">{t('order.oppBenchFull')}</p>
+      )}
     </div>
   );
 }
@@ -89,6 +158,8 @@ export function OppSubstituteSheet({ game, slot, onClose, initialKind = 'ph' }) 
 
   const inLineup = new Set(game.oppLineup.map((l) => l.letter));
   const candidates = OPP_LETTERS.filter((l) => !inLineup.has(l));
+  const named = candidates.filter((l) => oppHasName(game, l));     // 先に登録した控え
+  const unnamed = candidates.filter((l) => !oppHasName(game, l));  // 名前が分からない枠
   // リエントリーを認めている試合では、再出場は正常なので警告しない
   const isRetired = letter && game.oppRetiredLetters.includes(letter) && !game.allowReentry;
   const kindLabel = t(`order.sub.${kind}`);
@@ -110,14 +181,30 @@ export function OppSubstituteSheet({ game, slot, onClose, initialKind = 'ph' }) 
       )}
 
       <div className="section-title">{t('order.sub.playerIn')}</div>
+      {/* 先に登録した控えを上に出す。名前を選ぶだけで済むようにするため。
+          名前が分からない相手もいるので、記号のままの枠も残しておく */}
       <select value={letter} onChange={(e) => setLetter(e.target.value)}>
         <option value="">{t('score.selectLetter')}</option>
-        {candidates.map((l) => (
-          <option key={l} value={l}>
-            {oppHasName(game, l) ? `${oppNameOf(game, l)} (${l})` : l}
-            {game.oppRetiredLetters.includes(l) ? t('order.sub.usedMark') : ''}
-          </option>
-        ))}
+        {named.length > 0 && (
+          <optgroup label={t('order.oppBench')}>
+            {named.map((l) => (
+              <option key={l} value={l}>
+                {oppNameOf(game, l)} ({l})
+                {game.oppRetiredLetters.includes(l) ? t('order.sub.usedMark') : ''}
+              </option>
+            ))}
+          </optgroup>
+        )}
+        {unnamed.length > 0 && (
+          <optgroup label={t('order.oppUnnamed')}>
+            {unnamed.map((l) => (
+              <option key={l} value={l}>
+                {l}
+                {game.oppRetiredLetters.includes(l) ? t('order.sub.usedMark') : ''}
+              </option>
+            ))}
+          </optgroup>
+        )}
       </select>
 
       {isRetired && (
