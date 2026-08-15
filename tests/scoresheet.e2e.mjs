@@ -294,6 +294,10 @@ try {
     }
   }
   check('グラフを押すと打席の数字が出る', (await page.locator('.fv-read').count()) >= 1);
+  // 「+8pt」だけでは初見で分からない。打席の前と後の勝率をそのまま出す
+  const readTxt = await page.locator('.fv-read').first().innerText();
+  check('打席の前後の勝率が両方出ている', (readTxt.match(/\d+%/g) || []).length >= 2, readTxt);
+  check('勝率だと分かる言葉が付いている', readTxt.includes('勝率'), readTxt);
   await page.locator('.sheet').last().locator('button:has-text("閉じる"), .sheet-close').first().click();
   await page.waitForTimeout(500);
 

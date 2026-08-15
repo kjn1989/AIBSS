@@ -2305,6 +2305,11 @@ button.manage-open {
 .fv-read-nums b { font-variant-numeric: tabular-nums; margin-left: 4px; }
 .fv-read-nums b.up { color: var(--green); }
 .fv-read-nums b.down { color: var(--amber); }
+/* 「+8pt」ではなく「45% → 53%」。引いた結果ではなく引いた元を見せる */
+.fv-move { display: flex; align-items: baseline; gap: 5px; flex-wrap: wrap; }
+.fv-move i { font-style: normal; font-size: 13px; }
+.fv-move i.up { color: var(--green); }
+.fv-move i.down { color: var(--amber); }
 
 /* ---- チーム力 ----
    比べる相手が「その場面」なので、1.00(=場面どおり)が基準線になる。
