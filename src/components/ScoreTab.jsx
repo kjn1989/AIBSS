@@ -338,10 +338,17 @@ function BatterSheet({ game, onClose, onPinchHitter }) {
   const lang = state.settings.lang || 'ja';
   const nameOf = usePlayerName();
   return (
-    <Sheet title={t('sheet.nextBatter')} onClose={onClose}>
-      <button className="primary" style={{ width: '100%', marginBottom: 10 }} onClick={onPinchHitter}>
+    // 「代打を送る」と「実際の打者に合わせる」は、やることも記録への影響も別物。
+    // 混ぜて並べると、打者を合わせたいだけの人が交代を記録してしまう。
+    <Sheet title={t('sheet.batterTitle')} onClose={onClose}>
+      <div className="section-title">{t('sheet.subSection')}</div>
+      <button className="primary" style={{ width: '100%' }} onClick={onPinchHitter}>
         {t('sheet.pinchHitter', { name: nameOf(currentBatter(game)?.playerId) })}
       </button>
+      <p className="small dim mt8">{t('sheet.subNote')}</p>
+
+      <div className="section-title">{t('sheet.alignSection')}</div>
+      <p className="small dim" style={{ marginTop: -4 }}>{t('sheet.alignNote')}</p>
       {game.lineup.map((slot, i) => (
         <div className="row" key={slot.order}>
           <span className="rank-badge">{slot.order}</span>
@@ -367,10 +374,15 @@ function OppBatterSheet({ game, onClose, onPinchHitter }) {
   const t = useT();
   const current = currentOppBatter(game);
   return (
-    <Sheet title={t('score.selectOppBatter')} onClose={onClose}>
-      <button className="primary" style={{ width: '100%', marginBottom: 10 }} onClick={onPinchHitter}>
+    <Sheet title={t('sheet.batterTitle')} onClose={onClose}>
+      <div className="section-title">{t('sheet.subSection')}</div>
+      <button className="primary" style={{ width: '100%' }} onClick={onPinchHitter}>
         {t('score.oppPinchHit', { letter: current?.letter })}
       </button>
+      <p className="small dim mt8">{t('sheet.subNote')}</p>
+
+      <div className="section-title">{t('sheet.alignSection')}</div>
+      <p className="small dim" style={{ marginTop: -4 }}>{t('sheet.alignNote')}</p>
       {game.oppLineup.map((slot, i) => (
         <div className="row" key={slot.order}>
           <span className="rank-badge">{slot.order}</span>
