@@ -190,7 +190,8 @@ export default function FlowView({ game, onClose }) {
                   <div className="n">{t('fv.catchRateNote', { a: judged.caught, b: judged.swings.length })}</div>
                 </div>
               </div>
-              <p className="small dim mt8">{t('fv.pairNote')}</p>
+              <p className="small dim mt8">{t('fv.verdictNote')}</p>
+              <p className="small dim">{t('fv.pairNote')}</p>
               <div className="fv-tags">
                 {judged.tags.map((tg) => (
                   <div className={`fv-tag ${tg.payload?.dir === 'down' ? 'down' : 'up'}`} key={tg.id}>
