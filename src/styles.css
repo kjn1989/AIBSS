@@ -2368,7 +2368,8 @@ button.manage-open {
 
 /* 流れの線のすぐ下に線分スコア。落ちている回とその回の失点を目で結びつける。
    延長までいくと列が増えるので、はみ出す前にここだけ横スクロールさせる */
-.fv-line-score { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+.fv-line-score { margin-top: 2px; }
+.fv-axis { margin-top: 6px; }
 /* 列幅は線と同じ座標から来るので、ここでは幅を決めない(style で来る) */
 .fvls-row { display: flex; align-items: center; font-size: 11px; line-height: 1.5; }
 .fvls-row.head { color: var(--text-dim); }
@@ -2378,6 +2379,9 @@ button.manage-open {
   flex: none; overflow: hidden; font-variant-numeric: tabular-nums;
   display: flex; flex-direction: column; align-items: center;
 }
+/* 回の区切り線。上のグラフに引いてある区切りと同じ位置に落ちるので、
+   線が下まで通って見える(列の幅がグラフと同じ座標から来ているため) */
+.fvls-cell + .fvls-cell, .fvls-tot { border-left: 1px solid var(--border); }
 /* 安打数は得点の上下に小さく(スコアボードと同じ置き方)。
    横に並べると「4」と「4」が「44」に見えてしまう */
 .fvls-cell > b { font-weight: 600; line-height: 1.35; }
