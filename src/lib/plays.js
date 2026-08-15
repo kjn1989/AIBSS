@@ -5,15 +5,27 @@
 // ============================================================
 import { RESULTS } from './model.js';
 
-export function proposeMoves(result, runners) {
+// 内野への打球(内野安打)。外野へ抜けていないので、走者は1つずつしか進めない
+const INFIELD_DIRS = new Set(['P', 'C', '1B', '2B', '3B', 'SS']);
+
+export function proposeMoves(result, runners, direction = null) {
   const on = { 1: !!runners[1], 2: !!runners[2], 3: !!runners[3] };
   const moves = [];
   const push = (from, to) => on[from] && moves.push({ from, to });
 
   switch (result) {
-    case 'single':
-      push(3, 4); push(2, 4); push(1, 2);
+    case 'single': {
+      // 単打の二塁走者は打球方向で既定が変わる。
+      //   左翼前  … 三塁まで。左翼は三塁に近く本塁への送球も短いので、普通は止まる
+      //   中堅・右翼前 … 生還
+      //   内野安打 … 外野へ抜けていないので三塁まで
+      // 方向が分かっていないときは、単打全体で見て多いほうの「生還」を既定にする。
+      const holdAtThird = direction && (direction === 'LF' || INFIELD_DIRS.has(direction));
+      push(3, 4);
+      if (holdAtThird) push(2, 3); else push(2, 4);
+      push(1, 2);
       return { moves, batterTo: 1 };
+    }
     case 'double':
       push(3, 4); push(2, 4); push(1, 3);
       return { moves, batterTo: 2 };

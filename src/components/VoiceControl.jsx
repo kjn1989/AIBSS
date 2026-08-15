@@ -43,7 +43,7 @@ export default function VoiceControl({ game }) {
     if (!cand || cand.kind !== 'play') return null;
     const on = runnersOnNow();
     if (!needsRunnerConfirm(cand.result, on)) return null;
-    const proposal = proposeMoves(cand.result, on);
+    const proposal = proposeMoves(cand.result, on, cand.direction || null);
     const dests = {};
     for (const b of [1, 2, 3]) {
       if (on[b]) { const mv = proposal.moves.find((m) => m.from === b); dests[b] = mv ? mv.to : b; }
@@ -199,7 +199,7 @@ export default function VoiceControl({ game }) {
     // 「✎ 走者・方向を修正して確定」から手動シート(editing)を開ける。
     // play: 走者確認で調整済みなら movesOverride を、無ければ既定の進塁提案で確定
     const runnersOn = { 1: !!game.runners[1], 2: !!game.runners[2], 3: !!game.runners[3] };
-    const proposal = proposeMoves(cand.result, runnersOn);
+    const proposal = proposeMoves(cand.result, runnersOn, cand.direction || null);
     dispatch({
       type: 'CONFIRM_PLAY',
       gameId: game.id,
