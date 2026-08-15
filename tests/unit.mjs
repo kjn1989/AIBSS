@@ -13,7 +13,7 @@ import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarter
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
 import { tiebreakPlacement, backInOrder, halfHasPlays } from '../src/lib/tiebreak.js';
 import { aggregateScorers, rankScorers, scorerName, tagScorerId } from '../src/lib/scorers.js';
-import { stateKey, buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, formatRate, BASE_RE, reOf, KOSHIEN_RE, baseReFor } from '../src/lib/flow.js';
+import { stateKey, buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, formatRate, flowTiltKey, BASE_RE, reOf, KOSHIEN_RE, baseReFor } from '../src/lib/flow.js';
 import { teamPower, mostOff, formatPower } from '../src/lib/teamPower.js';
 import { RESULTS as RESULTS_FOR_OUT, newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions, attendeesOf, lastAttendees, autoLineupFrom, subRank, resultLabelOf, isIntentionalBB } from '../src/lib/model.js';
 import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf, oppLettersInGame, oppBaserunning } from '../src/lib/oppBox.js';
@@ -3792,4 +3792,18 @@ test('記録員: 回数の足りない人は上位に出さない', () => {
   const ranked = rankScorers({ a: many, b: few }, 5);
   assert.equal(ranked[0].scorerId, 'a', '1回だけの満点を先頭にしない');
   assert.equal(ranked[1].scorerId, 'b');
+});
+
+test('流れ: 終わった試合は過去形で言う', () => {
+  // 振り返って見ているのに「いまは傾いています」と書くと、まだ試合中のように読める
+  assert.equal(flowTiltKey('ongoing', 1.2), 'fv.nowUs');
+  assert.equal(flowTiltKey('ongoing', -1.2), 'fv.nowThem');
+  assert.equal(flowTiltKey('finished', 1.2), 'fv.endUs');
+  assert.equal(flowTiltKey('finished', -1.2), 'fv.endThem');
+  assert.equal(flowTiltKey('finished', 0), 'fv.endUs', '0は自チーム側の言い方に寄せる');
+  // 4つとも辞書にあること(片方だけ足して英語が落ちるのを防ぐ)
+  for (const k of ['fv.nowUs', 'fv.nowThem', 'fv.endUs', 'fv.endThem']) {
+    assert.ok(translate('ja', k, { v: '1.2' }).includes('1.2'), k);
+    assert.ok(translate('en', k, { v: '1.2' }).includes('1.2'), k);
+  }
 });

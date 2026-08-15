@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { useStore, useT } from '../state/store.jsx';
-import { buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, formatRate, KOSHIEN_RE, KOSHIEN_SOURCE } from '../lib/flow.js';
+import { buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, formatRate, flowTiltKey, KOSHIEN_RE, KOSHIEN_SOURCE } from '../lib/flow.js';
 import { aggregateScorers, scorerName } from '../lib/scorers.js';
 import ScorerPicker from './ScorerPicker.jsx';
 import Sheet from './Sheet.jsx';
@@ -225,7 +225,7 @@ export default function FlowView({ game, onClose }) {
           )}
           <div className="fv-now">
             <b style={{ color: cum >= 0 ? 'var(--green)' : 'var(--amber)' }}>
-              {cum >= 0 ? t('fv.nowUs', { v: cum.toFixed(1) }) : t('fv.nowThem', { v: Math.abs(cum).toFixed(1) })}
+              {t(flowTiltKey(game.status, cum), { v: Math.abs(cum).toFixed(1) })}
             </b>
             <div className="small dim">{t('fv.nowNote')}</div>
           </div>
