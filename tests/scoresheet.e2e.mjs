@@ -294,14 +294,8 @@ try {
     }
   }
   check('グラフを押すと打席の数字が出る', (await page.locator('.fv-read').count()) >= 1);
-  // 「+8pt」だけでは初見で分からない。打席の前と後の勝率をそのまま出す
-  const readTxt = await page.locator('.fv-read').first().innerText();
-  check('打席の前後の勝率が両方出ている', (readTxt.match(/\d+%/g) || []).length >= 2, readTxt);
-  check('勝率だと分かる言葉が付いている', readTxt.includes('勝率'), readTxt);
-  // 線だけでは「何が起きて動いたのか」が分からない。見慣れた線分スコアを同じ枠に置く
-  check('線のすぐ下に線分スコアがある', (await page.locator('.fv-chart .fv-line-score table').count()) === 1);
-  const lsTxt = await page.locator('.fv-chart .fv-line-score').innerText();
-  check('線分スコアに得点・安打・失策が出ている', /H/.test(lsTxt) && /E/.test(lsTxt), lsTxt);
+  // 線と線分スコアの中身は flow.e2e.mjs で見る。ここは入口が生きていることだけ
+  check('線のすぐ下に線分スコアがある', (await page.locator('.fv-chart .fv-line-score').count()) === 1);
   await page.locator('.sheet').last().locator('button:has-text("閉じる"), .sheet-close').first().click();
   await page.waitForTimeout(500);
 

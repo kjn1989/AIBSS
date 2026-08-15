@@ -5,7 +5,7 @@ import { buildRunDists, buildWinModel } from '../lib/winExp.js';
 import { currentRules } from '../lib/rules.js';
 import { aggregateScorers, scorerName } from '../lib/scorers.js';
 import ScorerPicker from './ScorerPicker.jsx';
-import { LinescoreTable } from './GameProgressView.jsx';
+import { computeBoxScore } from '../lib/boxscore.js';
 import Sheet from './Sheet.jsx';
 
 // ---- 試合の流れ ----
@@ -16,10 +16,76 @@ import Sheet from './Sheet.jsx';
 
 // 目盛りの無い線は「なんとなく上がっている」以上のことを伝えない。
 // 縦は点(得点期待値)、横は回。両方に数字を置く。
-const W = 300;      // 線を描く幅
+// 線分スコアの列を、線の回の区切りにぴったり重ねるための座標。
+// 表と線が同じ数字(PADL / W / PADR)を使うので、幅が食い違いようがない。
+const W = 262;      // 線を描く幅
 const H = 132;
-const PADL = 34;    // 縦軸の数字を置く余白
+const PADL = 44;    // 縦軸の数字・チーム名を置く左の余白
+const PADR = 68;    // 計/H/E を置く右の余白
 const PADB = 16;    // 回のラベルを置く余白
+const VBW = PADL + W + PADR;   // viewBox の全幅。表の%換算もこれで割る
+const pctOf = (u) => `${(u / VBW) * 100}%`;
+
+// ---- 線に幅を合わせた線分スコア ----
+// 回ごとの列幅を等分にすると、線(横軸は打席)とズレて「5回の列の下が線の5回ではない」
+// 表になってしまう。そこで線を描くのに使った x() をそのまま列幅に使う。
+// 打席が多かった回は列も広くなるので、落ちている位置とその回の失点が真下で揃う。
+//
+// cols … [{ inning, left, width }] いずれも viewBox 単位
+function AlignedLinescore({ game, cols, t }) {
+  const { state } = useStore();
+  const box = computeBoxScore(game);
+  const myName = state.settings.teamName || t('restab.teamFallback');
+  const oppName = game.opponent || t('restab.opponentFallback');
+  const away = game.isHome ? oppName : myName; // 先攻(表)
+  const home = game.isHome ? myName : oppName;
+  const initial = (n, fb) => (String(n || '').trim() ? Array.from(String(n).trim())[0] : fb);
+
+  const byInning = new Map(box.innings.map((i) => [i.inning, i]));
+  // 線に出ていない回が線分スコアにあるなら、重ねると嘘になる。そのときは並べない
+  const covered = cols.every((c) => byInning.has(c.inning));
+  const extra = box.innings.some((i) => !cols.some((c) => c.inning === i.inning));
+  if (!cols.length || !covered || extra) return null;
+
+  const cell = (i, top) => {
+    if (!i || !i.played) return '';
+    const mine = top !== !!game.isHome;
+    return mine ? i.my : i.opp;
+  };
+  const row = (label, full, top) => (
+    <div className="fvls-row">
+      <span className="fvls-team" style={{ width: pctOf(PADL) }} title={full}>
+        {initial(full, '?')}
+      </span>
+      {cols.map((c) => (
+        <span key={c.inning} className="fvls-cell" style={{ width: pctOf(c.width) }}>
+          {cell(byInning.get(c.inning), top)}
+        </span>
+      ))}
+      <span className="fvls-tot" style={{ width: pctOf(PADR) }}>
+        <b>{top !== !!game.isHome ? box.my.r : box.opp.r}</b>
+        <i>{top !== !!game.isHome ? box.my.h : box.opp.h}</i>
+        <i>{top !== !!game.isHome ? box.my.e : box.opp.e}</i>
+      </span>
+    </div>
+  );
+
+  return (
+    <div className="fv-line-score" aria-label={t('fv.lsAlt')}>
+      <div className="fvls-row head">
+        <span className="fvls-team" style={{ width: pctOf(PADL) }} />
+        {cols.map((c) => (
+          <span key={c.inning} className="fvls-cell" style={{ width: pctOf(c.width) }}>{c.inning}</span>
+        ))}
+        <span className="fvls-tot" style={{ width: pctOf(PADR) }}>
+          <b>{t('gp.total')}</b><i>{t('gp.h')}</i><i>{t('gp.e')}</i>
+        </span>
+      </div>
+      {row('away', away, true)}
+      {row('home', home, false)}
+    </div>
+  );
+}
 
 function Chart({ series, tags, order, t, linescore }) {
   const svgRef = useRef(null);
@@ -63,6 +129,19 @@ function Chart({ series, tags, order, t, linescore }) {
     }
     return out;
   };
+  // ---- 回ごとの列の位置と幅(線分スコアに渡す) ----
+  // 回の左端は「その回の最初の打席」の x。線に引いてある区切り線と同じ位置になる。
+  // 最後の回だけは線の右端まで伸ばす。
+  const innStarts = [];
+  for (let i = 0; i < series.length; i++) {
+    if (!i || series[i].inning !== series[i - 1].inning) innStarts.push({ inning: series[i].inning, i });
+  }
+  const cols = innStarts.map((c, k) => {
+    const left = x(c.i);
+    const right = k + 1 < innStarts.length ? x(innStarts[k + 1].i) : PADL + W;
+    return { inning: c.inning, left, width: Math.max(0, right - left) };
+  });
+
   const halfText = (s) => `${s.inning}${s.isTop ? t('fv.axisTop') : t('fv.axisBottom')}`;
   const roomy = spaced(halves, 26);
   const xLabels = roomy.length === halves.length
@@ -74,7 +153,7 @@ function Chart({ series, tags, order, t, linescore }) {
   const pickAt = (clientX) => {
     const rect = svgRef.current?.getBoundingClientRect();
     if (!rect || !rect.width) return;
-    const ux = ((clientX - rect.left) / rect.width) * (PADL + W + 6);
+    const ux = ((clientX - rect.left) / rect.width) * VBW;
     const ratio = series.length < 2 ? 0 : (ux - PADL) / W;
     const i = Math.round(ratio * (series.length - 1));
     setSel(Math.max(0, Math.min(series.length - 1, i)));
@@ -85,7 +164,7 @@ function Chart({ series, tags, order, t, linescore }) {
 
   return (
     <div className="fv-chart">
-      <svg ref={svgRef} viewBox={`0 0 ${PADL + W + 6} ${H + PADB}`} width="100%" height="164"
+      <svg ref={svgRef} viewBox={`0 0 ${VBW} ${H + PADB}`} width="100%" height="164"
         role="img" aria-label={t('fv.chartAlt')} style={{ touchAction: 'none' }}
         onPointerDown={(e) => { e.currentTarget.setPointerCapture?.(e.pointerId); pickAt(e.clientX); }}
         onPointerMove={(e) => { if (e.buttons) pickAt(e.clientX); }}>
@@ -94,8 +173,8 @@ function Chart({ series, tags, order, t, linescore }) {
             <stop offset="0%" stopColor="var(--green)" stopOpacity="0.32" />
             <stop offset="100%" stopColor="var(--green)" stopOpacity="0" />
           </linearGradient>
-          <clipPath id="fvTop"><rect x="0" y="0" width={PADL + W + 6} height={half} /></clipPath>
-          <clipPath id="fvBot"><rect x="0" y={half} width={PADL + W + 6} height={H - half} /></clipPath>
+          <clipPath id="fvTop"><rect x="0" y="0" width={VBW} height={half} /></clipPath>
+          <clipPath id="fvBot"><rect x="0" y={half} width={VBW} height={H - half} /></clipPath>
         </defs>
 
         {/* 縦軸: 勝率。50%が互角の線 */}
@@ -150,7 +229,7 @@ function Chart({ series, tags, order, t, linescore }) {
       {inningsOnly && <p className="small dim fv-axis-note">{t('fv.axisInningsOnly')}</p>}
       {/* 線だけでは「何が起きて動いたのか」が分からない。見慣れた線分スコアを
           同じ枠の中に置くと、落ちている回とその回の失点が目で結びつく */}
-      {linescore && <div className="fv-line-score">{linescore}</div>}
+      {linescore ? linescore(cols) : null}
       {cur ? (
         <div className="fv-read">
           <div className="fv-read-head">
@@ -235,7 +314,7 @@ export default function FlowView({ game, onClose }) {
           <p className="small dim" style={{ margin: '0 0 10px' }}>{t('fv.lead')}</p>
           <Chart
             series={series} tags={judged.tags} order={order} t={t}
-            linescore={<LinescoreTable game={game} compact />}
+            linescore={(cols) => <AlignedLinescore game={game} cols={cols} t={t} />}
           />
           {/* 回が1つも進んでいない = アウトが記録されていない。
               このとき線は必ず右肩上がりになり、流れとして読めない */}
