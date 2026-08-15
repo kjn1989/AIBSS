@@ -3380,9 +3380,15 @@ test('流れタグ: ヒットの直後に押したら「反応」', () => {
   });
   const tag = { id: 'tag', gameId: 'g', inning: 5, isTop: true, kind: 'flow', text: '', payload: { dir: 'up' } };
   // 単打1本ぶん(0.3前後)でも「もう動いていた」として拾えないと、
-  // ヒットを見てから押した人が「動かず」になってしまう
-  const after = { id: 'g', playLogs: [pa('x1', [0,0,0], 0), pa('x2', [0,0,0], 1), tag, pa('x3', [1,0,0], 1), pa('x4', [1,1,0], 1), pa('x5', [1,1,1], 1, 1)] };
-  assert.equal(judgeFlowTags(after, flowSeries(after, null)).verdict.tag, 'post', 'ヒットの後に押したら反応');
+  // ヒットを見てから押した人が「動かず」になってしまう。
+  // ただし、そのあとさらに大きく動いたなら「その先を読めていた」なので予兆になる
+  // (どちらが大きいかで決める)。ここは後が続かない形にして反応を確かめる。
+  const after = { id: 'g', playLogs: [
+    pa('x1', [0,0,0], 0), pa('x2', [0,0,0], 1), tag,
+    pa('x3', [1,0,0], 1), pa('x4', [1,0,0], 2),
+  ] };
+  assert.equal(judgeFlowTags(after, flowSeries(after, null)).verdict.tag, 'post',
+    'ヒットの後に押して、そのあとが続かなければ反応');
 
   // 同じ試合で、ヒットの前に押していれば予兆
   const before = { id: 'g', playLogs: [pa('x1', [0,0,0], 0), tag, pa('x2', [0,0,0], 1), pa('x3', [1,0,0], 1), pa('x4', [1,1,0], 1), pa('x5', [1,1,1], 1, 1)] };
@@ -3485,4 +3491,47 @@ test('結果を変えたときのアウト数の増減', () => {
   assert.equal(delta('out', 'single', 2), 1, '走者を刺した分は残す');
   // マイナスにはしない
   assert.equal(delta('out', 'single', 0), 0);
+});
+
+
+// ============================================================
+// 流れタグ: 直前にも動き、あとにも動いた場合はどちらが大きいかで決める
+//
+// 実際に起きた不具合。5回表が終わった時点で「流れ切れた」を押し、
+// 5回裏に2失点した。読めていたのに「反応」と判定され、察知率が0のままだった。
+// 回の終わりに押すと「攻撃が終わった」動きが必ず直前にあるので、
+// 直前だけを見て決めると、これから起きることを言い当てても評価されない。
+// ============================================================
+test('流れタグ: 回の終わりに押して、そのあと大きく動いたら予兆', () => {
+  const own = (id, r, o, runs = 0) => ({
+    id, gameId: 'g', inning: 5, isTop: true, kind: 'atbat', text: '',
+    payload: { beforeRunners: { 1: !!r[0], 2: !!r[1], 3: !!r[2] }, outsBefore: o, runs },
+  });
+  const def = (id, r, o, runs = 0) => ({
+    id, gameId: 'g', inning: 5, isTop: false, kind: 'defense', text: '',
+    payload: { beforeRunners: { 1: !!r[0], 2: !!r[1], 3: !!r[2] }, outsBefore: o, runs },
+  });
+  const g = { id: 'g', playLogs: [
+    own('a1', [0,0,0], 0), own('a2', [1,0,0], 0), own('a3', [1,1,0], 1), // 走者を残して表が終わる
+    { id: 'tag', gameId: 'g', inning: 5, isTop: false, kind: 'flow', text: '', payload: { dir: 'down' } },
+    def('b1', [0,0,0], 0), def('b2', [1,0,0], 0), def('b3', [1,1,0], 0, 2), // 裏に2失点
+  ] };
+  const j = judgeFlowTags(g, flowSeries(g, null));
+  assert.equal(j.verdict.tag, 'pre', 'あとの動きのほうが大きいので予兆');
+  assert.equal(j.hitRate, 1);
+  assert.equal(j.catchRate, 1, '言い当てた区間として察知率に入る');
+});
+
+test('流れタグ: 大きく動いた直後に押して、あとが静かなら反応のまま', () => {
+  // 待ち伏せ(起きたことをなぞる)を予兆にしてはいけない
+  const own = (id, r, o, runs = 0) => ({
+    id, gameId: 'g', inning: 5, isTop: true, kind: 'atbat', text: '',
+    payload: { beforeRunners: { 1: !!r[0], 2: !!r[1], 3: !!r[2] }, outsBefore: o, runs },
+  });
+  const g = { id: 'g', playLogs: [
+    own('c1', [1,1,1], 0, 3), own('c2', [0,0,0], 0), // 走者一掃
+    { id: 'tag', gameId: 'g', inning: 5, isTop: true, kind: 'flow', text: '', payload: { dir: 'up' } },
+    own('c3', [0,0,0], 1), own('c4', [0,0,0], 2),   // あとは静か
+  ] };
+  assert.equal(judgeFlowTags(g, flowSeries(g, null)).verdict.tag, 'post');
 });
