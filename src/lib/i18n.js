@@ -363,6 +363,8 @@ export const MESSAGES = {
     'score.selectLetter': '記号を選択...',
     'score.oppSubLog': '相手{kind}: {letter} ({order}番 {outLetter}に代わり)',
     // スコア修正シート
+    'score.runnerCheck': '記録を直しました。アウトカウントと得点は直した内容に合わせてあります。塁上の走者だけは記録から作り直せないので、ダイヤの塁を押して実際の状況に合わせてください。',
+    'score.runnerCheckOk': '走者は合っている',
     'score.fixPlays': '{n}回の打席を直す',
     'score.fixPlaysHint': '起きた順に並びます。打席を押すと結果を直せます。交代のタイミングもここで直せます。',
     'score.adjustRuns': '得点を直接増減する',
@@ -1692,6 +1694,8 @@ export const MESSAGES = {
     'score.oppSubTitle': 'Substitute #{order} {letter}',
     'score.selectLetter': 'Select a letter...',
     'score.oppSubLog': 'Opp {kind}: {letter} (for #{order} {outLetter})',
+    'score.runnerCheck': 'The record was corrected. Outs and runs now match the correction. Runners on base cannot be rebuilt from the record, so tap the bases on the diamond to match what actually happened.',
+    'score.runnerCheckOk': 'Runners are correct',
     'score.fixPlays': 'Fix plays in inning {n}',
     'score.fixPlaysHint': 'Listed in the order they happened. Tap a plate appearance to fix its result. Substitution timing can be fixed here too.',
     'score.adjustRuns': 'Adjust runs directly',

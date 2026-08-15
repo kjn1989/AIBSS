@@ -44,20 +44,22 @@ export function computeBoxScore(game) {
 //
 // side: 'away'(先攻=表に打つ) | 'home'(後攻=裏に打つ)
 // ------------------------------------------------------------
-export function halfPlayed(game, inning, side) {
+export function halfPlayed(game, inning, side, sideRuns = 0) {
   const cur = Number(game?.inning) || 1;
   const i = Number(inning) || 0;
   if (i < cur) return true;   // 過ぎた回は両方とも終わっている
   if (i > cur) return false;  // まだ来ていない
-  const hasEntry = !!game?.linescore?.[String(i)];
   const finished = game?.status === 'finished';
   // 試合は表から始まる。isTop が無い(旧データ)ときは表とみなす
   const isTop = game?.isTop !== false;
+  // 点が入ったかは「その回」ではなく「その半回」で見る。
+  // 回で見ると、表が点を取った時点で、まだ戦っていない裏まで0が出てしまう。
+  const scored = Number(sideRuns) > 0;
   if (side === 'away') {
     // 先攻の半回(表)は、裏に移った時点で終わっている
-    return !isTop || finished || hasEntry;
+    return !isTop || finished || scored;
   }
   // 後攻の半回(裏)は、この回が進行中のあいだは終わっていない。
   // 点が入っていれば途中経過として出す(試合終了時も同じ)
-  return hasEntry || (finished && !isTop);
+  return scored || (finished && !isTop);
 }
