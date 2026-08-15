@@ -284,6 +284,15 @@ export function judgeFlowTags(game, series = [], opts = {}) {
   };
 }
 
+// 「いまどちらへ傾いているか」の言い方。
+// 流れは試合が終わってから振り返ることのほうが多く、そこで「いまは傾いています」と
+// 書くと、まだ試合中のように読めてしまう。終わった試合は過去形で言う。
+export function flowTiltKey(status, cum) {
+  const over = status === 'finished';
+  if (cum >= 0) return over ? 'fv.endUs' : 'fv.nowUs';
+  return over ? 'fv.endThem' : 'fv.nowThem';
+}
+
 // 打率と同じ書き方。10割だけ 1.000 と書く(.1000 にならないように)
 export function formatRate(v) {
   if (v == null || Number.isNaN(v)) return '—';
