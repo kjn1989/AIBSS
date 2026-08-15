@@ -159,15 +159,21 @@ function foldHalf(next, dist, mine) {
 
 // 試合1つぶんの勝率モデルを作る。
 // 呼び出しごとに残り半回を畳み直すと重いので、半回ごとの表を1度だけ作って使い回す。
-export function buildWinModel({ dists, isHome, regulation }) {
-  const fresh = distOf(dists, '000|0');
+// halfStartKey(inning) … その回の半回が「どの状態から始まるか」の24状況キー。
+// ふつうの回は '000|0'(走者なし0アウト)だが、タイブレークの回は走者を置いて
+// 始まるので、そこを渡さないと「まだ点が入りやすい回が残っている」ことを
+// 見落として勝率がずれる。
+export function buildWinModel({ dists, isHome, regulation, halfStartKey }) {
+  const startKey = typeof halfStartKey === 'function' ? halfStartKey : () => '000|0';
   const cache = new Map(); // "inningT" -> 「その半回が終わった直後」の勝率表
   const tableAfter = (inning, isTop) => {
     const key = `${inning}${isTop ? 'T' : 'B'}`;
     if (cache.has(key)) return cache.get(key);
     let w = terminal();
     const rest = remainingHalves(isHome, inning, isTop, regulation);
-    for (let j = rest.length - 1; j >= 0; j--) w = foldHalf(w, fresh, rest[j].mine);
+    for (let j = rest.length - 1; j >= 0; j--) {
+      w = foldHalf(w, distOf(dists, startKey(rest[j].inning)), rest[j].mine);
+    }
     cache.set(key, w);
     return w;
   };

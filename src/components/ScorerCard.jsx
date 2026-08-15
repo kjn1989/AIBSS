@@ -3,6 +3,7 @@ import { useStore, useT } from '../state/store.jsx';
 import { buildRunExpectancy, formatRate } from '../lib/flow.js';
 import { buildRunDists, buildWinModel } from '../lib/winExp.js';
 import { currentRules } from '../lib/rules.js';
+import { halfStartKeyOf } from '../lib/tiebreak.js';
 import { aggregateScorers, rankScorers, scorerName } from '../lib/scorers.js';
 
 // ---- 記録員の読み ----
@@ -28,6 +29,7 @@ export default function ScorerCard({ games }) {
     // 勝率は先攻/後攻と規定回数で変わるので、試合ごとにモデルを作って渡す
     const modelFor = (g) => buildWinModel({
       dists, isHome: !!g.isHome, regulation: currentRules(g)?.innings || 7,
+      halfStartKey: (inn) => halfStartKeyOf(g, inn),
     });
     const merged = {};
     for (const g of real) {

@@ -15,6 +15,7 @@
 // その扱いは pitchingRebuild 側がタイブレークの回として別に見ている。
 // ============================================================
 import { isTiebreakInning, rulesAtInning } from './rules.js';
+import { stateKey } from './flow.js';
 
 // その半回に打席がもう記録されているか。
 // 記録済みの半回に後から走者を置くと、記録の中の塁上と食い違う。
@@ -75,4 +76,17 @@ export function tiebreakPlacement(game) {
     batterIndex,
     oppBatterIndex,
   };
+}
+
+// その回の半回が「どの状態から始まるか」。
+// ふつうの回は走者なし0アウトだが、タイブレークの回は走者を置いて始まる。
+// 勝率モデルはこれから先の半回の得点分布を畳むので、置いた走者を知らないと
+// 「まだ点が入りやすい回が残っている」ことを見落として勝率がずれる。
+export function halfStartKeyOf(game, inning) {
+  if (!isTiebreakInning(game, inning)) return '000|0';
+  const tb = rulesAtInning(game, inning)?.tiebreak;
+  if (!tb) return '000|0';
+  const on = String(tb.runners || '12');
+  const runners = { 1: on.includes('1'), 2: on.includes('2'), 3: on.includes('3') };
+  return stateKey(runners, Math.min(2, Math.max(0, Number(tb.outs) || 0)));
 }

@@ -3,6 +3,7 @@ import { useStore, useT } from '../state/store.jsx';
 import { buildRunExpectancy, weSeries, flowRuns, judgeFlowTags, formatRate, weShape, KOSHIEN_RE, KOSHIEN_SOURCE } from '../lib/flow.js';
 import { buildRunDists, buildWinModel } from '../lib/winExp.js';
 import { currentRules } from '../lib/rules.js';
+import { halfStartKeyOf } from '../lib/tiebreak.js';
 import { aggregateScorers, scorerName } from '../lib/scorers.js';
 import ScorerPicker from './ScorerPicker.jsx';
 import { computeBoxScore, hitsByInning } from '../lib/boxscore.js';
@@ -287,6 +288,7 @@ export default function FlowView({ game, onClose }) {
       dists,
       isHome: !!game.isHome,
       regulation: currentRules(game)?.innings || 7,
+      halfStartKey: (inn) => halfStartKeyOf(game, inn),
     });
   }, [state.games, game, edition, re]);
 
