@@ -80,6 +80,17 @@ try {
   // --- スコアシートを開く ---
   await page.click('nav button:has-text("試合結果")');
   await page.waitForTimeout(500);
+
+  // 試合の流れは、試合を選んだこの場所から直接見られる
+  // (スコアシートを開かないと辿り着けないと、振り返りの動線として遠い)
+  const resFlow = page.locator('button:has-text("試合の流れを見る")');
+  check('試合結果からも流れを開ける', (await resFlow.count()) >= 1);
+  await resFlow.first().click();
+  await page.waitForTimeout(700);
+  check('試合結果から開いた流れシートが出る', (await page.locator('.sheet:has-text("試合の流れ")').count()) >= 1);
+  await page.locator('.sheet').last().locator('button:has-text("閉じる"), .sheet-close').first().click();
+  await page.waitForTimeout(500);
+
   await page.click('button:has-text("スコアシートを開く")');
   await page.waitForTimeout(700);
 
@@ -264,8 +275,9 @@ try {
   // 試合の流れは、終わった試合でも見られる
   // スコア入力画面にしか入口が無いと、終わった試合では二度と開けない
   // ============================================================
-  const flowBtn = page.locator('button:has-text("試合の流れを見る")');
-  check('スコアシートから流れを開ける', (await flowBtn.count()) >= 1);
+  // 試合結果タブは全画面シートの裏に残っているので、シート内のボタンに限って探す
+  const flowBtn = page.locator('.ss-after button:has-text("試合の流れを見る")');
+  check('スコアシートから流れを開ける', (await flowBtn.count()) === 1);
   await flowBtn.first().click();
   await page.waitForTimeout(700);
   const fv = page.locator('.sheet:has-text("試合の流れ")');

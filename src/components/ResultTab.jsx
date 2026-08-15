@@ -8,6 +8,7 @@ import OppNamePrompt from './OppNamePrompt.jsx';
 import OppPlayerView from './OppPlayerView.jsx';
 import { PitchingGameManagement } from './PitchingTab.jsx';
 import ScoreSheetView from './ScoreSheetView.jsx';
+import FlowView from './FlowView.jsx';
 import NewspaperView from './NewspaperView.jsx';
 import ImportCsvView from './ImportCsvView.jsx';
 
@@ -115,6 +116,9 @@ export default function ResultTab() {
   const { state, dispatch } = useStore();
   const t = useT();
   const [showSheet, setShowSheet] = useState(false);
+  // 試合の流れは、試合が終わってから振り返るもののほうが多い。
+  // スコアシートを開かなくても、試合を選んだこの場所から直接見られるようにする
+  const [showFlow, setShowFlow] = useState(false);
   const [showNewspaper, setShowNewspaper] = useState(false);
   const [editMeta, setEditMeta] = useState(false);
   const games = Object.values(state.games)
@@ -205,6 +209,9 @@ export default function ResultTab() {
         <button className="mt8" style={{ width: '100%' }} onClick={() => setShowSheet(true)}>
           {t('restab.openSheet')}
         </button>
+        <button className="mt8" style={{ width: '100%' }} onClick={() => setShowFlow(true)}>
+          {t('ss.openFlow')}
+        </button>
       </div>
 
       <div className="section-title">{t('restab.report')}</div>
@@ -237,6 +244,7 @@ export default function ResultTab() {
       <ImportCard />
 
       {showSheet && <ScoreSheetView game={game} onClose={() => setShowSheet(false)} />}
+      {showFlow && <FlowView game={game} onClose={() => setShowFlow(false)} />}
       {showNewspaper && <NewspaperView game={game} onClose={() => setShowNewspaper(false)} />}
     </div>
   );
