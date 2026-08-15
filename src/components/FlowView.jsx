@@ -5,7 +5,7 @@ import { buildRunDists, buildWinModel } from '../lib/winExp.js';
 import { currentRules } from '../lib/rules.js';
 import { aggregateScorers, scorerName } from '../lib/scorers.js';
 import ScorerPicker from './ScorerPicker.jsx';
-import { computeBoxScore } from '../lib/boxscore.js';
+import { computeBoxScore, hitsByInning } from '../lib/boxscore.js';
 import Sheet from './Sheet.jsx';
 
 // ---- 試合の流れ ----
@@ -42,6 +42,8 @@ function AlignedLinescore({ game, cols, t }) {
   const initial = (n, fb) => (String(n || '').trim() ? Array.from(String(n).trim())[0] : fb);
 
   const byInning = new Map(box.innings.map((i) => [i.inning, i]));
+  // 回別の安打数。スコアボードと同じ数え方・同じ置き方(得点の脇に小さく)にする
+  const { my: myHits, opp: oppHits } = hitsByInning(game);
   // 線に出ていない回が線分スコアにあるなら、重ねると嘘になる。そのときは並べない
   const covered = cols.every((c) => byInning.has(c.inning));
   const extra = box.innings.some((i) => !cols.some((c) => c.inning === i.inning));
@@ -52,23 +54,31 @@ function AlignedLinescore({ game, cols, t }) {
     const mine = top !== !!game.isHome;
     return mine ? i.my : i.opp;
   };
-  const row = (label, full, top) => (
+  const row = (label, full, top) => {
+    const mine = top !== !!game.isHome;
+    const hits = mine ? myHits : oppHits;
+    return (
     <div className="fvls-row">
       <span className="fvls-team" style={{ width: pctOf(PADL) }} title={full}>
         {initial(full, '?')}
       </span>
       {cols.map((c) => (
         <span key={c.inning} className="fvls-cell" style={{ width: pctOf(c.width) }}>
-          {cell(byInning.get(c.inning), top)}
+          {/* 安打数の置き方はスコアボードと同じ。先攻は得点の上、後攻は下。
+              無い回も行は取っておく(得点の位置が回ごとにブレない) */}
+          {top && <i>{hits[c.inning] || '\u00a0'}</i>}
+          <b>{cell(byInning.get(c.inning), top)}</b>
+          {!top && <i>{hits[c.inning] || '\u00a0'}</i>}
         </span>
       ))}
       <span className="fvls-tot" style={{ width: pctOf(PADR) }}>
-        <b>{top !== !!game.isHome ? box.my.r : box.opp.r}</b>
-        <i>{top !== !!game.isHome ? box.my.h : box.opp.h}</i>
-        <i>{top !== !!game.isHome ? box.my.e : box.opp.e}</i>
+        <b>{mine ? box.my.r : box.opp.r}</b>
+        <i>{mine ? box.my.h : box.opp.h}</i>
+        <i>{mine ? box.my.e : box.opp.e}</i>
       </span>
     </div>
-  );
+    );
+  };
 
   return (
     <div className="fv-line-score" aria-label={t('fv.lsAlt')}>

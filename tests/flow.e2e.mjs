@@ -115,6 +115,19 @@ try {
   check('打席数の多い回ほど列が広い',
     Math.max(...widths) - Math.min(...widths) > 8, widths.map((w) => w.toFixed(1)).join(', '));
 
+  // --- 回別の安打数も出る(スコアボードと同じ置き方) ---
+  const hits = await page.evaluate(() => {
+    const row = document.querySelectorAll('.fvls-row:not(.head)')[0]; // 先攻(この試合では自チーム)
+    return [...row.querySelectorAll('.fvls-cell')].map((c) => ({
+      run: c.querySelector('b')?.textContent || '',
+      hit: (c.querySelector('i')?.textContent || '').trim(),
+    }));
+  });
+  check('回別の安打数が出ている', hits.some((h) => h.hit !== ''), JSON.stringify(hits));
+  check('1回は4安打(記録どおり)', hits[0]?.hit === '4', JSON.stringify(hits[0]));
+  check('三者凡退の回は安打欄が空', hits[1]?.hit === '', JSON.stringify(hits[1]));
+  check('得点と安打が別の数字として出ている', hits[0]?.run === '4' && hits[0]?.hit === '4', JSON.stringify(hits[0]));
+
   // --- 打席を押すと前後の勝率が読める ---
   const box = await page.locator('.fv-chart svg').boundingBox();
   await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);

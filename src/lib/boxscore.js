@@ -44,6 +44,25 @@ export function computeBoxScore(game) {
 //
 // side: 'away'(先攻=表に打つ) | 'home'(後攻=裏に打つ)
 // ------------------------------------------------------------
+// 回別の安打数。スコアボードでも流れの線分スコアでも同じ数え方をしたいので、
+// ここに1つだけ置く(2か所で数えると、片方だけ直したときに食い違う)。
+// 戻り値: { my: {inning: 本数}, opp: {...} }
+export function hitsByInning(game) {
+  const my = {};
+  const opp = {};
+  for (const ab of game?.atBats || []) {
+    if (!RESULTS[ab.result]?.hit) continue;
+    const inn = ab.snapshot?.inning;
+    if (inn) my[inn] = (my[inn] || 0) + 1;
+  }
+  for (const l of game?.playLogs || []) {
+    if (l.kind !== 'defense' || !RESULTS[l.payload?.result]?.hit) continue;
+    const inn = Number(l.inning) || 0;
+    if (inn) opp[inn] = (opp[inn] || 0) + 1;
+  }
+  return { my, opp };
+}
+
 export function halfPlayed(game, inning, side, sideRuns = 0) {
   const cur = Number(game?.inning) || 1;
   const i = Number(inning) || 0;
