@@ -73,6 +73,31 @@ ok('シートが閉じる',(await p.locator('.sheet').count())===0,String(await 
 // 直った結果が試合経過に出るか
 const prog=await p.locator('.log-line').allInnerTexts();
 ok('直した結果が反映される',prog.join(' ').includes('三振'),prog.join(' | ').slice(0,200));
+// ラインスコア: 終わった半回は0点でも数字を出す(空欄のままだと「表の得点が出ない」に見える)
+// 三振3つで表を終わらせ、裏に移った時点で表の欄に0が出ることを見る
+const play = async (label) => {
+  const btn = p.locator(`.result-pad button:has-text("${label}")`);
+  if (!(await btn.count()) || !(await btn.first().isEnabled().catch(() => false))) return false;
+  await btn.first().click(); await p.waitForTimeout(300);
+  const o = p.locator('.sheet-actions button:has-text("確定")');
+  if (await o.count()) { await o.click(); await p.waitForTimeout(450); }
+  return true;
+};
+const lineCells = () => p.evaluate(() => {
+  const rows = [...document.querySelectorAll('tr')].filter((r) => r.querySelector('td.ini'));
+  return rows.map((r) => [...r.querySelectorAll('td.inn')].map((td) => td.querySelector('.rn')?.textContent.trim() ?? ''));
+});
+for (let i = 0; i < 6; i++) { if (!(await play('三振'))) break; }
+await p.waitForTimeout(500);
+const cells = await lineCells();
+const body = await p.locator('body').innerText();
+const inBottom = /\d+回裏/.test(body);
+ok('裏に移っている', inBottom, body.slice(0, 60));
+if (inBottom) {
+  ok('無得点で終わった表が0と出る', cells[0]?.[0] === '0', JSON.stringify(cells));
+  ok('進行中の裏はまだ空欄', cells[1]?.[0] === '', JSON.stringify(cells));
+}
+
 ok('横あふれなし',!(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1)));
 await b.close(); server.kill();
 console.log(fail===0?'\n✓ fixplay PASS':`\n✗ fixplay FAIL (${fail})`);

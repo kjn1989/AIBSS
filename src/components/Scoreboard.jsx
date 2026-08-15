@@ -1,6 +1,6 @@
 import React from 'react';
 import { useStore, useT, usePlayerName, isMyTeamBatting } from '../state/store.jsx';
-import { computeBoxScore } from '../lib/boxscore.js';
+import { computeBoxScore, halfPlayed } from '../lib/boxscore.js';
 import { RESULTS } from '../lib/model.js';
 
 // チーム名の頭文字(先頭グラフェム)。空なら控えの記号を返す。
@@ -102,9 +102,10 @@ export default function Scoreboard({ game }) {
   const homeHits = game.isHome ? myHits : oppHits;
 
   const runOf = (side, i) => {
+    // 終わった半回は0点でも数字を出す。linescore は点が入った回にしか
+    // 作られないので、エントリの有無だけで判定すると無得点の半回が空になる
+    if (!halfPlayed(game, i, side)) return '';
     const e = game.linescore?.[String(i)];
-    const played = i < cur || (i === cur && !!e);
-    if (!played) return '';
     const v = side === 'away' ? (game.isHome ? e?.opp : e?.my) : (game.isHome ? e?.my : e?.opp);
     return v ?? 0;
   };
