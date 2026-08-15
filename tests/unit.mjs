@@ -3827,6 +3827,7 @@ test('流れ: 線の形をひとことで言う', () => {
   const them = flowShape(mk([-1, -2, -3, -1, 0.2]));
   assert.equal(them.lean, 'them', '4/5が下なら相手に傾いていた試合');
   assert.equal(them.leanPct, 80);
+  assert.equal(them.n, 5, '母数は打席数(経過時間は記録していない)');
   assert.equal(them.lowest.cum, -3);
   assert.equal(them.highest.cum, 0.2);
 
@@ -3841,8 +3842,12 @@ test('流れ: 線の形をひとことで言う', () => {
   // 言い回しは6通りとも両言語にある
   for (const lean of ['us', 'them', 'even']) {
     for (const when of ['now', 'end']) {
-      assert.ok(translate('ja', `fv.lean.${lean}.${when}`, { p: 70 }), `ja ${lean}.${when}`);
-      assert.ok(translate('en', `fv.lean.${lean}.${when}`, { p: 70 }), `en ${lean}.${when}`);
+      // 打席数が必ず入ること。割合だけだと「何に対する70%か」が言えていない
+      const ja = translate('ja', `fv.lean.${lean}.${when}`, { p: 70, n: 42 });
+      const en = translate('en', `fv.lean.${lean}.${when}`, { p: 70, n: 42 });
+      assert.ok(ja.includes('42') && ja.includes('打席'), `ja ${lean}.${when}: ${ja}`);
+      assert.ok(en.includes('42') && en.includes('plate appearances'), `en ${lean}.${when}: ${en}`);
+      assert.ok(!ja.includes('時間'), `時間では測っていない: ${ja}`);
     }
   }
 });
