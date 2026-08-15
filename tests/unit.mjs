@@ -9,7 +9,7 @@ import { translate } from '../src/lib/i18n.js';
 import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, parseDirectionOnly, parseContact, playLabel } from '../src/lib/voiceParser.js';
 import { swapTargetIndex, timingAnchor } from '../src/lib/logOrder.js';
 import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, assignResultTargets, mergeResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parsePositionSwaps, keepsBattingOrder, explicitOrderChange, stripInningFractions, parseInningRange, parseSlotBatters, parseAtBatDeletions, parseShortResult, isExplicitSubText, inGamePlayerIds, preferInGamePlayers } from '../src/lib/correctionParser.js';
-import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarters, findPositionIssues } from '../src/lib/lineupBox.js';
+import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarters, findPositionIssues, alignmentByInning } from '../src/lib/lineupBox.js';
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
 import { stateKey, buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, formatRate, BASE_RE, reOf, KOSHIEN_RE, baseReFor } from '../src/lib/flow.js';
 import { teamPower, mostOff, formatPower } from '../src/lib/teamPower.js';
@@ -3246,4 +3246,99 @@ test('halfPlayed: 試合終了時は打った半回を出す', () => {
 test('halfPlayed: 旧データ・空のgameでも壊れない', () => {
   assert.equal(halfPlayed({}, 1, 'away'), false);
   assert.equal(halfPlayed({ inning: 2, isTop: false }, 1, 'home'), true);
+});
+
+
+// ============================================================
+// 投手欄で選んだ投手が、守備位置の判定に反映されること
+//
+// 投手はスタメン表に「投」として載っているとは限らない。スコア入力画面の
+// 投手欄で選んだだけだと打順の守備位置は空のままで、
+// 「投手を守る人が居ません」と警告され続けていた。
+// ============================================================
+test('投手欄で選んだ投手を「投」として数える', () => {
+  // 打順9人。投だけ空(スタメン登録時に投手を入れていない)
+  const POS = ['捕', '一', '二', '三', '遊', '左', '中', '右', '控'];
+  const startingLineup = POS.map((position, i) => ({ order: i + 1, playerId: 'p' + i, position }));
+  const mk = (extra) => ({
+    id: 'g', isHome: true, atBats: [], pitchingRecords: [], startingLineup,
+    lineup: startingLineup.map((l) => ({ ...l })),
+    playLogs: [
+      ...[1, 2, 3, 4].map((inning) => ({
+        id: 'a' + inning, gameId: 'g', inning, isTop: true, kind: 'atbat', text: '',
+        payload: { order: 1, playerId: 'p0', result: 'out' },
+      })),
+      ...extra,
+    ],
+    rules: {}, ruleChanges: [],
+  });
+
+  // 投手を一度も選んでいなければ、不在の警告は正しい
+  const none = findPositionIssues(mk([]));
+  assert.ok(none.missing.some((m) => m.position === '投'), '投手が居なければ警告する');
+
+  // 投手欄で「米原」を選んだ = kind:'pitcher' のログが残る
+  const withP = findPositionIssues(mk([
+    { id: 'pc', gameId: 'g', inning: 1, isTop: true, kind: 'pitcher', text: '', payload: { in: '米原', out: null } },
+  ]));
+  assert.equal(withP.missing.filter((m) => m.position === '投').length, 0,
+    `投手を選んでいれば警告しない: ${JSON.stringify(withP.missing)}`);
+  // 他の位置の判定は変わらない
+  assert.equal(withP.duplicates.length, 0, '重複の警告は増えない');
+});
+
+test('打順に居る投手は、その枠が「投」になる', () => {
+  const startingLineup = [
+    { order: 1, playerId: '米原', position: '控' },
+    ...['捕', '一', '二', '三', '遊', '左', '中', '右'].map((position, i) => ({ order: i + 2, playerId: 'p' + i, position })),
+  ];
+  const game = {
+    id: 'g', isHome: true, atBats: [], pitchingRecords: [], startingLineup,
+    lineup: startingLineup.map((l) => ({ ...l })),
+    playLogs: [
+      { id: 'pc', gameId: 'g', inning: 1, isTop: true, kind: 'pitcher', text: '', payload: { in: '米原', out: null } },
+      { id: 'a1', gameId: 'g', inning: 1, isTop: true, kind: 'atbat', text: '', payload: { order: 1, playerId: '米原', result: 'out' } },
+    ],
+    rules: {}, ruleChanges: [],
+  };
+  const align = alignmentByInning(game).get(1);
+  const mine = align.find((s) => s.playerId === '米原');
+  assert.equal(mine.position, '投', '打順に居るなら新しい枠を作らずその枠を投にする');
+  assert.equal(mine.order, 1, '打順は変わらない');
+  assert.equal(align.filter((s) => s.position === '投').length, 1, '投が2つにならない');
+});
+
+test('すでに「投」に誰か就いていれば、投手欄の値で上書きしない', () => {
+  const startingLineup = ['投', '捕', '一', '二', '三', '遊', '左', '中', '右']
+    .map((position, i) => ({ order: i + 1, playerId: 'p' + i, position }));
+  const game = {
+    id: 'g', isHome: true, atBats: [], pitchingRecords: [], startingLineup,
+    lineup: startingLineup.map((l) => ({ ...l })),
+    playLogs: [{ id: 'a1', gameId: 'g', inning: 1, isTop: true, kind: 'atbat', text: '', payload: { order: 1, playerId: 'p0', result: 'out' } }],
+    rules: {}, ruleChanges: [],
+  };
+  const align = alignmentByInning(game).get(1);
+  assert.equal(align.filter((s) => s.position === '投').length, 1, '記録どおり1人だけ');
+  assert.equal(align.find((s) => s.position === '投').playerId, 'p0', 'スタメンの投手のまま');
+});
+
+test('継投すると、その回から投手が入れ替わる', () => {
+  const startingLineup = ['捕', '一', '二', '三', '遊', '左', '中', '右', '控']
+    .map((position, i) => ({ order: i + 1, playerId: 'p' + i, position }));
+  const game = {
+    id: 'g', isHome: true, atBats: [], pitchingRecords: [], startingLineup,
+    lineup: startingLineup.map((l) => ({ ...l })),
+    playLogs: [
+      { id: 'pc1', gameId: 'g', inning: 1, isTop: true, kind: 'pitcher', text: '', payload: { in: '米原', out: null } },
+      { id: 'a1', gameId: 'g', inning: 1, isTop: true, kind: 'atbat', text: '', payload: { order: 1, playerId: 'p0', result: 'out' } },
+      { id: 'pc2', gameId: 'g', inning: 3, isTop: true, kind: 'pitcher', text: '', payload: { in: '辻', out: '米原' } },
+      { id: 'a3', gameId: 'g', inning: 3, isTop: true, kind: 'atbat', text: '', payload: { order: 1, playerId: 'p0', result: 'out' } },
+    ],
+    rules: {}, ruleChanges: [],
+  };
+  const by = alignmentByInning(game);
+  assert.equal(by.get(1).find((s) => s.position === '投').playerId, '米原');
+  assert.equal(by.get(2).find((s) => s.position === '投').playerId, '米原', '交代までは前の投手');
+  assert.equal(by.get(3).find((s) => s.position === '投').playerId, '辻', '3回から新しい投手');
+  assert.equal(findPositionIssues(game).missing.filter((m) => m.position === '投').length, 0);
 });
