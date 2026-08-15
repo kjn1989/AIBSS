@@ -64,6 +64,18 @@ ok('直したら警告が消える', !/アプリの打者と記録がずれて�
 // スコアが壊れていないこと
 const sc=await p.evaluate(()=>{const r=[...document.querySelectorAll('td.rc.rv')].map(e=>e.textContent.trim());return r.slice(0,2);});
 ok('スコアは変わらない', sc.every(x=>/^\d+$/.test(x)), JSON.stringify(sc));
+// 打者変更シート: 「代打(記録に残る)」と「実際に合わせる(記録は変わらない)」を混ぜない
+await p.locator('button:has-text("打者変更")').first().click(); await p.waitForTimeout(600);
+const sheetTxt = await p.locator('.sheet').last().innerText();
+ok('用途が2つに分かれている',
+  sheetTxt.includes('代打を送る') && sheetTxt.includes('実際の打者に合わせる'), sheetTxt.slice(0, 300));
+ok('代打は記録に残ると書いてある', sheetTxt.includes('交代として記録されます'));
+ok('合わせるほうは記録が変わらないと書いてある', sheetTxt.includes('打席の記録も得点も変わりません'));
+const logsBefore = await p.evaluate(() => document.querySelectorAll('.log-line').length);
+await p.locator('.sheet .row').nth(4).locator('button').last().click(); await p.waitForTimeout(700);
+ok('合わせても記録は増えない',
+  (await p.evaluate(() => document.querySelectorAll('.log-line').length)) === logsBefore);
+
 ok('横あふれなし',!(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1)));
 await b.close(); server.kill();
 console.log(fail===0?'\n✓ drift PASS':`\n✗ drift FAIL (${fail})`);

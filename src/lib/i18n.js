@@ -97,6 +97,11 @@ export const MESSAGES = {
 
     // 打者/走者シート共通
     'sheet.nextBatter': '次の打者を選択',
+    'sheet.batterTitle': '打者を変える／合わせる',
+    'sheet.subSection': '代打を送る',
+    'sheet.subNote': '打順に交代として記録されます。実際に選手が代わったときだけ使ってください。',
+    'sheet.alignSection': '実際の打者に合わせる',
+    'sheet.alignNote': 'アプリの打者が実際の試合とずれてしまったときに使います。いま打席に入っている人を選んでください。打席の記録も得点も変わりません。交代としても残りません。',
     'sheet.pinchHitter': '🔄 代打を送る({name}に代えて)',
 
     // プレイ確定シート(PlaySheet)の見出し
@@ -1456,6 +1461,11 @@ export const MESSAGES = {
     'pitch.undo': '↩ Undo last pitch',
 
     'sheet.nextBatter': 'Select Next Batter',
+    'sheet.batterTitle': 'Change or align the batter',
+    'sheet.subSection': 'Send a pinch hitter',
+    'sheet.subNote': 'This is recorded as a substitution in the batting order. Use it only when a player actually changed.',
+    'sheet.alignSection': 'Match the batter to the real game',
+    'sheet.alignNote': 'Use this when the app’s batter has drifted from the real game. Pick whoever is actually at the plate. Nothing in the record or the score changes, and no substitution is logged.',
     'sheet.pinchHitter': '🔄 Pinch hit (for {name})',
 
     'playsheet.direction': 'Batted Ball Direction',
