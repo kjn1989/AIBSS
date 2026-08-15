@@ -14,6 +14,7 @@ import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
 import { tiebreakPlacement, backInOrder, halfHasPlays, halfStartKeyOf } from '../src/lib/tiebreak.js';
 import { aggregateScorers, rankScorers, scorerName, tagScorerId } from '../src/lib/scorers.js';
 import { buildRunDists, buildWinModel, priorDist, remainingHalves, SCORE_PROB, MAX_RUNS } from '../src/lib/winExp.js';
+import { aggregateContrib, rankContrib, formatContrib } from '../src/lib/contrib.js';
 import { stateKey, buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, formatRate, weShape, weSeries, BASE_RE, reOf, KOSHIEN_RE, baseReFor } from '../src/lib/flow.js';
 import { teamPower, mostOff, formatPower } from '../src/lib/teamPower.js';
 import { RESULTS as RESULTS_FOR_OUT, newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions, attendeesOf, lastAttendees, autoLineupFrom, subRank, resultLabelOf, isIntentionalBB } from '../src/lib/model.js';
@@ -3966,4 +3967,106 @@ test('WE: タイブレークの回は「走者を置いて始まる」ぶんま�
   const m2 = buildWinModel({ dists, isHome: false, regulation: 7, halfStartKey: (i) => halfStartKeyOf(g2, i) });
   const st2 = { inning: 8, isTop: true, runners: { 1: true, 2: true, 3: true }, outs: 1, diff: 0 };
   assert.ok(Math.abs(m2(st2) - 0.5) < 0.02, `1アウト満塁開始でも互角: ${m2(st2)}`);
+});
+
+// ============================================================
+// 勝利貢献(WPA)と得点貢献(RE24)
+// ============================================================
+// 実際に成立する並びで作る(走者と得点とアウトが食い違うと、値の意味が確かめられない)
+//  得点する回: A単打 → B2ランHR → C凡打 → D凡打 → E凡打
+//  無得点の回: 三者凡退
+const N0 = { 1: false, 2: false, 3: false };
+const ON1 = { 1: true, 2: false, 3: false };
+function contribGame(scoreInning = 3, innings = 7, id = 'g-contrib') {
+  let n = 0;
+  const pa = (kind, inn, isTop, runners, outs, runs, extra) =>
+    ({ id: `${id}-${++n}`, kind, inning: inn, isTop, text: '',
+       payload: { beforeRunners: runners, outsBefore: outs, runs, ...extra } });
+  const logs = [];
+  for (let i = 1; i <= innings; i++) {
+    if (i === scoreInning) {
+      logs.push(pa('atbat', i, true, N0, 0, 0, { playerId: 'A' }));   // 単打 → 一塁
+      logs.push(pa('atbat', i, true, ON1, 0, 2, { playerId: 'B' }));  // 2ランHR → 走者なし
+      logs.push(pa('atbat', i, true, N0, 0, 0, { playerId: 'C' }));   // 凡打
+      logs.push(pa('atbat', i, true, N0, 1, 0, { playerId: 'D' }));
+      logs.push(pa('atbat', i, true, N0, 2, 0, { playerId: 'E' }));
+    } else {
+      logs.push(pa('atbat', i, true, N0, 0, 0, { playerId: 'A' }));
+      logs.push(pa('atbat', i, true, N0, 1, 0, { playerId: 'B' }));
+      logs.push(pa('atbat', i, true, N0, 2, 0, { playerId: 'C' }));
+    }
+    for (const o of [0, 1, 2]) logs.push(pa('defense', i, false, N0, o, 0, { pitcherId: 'K1' }));
+  }
+  return { id, isHome: false, playLogs: logs };
+}
+const contribModel = () => {
+  const { re } = buildRunExpectancy([], null);
+  const { dists } = buildRunDists([], null, re);
+  return { re, we: buildWinModel({ dists, isHome: false, regulation: 7 }) };
+};
+
+test('貢献: WPAの合計は「最終勝率 − 開始勝率」に一致する', () => {
+  // これが崩れていたら、どこかで打席を数え落としているか二重に数えている
+  const g = contribGame();
+  const { re, we } = contribModel();
+  const s = weSeries(g, we);
+  const total = s.reduce((a, x) => a + x.delta, 0);
+  const swing = s[s.length - 1].we - (s[0].we - s[0].delta);
+  assert.ok(Math.abs(total - swing) < 1e-9, `合計=${total} / 差=${swing}`);
+  assert.ok(Math.abs(total - 0.5) < 1e-9, '勝った試合は 開始50% → 100% で +0.5');
+
+  // 選手ごとに割り振っても合計は変わらない
+  const { bat, pit } = aggregateContrib([g], () => we, re);
+  const byPlayer = [...bat, ...pit].reduce((a, x) => a + x.wpa, 0);
+  assert.ok(Math.abs(byPlayer - total) < 1e-9, `割り振り後=${byPlayer}`);
+});
+
+test('貢献: 打者は打席に、投手は守備の打席に付く', () => {
+  const g = contribGame();
+  const { re, we } = contribModel();
+  const { bat, pit } = aggregateContrib([g], () => we, re);
+
+  assert.deepEqual(bat.map((x) => x.playerId).sort(), ['A', 'B', 'C', 'D', 'E']);
+  assert.deepEqual(pit.map((x) => x.playerId), ['K1']);
+  assert.equal(pit[0].bf, 21, '7回×3人');
+  assert.equal(bat[0].games, 1);
+
+  // 2ランHRを打った打者はプラス
+  const b = bat.find((x) => x.playerId === 'B');
+  assert.ok(b.wpa > 0, `HRの打者はプラス: ${b.wpa}`);
+  // 打席ごとの合計なので、HR以外の凡打ぶんは差し引かれる(HR単体は約+1.6)
+  assert.ok(b.re24 > 0.5, `2点入れた打者は得点貢献もプラス: ${b.re24}`);
+  // 凡打しかしていない打者はマイナス
+  const e = bat.find((x) => x.playerId === 'E');
+  assert.ok(e.wpa < 0 && e.re24 < 0, `凡打だけの打者はマイナス: ${e.wpa}`);
+  // 無失点で投げ切った投手は大きくプラス(自チーム視点なので反転は不要)
+  assert.ok(pit[0].wpa > 0.3, `無失点完投はプラス: ${pit[0].wpa}`);
+});
+
+test('貢献: WPAとRE24は別物(場面の重みの有無)', () => {
+  // 同じ2ランHRでも、WPAは回によって変わる。RE24は変わらない。
+  const { re, we } = contribModel();
+  const swingOf = (inn) => {
+    const g = contribGame(inn, 7, `g${inn}`);
+    const w = weSeries(g, we).find((x) => x.runs === 2);
+    const r = flowSeries(g, re).find((x) => x.runs === 2);
+    return { wpa: w.delta, re24: r.delta };
+  };
+  const early = swingOf(1);
+  const late = swingOf(7);
+  assert.ok(late.wpa > early.wpa + 0.02, `終盤のほうが勝率は大きく動く: 1回=${early.wpa} 7回=${late.wpa}`);
+  assert.ok(Math.abs(late.re24 - early.re24) < 1e-9, '得点期待値の動きは回によらない');
+});
+
+test('貢献: 表示は符号つき、0にマイナスを付けない', () => {
+  assert.equal(formatContrib(0.5), '+0.50');
+  assert.equal(formatContrib(-0.5), '−0.50');
+  assert.equal(formatContrib(0), '0.00');
+  assert.equal(formatContrib(-0.001), '0.00', '四捨五入して0になったらマイナスを付けない');
+  assert.equal(formatContrib(3.24, 1), '+3.2');
+});
+
+test('貢献: 並べ替えは勝利貢献の大きい順', () => {
+  const rows = [{ playerId: 'a', wpa: 0.1, re24: 5 }, { playerId: 'b', wpa: 0.3, re24: 1 }, { playerId: 'c', wpa: 0.1, re24: 9 }];
+  assert.deepEqual(rankContrib(rows).map((x) => x.playerId), ['b', 'c', 'a']);
 });

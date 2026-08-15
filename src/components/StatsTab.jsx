@@ -5,6 +5,7 @@ import { formatIP } from '../lib/model.js';
 import GameScopeToggle, { scopedGames } from './GameScopeToggle.jsx';
 import TeamPowerCard from './TeamPowerCard.jsx';
 import ScorerCard from './ScorerCard.jsx';
+import ContribCard from './ContribCard.jsx';
 import { tenureByPlayer, isArchived, DEFAULT_YEAR_START_MONTH } from '../lib/year.js';
 import PlayerView from './PlayerView.jsx';
 import MemberSection from './MemberSection.jsx';
@@ -61,6 +62,7 @@ export default function StatsTab() {
 
       {/* チーム力: 他チームではなく「その場面」と比べるので順位表が要らない */}
       <TeamPowerCard games={games} />
+      <ContribCard games={games} />
       <ScorerCard games={games} />
 
       <div className="section-title">{t('stats.battingMetrics')}</div>

@@ -167,6 +167,31 @@ try {
   check('前と後の勝率が両方出ている', (read.match(/\d+%/g) || []).length >= 2, read);
   check('勝率だと分かる言葉が付いている', read.includes('勝率'), read);
 
+  // --- 成績タブに勝利貢献・得点貢献が出る ---
+  await page.locator('.sheet button:has-text("閉じる")').last().click();
+  await page.waitForTimeout(500);
+  await page.click('nav button:has-text("成績")');
+  await page.waitForTimeout(1200);
+  const cc = page.locator('.card:has-text("勝利貢献・得点貢献")');
+  check('勝利貢献のカードが出る', (await cc.count()) === 1);
+  const ccTxt = await cc.innerText();
+  check('勝利貢献と得点貢献を並べている',
+    ccTxt.includes('勝利貢献') && ccTxt.includes('得点貢献'), ccTxt.slice(0, 200));
+  check('WARを出していない理由を書いてある', ccTxt.includes('WAR'), ccTxt.slice(-300));
+  const ccRows = await page.evaluate(() => [...document.querySelectorAll('.cc-table tbody tr')]
+    .map((tr) => [...tr.querySelectorAll('td')].map((td) => td.textContent)));
+  check('打者が並んでいる', ccRows.length > 0, JSON.stringify(ccRows));
+  check('勝利貢献が大きい順', ccRows.every((r, i) => i === 0
+    || parseFloat(String(ccRows[i - 1][1]).replace('−', '-')) >= parseFloat(String(r[1]).replace('−', '-'))),
+    JSON.stringify(ccRows.map((r) => r[1])));
+  // 投手側に切り替えられる。この試合は守備を記録していないので、
+  // 空の表ではなく「記録が無い」と言う(0.00 が並ぶと記録済みに見える)
+  await cc.locator('button:has-text("投手")').click();
+  await page.waitForTimeout(500);
+  const pitTxt = await cc.innerText();
+  check('投手側に切り替わる', pitTxt.includes('まだ記録がありません'), pitTxt.slice(0, 300));
+  check('切り替えたら打者の表は消えている', (await page.locator('.cc-table tbody tr').count()) === 0);
+
   // --- 横あふれなし ---
   const over = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   check('横あふれなし', !over);
