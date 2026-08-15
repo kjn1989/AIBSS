@@ -81,7 +81,6 @@ function Chart({ series, tags, order, t }) {
 
   const cur = sel === null ? null : series[sel];
   const pct = (v) => `${Math.round(v * 100)}%`;
-  const signedPt = (v) => `${v >= 0 ? '+' : '−'}${Math.abs(Math.round(v * 100))}pt`;
 
   return (
     <div className="fv-chart">
@@ -154,14 +153,14 @@ function Chart({ series, tags, order, t }) {
             <b>{t(cur.isTop ? 'scoreboard.top' : 'scoreboard.bottom', { n: cur.inning })}</b>
             <span className="fv-read-text">{cur.log?.text || ''}</span>
           </div>
+          {/* 「+8pt」だけでは何のことか分からない。引いた結果ではなく、
+              引いた元(打席の前と後の勝率)をそのまま見せる */}
           <div className="fv-read-nums">
-            <span>
-              {t('fv.winProb')}
-              <b className={cur.we >= 0.5 ? 'up' : 'down'}>{pct(cur.we)}</b>
-            </span>
-            <span>
+            <span className="fv-move">
               {t('fv.thisPa')}
-              <b className={cur.delta >= 0 ? 'up' : 'down'}>{signedPt(cur.delta)}</b>
+              <b>{pct(cur.we - cur.delta)}</b>
+              <i className={cur.delta >= 0 ? 'up' : 'down'}>→</i>
+              <b className={cur.delta >= 0 ? 'up' : 'down'}>{pct(cur.we)}</b>
             </span>
           </div>
         </div>
@@ -266,7 +265,11 @@ export default function FlowView({ game, onClose }) {
                 {swings.map((sw) => (
                   <div className={`fv-swing ${sw.dir > 0 ? 'up' : 'down'}`} key={sw.from.id}>
                     <b>{innOf(sw.from) === innOf(sw.to) ? innOf(sw.from) : `${innOf(sw.from)}〜${innOf(sw.to)}`}</b>
-                    <span>{t(sw.dir > 0 ? 'fv.swingUs' : 'fv.swingThem', { n: sw.n, v: Math.round(Math.abs(sw.swing) * 100) })}</span>
+                    <span>{t('fv.swingRange', {
+                      n: sw.n,
+                      a: Math.round((sw.from.we - sw.from.delta) * 100),
+                      b: Math.round(sw.to.we * 100),
+                    })}</span>
                   </div>
                 ))}
               </div>

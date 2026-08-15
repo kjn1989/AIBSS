@@ -3922,3 +3922,22 @@ test('WE: 線は0〜100%に収まり、打席ごとの動きが線の差にな�
   // 守備側でも自チーム視点なので符号を反転しなくていい(相手を抑えれば上がる)
   assert.ok(s[5].we >= s[3].we, '相手を0点に抑えた半回は勝率が下がらない');
 });
+
+test('WE: 打席の動きは「前の勝率」と「後の勝率」の差', () => {
+  // 画面は差ではなく前後をそのまま出す。差だけだと初見で何のことか分からない。
+  // ここでは we - delta が「打席前の勝率」として取り出せることを固定する。
+  const we = weModel({ regulation: 9 });
+  let n = 0;
+  const pa = (kind, inn, isTop, runners, outs, runs = 0) =>
+    ({ id: 'm' + (++n), kind, inning: inn, isTop, text: '', payload: { beforeRunners: runners, outsBefore: outs, runs } });
+  const R1 = { 1: true, 2: false, 3: false };
+  const logs = [pa('atbat', 7, true, EMPTY, 0), pa('atbat', 7, true, R1, 0), pa('atbat', 7, true, R1, 1)];
+  const s = weSeries({ playLogs: logs, isHome: false }, we);
+  const before0 = we({ inning: 7, isTop: true, runners: EMPTY, outs: 0, diff: 0 });
+  assert.ok(Math.abs((s[0].we - s[0].delta) - before0) < 1e-9, '1打席目の「前」は試合開始時の勝率');
+  // 走者が出れば上がり、アウトが増えれば下がる
+  assert.ok(s[0].delta > 0, 'ヒットで一塁に出れば上がる');
+  assert.ok(s[1].delta < 0, 'アウトが増えれば下がる');
+  // 前後の差がそのまま delta
+  for (const x of s) assert.ok(Math.abs((x.we - (x.we - x.delta)) - x.delta) < 1e-12);
+});
