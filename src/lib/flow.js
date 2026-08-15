@@ -220,8 +220,11 @@ export function flowRuns(series = [], minSwing = 0.6) {
 // ------------------------------------------------------------
 export function judgeFlowTags(game, series = [], opts = {}) {
   const windowAfter = opts.windowAfter ?? 5;
-  const windowBefore = opts.windowBefore ?? 2;
+  const windowBefore = opts.windowBefore ?? 3;
   const minSwing = opts.minSwing ?? 0.5;
+  // 「もう動いていた」の判定はこれより小さくてよい。単打1本で0.3前後動くので、
+  // ヒットの直後に押したのは(読みではなく)反応として拾えないと意味がない。
+  const reactSwing = opts.reactSwing ?? 0.25;
 
   const tags = (game?.playLogs || []).filter((l) => l.kind === 'flow');
   // 打席の並びの中で、そのタグがどこに入るかを求める(ログ全体の並び順で見る)
@@ -238,10 +241,18 @@ export function judgeFlowTags(game, series = [], opts = {}) {
     const want = tag.payload?.dir === 'down' ? -1 : 1;
     const before = paPos.filter((x) => x.at < at).slice(-windowBefore);
     const after = paPos.filter((x) => x.at > at).slice(0, windowAfter);
-    const sum = (arr) => arr.reduce((t, x) => t + x.s.delta, 0);
+    // 窓の端まで足してはいけない。その向きへ動いたあと戻した場合、
+    // 合計だと打ち消し合って「何も起きなかった」ことになってしまう。
+    // 途中でいちばん動いたところを見る。
+    const best = (arr) => {
+      let acc = 0;
+      let top = 0;
+      for (const x of arr) { acc += want * x.s.delta; if (acc > top) top = acc; }
+      return top;
+    };
 
-    if (want * sum(before) >= minSwing) { verdict[tag.id] = 'post'; continue; }
-    if (want * sum(after) >= minSwing) {
+    if (best([...before].reverse()) >= reactSwing) { verdict[tag.id] = 'post'; continue; }
+    if (best(after) >= minSwing) {
       verdict[tag.id] = 'pre';
       // どの区間を先に読めたか(察知率の分子)
       for (const sw of swings) {

@@ -3342,3 +3342,57 @@ test('継投すると、その回から投手が入れ替わる', () => {
   assert.equal(by.get(3).find((s) => s.position === '投').playerId, '辻', '3回から新しい投手');
   assert.equal(findPositionIssues(game).missing.filter((m) => m.position === '投').length, 0);
 });
+
+
+// ============================================================
+// 流れタグの判定: 窓の端まで足すと、動いたあと戻した分で打ち消される
+//
+// 実際に起きた不具合。ヒットの直後に押したのに「動かず」と判定された。
+// 押した後に +1.29 動いていたのに、窓の最後にあった -0.54 まで足して
+// 合計 +0.49 になり、しきい値0.5をわずかに下回っていた。
+// ============================================================
+test('流れタグ: 動いたあと戻しても、動いた事実を拾う', () => {
+  const pa = (id, r, o, runs = 0) => ({
+    id, gameId: 'g', inning: 5, isTop: true, kind: 'atbat', text: '',
+    payload: { beforeRunners: { 1: !!r[0], 2: !!r[1], 3: !!r[2] }, outsBefore: o, runs },
+  });
+  const tag = { id: 'tag', gameId: 'g', inning: 5, isTop: true, kind: 'flow', text: '', payload: { dir: 'up' } };
+  // 押した後: +0.37, +0.66 と上がってから -0.54 戻す(合計 +0.49)
+  const g = { id: 'g', playLogs: [
+    pa('x1', [0,0,0], 0), pa('x2', [0,0,0], 1), tag,
+    pa('x3', [1,0,0], 1), pa('x4', [1,1,0], 1), pa('x5', [1,1,1], 1, 1),
+  ] };
+  const j = judgeFlowTags(g, flowSeries(g, null));
+  assert.notEqual(j.verdict.tag, 'miss', '上がってから戻しただけで「動かず」にしない');
+});
+
+test('流れタグ: ヒットの直後に押したら「反応」', () => {
+  const pa = (id, r, o, runs = 0) => ({
+    id, gameId: 'g', inning: 5, isTop: true, kind: 'atbat', text: '',
+    payload: { beforeRunners: { 1: !!r[0], 2: !!r[1], 3: !!r[2] }, outsBefore: o, runs },
+  });
+  const tag = { id: 'tag', gameId: 'g', inning: 5, isTop: true, kind: 'flow', text: '', payload: { dir: 'up' } };
+  // 単打1本ぶん(0.3前後)でも「もう動いていた」として拾えないと、
+  // ヒットを見てから押した人が「動かず」になってしまう
+  const after = { id: 'g', playLogs: [pa('x1', [0,0,0], 0), pa('x2', [0,0,0], 1), tag, pa('x3', [1,0,0], 1), pa('x4', [1,1,0], 1), pa('x5', [1,1,1], 1, 1)] };
+  assert.equal(judgeFlowTags(after, flowSeries(after, null)).verdict.tag, 'post', 'ヒットの後に押したら反応');
+
+  // 同じ試合で、ヒットの前に押していれば予兆
+  const before = { id: 'g', playLogs: [pa('x1', [0,0,0], 0), tag, pa('x2', [0,0,0], 1), pa('x3', [1,0,0], 1), pa('x4', [1,1,0], 1), pa('x5', [1,1,1], 1, 1)] };
+  const jb = judgeFlowTags(before, flowSeries(before, null));
+  assert.equal(jb.verdict.tag, 'pre', 'ヒットの前に押したら予兆');
+  assert.equal(jb.hitRate, 1);
+  assert.ok(jb.catchRate > 0, '事前に押せた区間として数える');
+});
+
+test('流れタグ: 本当に何も動かなければ「動かず」のまま', () => {
+  const pa = (id, r, o) => ({
+    id, gameId: 'g', inning: 5, isTop: true, kind: 'atbat', text: '',
+    payload: { beforeRunners: { 1: !!r[0], 2: !!r[1], 3: !!r[2] }, outsBefore: o, runs: 0 },
+  });
+  const g = { id: 'g', playLogs: [
+    { id: 'tag', gameId: 'g', inning: 5, isTop: true, kind: 'flow', text: '', payload: { dir: 'up' } },
+    pa('x1', [0,0,0], 0), pa('x2', [0,0,0], 1), pa('x3', [0,0,0], 2),
+  ] };
+  assert.equal(judgeFlowTags(g, flowSeries(g, null)).verdict.tag, 'miss', '三者凡退なら動かず');
+});
