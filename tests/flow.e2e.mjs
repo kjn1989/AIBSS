@@ -172,7 +172,7 @@ try {
   await page.waitForTimeout(500);
   await page.click('nav button:has-text("成績")');
   await page.waitForTimeout(1200);
-  const cc = page.locator('.card:has-text("勝利貢献・得点貢献")');
+  const cc = page.locator('.card').filter({ has: page.locator('.cc-table, .toggle-row') }).filter({ hasText: '勝利貢献' }).first();
   check('勝利貢献のカードが出る', (await cc.count()) === 1);
   const ccTxt = await cc.innerText();
   check('勝利貢献と得点貢献を並べている',
@@ -190,6 +190,10 @@ try {
   await page.waitForTimeout(500);
   const pitTxt = await cc.innerText();
   check('投手側に切り替わる', pitTxt.includes('まだ記録がありません'), pitTxt.slice(0, 300));
+  // 同じ列でも打者と投手で意味が反転する。見出しも説明も切り替わっていること
+  check('投手側は「防いだ失点」と言い換えている', pitTxt.includes('防いだ失点'), pitTxt.slice(0, 300));
+  check('投手側の説明は防御率から入る', pitTxt.includes('防御率'), pitTxt.slice(0, 300));
+  check('投手側は0が「場面どおり」だと書いてある', pitTxt.includes('場面どおり'), pitTxt.slice(-500));
   check('切り替えたら打者の表は消えている', (await page.locator('.cc-table tbody tr').count()) === 0);
 
   // --- 横あふれなし ---

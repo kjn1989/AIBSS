@@ -46,8 +46,9 @@ export default function ContribCard({ games }) {
 
   return (
     <div className="card">
-      <h2>{t('cc.title')}</h2>
-      <p className="small dim" style={{ marginTop: -4 }}>{t('cc.lead')}</p>
+      {/* 2列目の意味が打者と投手で反転するので、見出しも切り替える */}
+      <h2>{t(`cc.title.${side}`)}</h2>
+      <p className="small dim" style={{ marginTop: -4 }}>{t(`cc.lead.${side}`)}</p>
       <div className="toggle-row">
         <button className={side === 'bat' ? 'active' : ''} onClick={() => { setSide('bat'); setOpen(false); }}>
           {t('cc.bat')}
@@ -65,7 +66,7 @@ export default function ContribCard({ games }) {
               <tr>
                 <th>{t('cc.player')}</th>
                 <th className="num">{t('cc.wpa')}</th>
-                <th className="num">{t('cc.re24')}</th>
+                <th className="num">{t(side === 'bat' ? 'cc.re24' : 'cc.rePrev')}</th>
                 <th className="num">{side === 'bat' ? t('cc.pa') : t('cc.bf')}</th>
               </tr>
             </thead>
@@ -87,7 +88,10 @@ export default function ContribCard({ games }) {
           )}
         </>
       )}
-      <p className="small dim mt8">{t('cc.note')}</p>
+      {/* 同じ列でも打者と投手で意味が反転する(稼いだ点 / 取られずに済んだ点)。
+          見出しも説明も side ごとに変えないと、投手側が読めない */}
+      <p className="small dim mt8">{t('cc.note.wpa')}</p>
+      <p className="small dim">{t(`cc.note.${side}`)}</p>
       <p className="small dim">{t('cc.noWar')}</p>
     </div>
   );
