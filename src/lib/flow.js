@@ -284,13 +284,38 @@ export function judgeFlowTags(game, series = [], opts = {}) {
   };
 }
 
-// 「いまどちらへ傾いているか」の言い方。
-// 流れは試合が終わってから振り返ることのほうが多く、そこで「いまは傾いています」と
-// 書くと、まだ試合中のように読めてしまう。終わった試合は過去形で言う。
-export function flowTiltKey(status, cum) {
-  const over = status === 'finished';
-  if (cum >= 0) return over ? 'fv.endUs' : 'fv.nowUs';
-  return over ? 'fv.endThem' : 'fv.nowThem';
+// ------------------------------------------------------------
+// 線の形をひとことで言う
+//
+// 線の終値そのものは出さない。デルタは半回ごとに打ち消し合うので、
+// 回の切れ目では積み上げ値は「そのときの点差」とぴったり同じ値になる
+// (半回の合計 = その半回の得点 − 開始状態の得点期待値。両チームが同じ回数
+//  ずつ攻撃すれば、開始状態ぶんは相殺される)。
+// つまり終値を見出しに出しても、すぐ上のスコアボードを分かりにくい単位で
+// 言い直しているだけになる。
+//
+// スコアボードに書いていないのは「どれだけの時間どちらに傾いていたか」と
+// 「どこが底で、どこまで押し返したか」。線から読めるのはそこなので、そこを言う。
+// ------------------------------------------------------------
+export function flowShape(series = []) {
+  if (!series.length) return null;
+  let lowest = series[0];
+  let highest = series[0];
+  let below = 0;
+  for (const s of series) {
+    if (s.cum < lowest.cum) lowest = s;
+    if (s.cum > highest.cum) highest = s;
+    if (s.cum < 0) below += 1;
+  }
+  const belowShare = below / series.length;
+  // 6割を境にする。5割ちょうどを「傾いていた」と言うと、
+  // ほぼ互角の試合まで一方に振り分けてしまう
+  const lean = belowShare >= 0.6 ? 'them' : belowShare <= 0.4 ? 'us' : 'even';
+  return {
+    lowest, highest, belowShare, lean,
+    // 見出しに出す割合。傾いていた側の時間を出す
+    leanPct: Math.round((lean === 'them' ? belowShare : 1 - belowShare) * 100),
+  };
 }
 
 // 打率と同じ書き方。10割だけ 1.000 と書く(.1000 にならないように)
