@@ -2368,7 +2368,13 @@ button.manage-open {
 
 /* 流れの線のすぐ下に線分スコア。落ちている回とその回の失点を目で結びつける。
    延長までいくと列が増えるので、はみ出す前にここだけ横スクロールさせる */
-.fv-line-score { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); overflow-x: auto; }
-.fv-line-score .linescore-table.compact { min-width: 260px; }
-.fv-line-score .linescore-table.compact th:first-child,
-.fv-line-score .linescore-table.compact td:first-child { width: 24%; }
+.fv-line-score { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+/* 列幅は線と同じ座標から来るので、ここでは幅を決めない(style で来る) */
+.fvls-row { display: flex; align-items: center; font-size: 11px; line-height: 1.7; }
+.fvls-row.head { color: var(--text-dim); }
+.fvls-row + .fvls-row { border-top: 1px solid var(--border); }
+.fvls-team { flex: none; font-weight: 700; text-align: left; padding-left: 2px; overflow: hidden; }
+.fvls-cell { flex: none; text-align: center; font-variant-numeric: tabular-nums; overflow: hidden; }
+.fvls-tot { flex: none; display: flex; justify-content: space-around; font-variant-numeric: tabular-nums; }
+.fvls-tot > b { font-weight: 800; }
+.fvls-tot > i { font-style: normal; color: var(--text-dim); }
