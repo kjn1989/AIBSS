@@ -17,7 +17,7 @@ export function aggregateBatting(games) {
       map[pid] = {
         playerId: pid,
         pa: 0, ab: 0, h: 0, single: 0, double: 0, triple: 0, hr: 0,
-        rbi: 0, runs: 0, sb: 0, bb: 0, hbp: 0, so: 0,
+        rbi: 0, runs: 0, sb: 0, bb: 0, ibb: 0, hbp: 0, so: 0,
         sacBunt: 0, sacFly: 0, interference: 0, error: 0, tb: 0,
         // 詳細メトリクス用
         rispAB: 0, rispH: 0,
@@ -52,7 +52,11 @@ export function aggregateBatting(games) {
         if (ab.result === 'triple') s.triple += 1;
         if (ab.result === 'hr') s.hr += 1;
       }
-      if (ab.result === 'bb') s.bb += 1;
+      // 敬遠も四球。四球に数えたうえで内訳として別に持つ(出塁率の分母は変えない)
+      if (ab.result === 'bb') {
+        s.bb += 1;
+        if (ab.intentional) s.ibb += 1;
+      }
       if (ab.result === 'hbp') s.hbp += 1;
       if (ab.result === 'so') s.so += 1;
       if (isBattedBall(ab.result)) {
@@ -127,7 +131,7 @@ export function aggregatePitching(games) {
       map[pid] = {
         playerId: pid,
         outsRecorded: 0, runs: 0, earnedRuns: 0, hitsAllowed: 0,
-        walks: 0, hitByPitch: 0, strikeouts: 0, pitches: 0, abFaced: 0,
+        walks: 0, intentionalWalks: 0, hitByPitch: 0, strikeouts: 0, pitches: 0, abFaced: 0,
         wins: 0, saves: 0, holds: 0, games: 0,
         // 対左右打者(相手打者の左右を入力してある打席だけが対象)
         vsL: { ab: 0, h: 0 }, vsR: { ab: 0, h: 0 },
@@ -168,6 +172,7 @@ export function aggregatePitching(games) {
       s.earnedRuns += pr.earnedRuns || 0;
       s.hitsAllowed += pr.hitsAllowed || 0;
       s.walks += pr.walks || 0;
+      s.intentionalWalks += pr.intentionalWalks || 0;
       s.hitByPitch += pr.hitByPitch || 0;
       s.strikeouts += pr.strikeouts || 0;
       s.pitches += pr.pitches || 0;

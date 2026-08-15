@@ -6,8 +6,8 @@
 // ============================================================
 import React, { createContext, useContext, useReducer, useEffect, useRef } from 'react';
 import {
-  newPlayer, newMember, newGame, newAtBat, newPitch, newPlayLog, newPitchingRecord, RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES,
-  OPP_LETTERS, DEFAULT_EDITION, normalizeEdition, multiOutLabel, uid, attendeesOf,
+  newPlayer, newMember, newGame, newAtBat, newPitch, newPlayLog, newPitchingRecord, RESULTS, DIRECTIONS, OUT_TYPES,
+  OPP_LETTERS, DEFAULT_EDITION, normalizeEdition, multiOutLabel, uid, attendeesOf, resultLabelOf,
 } from '../lib/model.js';
 import { generateDemoData } from '../lib/demo.js';
 import { rebuildPitchingStats } from '../lib/pitchingRebuild.js';
@@ -1301,6 +1301,7 @@ export function reducer(state, action) {
         ab.result = p.result;
         ab.outType = p.outType || null;
         ab.soType = p.result === 'so' ? p.soType || null : null;
+        ab.intentional = p.result === 'bb' ? !!p.intentional : false;
         ab.direction = p.direction || null;
         // 打球の強さと打点(角度・深さ)。押されていなければ null のまま残す。
         // 「平凡だった」と「記録していない」は別物なので既定値を入れない
@@ -1327,7 +1328,7 @@ export function reducer(state, action) {
         }
         ab.clutch = judgeClutch(pending.snapshot.scoreDiff, rbi, scoreBefore.my, scoreBefore.opp);
         g.atBats.push(ab);
-        const resultLabel = (p.result === 'so' && SO_TYPES[p.soType]) || resultDef?.label || p.result;
+        const resultLabel = resultLabelOf(p);
         const multiOut = multiOutLabel(outsOnPlay);
         g.playLogs.push(newPlayLog({
           gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'atbat',
@@ -1338,6 +1339,7 @@ export function reducer(state, action) {
           payload: {
             atBatId: ab.id, playerId: batter.playerId, order: batter.order, result: p.result,
             outType: p.outType || null, soType: p.result === 'so' ? p.soType || null : null,
+            intentional: p.result === 'bb' ? !!p.intentional : false,
             direction: p.direction, contact: p.contact || null,
             hitAngle: p.hitAngle ?? null, hitDepth: p.hitDepth ?? null,
             rbi, runs: totalRuns, outsOnPlay,
@@ -1360,7 +1362,11 @@ export function reducer(state, action) {
         const pr = ensurePitchingRecord(g, g.currentPitcherId);
         if (resultDef?.hit) pr.hitsAllowed += 1;
         if (resultDef?.ab) pr.abFaced = (pr.abFaced || 0) + 1; // 被打数(被打率の分母)
-        if (p.result === 'bb') pr.walks += 1;
+        // 敬遠も与四球。内訳として与故意四球にも足す(公式記録と同じ扱い)
+        if (p.result === 'bb') {
+          pr.walks += 1;
+          if (p.intentional) pr.intentionalWalks = (pr.intentionalWalks || 0) + 1;
+        }
         if (p.result === 'hbp') pr.hitByPitch += 1;
         if (p.result === 'so') pr.strikeouts += 1;
         // アウトカウントは下の共通処理後に別途集計する
@@ -1368,7 +1374,7 @@ export function reducer(state, action) {
       // --- 守備時: 相手打者は記号(A〜T)で識別してログに残す ---
       // (投手未選択でも打順表示・履歴は追えるよう、投手成績とは別に常に記録する)
       if (!myBatting && oppBatter) {
-        const oppResultLabel = (p.result === 'so' && SO_TYPES[p.soType]) || resultDef?.label || p.result;
+        const oppResultLabel = resultLabelOf(p);
         const oppMultiOut = multiOutLabel(outsOnPlay);
         g.playLogs.push(newPlayLog({
           gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'defense',
@@ -1377,7 +1383,9 @@ export function reducer(state, action) {
           payload: {
             result: p.result, direction: p.direction, outType: p.outType || null,
             contact: p.contact || null, hitAngle: p.hitAngle ?? null, hitDepth: p.hitDepth ?? null,
-            soType: p.result === 'so' ? p.soType || null : null, runs: totalRuns, outsOnPlay,
+            soType: p.result === 'so' ? p.soType || null : null,
+            intentional: p.result === 'bb' ? !!p.intentional : false,
+            runs: totalRuns, outsOnPlay,
             letter: oppBatter.letter, order: oppBatter.order,
             pitcherId: g.currentPitcherId || null, // どの自軍投手が投げたか(対左右打者split用)
             batterHand: g.oppBatterHands?.[oppBatter.letter] || null, // 相手打者の左右
@@ -1436,7 +1444,8 @@ export function reducer(state, action) {
       const hitAngle = pick('hitAngle') ?? null;
       const hitDepth = pick('hitDepth') ?? null;
       const soType = result === 'so' ? (pick('soType') || 'swinging') : null;
-      const label = (result === 'so' && SO_TYPES[soType]) || RESULTS[result]?.label || result;
+      const intentional = result === 'bb' ? !!pick('intentional') : false;
+      const label = resultLabelOf({ result, soType, intentional });
       const dir = DIRECTIONS[direction] || '';
       // その打撃で入った得点。打席を入れ替えるときは打点と一緒に移す必要がある
       const newRuns = p.runs !== undefined ? p.runs : log.payload.runs;
@@ -1454,6 +1463,7 @@ export function reducer(state, action) {
           ab.direction = direction || null;
           ab.outType = outType;
           ab.soType = soType;
+          ab.intentional = intentional;
           ab.contact = contact;
           ab.hitAngle = hitAngle;
           ab.hitDepth = hitDepth;
@@ -1474,6 +1484,7 @@ export function reducer(state, action) {
         hitAngle,
         hitDepth,
         soType,
+        intentional,
         outsOnPlay,
         ...(p.rbi !== undefined ? { rbi: p.rbi } : {}),
         ...(p.runs !== undefined ? { runs: p.runs } : {}),
@@ -1545,7 +1556,7 @@ export function reducer(state, action) {
       if (ab) ab.playerId = newId;
       log.payload = { ...log.payload, playerId: newId };
       const name = playerNameOf(state, newId);
-      const label = (log.payload.result === 'so' && SO_TYPES[log.payload.soType]) || RESULTS[log.payload.result]?.label || log.payload.result;
+      const label = resultLabelOf(log.payload);
       const dir = DIRECTIONS[log.payload.direction] || '';
       log.text = `${name} ${dir}${label}` + (log.payload.runs ? ` (${log.payload.runs}点)` : '');
       // 直後の得点ログ(打者自身の生還。CONFIRM_PLAYで打席ログの直後にpushされる)も付け替える
@@ -1600,13 +1611,14 @@ export function reducer(state, action) {
       ab.result = action.result;
       ab.outType = action.outType ?? null;
       ab.soType = action.result === 'so' ? (action.soType || null) : null;
+      ab.intentional = action.result === 'bb' ? !!action.intentional : false;
       ab.direction = action.direction ?? null;
       ab.rbi = action.rbi || 0;
       ab.contact = action.contact ?? null;
       ab.hitAngle = action.hitAngle ?? null;
       ab.hitDepth = action.hitDepth ?? null;
       g.atBats.push(ab);
-      const label = (action.result === 'so' && SO_TYPES[action.soType]) || RESULTS[action.result]?.label || action.result;
+      const label = resultLabelOf({ result: action.result, soType: action.soType, intentional: action.intentional });
       const plog = newPlayLog({
         gameId: g.id, inning, isTop, kind: 'atbat',
         text: `${playerNameOf(state, action.playerId)} ${DIRECTIONS[action.direction] || ''}${label}`,
@@ -1614,6 +1626,7 @@ export function reducer(state, action) {
           atBatId: ab.id, playerId: action.playerId, order: action.order ?? null,
           result: action.result, outType: action.outType ?? null,
           soType: action.result === 'so' ? (action.soType || null) : null,
+          intentional: action.result === 'bb' ? !!action.intentional : false,
           direction: action.direction ?? null, contact: action.contact ?? null,
           hitAngle: action.hitAngle ?? null, hitDepth: action.hitDepth ?? null,
           rbi: action.rbi || 0, runs: 0, outsOnPlay: 0,
@@ -1758,7 +1771,7 @@ export function reducer(state, action) {
         if (l.kind === 'atbat' && l.payload?.order === order && l.payload?.playerId === outId && (l.inning || 0) > inning
             && !g.atBats.some((ab) => ab.id === l.payload.atBatId && ab.playerId === outId)) {
           const nm = playerNameOf(state, inId);
-          const lbl = (l.payload.result === 'so' && SO_TYPES[l.payload.soType]) || RESULTS[l.payload.result]?.label || l.payload.result;
+          const lbl = resultLabelOf(l.payload);
           const dir = DIRECTIONS[l.payload.direction] || '';
           l.payload = { ...l.payload, playerId: inId };
           l.text = `${nm} ${dir}${lbl}` + (l.payload.runs ? ` (${l.payload.runs}点)` : '');

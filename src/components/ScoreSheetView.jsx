@@ -23,7 +23,7 @@ function shortLabel(ab, edition, lang, t) {
       case 'hr': return `${d}HR`;
       case 'out': return `${d}${{ ground: 'GO', fly: 'FO', liner: 'LO', dp: 'DP' }[ab.outType] || 'GO'}`;
       case 'so': return ab.soType === 'looking' ? 'ꓘ' : 'K';
-      case 'bb': return 'BB';
+      case 'bb': return ab.intentional ? 'IBB' : 'BB';
       case 'hbp': return 'HBP';
       case 'error': return `${d}E`;
       case 'sacBunt': return 'SAC';
@@ -43,7 +43,7 @@ function shortLabel(ab, edition, lang, t) {
     case 'hr': return `${dir}本`;
     case 'out': return `${dir}${{ ground: 'ゴ', fly: '飛', liner: '直', dp: dpShort }[ab.outType] || 'ゴ'}`;
     case 'so': return ab.soType === 'looking' ? '見三振' : '三振';
-    case 'bb': return '四球';
+    case 'bb': return ab.intentional ? '敬遠' : '四球';
     case 'hbp': return '死球';
     case 'error': return `${dir}エ`;
     case 'sacBunt': return '犠打';

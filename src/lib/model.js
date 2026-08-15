@@ -29,6 +29,21 @@ export const RESULTS = {
 // ---- 三振の内訳 ----
 export const SO_TYPES = { swinging: '空振り三振', looking: '見逃し三振' };
 
+// ---- 四球の内訳 ----
+// 故意四球(敬遠)は独立した結果ではなく四球の内訳。公式記録でも与四球に数えたうえで、
+// 別に故意四球として持つ。結果種別を増やすと打率・出塁率の分母を通る道が二重になるので、
+// result は 'bb' のまま intentional フラグだけを足す。
+export const IBB_LABEL = '敬遠';
+export const isIntentionalBB = (p) => p?.result === 'bb' && !!p?.intentional;
+
+// 打席結果の表示名(ログ・確認・修正で共通)。三振と四球は内訳で呼び名が変わる。
+export function resultLabelOf(p) {
+  if (!p) return '';
+  if (p.result === 'so') return SO_TYPES[p.soType] || RESULTS.so.label;
+  if (isIntentionalBB(p)) return IBB_LABEL;
+  return RESULTS[p.result]?.label || p.result;
+}
+
 // ---- ファウルグラウンドを選べる結果 ----
 // ファウルフライは凡打なので、打点をファウル側に置けないと記録できない。
 // 一方でファウルの安打は無く、ファウルのバントは犠打ではなくストライクなので、
@@ -371,6 +386,7 @@ export function newAtBat({ gameId, playerId, order, snapshot }) {
     result: null, // RESULTS のキー
     outType: null, // OUT_TYPES のキー(凡打時)
     soType: null, // 三振の種類: 'swinging'(空振り) | 'looking'(見逃し)
+    intentional: false, // 故意四球(敬遠)。result==='bb' のときだけ意味を持つ
     direction: null, // DIRECTIONS のキー
     rbi: 0,
     runsOnPlay: 0,
@@ -419,6 +435,7 @@ export function newPitchingRecord({ gameId, playerId, appearanceOrder }) {
     earnedRuns: 0, // 自責点(手動微調整可)
     hitsAllowed: 0, // 被安打
     walks: 0, // 与四球
+    intentionalWalks: 0, // 与故意四球(与四球の内数)
     hitByPitch: 0, // 与死球
     strikeouts: 0, // 奪三振
     pitches: 0, // 投球数

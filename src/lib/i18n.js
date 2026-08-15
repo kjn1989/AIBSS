@@ -58,6 +58,9 @@ export const MESSAGES = {
     'outType.dp': 'ダブルプレー',
     'soType.swinging': '空振り三振',
     'soType.looking': '見逃し三振',
+    'result.ibb': '敬遠',
+    'bbType.normal': 'ふつうの四球',
+    'bbType.intentional': '敬遠(故意四球)',
 
     // 試合セットアップ(スコア入力タブ)
     'gamesetup.title': '新しい試合を開始',
@@ -107,6 +110,8 @@ export const MESSAGES = {
     // プレイ確定シート(PlaySheet)の見出し
     'playsheet.direction': '打球方向',
     'playsheet.soType': '三振の種類',
+    'playsheet.bbType': '四球の種類',
+    'playsheet.bbTypeNote': '敬遠(故意四球)も四球として数えます。内訳だけ別に残ります。',
     'playsheet.outType': '凡打の種類',
     'playsheet.battedBall': '打球',
     'playsheet.tapField': '打球が落ちたところを押す（どこでも可・深さも記録）',
@@ -1426,6 +1431,9 @@ export const MESSAGES = {
     'outType.dp': 'Double Play',
     'soType.swinging': 'Swinging K',
     'soType.looking': 'Looking K',
+    'result.ibb': 'IBB',
+    'bbType.normal': 'Walk',
+    'bbType.intentional': 'Intentional walk',
 
     'gamesetup.title': 'Start a New Game',
     'gamesetup.opponent': 'Opponent',
@@ -1470,6 +1478,8 @@ export const MESSAGES = {
 
     'playsheet.direction': 'Batted Ball Direction',
     'playsheet.soType': 'Strikeout Type',
+    'playsheet.bbType': 'Walk Type',
+    'playsheet.bbTypeNote': 'An intentional walk still counts as a walk; only the breakdown is kept separately.',
     'playsheet.outType': 'Out Type',
     'playsheet.battedBall': 'Batted ball',
     'playsheet.tapField': 'Tap where the ball landed (anywhere — depth is recorded too)',

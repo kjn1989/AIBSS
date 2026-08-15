@@ -13,7 +13,7 @@ import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarter
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
 import { stateKey, buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, formatRate, BASE_RE, reOf, KOSHIEN_RE, baseReFor } from '../src/lib/flow.js';
 import { teamPower, mostOff, formatPower } from '../src/lib/teamPower.js';
-import { RESULTS as RESULTS_FOR_OUT, newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions, attendeesOf, lastAttendees, autoLineupFrom, subRank } from '../src/lib/model.js';
+import { RESULTS as RESULTS_FOR_OUT, newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions, attendeesOf, lastAttendees, autoLineupFrom, subRank, resultLabelOf, isIntentionalBB } from '../src/lib/model.js';
 import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf, oppLettersInGame, oppBaserunning } from '../src/lib/oppBox.js';
 import { remapPlayerInGame, fillPlayerGaps } from '../src/lib/mergePlayers.js';
 import { computeBoxScore, halfPlayed } from '../src/lib/boxscore.js';
@@ -3583,4 +3583,64 @@ test('batterDrift: 打順に無い番号が記録されていても壊れない'
   // 打順を組み直した直後など、記録の打順が現在の打線に無いことがある
   assert.equal(expectedBatterIndex({ lineup: lineup9, playLogs: [paLogOf(15)] }), null);
   assert.equal(batterDrift({ lineup: lineup9, playLogs: [paLogOf(15)], batterIndex: 0 }, true), null, '判断できないときは黙る');
+});
+
+// ============================================================
+// 故意四球(敬遠)
+// ============================================================
+test('敬遠: 四球の内訳として扱う(結果は bb のまま)', () => {
+  assert.equal(resultLabelOf({ result: 'bb' }), '四球');
+  assert.equal(resultLabelOf({ result: 'bb', intentional: true }), '敬遠');
+  assert.equal(isIntentionalBB({ result: 'bb', intentional: true }), true);
+  assert.equal(isIntentionalBB({ result: 'hbp', intentional: true }), false, '死球は敬遠ではない');
+  // 三振の内訳はこれまでどおり
+  assert.equal(resultLabelOf({ result: 'so', soType: 'looking' }), '見逃し三振');
+  assert.equal(resultLabelOf({ result: 'single' }), 'ヒット');
+});
+
+test('敬遠: playLabel は方向を付けず呼び名だけ差し替える', () => {
+  assert.equal(playLabel('bb', null, null, null, undefined, 'ja', { intentional: true }), '敬遠');
+  assert.equal(playLabel('bb', null, null, null, undefined, 'ja'), '四球');
+  assert.equal(playLabel('bb', null, null, null, undefined, 'en', { intentional: true }), 'IBB');
+});
+
+test('敬遠: 四球にも数え、内訳としても数える(出塁率の分母は変わらない)', () => {
+  const mk = (intentional) => ({
+    atBats: [
+      { playerId: 'p1', result: 'bb', intentional, rbi: 0, snapshot: {} },
+      { playerId: 'p1', result: 'single', rbi: 0, snapshot: {} },
+    ],
+    playLogs: [],
+  });
+  const plain = aggregateBatting([mk(false)]).p1;
+  const ibb = aggregateBatting([mk(true)]).p1;
+  assert.equal(plain.bb, 1);
+  assert.equal(plain.ibb, 0);
+  assert.equal(ibb.bb, 1, '敬遠も四球に数える');
+  assert.equal(ibb.ibb, 1);
+  assert.equal(battingMetrics(ibb).obp, battingMetrics(plain).obp, '出塁率は変わらない');
+});
+
+test('敬遠: 与四球に数えたうえで与故意四球にも入る', () => {
+  const g = {
+    playLogs: [
+      { kind: 'pitcher', inning: 1, isTop: true, payload: { in: 'k1' } },
+      { kind: 'defense', inning: 1, isTop: true, payload: { result: 'bb', intentional: true, outsOnPlay: 0, runs: 0 } },
+      { kind: 'defense', inning: 1, isTop: true, payload: { result: 'bb', outsOnPlay: 0, runs: 0 } },
+    ],
+  };
+  const { records } = rebuildPitchingStats(g);
+  const pr = records.find((r) => r.playerId === 'k1');
+  assert.equal(pr.walks, 2);
+  assert.equal(pr.intentionalWalks, 1);
+});
+
+test('敬遠: 音声で「敬遠」と言えば四球+内訳として拾う', () => {
+  const cands = parseUtterance('ろぐ、敬遠');
+  const bb = cands.find((c) => c.result === 'bb');
+  assert.ok(bb, '四球として拾う');
+  assert.equal(bb.intentional, true);
+  assert.equal(bb.label, '敬遠');
+  const plain = parseUtterance('ろぐ、フォアボール').find((c) => c.result === 'bb');
+  assert.equal(plain.intentional, false);
 });

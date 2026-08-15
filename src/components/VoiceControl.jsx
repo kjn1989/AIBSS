@@ -209,6 +209,7 @@ export default function VoiceControl({ game }) {
         outType: cand.outType,
         contact: cand.contact || null,
         soType: cand.soType,
+        intentional: cand.intentional,
         direction: cand.direction,
         moves: movesOverride || proposal.moves,
         batterTo: proposal.batterTo,

@@ -120,7 +120,10 @@ export function rebuildPitchingStats(game) {
       const def = RESULTS[p.result];
       if (def?.hit) pr.hitsAllowed += 1;
       if (def?.ab) pr.abFaced = (pr.abFaced || 0) + 1;
-      if (p.result === 'bb') pr.walks += 1;
+      if (p.result === 'bb') {
+        pr.walks += 1;
+        if (p.intentional) pr.intentionalWalks = (pr.intentionalWalks || 0) + 1;
+      }
       if (p.result === 'hbp') pr.hitByPitch += 1;
       if (p.result === 'so') pr.strikeouts += 1;
       pr.outsRecorded += p.outsOnPlay || 0;

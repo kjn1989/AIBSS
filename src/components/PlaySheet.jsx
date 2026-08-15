@@ -63,6 +63,8 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
   // 数え始めるとハードヒット率がすぐ嘘になるので、既定値は入れない
   const [contact, setContact] = useState(initial.contact || null);
   const [soType, setSoType] = useState(initial.soType || 'swinging');
+  // 敬遠(故意四球)。四球の内訳なので結果は 'bb' のまま
+  const [intentional, setIntentional] = useState(!!initial.intentional);
   const [dests, setDests] = useState(() => {
     const d = {};
     for (const b of [1, 2, 3]) {
@@ -188,7 +190,7 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
     const soLabel = lang === 'ja' ? SO_TYPES[soType] : t(`soType.${soType}`);
     const label = result === 'so'
       ? soLabel + (batterTo === 1 ? t('playsheet.dropThird') : '')
-      : result === 'out' ? '' : resultLabel;
+      : result === 'out' ? '' : (result === 'bb' && intentional) ? t('result.ibb') : resultLabel;
     const runsSuffix = runs ? t('playsheet.runsSuffix', { n: runs }) : '';
     if (lang === 'ja') return `${[dir, ot, label].filter(Boolean).join(' ')}${runsSuffix}`;
     // 英語は語順が異なるため、空でない要素を半角スペースで連結
@@ -217,6 +219,7 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
         hitAngle: needsDir && point ? point.angle : null,
         hitDepth: needsDir && point ? point.depth : null,
         soType: result === 'so' ? soType : undefined,
+        intentional: result === 'bb' ? intentional : undefined,
         direction: needsDir ? direction : null,
         moves,
         batterTo,
@@ -272,6 +275,21 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
               </button>
             ))}
           </div>
+        </>
+      )}
+
+      {result === 'bb' && (
+        <>
+          <div className="section-title" style={needsDir ? undefined : { marginTop: 0 }}>{t('playsheet.bbType')}</div>
+          <div className="grid2">
+            <button className={intentional ? '' : 'primary'} onClick={() => setIntentional(false)}>
+              {t('bbType.normal')}
+            </button>
+            <button className={intentional ? 'primary' : ''} onClick={() => setIntentional(true)}>
+              {t('bbType.intentional')}
+            </button>
+          </div>
+          <p className="small dim mt8">{t('playsheet.bbTypeNote')}</p>
         </>
       )}
 

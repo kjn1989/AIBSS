@@ -4,7 +4,7 @@
 // - UTF-8 BOM付き(Excel/スマホでの文字化け防止)
 // - ダウンロード / 端末の共有機能(LINE等, Web Share API)
 // ============================================================
-import { RESULTS, DIRECTIONS, OUT_TYPES, SO_TYPES, formatIP } from './model.js';
+import { DIRECTIONS, OUT_TYPES, formatIP, resultLabelOf } from './model.js';
 import { aggregateBatting, aggregatePitching, battingMetrics, pitchingMetrics, fmtAvg, fmt2, fmtPct } from './stats.js';
 
 function esc(v) {
@@ -21,14 +21,14 @@ export function battingCSV(games, nameOf) {
   const stats = aggregateBatting(games);
   const rows = [[
     '選手', '打席', '打数', '安打', '単打', '二塁打', '三塁打', '本塁打', '塁打',
-    '打点', '得点', '盗塁', '四球', '死球', '三振', '犠打', '犠飛', '失策出塁',
+    '打点', '得点', '盗塁', '四球', '敬遠', '死球', '三振', '犠打', '犠飛', '失策出塁',
     '打率', '得点圏打率', '出塁率', '長打率', 'OPS', '進塁打成功率', 'PPA', 'クラッチ打数', '初球安打率', '総投球数',
   ]];
   for (const s of Object.values(stats).sort((a, b) => b.h - a.h)) {
     const m = battingMetrics(s);
     rows.push([
       nameOf(s.playerId), s.pa, s.ab, s.h, s.single, s.double, s.triple, s.hr, s.tb,
-      s.rbi, s.runs, s.sb, s.bb, s.hbp, s.so, s.sacBunt, s.sacFly, s.error,
+      s.rbi, s.runs, s.sb, s.bb, s.ibb, s.hbp, s.so, s.sacBunt, s.sacFly, s.error,
       fmtAvg(m.ba), fmtAvg(m.risp), fmtAvg(m.obp), fmtAvg(m.slg),
       m.ops === null ? '-' : m.ops.toFixed(3), fmtPct(m.adv), fmt2(m.ppa), m.clutch, fmtPct(m.fhit), s.totalPitches,
     ]);
@@ -40,14 +40,14 @@ export function battingCSV(games, nameOf) {
 export function pitchingCSV(games, nameOf) {
   const stats = aggregatePitching(games);
   const rows = [[
-    '投手', '登板', '投球回', '投球数', '失点', '自責点', '被安打', '被打数', '与四球', '与死球', '奪三振',
+    '投手', '登板', '投球回', '投球数', '失点', '自責点', '被安打', '被打数', '与四球', '与故意四球', '与死球', '奪三振',
     '勝利', 'セーブ', 'ホールド', '防御率(7回換算)', '被打率', 'WHIP', 'K/BB',
   ]];
   for (const s of Object.values(stats).sort((a, b) => b.outsRecorded - a.outsRecorded)) {
     const m = pitchingMetrics(s);
     rows.push([
       nameOf(s.playerId), s.games, formatIP(s.outsRecorded), s.pitches, s.runs, s.earnedRuns,
-      s.hitsAllowed, s.abFaced, s.walks, s.hitByPitch, s.strikeouts, s.wins, s.saves, s.holds,
+      s.hitsAllowed, s.abFaced, s.walks, s.intentionalWalks, s.hitByPitch, s.strikeouts, s.wins, s.saves, s.holds,
       m.era === null ? '-' : m.era.toFixed(2), fmtAvg(m.oba),
       m.whip === null ? '-' : m.whip.toFixed(2), m.kbbDisplay,
     ]);
@@ -89,7 +89,7 @@ export function atBatCSV(games, nameOf) {
       const snap = ab.snapshot || {};
       rows.push([
         g.date, g.opponent, snap.inning ?? '', ab.order, nameOf(ab.playerId),
-        (ab.result === 'so' && SO_TYPES[ab.soType]) || RESULTS[ab.result]?.label || ab.result,
+        resultLabelOf(ab),
         ab.outType ? OUT_TYPES[ab.outType] : '',
         ab.direction ? DIRECTIONS[ab.direction] : '',
         // 未記録は空欄。「平凡」と書くと押していないものまで平凡になってしまう

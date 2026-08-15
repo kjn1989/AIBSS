@@ -105,7 +105,7 @@ const RESULT_DICT = {
   triple: ['スリーベース', '三塁打', 'トリプル', '3ベース'],
   hr: ['ホームラン', '本塁打', 'ホーマー', '柵越え', 'スタンドイン', '場外', 'アーチ'],
   out: ['ゴロ', 'フライ', 'ライナー', '凡打', 'ポップ', 'アウト', 'ゲッツー', '併殺', 'ダブルプレー', '正面', '刺された'],
-  bb: ['フォアボール', '四球', 'フォア', '歩いた', '歩かせ', 'ボール4', 'ボールフォア', '押し出し'],
+  bb: ['フォアボール', '四球', 'フォア', '歩いた', '歩かせ', 'ボール4', 'ボールフォア', '押し出し', '敬遠', '故意四球', '申告敬遠'],
   hbp: ['デッドボール', '死球', '当てた', '当たった', 'ぶつけた'],
   so: ['三振', '空振り三振', '見逃し三振', 'サンシン', '空振った', '振り逃げ'],
   error: ['エラー', '失策', 'トンネル', '悪送球', 'お手玉', '落とした', 'ファンブル'],
@@ -217,6 +217,9 @@ export function parseUtterance(rawText) {
     // 三振: 発話に「見逃し/空振り」が含まれていれば確定、なければ確認カードで選ばせる
     const soExplicit = result === 'so' && (text.includes('見逃') || text.includes('空振') || text.includes('からぶ'));
     const soType = result === 'so' ? (text.includes('見逃') ? 'looking' : 'swinging') : null;
+    // 敬遠・故意四球と言われたら、四球の内訳として拾う
+    const intentional = result === 'bb'
+      && (text.includes('敬遠') || text.includes('けいえん') || text.includes('故意四球'));
     candidates.push({
       kind: 'play',
       result,
@@ -225,7 +228,8 @@ export function parseUtterance(rawText) {
       contact: needsDirection(result) ? contact : null,
       soType,
       soExplicit,
-      label: result === 'so' && !soExplicit ? '三振' : playLabel(result, bestDir, outType, soType),
+      intentional,
+      label: result === 'so' && !soExplicit ? '三振' : playLabel(result, bestDir, outType, soType, undefined, 'ja', { intentional }),
       confidence: norm(s) * (uncertain ? 0.75 : 1),
     });
   }
@@ -305,6 +309,7 @@ export function parseDirectionOnly(rawText) {
 // プレイの表示ラベル。lang='en' で英語表記に切替(既定'ja'は従来どおり)。
 // 保存済みログ文言(highlights等)は lang を渡さず日本語のまま維持する。
 // opts.hitAngle を渡すとファウルかどうかを見て表記に足す。
+// opts.intentional を渡すと四球を「敬遠」と表記する。
 // 足さないと、ファウルフライが「左翼フライ・アウト」になってフェアのフライと
 // 区別できなくなる(記録としては別物なので、ログの1行で分かる必要がある)。
 // 角度を持たない呼び出し(音声の解釈中など)は今までどおり動く。
@@ -315,6 +320,8 @@ export function playLabel(result, direction, outType, soType, edition, lang = 'j
     ? (en ? ' (foul)' : `(${translate('ja', 'dir.foul')})`)
     : '';
   if (result === 'so') return en ? translate('en', `soType.${soType || 'swinging'}`) : SO_TYPES[soType || 'swinging'];
+  // 敬遠は方向も打球も無いので、四球と同じ位置に呼び名だけ差し替える
+  if (result === 'bb' && opts.intentional) return translate(en ? 'en' : 'ja', 'result.ibb');
   if (result === 'out') {
     const ot = en ? translate('en', `outType.${outType || 'ground'}`) : outTypeLabel(outType || 'ground', edition);
     return en ? `${dir ? dir + ' ' : ''}${ot}${foul}` : `${dir}${ot}${foul}・アウト`;
