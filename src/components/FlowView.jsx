@@ -232,7 +232,7 @@ export default function FlowView({ game, onClose }) {
           {shape && (
             <div className="fv-now">
               <b className={`fv-lean ${shape.lean}`}>
-                {t(`fv.lean.${shape.lean}.${over ? 'end' : 'now'}`, { p: shape.leanPct })}
+                {t(`fv.lean.${shape.lean}.${over ? 'end' : 'now'}`, { p: shape.leanPct, n: shape.n })}
               </b>
               <div className="fv-peaks">
                 {shape.lowest.cum < -0.3 && (

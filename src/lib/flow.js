@@ -294,8 +294,11 @@ export function judgeFlowTags(game, series = [], opts = {}) {
 // つまり終値を見出しに出しても、すぐ上のスコアボードを分かりにくい単位で
 // 言い直しているだけになる。
 //
-// スコアボードに書いていないのは「どれだけの時間どちらに傾いていたか」と
+// スコアボードに書いていないのは「どれだけの打席をどちらに傾いた状態で過ごしたか」と
 // 「どこが底で、どこまで押し返したか」。線から読めるのはそこなので、そこを言う。
+//
+// 数えるのは打席数。グラフの横軸も打席なので、目で見ている割合とそのまま一致する。
+// (経過時間は記録していないので「時間の何割」とは言えない)
 // ------------------------------------------------------------
 export function flowShape(series = []) {
   if (!series.length) return null;
@@ -313,7 +316,8 @@ export function flowShape(series = []) {
   const lean = belowShare >= 0.6 ? 'them' : belowShare <= 0.4 ? 'us' : 'even';
   return {
     lowest, highest, belowShare, lean,
-    // 見出しに出す割合。傾いていた側の時間を出す
+    n: series.length, // 母数は打席数。見出しでも必ずこの数と一緒に出す
+    // 見出しに出す割合。傾いていた側の打席の割合
     leanPct: Math.round((lean === 'them' ? belowShare : 1 - belowShare) * 100),
   };
 }
