@@ -5,6 +5,7 @@ import { buildRunDists, buildWinModel } from '../lib/winExp.js';
 import { currentRules } from '../lib/rules.js';
 import { aggregateScorers, scorerName } from '../lib/scorers.js';
 import ScorerPicker from './ScorerPicker.jsx';
+import { LinescoreTable } from './GameProgressView.jsx';
 import Sheet from './Sheet.jsx';
 
 // ---- 試合の流れ ----
@@ -20,7 +21,7 @@ const H = 132;
 const PADL = 34;    // 縦軸の数字を置く余白
 const PADB = 16;    // 回のラベルを置く余白
 
-function Chart({ series, tags, order, t }) {
+function Chart({ series, tags, order, t, linescore }) {
   const svgRef = useRef(null);
   // 押した打席。線を見て「ここは何%?」と思ったときに読めるようにする
   const [sel, setSel] = useState(null);
@@ -147,6 +148,9 @@ function Chart({ series, tags, order, t }) {
         <span style={{ color: 'var(--amber)' }}>{t('fv.toThem')}</span>
       </div>
       {inningsOnly && <p className="small dim fv-axis-note">{t('fv.axisInningsOnly')}</p>}
+      {/* 線だけでは「何が起きて動いたのか」が分からない。見慣れた線分スコアを
+          同じ枠の中に置くと、落ちている回とその回の失点が目で結びつく */}
+      {linescore && <div className="fv-line-score">{linescore}</div>}
       {cur ? (
         <div className="fv-read">
           <div className="fv-read-head">
@@ -229,7 +233,10 @@ export default function FlowView({ game, onClose }) {
       ) : (
         <>
           <p className="small dim" style={{ margin: '0 0 10px' }}>{t('fv.lead')}</p>
-          <Chart series={series} tags={judged.tags} order={order} t={t} />
+          <Chart
+            series={series} tags={judged.tags} order={order} t={t}
+            linescore={<LinescoreTable game={game} compact />}
+          />
           {/* 回が1つも進んでいない = アウトが記録されていない。
               このとき線は必ず右肩上がりになり、流れとして読めない */}
           {oneHalf && series.length > 8 && (
