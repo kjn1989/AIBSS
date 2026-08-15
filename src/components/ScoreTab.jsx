@@ -23,6 +23,8 @@ import { canWriteCloud } from '../lib/officialCloud.js';
 import { RULE_PRESETS, presetById, presetLabel, describeRules, initialPresetIdFor, gameEndCheck, pitchLimitCheck, timeLimitCheck, lineupSlotsFor } from '../lib/rules.js';
 import LiveRulesSheet from './LiveRulesSheet.jsx';
 import FlowView from './FlowView.jsx';
+import InningFlowSheet from './InningFlowSheet.jsx';
+import EditPlaySheet from './EditPlaySheet.jsx';
 
 // 投手名は6文字までを基準サイズで、長い名前(カタカナ等)はフォントを縮めて枠内に収める
 function pitcherFont(name) {
@@ -392,7 +394,10 @@ function OppBatterSheet({ game, onClose, onPinchHitter }) {
 }
 
 // ---- スコア手動修正シート(回を指定して±。事後編集で点差が狂ったときの帳尻合わせ用) ----
-function ScoreAdjustSheet({ game, onClose }) {
+// スコア入力中の修正。得点の増減だけでなく、打席の記録そのものも直せるようにする。
+// 打席の直し方はスコアシート側で既に決めてある(回の流れ → その打席を直す)ので、
+// ここでは同じ画面を開く。修正のやり方を2通り作らない。
+function ScoreAdjustSheet({ game, onClose, onOpenFlow }) {
   const { state, dispatch } = useStore();
   const t = useT();
   const [inning, setInning] = useState(game.inning);
@@ -413,6 +418,13 @@ function ScoreAdjustSheet({ game, onClose }) {
           </button>
         ))}
       </div>
+      {/* 打席の記録を直す。回の流れには打席も交代も起きた順に並んでいる */}
+      <button className="mt12" style={{ width: '100%' }} onClick={() => onOpenFlow(inning)}>
+        {t('score.fixPlays', { n: inning })}
+      </button>
+      <p className="small dim mt8">{t('score.fixPlaysHint')}</p>
+
+      <div className="section-title">{t('score.adjustRuns')}</div>
       {[['my', myName, ls.my, game.myScore], ['opp', oppName, ls.opp, game.oppScore]].map(([team, name, innScore, total]) => (
         <div className="flex mt12" key={team}>
           <span className="grow">{name} <span className="dim small">{t('score.adjustDetail', { inning, runs: innScore, total })}</span></span>
@@ -625,6 +637,8 @@ export default function ScoreTab() {
   const [sheet, setSheet] = useState(null); // {kind:'play',result} | {kind:'runner',base} | {kind:'batter'}
   const [showProgress, setShowProgress] = useState(false);
   const [flowMsg, setFlowMsg] = useState(null); // 流れタグを押した直後の手応え表示
+  const [flowInn, setFlowInn] = useState(null); // 回の流れ(打席・交代を直す)
+  const [editLog, setEditLog] = useState(null); // その打席を直す
   // 代打・代走を出した攻撃が終わったら、守備につく前に守備位置を確認する(パワプロと同じ流れ)。
   // 代打がそのまま元の位置に入るとは限らず、他の選手も含めて組み替えることが多いため。
   const [defenseCheck, setDefenseCheck] = useState(null); // { playerIds: [id] }
@@ -910,6 +924,16 @@ export default function ScoreTab() {
       {showProgress && <GameProgressView game={game} onClose={() => setShowProgress(false)} />}
       {sheet?.kind === 'liveRules' && <LiveRulesSheet game={game} onClose={() => setSheet(null)} />}
       {sheet?.kind === 'flowView' && <FlowView game={game} onClose={() => setSheet(null)} />}
+      {/* 打席の修正はスコアシートと同じ画面を使う(やり方を2通り作らない) */}
+      {flowInn != null && (
+        <InningFlowSheet
+          game={game}
+          inning={flowInn}
+          onClose={() => setFlowInn(null)}
+          onEditLog={(l) => { setFlowInn(null); setEditLog(l); }}
+        />
+      )}
+      {editLog && <EditPlaySheet game={game} log={editLog} onClose={() => setEditLog(null)} />}
       {defenseCheck && (
         <DefenseCheckView game={game} newPlayerIds={defenseCheck.playerIds} onClose={() => setDefenseCheck(null)} />
       )}
@@ -970,7 +994,11 @@ export default function ScoreTab() {
         <HighlightSheet game={game} onClose={() => setSheet(null)} />
       )}
       {sheet?.kind === 'scoreAdjust' && (
-        <ScoreAdjustSheet game={game} onClose={() => setSheet(null)} />
+        <ScoreAdjustSheet
+          game={game}
+          onClose={() => setSheet(null)}
+          onOpenFlow={(n) => { setSheet(null); setFlowInn(n); }}
+        />
       )}
       {sheet?.kind === 'note' && (
         <NoteSheet
