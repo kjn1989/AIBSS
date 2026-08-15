@@ -12,7 +12,8 @@ import {
 import { generateDemoData } from '../lib/demo.js';
 import { rebuildPitchingStats } from '../lib/pitchingRebuild.js';
 import { swapTargetIndex } from '../lib/logOrder.js';
-import { describeRulePatch, halfKeyOf, allBatSize } from '../lib/rules.js';
+import { describeRulePatch, halfKeyOf, allBatSize, isTiebreakInning } from '../lib/rules.js';
+import { tiebreakPlacement } from '../lib/tiebreak.js';
 import { resolveStarters, alignmentByInning, findPositionIssues } from '../lib/lineupBox.js';
 
 // 1人しか就けない守備位置(「打」=全員打ち・「控」は複数人可)。位置変更の入れ替え判定に使う。
@@ -411,6 +412,21 @@ function capOuts(game) {
   if (game.outs > 3) game.outs = 3;
 }
 
+// タイブレークの回は走者を置いて始める。置ける状態(その半回がまだ始まっていない)
+// なら置いて true を返す。組み立てそのものは lib/tiebreak.js にある。
+function placeTiebreakRunners(game) {
+  const plan = tiebreakPlacement(game);
+  if (!plan) return false;
+  game.runners = plan.runners;
+  game.outs = plan.outs;
+  game.batterIndex = plan.batterIndex;
+  game.oppBatterIndex = plan.oppBatterIndex;
+  // 打席の途中で宣言されることがある。投げた球は消さず、
+  // 打席開始時のスナップショットだけ置いた走者に合わせ直す
+  if (game.pending) game.pending = { ...game.pending, snapshot: makeSnapshot(game) };
+  return true;
+}
+
 function changeHalf(game) {
   game.outs = 0;
   game.runners = { 1: null, 2: null, 3: null };
@@ -421,6 +437,7 @@ function changeHalf(game) {
     game.isTop = true;
     game.inning += 1;
   }
+  placeTiebreakRunners(game);
 }
 
 // BB/K確定時、タップ漏れがあっても最低限の球数を担保する
@@ -1083,6 +1100,14 @@ export function reducer(state, action) {
       if ('tiebreak' in patch) {
         const { records } = rebuildPitchingStats(g);
         if (records.length) g.pitchingRecords = records;
+        // 回に入ってから宣言することのほうが多い(延長に入って決まる)。
+        // その半回がまだ始まっていなければ、その場で走者を置く。
+        // もう打席が記録されている半回には勝手に置けないので、確認をお願いする
+        const placed = placeTiebreakRunners(g);
+        if (!placed && g.status === 'ongoing' && isTiebreakInning(g, g.inning)
+            && !g.runners[1] && !g.runners[2] && !g.runners[3]) {
+          g.runnerCheck = true;
+        }
       }
       g.updatedAt = Date.now();
       return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };

@@ -2288,6 +2288,18 @@ button.manage-open {
 .fv-src > b { display: block; color: var(--text); margin-bottom: 3px; font-size: 12px; }
 .fv-axis .fv-unit { color: var(--text-dim); font-weight: 400; }
 
+/* グラフを押したときの読み取り。押していないときは同じ高さのヒントを置いて、
+   押すたびに下の内容が跳ね上がらないようにする */
+.fv-tap-hint, .fv-axis-note { margin: 6px 2px 0; }
+.fv-read { margin-top: 6px; padding: 8px 10px; border-radius: 10px; background: var(--bg-2); border: 1px solid var(--border); }
+.fv-read-head { display: flex; gap: 8px; align-items: baseline; font-size: 12px; }
+.fv-read-head > b { flex: none; }
+.fv-read-text { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fv-read-nums { display: flex; gap: 16px; margin-top: 4px; font-size: 12px; color: var(--text-dim); }
+.fv-read-nums b { font-variant-numeric: tabular-nums; margin-left: 4px; }
+.fv-read-nums b.up { color: var(--green); }
+.fv-read-nums b.down { color: var(--amber); }
+
 /* ---- チーム力 ----
    比べる相手が「その場面」なので、1.00(=場面どおり)が基準線になる。
    バーは基準からどちらへどれだけ離れているかを見せる。 */
