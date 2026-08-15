@@ -251,8 +251,16 @@ export function judgeFlowTags(game, series = [], opts = {}) {
       return top;
     };
 
-    if (best([...before].reverse()) >= reactSwing) { verdict[tag.id] = 'post'; continue; }
-    if (best(after) >= minSwing) {
+    // 押す直前にも動き、押したあとにも動く、ということは普通に起きる。
+    // 回の終わりに押せば「攻撃が終わった」動きが直前にあり、そのあと相手の攻撃で
+    // 大きく動く。ここで直前だけを見て「反応」に決めてしまうと、
+    // これから起きることを言い当てていても評価されない。
+    // どちらが大きいかで決める。あとの動きのほうが大きければ、それは読めていたということ。
+    const beforeBest = best([...before].reverse());
+    const afterBest = best(after);
+    if (afterBest >= minSwing && afterBest >= beforeBest) { /* 予兆 */ }
+    else if (beforeBest >= reactSwing) { verdict[tag.id] = 'post'; continue; }
+    if (afterBest >= minSwing) {
       verdict[tag.id] = 'pre';
       // どの区間を先に読めたか(察知率の分子)
       for (const sw of swings) {
