@@ -7,6 +7,7 @@ import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingS
 import FullscreenView from './FullscreenView.jsx';
 import EditPlaySheet from './EditPlaySheet.jsx';
 import InningFlowSheet from './InningFlowSheet.jsx';
+import FlowView from './FlowView.jsx';
 import DefenseFixSheet from './DefenseFixSheet.jsx';
 import PitchingFixSheet from './PitchingFixSheet.jsx';
 import LiveRulesSheet from './LiveRulesSheet.jsx';
@@ -133,6 +134,9 @@ export default function ScoreSheetView({ game, onClose }) {
   const [flowInn, setFlowInn] = useState(null); // 回の流れ(交代のタイミングを直す)
   const [defFix, setDefFix] = useState(null); // 守備・交代(何を直すかを先に選ばせる)
   const [pitFix, setPitFix] = useState(null); // 投手成績(記録から計算した値と並べて見せる)
+  // 試合の流れは、試合が終わってから振り返るもののほうが多い。
+  // スコア入力画面にしか入口が無いと、終わった試合では二度と見られなかった
+  const [showFlow, setShowFlow] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false); // 試合ルール(9人でないのが正しい試合はここで宣言する)
   const logById = new Map((game.playLogs || []).map((l) => [l.id, l]));
   const logByAtBat = new Map();
@@ -429,9 +433,17 @@ export default function ScoreSheetView({ game, onClose }) {
             </>
           )}
 
+          <div className="ss-after">
+            <button type="button" className="ss-flowbtn" onClick={() => setShowFlow(true)}>
+              {t('ss.openFlow')}
+            </button>
+            <p className="small dim">{t('ss.openFlowNote')}</p>
+          </div>
+
           <div className="ss-footer">{t('ss.footer')}</div>
         </div>
       </div>
+      {showFlow && <FlowView game={game} onClose={() => setShowFlow(false)} />}
       {editLog && <EditPlaySheet game={game} log={editLog} onClose={() => setEditLog(null)} />}
       {draft && <EditPlaySheet game={game} draft={draft} onClose={() => setDraft(null)} />}
       {defFix && (

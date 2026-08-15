@@ -315,7 +315,7 @@ export function newMember(name, role = 'マネージャー') {
   };
 }
 
-export function newGame({ opponent = '', isHome = false, date = null, season = '', rules = null, allowReentry = false, attendees = null } = {}) {
+export function newGame({ opponent = '', isHome = false, date = null, season = '', rules = null, allowReentry = false, attendees = null, scorerId = null } = {}) {
   return {
     id: uid(),
     date: date || new Date().toISOString().slice(0, 10),
@@ -331,6 +331,10 @@ export function newGame({ opponent = '', isHome = false, date = null, season = '
     // その試合に来ているメンバー(選手ID の配列)。登録選手が全員来るとは限らない。
     // null = 未設定(この項目より前に作られた試合)。そのときは全員が来ていた扱いにする。
     attendees: Array.isArray(attendees) ? [...attendees] : null,
+    // その試合の記録員(スコアラー)。流れタグは記録員の読みなので、
+    // 誰が付けた試合かが分からないと読みの正答率を積み上げられない。
+    // null = 未設定(この項目より前に作られた試合。集計から外れるだけで記録は壊れない)
+    scorerId,
     startedAt: Date.now(), // 試合開始時刻(時間制限ルールの判定に使用)
     status: 'ongoing', // 'ongoing' | 'finished'
     inning: 1,

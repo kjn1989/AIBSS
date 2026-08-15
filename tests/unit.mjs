@@ -12,6 +12,7 @@ import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstit
 import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarters, findPositionIssues, alignmentByInning } from '../src/lib/lineupBox.js';
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
 import { tiebreakPlacement, backInOrder, halfHasPlays } from '../src/lib/tiebreak.js';
+import { aggregateScorers, rankScorers, scorerName, tagScorerId } from '../src/lib/scorers.js';
 import { stateKey, buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, formatRate, BASE_RE, reOf, KOSHIEN_RE, baseReFor } from '../src/lib/flow.js';
 import { teamPower, mostOff, formatPower } from '../src/lib/teamPower.js';
 import { RESULTS as RESULTS_FOR_OUT, newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions, attendeesOf, lastAttendees, autoLineupFrom, subRank, resultLabelOf, isIntentionalBB } from '../src/lib/model.js';
@@ -3724,4 +3725,71 @@ test('タイブレーク: 回の途中で宣言しても、その回から効く
   const plan = tiebreakPlacement(g);
   assert.ok(plan, '10回から宣言したタイブレークは11回にも効く');
   assert.equal(plan.runners[2].playerId, 'p2');
+});
+
+// ============================================================
+// 記録員(スコアラー)の読みの実績
+// ============================================================
+// 得点期待値は Map で持つので、テストでも同じ作り方で用意する
+const scRe = (games) => buildRunExpectancy(games, '草野球').re;
+// 流れが実際に動く形の試合を作る: 走者なし0アウトから走者が溜まって点が入る
+const scGame = (id, scorerId, tags) => {
+  const pa = (i, runners, outs, runs = 0) => ({
+    id: `${id}-pa${i}`, kind: 'atbat', inning: 1, isTop: true,
+    text: '打席', payload: { beforeRunners: runners, outsBefore: outs, runs },
+  });
+  return {
+    id, scorerId,
+    playLogs: [
+      pa(1, { 1: false, 2: false, 3: false }, 0),
+      ...tags,
+      pa(2, { 1: true, 2: false, 3: false }, 0),
+      pa(3, { 1: true, 2: true, 3: false }, 0),
+      pa(4, { 1: true, 2: true, 3: true }, 0, 2),
+      pa(5, { 1: true, 2: true, 3: false }, 0),
+    ],
+  };
+};
+const flowTag = (id, dir = 'up', scorerId) => ({
+  id, kind: 'flow', inning: 1, isTop: true, text: 'タグ',
+  payload: { dir, scorerId },
+});
+
+test('記録員: 押したタグが記録員に紐づく', () => {
+  const g = scGame('g1', 's1', [flowTag('t1', 'up')]);
+  const map = aggregateScorers([g], scRe([g]));
+  assert.ok(map.s1, '試合の記録員に付く');
+  assert.equal(map.s1.tags, 1);
+  assert.equal(map.s1.games, 1);
+  assert.equal(map.s1.pre + map.s1.post + map.s1.miss, 1, '判定はどれか1つに入る');
+});
+
+test('記録員: タグに焼き込まれた記録員が試合の記録員より優先される', () => {
+  // 途中で記録員が代わっても、押した人のタグは押した人のもの
+  const g = scGame('g2', 's1', [flowTag('t1', 'up', 's2')]);
+  const map = aggregateScorers([g], scRe([g]));
+  assert.equal(map.s2.tags, 1, '押した人に付く');
+  assert.equal(map.s1?.tags || 0, 0, '試合の記録員には付かない');
+  assert.equal(map.s1.games, 1, '察知率の母数は試合の記録員に付く');
+});
+
+test('記録員: 未設定の試合はタグがあっても実績にならない', () => {
+  const g = scGame('g3', null, [flowTag('t1', 'up')]);
+  const map = aggregateScorers([g], scRe([g]));
+  assert.equal(Object.keys(map).length, 0, '誰の読みか分からないものは積み上げない');
+});
+
+test('記録員: 率は押した数で割る／押していなければ null', () => {
+  const g = scGame('g4', 's1', []);
+  const map = aggregateScorers([g], scRe([g]));
+  assert.equal(map.s1.tags, 0);
+  assert.equal(map.s1.hitRate, null, '0回を0割にしない');
+});
+
+test('記録員: 回数の足りない人は上位に出さない', () => {
+  const many = { scorerId: 'a', tags: 10, pre: 6, hitRate: 0.6, games: 3 };
+  const few = { scorerId: 'b', tags: 1, pre: 1, hitRate: 1, games: 1 };
+  const ranked = rankScorers({ a: many, b: few }, 5);
+  assert.equal(ranked[0].scorerId, 'a', '1回だけの満点を先頭にしない');
+  assert.equal(ranked[1].scorerId, 'b');
 });

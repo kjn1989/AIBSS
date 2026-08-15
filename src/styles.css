@@ -1291,6 +1291,12 @@ body.sheet-open .main { overflow: hidden; touch-action: none; }
 .ss-matrix td .ss-cell { display: inline-block; word-break: break-all; line-height: 1.15; }
 .ss-footer { text-align: center; font-size: 10px; color: var(--text-dim); }
 
+/* シートを見終わったあとの行き先。紙には出さない(印刷物に押せないボタンを残さない) */
+.ss-after { margin: 18px 0 14px; }
+.ss-after .small { margin: 6px 2px 0; text-align: center; }
+.ss-flowbtn { width: 100%; }
+@media print { .ss-after { display: none; } }
+
 /* ---- スコアシートの修正モード ----
    シートは見るだけだったので、直すには別画面を探すか文章で頼むしかなかった。
    押したマスがそのまま対象になるので、「何打席目か」を言葉で特定する工程が要らない。 */
@@ -2327,3 +2333,19 @@ button.manage-open {
 /* 相手の控え。記号を選ばせず、名前を入れれば空いている記号を自動で割り当てる */
 .opp-bench { margin-top: 6px; border-top: 1px solid var(--border); padding-top: 4px; }
 .opp-bench .row { padding: 6px 0; }
+
+/* ---- 記録員(スコアラー) ----
+   打った・投げたは選手の成績になるが、「いま流れが来た」を押した判断は記録員のもの。 */
+.scorer-pick select { min-width: 0; }
+.ft-scorer, .fv-scorer {
+  margin-top: 10px; padding: 10px; border-radius: 10px;
+  background: var(--bg-3); border: 1px solid var(--border);
+}
+.ft-scorer > .small, .fv-scorer > .small { display: block; margin-bottom: 6px; }
+.sc-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.sc-table th { text-align: left; font-weight: 600; color: var(--text-dim); font-size: 11px; padding: 4px 6px; }
+.sc-table td { padding: 7px 6px; border-top: 1px solid var(--border); }
+.sc-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.sc-table .sc-name { font-weight: 600; }
+/* 回数が足りない人は率が跳ねるので、同じ濃さで並べない */
+.sc-table tr.thin td { color: var(--text-dim); }
