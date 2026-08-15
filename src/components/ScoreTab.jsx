@@ -623,11 +623,18 @@ export default function ScoreTab() {
   const nameOf = usePlayerName();
   const [sheet, setSheet] = useState(null); // {kind:'play',result} | {kind:'runner',base} | {kind:'batter'}
   const [showProgress, setShowProgress] = useState(false);
+  const [flowMsg, setFlowMsg] = useState(null); // 流れタグを押した直後の手応え表示
   // 代打・代走を出した攻撃が終わったら、守備につく前に守備位置を確認する(パワプロと同じ流れ)。
   // 代打がそのまま元の位置に入るとは限らず、他の選手も含めて組み替えることが多いため。
   const [defenseCheck, setDefenseCheck] = useState(null); // { playerIds: [id] }
   const halfKey = game ? `${game.inning}|${game.isTop ? 'T' : 'B'}` : '';
   const prevHalfRef = useRef(halfKey);
+  // 押した手応えは少ししたら消す。フックは早期returnより前に置く必要がある
+  useEffect(() => {
+    if (!flowMsg) return undefined;
+    const id = setTimeout(() => setFlowMsg(null), 2200);
+    return () => clearTimeout(id);
+  }, [flowMsg]);
   useEffect(() => {
     const prev = prevHalfRef.current;
     prevHalfRef.current = halfKey;
@@ -687,6 +694,10 @@ export default function ScoreTab() {
   // 守備側(攻撃中は相手投手/守備中は自軍投手)が未設定だと球数が記録されない。
   // 選ぶまで投球・結果入力をロックして、球数の記録漏れを防ぐ。
   const needsPitcher = !noLineup && ((myBatting && !game.oppPitcherLetter) || (!myBatting && !game.currentPitcherId));
+
+  // 流れタグ: 押した数と、押した時点の状況(手応え表示に使う)
+  const flowCount = (game.playLogs || []).filter((l) => l.kind === 'flow').length;
+  const flowSit = t(game.isTop ? 'scoreboard.top' : 'scoreboard.bottom', { n: game.inning });
 
   // 今日来ているメンバーから組む。登録順に 投捕一二三遊左中右 を当てていた頃は、
   // 誰がどこを守れるかを見ていなかったので位置がばらばらになっていた
@@ -817,6 +828,30 @@ export default function ScoreTab() {
             <ResultPad onSelect={(result) => setSheet({ kind: 'play', result })} />
           </div>
         )}
+      </div>
+
+      {/* 流れタグ: 感じた瞬間に押す。記録の本体には影響しないので、いつでも押せる */}
+      <div className="card flow-card">
+        <div className="flex">
+          <h2 className="grow" style={{ marginBottom: 0 }}>{t('flowtag.title')}</h2>
+          <span className="small dim">{t('flowtag.hint')}</span>
+        </div>
+        <div className="flow-tap">
+          <button
+            className="ft-up"
+            onClick={() => { dispatch({ type: 'FLOW_TAG', gameId: game.id, dir: 'up' }); setFlowMsg('up'); }}
+          >
+            {t('flowtag.up')}<span>{t('flowtag.upSub')}</span>
+          </button>
+          <button
+            className="ft-down"
+            onClick={() => { dispatch({ type: 'FLOW_TAG', gameId: game.id, dir: 'down' }); setFlowMsg('down'); }}
+          >
+            {t('flowtag.down')}<span>{t('flowtag.downSub')}</span>
+          </button>
+        </div>
+        {flowMsg && <div className={`ft-flash ${flowMsg}`}>{t(`flowtag.saved.${flowMsg}`, { sit: flowSit })}</div>}
+        {flowCount > 0 && <div className="small dim mt8">{t('flowtag.count', { n: flowCount })}</div>}
       </div>
 
       <div className="card">

@@ -990,6 +990,23 @@ export function reducer(state, action) {
       return { ...state, games: { ...state.games, [g.id]: g } };
     }
 
+    // ===== 流れタグ =====
+    // 「いま流れが来た/切れた」をスコアラーが感じた瞬間に1タップで残す。
+    // 押した時点の状況(回・アウト・走者・点差)を一緒に持たせるのが肝で、
+    // これが無いと後から「動く前に押せたか」を判定できない。
+    // 押さなくても何も困らない。記録の本体には一切影響しない。
+    case 'FLOW_TAG': {
+      const g = deep(state.games[action.gameId]);
+      const dir = action.dir === 'down' ? 'down' : 'up';
+      g.playLogs.push(newPlayLog({
+        gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'flow',
+        text: dir === 'up' ? '▲ 流れ来た' : '▼ 流れ切れた',
+        payload: { dir, snapshot: makeSnapshot(g), memo: action.memo || '' },
+      }));
+      g.updatedAt = Date.now();
+      return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
+    }
+
     // ===== 試合中に変わるルール(タイブレーク・守備人数・全員打ち) =====
     // 試合前に決めた rules は土台として残し、「何回から何を変えたか」を積む。
     // fromInning より前の回の記録には効かないので、終わった回を指定して

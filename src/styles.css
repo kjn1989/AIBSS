@@ -2233,3 +2233,17 @@ button.manage-open {
   display: block; width: 100%; margin-top: 8px; background: transparent; border: 0;
   color: var(--text-dim); font-size: 12px; text-decoration: underline; padding: 5px;
 }
+
+/* ---- 流れタグ ----
+   感じた瞬間に押すものなので、探させない・迷わせない。
+   記録の本体には影響しないので、結果パッドが使えない場面でも押せる。 */
+.flow-card .flow-tap { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 10px; }
+.flow-card .flow-tap button {
+  padding: 15px 8px; border-radius: 13px; font-size: 15px; font-weight: 800; line-height: 1.35;
+}
+.flow-card .flow-tap button span { display: block; font-size: 10.5px; font-weight: 600; opacity: .85; margin-top: 3px; }
+.flow-card .ft-up { background: color-mix(in srgb, var(--green) 18%, transparent); border-color: var(--green); color: var(--green); }
+.flow-card .ft-down { background: color-mix(in srgb, var(--amber) 18%, transparent); border-color: var(--amber); color: var(--amber); }
+.flow-card .ft-flash { margin-top: 9px; font-size: 12.5px; font-weight: 700; text-align: center; }
+.flow-card .ft-flash.up { color: var(--green); }
+.flow-card .ft-flash.down { color: var(--amber); }

@@ -18,7 +18,7 @@ import Sheet from './Sheet.jsx';
 const ICON = {
   atbat: '⚾', defense: '⚾', sub: '⇄', oppsub: '⇄',
   pitcher: '⇄', opppitcher: '⇄', sb: '走', run: '◆',
-  runner: '走', change: '—', note: '📝',
+  runner: '走', change: '—', note: '📝', flow: '📈',
 };
 const isPa = isPlateAppearance;
 
