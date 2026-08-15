@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { useStore, useT } from '../state/store.jsx';
-import { buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, formatRate, flowTiltKey, KOSHIEN_RE, KOSHIEN_SOURCE } from '../lib/flow.js';
+import { buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, formatRate, flowShape, KOSHIEN_RE, KOSHIEN_SOURCE } from '../lib/flow.js';
 import { aggregateScorers, scorerName } from '../lib/scorers.js';
 import ScorerPicker from './ScorerPicker.jsx';
 import Sheet from './Sheet.jsx';
@@ -203,7 +203,8 @@ export default function FlowView({ game, onClose }) {
     return aggregateScorers(games, re)[game.scorerId] || null;
   }, [state.games, game.scorerId, re]);
 
-  const cum = series.length ? series[series.length - 1].cum : 0;
+  const shape = useMemo(() => flowShape(series), [series]);
+  const over = game.status === 'finished';
   const VD = { pre: t('fv.pre'), post: t('fv.post'), miss: t('fv.miss') };
   const innOf = (s) => t(s.isTop ? 'scoreboard.top' : 'scoreboard.bottom', { n: s.inning });
   // 全部の打席が同じ半回に入っている = 回が進んでいない
@@ -223,12 +224,27 @@ export default function FlowView({ game, onClose }) {
           {oneHalf && series.length > 8 && (
             <div className="warn-box mt8">{t('fv.stuck', { inn: innOf(series[0]) })}</div>
           )}
-          <div className="fv-now">
-            <b style={{ color: cum >= 0 ? 'var(--green)' : 'var(--amber)' }}>
-              {t(flowTiltKey(game.status, cum), { v: Math.abs(cum).toFixed(1) })}
-            </b>
-            <div className="small dim">{t('fv.nowNote')}</div>
-          </div>
+          {/* 線の終値は出さない。半回ごとにデルタが打ち消し合うので、回の切れ目では
+              積み上げ値は「そのときの点差」と同じ値になる。終値を見出しに出しても、
+              すぐ上のスコアボードを分かりにくい単位で言い直しているだけになる。
+              スコアボードに書いていないのは「どちらに傾いていた時間が長いか」と
+              「どこが底で、どこまで押し返したか」なので、そこを言う */}
+          {shape && (
+            <div className="fv-now">
+              <b className={`fv-lean ${shape.lean}`}>
+                {t(`fv.lean.${shape.lean}.${over ? 'end' : 'now'}`, { p: shape.leanPct })}
+              </b>
+              <div className="fv-peaks">
+                {shape.lowest.cum < -0.3 && (
+                  <span>{t('fv.lowPoint', { inn: innOf(shape.lowest), v: Math.abs(shape.lowest.cum).toFixed(1) })}</span>
+                )}
+                {shape.highest.cum > 0.3 && (
+                  <span>{t('fv.highPoint', { inn: innOf(shape.highest), v: shape.highest.cum.toFixed(1) })}</span>
+                )}
+              </div>
+              <div className="small dim">{t('fv.scaleNote')}</div>
+            </div>
+          )}
 
           {/* 人が「流れが変わった」と言うのは1本ではなく続いた区間。そこを言葉にする */}
           {swings.length > 0 && (

@@ -13,7 +13,7 @@ import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarter
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
 import { tiebreakPlacement, backInOrder, halfHasPlays } from '../src/lib/tiebreak.js';
 import { aggregateScorers, rankScorers, scorerName, tagScorerId } from '../src/lib/scorers.js';
-import { stateKey, buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, formatRate, flowTiltKey, BASE_RE, reOf, KOSHIEN_RE, baseReFor } from '../src/lib/flow.js';
+import { stateKey, buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, formatRate, flowShape, BASE_RE, reOf, KOSHIEN_RE, baseReFor } from '../src/lib/flow.js';
 import { teamPower, mostOff, formatPower } from '../src/lib/teamPower.js';
 import { RESULTS as RESULTS_FOR_OUT, newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions, attendeesOf, lastAttendees, autoLineupFrom, subRank, resultLabelOf, isIntentionalBB } from '../src/lib/model.js';
 import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf, oppLettersInGame, oppBaserunning } from '../src/lib/oppBox.js';
@@ -3794,16 +3794,55 @@ test('記録員: 回数の足りない人は上位に出さない', () => {
   assert.equal(ranked[1].scorerId, 'b');
 });
 
-test('流れ: 終わった試合は過去形で言う', () => {
-  // 振り返って見ているのに「いまは傾いています」と書くと、まだ試合中のように読める
-  assert.equal(flowTiltKey('ongoing', 1.2), 'fv.nowUs');
-  assert.equal(flowTiltKey('ongoing', -1.2), 'fv.nowThem');
-  assert.equal(flowTiltKey('finished', 1.2), 'fv.endUs');
-  assert.equal(flowTiltKey('finished', -1.2), 'fv.endThem');
-  assert.equal(flowTiltKey('finished', 0), 'fv.endUs', '0は自チーム側の言い方に寄せる');
-  // 4つとも辞書にあること(片方だけ足して英語が落ちるのを防ぐ)
-  for (const k of ['fv.nowUs', 'fv.nowThem', 'fv.endUs', 'fv.endThem']) {
-    assert.ok(translate('ja', k, { v: '1.2' }).includes('1.2'), k);
-    assert.ok(translate('en', k, { v: '1.2' }).includes('1.2'), k);
+test('流れ: 積み上げ値は回の切れ目でそのときの点差と同じになる', () => {
+  // これが線の性質そのもの。終値を見出しに出すとスコアボードの言い直しになるので、
+  // 「終値は出さない」という判断の根拠をここで固定する。
+  const re = new Map(Object.entries(BASE_RE));
+  const N = { 1: false, 2: false, 3: false };
+  const R1 = { 1: true, 2: false, 3: false };
+  let n = 0;
+  const pa = (kind, inn, isTop, runners, outs, runs = 0) =>
+    ({ id: 'p' + (++n), kind, inning: inn, isTop, text: '', payload: { beforeRunners: runners, outsBefore: outs, runs } });
+  const logs = [
+    // 1回表 自チーム 0点
+    pa('atbat', 1, true, N, 0), pa('atbat', 1, true, N, 1), pa('atbat', 1, true, N, 2),
+    // 1回裏 相手 2点
+    pa('defense', 1, false, N, 0), pa('defense', 1, false, R1, 0), pa('defense', 1, false, R1, 1, 2),
+    // 2回表 自チーム 3点
+    pa('atbat', 2, true, N, 0), pa('atbat', 2, true, R1, 1, 3),
+    // 2回裏 相手 0点
+    pa('defense', 2, false, N, 0), pa('defense', 2, false, N, 1), pa('defense', 2, false, N, 2),
+  ];
+  const s = flowSeries({ playLogs: logs }, re);
+  const at = (i) => Number(s[i].cum.toFixed(6));
+  assert.equal(at(5), -2, '1回終了時は点差 -2 と一致する');
+  assert.equal(at(10), 1, '2回終了時は点差 +1 と一致する');
+  // 回の途中は塁上のぶんだけ振れる。そこが点差には出ない情報で、線を見る意味になる
+  assert.equal(s[5].runs, 2, '点が入るのはこの打席');
+  assert.ok(s[3].cum < s[2].cum, '相手に走者が出た時点で、点が入る前から下がっている');
+});
+
+test('流れ: 線の形をひとことで言う', () => {
+  const mk = (cums) => cums.map((c, i) => ({ cum: c, inning: i + 1, isTop: true }));
+  const them = flowShape(mk([-1, -2, -3, -1, 0.2]));
+  assert.equal(them.lean, 'them', '4/5が下なら相手に傾いていた試合');
+  assert.equal(them.leanPct, 80);
+  assert.equal(them.lowest.cum, -3);
+  assert.equal(them.highest.cum, 0.2);
+
+  const us = flowShape(mk([1, 2, 3, 1, -0.2]));
+  assert.equal(us.lean, 'us');
+  assert.equal(us.leanPct, 80);
+
+  // ちょうど半々を一方に振り分けない
+  assert.equal(flowShape(mk([1, -1, 1, -1])).lean, 'even');
+  assert.equal(flowShape([]), null);
+
+  // 言い回しは6通りとも両言語にある
+  for (const lean of ['us', 'them', 'even']) {
+    for (const when of ['now', 'end']) {
+      assert.ok(translate('ja', `fv.lean.${lean}.${when}`, { p: 70 }), `ja ${lean}.${when}`);
+      assert.ok(translate('en', `fv.lean.${lean}.${when}`, { p: 70 }), `en ${lean}.${when}`);
+    }
   }
 });
