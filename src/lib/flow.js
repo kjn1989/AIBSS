@@ -202,6 +202,20 @@ export function flowSeries(game, re) {
 // その半回を終えた時点で試合が終わっているか。
 // 延長に入るのは同点のときだけ。規定回の表を終えて後攻がリードしていれば裏は行われない。
 // (winExp モデルが規定回と先攻/後攻を持っているので、そこから判断する)
+// 24状況キー('110|0'等)を走者とアウトに戻す。
+// 半回の頭がどこから始まるかは回によって変わる(タイブレークは走者を置く)。
+export function stateOfKey(key) {
+  const s = String(key || '000|0');
+  const [r = '000', o = '0'] = s.split('|');
+  return {
+    runners: { 1: r[0] === '1', 2: r[1] === '1', 3: r[2] === '1' },
+    outs: Math.max(0, Math.min(2, Number(o) || 0)),
+  };
+}
+
+// その回の半回の開始状態。モデルが持っていなければ走者なし0アウト
+const halfStartOf = (model, inning) => stateOfKey(model?.halfStartKey?.(inning) || '000|0');
+
 export function gameDecided(model, inning, isTop, diff) {
   const reg = Number(model?.regulation) || 7;
   if ((Number(inning) || 0) < reg) return false;
@@ -227,9 +241,11 @@ export function weSeries(game, winExp) {
   let diff = 0; // 自チーム − 相手
   // 試合開始時(1回表・走者なし0アウト・0-0)の勝率。ここが線の出発点になる
   const first = pas[0];
+  const firstInn = Number(first.inning) || 1;
+  const firstSt = halfStartOf(winExp, firstInn);
   let prev = winExp({
-    inning: Number(first.inning) || 1, isTop: !!first.isTop,
-    runners: { 1: false, 2: false, 3: false }, outs: 0, diff: 0,
+    inning: firstInn, isTop: !!first.isTop,
+    runners: firstSt.runners, outs: firstSt.outs, diff: 0,
   });
   const start = prev;
 
@@ -253,13 +269,15 @@ export function weSeries(game, winExp) {
       // 半回が終わって試合も終わった。延長に入るのは同点のときだけ
       we = diff > 0 ? 1 : 0;
     } else {
-      // 半回が終わった。次の半回の頭(走者なし0アウト)から見る
+      // 半回が終わった。次の半回の頭から見る。
+      // タイブレークの回は走者を置いて始まるので、走者なしで見てはいけない。
+      // (先の半回を畳むときはタイブレークを見ているので、ここだけ走者なしにすると
+      //  「自分の回は走者なし・相手の回は走者あり」という非対称な見立てになり、
+      //  無失点で抑えた投手にマイナスが付く)
       const nextTop = !l.isTop;
       const nextInn = (Number(l.inning) || 1) + (l.isTop ? 0 : 1);
-      we = winExp({
-        inning: nextInn, isTop: nextTop,
-        runners: { 1: false, 2: false, 3: false }, outs: 0, diff,
-      });
+      const st = halfStartOf(winExp, nextInn);
+      we = winExp({ inning: nextInn, isTop: nextTop, runners: st.runners, outs: st.outs, diff });
     }
     out.push({
       log: l, id: l.id, inning: Number(l.inning) || 0, isTop: !!l.isTop,
