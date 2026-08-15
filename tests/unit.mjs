@@ -11,7 +11,7 @@ import { swapTargetIndex, timingAnchor } from '../src/lib/logOrder.js';
 import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, assignResultTargets, mergeResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parsePositionSwaps, keepsBattingOrder, explicitOrderChange, stripInningFractions, parseInningRange, parseSlotBatters, parseAtBatDeletions, parseShortResult, isExplicitSubText, inGamePlayerIds, preferInGamePlayers } from '../src/lib/correctionParser.js';
 import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarters, findPositionIssues, alignmentByInning } from '../src/lib/lineupBox.js';
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
-import { tiebreakPlacement, backInOrder, halfHasPlays } from '../src/lib/tiebreak.js';
+import { tiebreakPlacement, backInOrder, halfHasPlays, halfStartKeyOf } from '../src/lib/tiebreak.js';
 import { aggregateScorers, rankScorers, scorerName, tagScorerId } from '../src/lib/scorers.js';
 import { buildRunDists, buildWinModel, priorDist, remainingHalves, SCORE_PROB, MAX_RUNS } from '../src/lib/winExp.js';
 import { stateKey, buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, formatRate, weShape, weSeries, BASE_RE, reOf, KOSHIEN_RE, baseReFor } from '../src/lib/flow.js';
@@ -3940,4 +3940,30 @@ test('WE: 打席の動きは「前の勝率」と「後の勝率」の差', () =
   assert.ok(s[1].delta < 0, 'アウトが増えれば下がる');
   // 前後の差がそのまま delta
   for (const x of s) assert.ok(Math.abs((x.we - (x.we - x.delta)) - x.delta) < 1e-12);
+});
+
+test('WE: タイブレークの回は「走者を置いて始まる」ぶんまで見る', () => {
+  // 残りの半回を走者なしで畳むと、自分の回だけ走者ありに見えて勝率が跳ね上がる。
+  // 両チームとも走者を置いて始まるので、同点なら互角のはず。
+  const { re } = buildRunExpectancy([], null);
+  const { dists } = buildRunDists([], null, re);
+  const game = {
+    isHome: false,
+    rules: { innings: 9, tiebreak: { fromInning: 10, runners: '12', order: 'cont', outs: 0 } },
+  };
+  assert.equal(halfStartKeyOf(game, 10), '110|0', 'タイブレークの回は無死一二塁から始まる');
+  assert.equal(halfStartKeyOf(game, 9), '000|0', 'その前の回はふつうに走者なしから');
+
+  const naive = buildWinModel({ dists, isHome: false, regulation: 9 });
+  const aware = buildWinModel({ dists, isHome: false, regulation: 9, halfStartKey: (i) => halfStartKeyOf(game, i) });
+  const st = { inning: 10, isTop: true, runners: { 1: true, 2: true, 3: false }, outs: 0, diff: 0 };
+  assert.ok(Math.abs(aware(st) - 0.5) < 0.01, `同点のタイブレーク開始は互角: ${aware(st)}`);
+  assert.ok(naive(st) - aware(st) > 0.1, '走者を見落とすと先に攻める側が過大評価される');
+
+  // 満塁・1アウト開始でも同じように互角から始まる
+  const g2 = { isHome: false, rules: { innings: 7, tiebreak: { fromInning: 8, runners: '123', order: 'cont', outs: 1 } } };
+  assert.equal(halfStartKeyOf(g2, 8), '111|1');
+  const m2 = buildWinModel({ dists, isHome: false, regulation: 7, halfStartKey: (i) => halfStartKeyOf(g2, i) });
+  const st2 = { inning: 8, isTop: true, runners: { 1: true, 2: true, 3: true }, outs: 1, diff: 0 };
+  assert.ok(Math.abs(m2(st2) - 0.5) < 0.02, `1アウト満塁開始でも互角: ${m2(st2)}`);
 });
