@@ -2402,3 +2402,23 @@ button.manage-open {
 .cc-table td.up { color: var(--green); }
 .cc-table td.down { color: var(--amber); }
 .cc-table td.dim { color: var(--text-dim); }
+
+/* ---- 期待得点・期待失点の24通りの表 ---- */
+.ret-wrap { overflow-x: auto; }
+.ret-table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 300px; }
+.ret-table th { text-align: left; font-weight: 600; color: var(--text-dim); font-size: 10.5px; padding: 4px 4px; }
+.ret-table td { padding: 6px 4px; border-top: 1px solid var(--border); }
+.ret-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.ret-table .ret-sit { font-weight: 600; white-space: nowrap; }
+.ret-table td.num b { font-weight: 700; }
+/* 回数は「その数字がどれだけ自分たちの記録から来ているか」の目安。小さく併記する */
+.ret-table td.num i { display: block; font-style: normal; font-size: 9px; color: var(--text-dim); }
+.ret-ex { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.ret-ex-row {
+  display: flex; gap: 10px; align-items: baseline; justify-content: space-between;
+  padding: 8px 10px; border-radius: 8px; background: var(--bg-3); border: 1px solid var(--border);
+  font-size: 12px;
+}
+.ret-ex-row > b { flex: none; font-variant-numeric: tabular-nums; }
+.ret-ex-row > b.up { color: var(--green); }
+.ret-ex-row > b.down { color: var(--amber); }
