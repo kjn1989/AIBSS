@@ -209,3 +209,41 @@ export function findDuplicateAtBats(game) {
   }
   return out.sort((a, b) => a.inning - b.inning);
 }
+
+// ------------------------------------------------------------
+// いま打席に入るはずの打順(記録から導く)
+//
+// 打順は記録の並びで決まる。最後に記録した打席の次の枠が、次に来る打者。
+// 画面が持っている打者ポインタ(batterIndex / oppBatterIndex)がこれとずれていたら、
+// 記録と画面が食い違っている。
+//
+// 打席を直したり消したりすると、ここがずれたまま試合が進んでしまい、
+// 実際の打者とアプリの打者が1人違う、という事故になる。
+// 戻り値: 期待されるインデックス(0始まり) | null(まだ判断できない)
+// ------------------------------------------------------------
+function expectedIndexFrom(logs, lineup) {
+  if (!logs.length || !lineup.length) return null;
+  const lastOrder = logs[logs.length - 1].payload.order;
+  const i = lineup.findIndex((l) => Number(l.order) === Number(lastOrder));
+  if (i < 0) return null;
+  return (i + 1) % lineup.length;
+}
+
+export function expectedBatterIndex(game) {
+  return expectedIndexFrom(myAtBatLogs(game), game?.lineup || []);
+}
+
+export function expectedOppBatterIndex(game) {
+  const logs = (game?.playLogs || []).filter((l) => l.kind === 'defense' && l.payload?.order != null);
+  return expectedIndexFrom(logs, game?.oppLineup || []);
+}
+
+// 画面の打者と記録がずれているか。ずれていれば、あるべきインデックスを返す。
+// mine=true で自チーム、false で相手。ずれていなければ null。
+export function batterDrift(game, mine) {
+  if (!game) return null;
+  const expected = mine ? expectedBatterIndex(game) : expectedOppBatterIndex(game);
+  if (expected == null) return null;
+  const cur = Number(mine ? game.batterIndex : game.oppBatterIndex) || 0;
+  return expected === cur ? null : expected;
+}

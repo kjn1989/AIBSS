@@ -22,7 +22,7 @@ import { yearOfDate, yearOfGame, yearsInGames, tenureByPlayer, playedInYear, isA
   gradeOf, entryYearFromGrade, willGraduate, sortByGrade, usesGrade, defaultSchoolType, maxGradeOf,
   defaultYearStartMonth, schoolYearAtSeasonEnd, currentSchoolYear, labelOfYear } from '../src/lib/year.js';
 
-import { rebuildBatters, findDuplicateAtBats, findOrderBreaks, canRebuildOrders } from '../src/lib/battersRebuild.js';
+import { rebuildBatters, findDuplicateAtBats, findOrderBreaks, canRebuildOrders, expectedBatterIndex, expectedOppBatterIndex, batterDrift } from '../src/lib/battersRebuild.js';
 import { ownOffenseStats, ownBatteryStats } from '../src/lib/ownScout.js';
 import { padPointToBall, ballToPadPoint, nearestDirection, depthBand, contactCandidate, ballOf, chartPoint, zoneCounts, zoneOf, POS_BALL, PAD_VB, PAD_ASPECT, padPoint, padWedge, padBandRange, PAD_STANDS_TOP, padSector, padArc, isFoul } from '../src/lib/battedBall.js';
 
@@ -3534,4 +3534,53 @@ test('流れタグ: 大きく動いた直後に押して、あとが静かなら
     own('c3', [0,0,0], 1), own('c4', [0,0,0], 2),   // あとは静か
   ] };
   assert.equal(judgeFlowTags(g, flowSeries(g, null)).verdict.tag, 'post');
+});
+
+
+// ============================================================
+// 画面の打者と記録がずれていないか
+//
+// 実際に起きたこと。回の途中で打席を直したあと、次の回の攻撃で
+// 実際の打者とアプリの打者が1人ずれたまま試合が進んでしまった。
+// 打順は記録の並びで決まるので、最後に記録した打席の次が来るはず。
+// そこと食い違っていれば、その場で気づけるようにする。
+// ============================================================
+const lineup9 = Array.from({ length: 9 }, (_, i) => ({ order: i + 1, playerId: 'p' + i, position: '左' }));
+const paLogOf = (order, kind = 'atbat') => ({ id: `${kind}${order}${Math.random()}`, kind, inning: 1, isTop: true, payload: { order } });
+
+test('expectedBatterIndex: 最後に記録した打席の次が来る', () => {
+  assert.equal(expectedBatterIndex({ lineup: lineup9, playLogs: [paLogOf(1), paLogOf(2), paLogOf(3)] }), 3, '3番のあとは4番(index 3)');
+  assert.equal(expectedBatterIndex({ lineup: lineup9, playLogs: [paLogOf(9)] }), 0, '9番のあとは1番に回る');
+  assert.equal(expectedBatterIndex({ lineup: lineup9, playLogs: [] }), null, '記録が無ければ判断しない');
+  assert.equal(expectedBatterIndex({ lineup: [], playLogs: [paLogOf(1)] }), null, '打順が無ければ判断しない');
+});
+
+test('batterDrift: ずれていればあるべき打順、合っていれば null', () => {
+  const g = { lineup: lineup9, playLogs: [paLogOf(1), paLogOf(2), paLogOf(3)], batterIndex: 3 };
+  assert.equal(batterDrift(g, true), null, '合っていれば何も出さない');
+  assert.equal(batterDrift({ ...g, batterIndex: 4 }, true), 3, '1人先に進んでいたら3を返す');
+  assert.equal(batterDrift({ ...g, batterIndex: 2 }, true), 3, '1人戻っていても3を返す');
+  // 一巡をまたぐ
+  const around = { lineup: lineup9, playLogs: [paLogOf(9)], batterIndex: 1 };
+  assert.equal(batterDrift(around, true), 0, '9番のあとは1番のはず');
+});
+
+test('batterDrift: 相手側も同じように見る', () => {
+  const oppLineup = Array.from({ length: 9 }, (_, i) => ({ order: i + 1, letter: 'ABCDEFGHI'[i] }));
+  const g = { oppLineup, playLogs: [paLogOf(1, 'defense'), paLogOf(2, 'defense')], oppBatterIndex: 2 };
+  assert.equal(expectedOppBatterIndex(g), 2);
+  assert.equal(batterDrift(g, false), null);
+  assert.equal(batterDrift({ ...g, oppBatterIndex: 5 }, false), 2);
+});
+
+test('batterDrift: 全員打ちで打順が9人より多くても回る', () => {
+  const lineup12 = Array.from({ length: 12 }, (_, i) => ({ order: i + 1, playerId: 'p' + i, position: i < 9 ? '左' : '打' }));
+  assert.equal(expectedBatterIndex({ lineup: lineup12, playLogs: [paLogOf(12)] }), 0, '12番のあとは1番');
+  assert.equal(expectedBatterIndex({ lineup: lineup12, playLogs: [paLogOf(9)] }), 9, '9番のあとは10番');
+});
+
+test('batterDrift: 打順に無い番号が記録されていても壊れない', () => {
+  // 打順を組み直した直後など、記録の打順が現在の打線に無いことがある
+  assert.equal(expectedBatterIndex({ lineup: lineup9, playLogs: [paLogOf(15)] }), null);
+  assert.equal(batterDrift({ lineup: lineup9, playLogs: [paLogOf(15)], batterIndex: 0 }, true), null, '判断できないときは黙る');
 });

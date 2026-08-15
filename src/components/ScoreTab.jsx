@@ -18,6 +18,7 @@ import { oppNameOf, oppPositionOf, oppHasName } from '../lib/oppBox.js';
 import GameProgressView from './GameProgressView.jsx';
 import { POSITIONS, OPP_LETTERS, resultCategory, multiOutLabel, positionLabel, attendeesOf, autoLineupFrom } from '../lib/model.js';
 import { playLabel } from '../lib/voiceParser.js';
+import { batterDrift } from '../lib/battersRebuild.js';
 import { convertMemoToPlay, guessPlayFromMemo, maskNames } from '../lib/gemini.js';
 import { canWriteCloud } from '../lib/officialCloud.js';
 import { RULE_PRESETS, presetById, presetLabel, describeRules, initialPresetIdFor, gameEndCheck, pitchLimitCheck, timeLimitCheck, lineupSlotsFor } from '../lib/rules.js';
@@ -710,6 +711,18 @@ export default function ScoreTab() {
   // 選ぶまで投球・結果入力をロックして、球数の記録漏れを防ぐ。
   const needsPitcher = !noLineup && ((myBatting && !game.oppPitcherLetter) || (!myBatting && !game.currentPitcherId));
 
+  // 画面の打者と記録がずれていないか。ずれていればその場で直せるようにする
+  const drift = batterDrift(game, myBatting);
+  const driftLineup = myBatting ? (game.lineup || []) : (game.oppLineup || []);
+  const slotLabel = (i) => {
+    const slot = driftLineup[i];
+    if (!slot) return '';
+    const who = myBatting ? nameOf(slot.playerId) : oppNameOf(game, slot.letter);
+    return t('score.batterSlot', { order: slot.order, name: who });
+  };
+  const driftShown = drift != null ? slotLabel(Number(myBatting ? game.batterIndex : game.oppBatterIndex) || 0) : '';
+  const driftShould = drift != null ? slotLabel(drift) : '';
+
   // 流れタグ: 押した数と、押した時点の状況(手応え表示に使う)
   const flowCount = (game.playLogs || []).filter((l) => l.kind === 'flow').length;
   const flowSit = t(game.isTop ? 'scoreboard.top' : 'scoreboard.bottom', { n: game.inning });
@@ -844,6 +857,33 @@ export default function ScoreTab() {
           </div>
         )}
       </div>
+
+      {/* 打席を直したり消したりすると、次の打者のポインタが記録とずれる。
+          ずれたまま進むと「実際の打者とアプリの打者が1人違う」事故になるので、
+          記録から導いた「次に来るはずの打者」と食い違ったらその場で直せるようにする */}
+      {drift != null && (
+        <div className="warn-box mt8">
+          {t('score.batterDrift', {
+            shown: driftShown,
+            should: driftShould,
+          })}
+          <div className="grid2 mt8">
+            <button
+              className="primary"
+              onClick={() => dispatch({
+                type: myBatting ? 'SET_BATTER_INDEX' : 'OPP_SET_BATTER_INDEX',
+                gameId: game.id,
+                index: drift,
+              })}
+            >
+              {t('score.batterDriftFix', { name: driftShould })}
+            </button>
+            <button onClick={() => setSheet({ kind: myBatting ? 'batter' : 'oppBatter' })}>
+              {t('score.batterDriftPick')}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 記録を直したあと。アウトと得点は足し直せるが、塁上の走者は作り直せない
           (どの走者がどこまで進んだかは打席ごとに人が選んでいて、保存していない) */}
