@@ -1,23 +1,11 @@
 import React from 'react';
 import { useStore, useT, usePlayerName, isMyTeamBatting } from '../state/store.jsx';
-import { computeBoxScore, halfPlayed } from '../lib/boxscore.js';
-import { RESULTS } from '../lib/model.js';
+import { computeBoxScore, halfPlayed, hitsByInning } from '../lib/boxscore.js';
 
 // チーム名の頭文字(先頭グラフェム)。空なら控えの記号を返す。
 function initialOf(name, fallback) {
   const s = (name || '').trim();
   return s ? Array.from(s)[0] : fallback;
-}
-
-// イニング別の安打数を {inning: count} で集計するヘルパ。
-function hitsByInning(entries, inningOf) {
-  const map = {};
-  for (const e of entries) {
-    const inn = inningOf(e);
-    if (!inn) continue;
-    map[inn] = (map[inn] || 0) + 1;
-  }
-  return map;
 }
 
 // ---- 両投手の球数(見るだけ・極小)。1行を左右に二分し、左=自軍投手 / 右=相手投手。
@@ -90,14 +78,7 @@ export default function Scoreboard({ game }) {
   const battingSide = game.isTop ? 'away' : 'home';
 
   // イニング別の安打数(自軍=atBats / 相手=defenseログ)を away/home に振り分け
-  const myHits = hitsByInning(
-    game.atBats.filter((ab) => RESULTS[ab.result]?.hit),
-    (ab) => ab.snapshot?.inning,
-  );
-  const oppHits = hitsByInning(
-    game.playLogs.filter((l) => l.kind === 'defense' && RESULTS[l.payload?.result]?.hit),
-    (l) => l.inning,
-  );
+  const { my: myHits, opp: oppHits } = hitsByInning(game);
   const awayHits = game.isHome ? oppHits : myHits;
   const homeHits = game.isHome ? myHits : oppHits;
 
