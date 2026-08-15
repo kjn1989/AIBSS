@@ -11,7 +11,7 @@ import { swapTargetIndex, timingAnchor } from '../src/lib/logOrder.js';
 import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, assignResultTargets, mergeResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parsePositionSwaps, keepsBattingOrder, explicitOrderChange, stripInningFractions, parseInningRange, parseSlotBatters, parseAtBatDeletions, parseShortResult, isExplicitSubText, inGamePlayerIds, preferInGamePlayers } from '../src/lib/correctionParser.js';
 import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarters, findPositionIssues } from '../src/lib/lineupBox.js';
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
-import { stateKey, buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, formatRate, BASE_RE, reOf } from '../src/lib/flow.js';
+import { stateKey, buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, formatRate, BASE_RE, reOf, KOSHIEN_RE, baseReFor } from '../src/lib/flow.js';
 import { newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions, attendeesOf, lastAttendees, autoLineupFrom, subRank } from '../src/lib/model.js';
 import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf, oppLettersInGame, oppBaserunning } from '../src/lib/oppBox.js';
 import { remapPlayerInGame, fillPlayerGaps } from '../src/lib/mergePlayers.js';
@@ -2985,4 +2985,58 @@ test('formatRate: 打率と同じ書き方', () => {
   assert.equal(formatRate(0.5), '.500');
   assert.equal(formatRate(0), '.000');
   assert.equal(formatRate(null), '—');
+});
+
+
+// ============================================================
+// 甲子園の実測値(明治大学 2018年度卒業研究 / 2015〜2017年 全144試合)
+//
+// 論文は戦術別(ヒッティング/盗塁/バント)の値しか出していないので、
+// 同論文の実行回数で重みを付けて戦術によらない値に直している。
+// その計算がずれていないことを、論文の数字そのものから確かめる。
+// ============================================================
+test('甲子園の実測4状況: 論文の表から重み付けした値と一致する', () => {
+  // [ヒッティング n,値], [盗塁 n,値], [バント n,値] → 期待するキー
+  const rows = [
+    { key: '100|0', h: [351, 0.90], s: [56, 0.71], b: [363, 0.69] },
+    { key: '110|0', h: [62, 1.24], s: [1, 1.00], b: [67, 1.09] },
+    { key: '100|1', h: [481, 0.54], s: [74, 0.66], b: [74, 0.49] },
+    { key: '110|1', h: [241, 0.92], s: [2, 1.00], b: [10, 0.30] },
+  ];
+  for (const r of rows) {
+    const n = r.h[0] + r.s[0] + r.b[0];
+    const want = (r.h[0] * r.h[1] + r.s[0] * r.s[1] + r.b[0] * r.b[1]) / n;
+    assert.equal(KOSHIEN_RE[r.key], Number(want.toFixed(2)), `${r.key}: ${want.toFixed(3)}`);
+  }
+  assert.equal(Object.keys(KOSHIEN_RE).length, 4, '論文にあるのは4状況だけ');
+});
+
+test('baseReFor: ブカツだけ実測値を使い、他のエディションには持ち込まない', () => {
+  const bukatsu = baseReFor('ブカツ(中高大)');
+  assert.equal(bukatsu['100|0'], 0.79, 'ブカツは甲子園の実測値');
+  assert.equal(bukatsu['000|0'], BASE_RE['000|0'], '実測が無い状況は一般値のまま');
+  assert.equal(Object.keys(bukatsu).length, 24, '24状態そろっている');
+  // 草野球・少年野球はバントがここまで多くないので持ち込まない
+  for (const ed of ['草野球', '少年野球', null, undefined]) {
+    assert.equal(baseReFor(ed)['100|0'], BASE_RE['100|0'], `${ed} には持ち込まない`);
+  }
+});
+
+test('baseReFor: 実測を入れても表の形が壊れない', () => {
+  const b = baseReFor('ブカツ(中高大)');
+  // 走者が進むほど高い / アウトが増えるほど低い、が崩れると流れの符号が狂う
+  for (const outs of [0, 1, 2]) {
+    assert.ok(b[`000|${outs}`] < b[`100|${outs}`], `${outs}死: 走者なし < 一塁`);
+    assert.ok(b[`100|${outs}`] < b[`110|${outs}`], `${outs}死: 一塁 < 一二塁`);
+  }
+  for (const st of ['100', '110']) {
+    assert.ok(b[`${st}|0`] > b[`${st}|1`], `${st}: 無死 > 1死`);
+    assert.ok(b[`${st}|1`] > b[`${st}|2`], `${st}: 1死 > 2死`);
+  }
+});
+
+test('buildRunExpectancy: エディションごとに土台が変わる', () => {
+  const empty = [{ id: 'g', playLogs: [] }];
+  assert.equal(Number(buildRunExpectancy(empty, 'ブカツ(中高大)').re.get('100|0').toFixed(2)), 0.79);
+  assert.equal(Number(buildRunExpectancy(empty, '草野球').re.get('100|0').toFixed(2)), BASE_RE['100|0']);
 });
