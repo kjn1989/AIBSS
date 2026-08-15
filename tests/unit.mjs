@@ -15,7 +15,7 @@ import { tiebreakPlacement, backInOrder, halfHasPlays, halfStartKeyOf } from '..
 import { aggregateScorers, rankScorers, scorerName, tagScorerId } from '../src/lib/scorers.js';
 import { buildRunDists, buildWinModel, priorDist, remainingHalves, SCORE_PROB, MAX_RUNS } from '../src/lib/winExp.js';
 import { aggregateContrib, rankContrib, formatContrib } from '../src/lib/contrib.js';
-import { stateKey, buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, formatRate, weShape, weSeries, BASE_RE, reOf, KOSHIEN_RE, baseReFor } from '../src/lib/flow.js';
+import { stateKey, buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, formatRate, weShape, weSeries, stateOfKey, BASE_RE, reOf, KOSHIEN_RE, baseReFor } from '../src/lib/flow.js';
 import { teamPower, mostOff, formatPower } from '../src/lib/teamPower.js';
 import { RESULTS as RESULTS_FOR_OUT, newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions, attendeesOf, lastAttendees, autoLineupFrom, subRank, resultLabelOf, isIntentionalBB } from '../src/lib/model.js';
 import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf, oppLettersInGame, oppBaserunning } from '../src/lib/oppBox.js';
@@ -4069,4 +4069,61 @@ test('貢献: 表示は符号つき、0にマイナスを付けない', () => {
 test('貢献: 並べ替えは勝利貢献の大きい順', () => {
   const rows = [{ playerId: 'a', wpa: 0.1, re24: 5 }, { playerId: 'b', wpa: 0.3, re24: 1 }, { playerId: 'c', wpa: 0.1, re24: 9 }];
   assert.deepEqual(rankContrib(rows).map((x) => x.playerId), ['b', 'c', 'a']);
+});
+
+test('WE: 同点で無失点に抑えた半回は、投手にマイナスが付かない', () => {
+  // 半回の切れ目で「次の半回の頭」を走者なしで見ていると、タイブレークの回で
+  // 「自分の回は走者なし・相手の回は走者あり」という非対称な見立てになり、
+  // 三者凡退に抑えた投手にマイナスが付く。
+  const N = { 1: false, 2: false, 3: false };
+  const R12 = { 1: true, 2: true, 3: false };
+  let n = 0;
+  const pa = (kind, inn, isTop, runners, outs, runs, extra) =>
+    ({ id: 'w' + (++n), kind, inning: inn, isTop, text: '',
+       payload: { beforeRunners: runners, outsBefore: outs, runs, ...extra } });
+  const logs = [];
+  for (let i = 1; i <= 10; i++) {
+    const tb = i >= 10;
+    const start = tb ? R12 : N;
+    for (const isTop of [true, false]) {
+      const kind = isTop ? 'atbat' : 'defense';
+      const who = isTop ? { playerId: 'BAT' } : { pitcherId: 'P' };
+      logs.push(pa(kind, i, isTop, start, 0, 0, who));
+      logs.push(pa(kind, i, isTop, tb ? R12 : N, 1, 0, who));
+      logs.push(pa(kind, i, isTop, tb ? R12 : N, 2, 0, who));
+    }
+  }
+  const game = {
+    id: 'tie', isHome: false, playLogs: logs,
+    rules: { innings: 9, tiebreak: { fromInning: 10, runners: '12', order: 'cont', outs: 0 } },
+  };
+  const { re } = buildRunExpectancy([], null);
+  const { dists } = buildRunDists([], null, re);
+  const we = buildWinModel({
+    dists, isHome: false, regulation: 9, halfStartKey: (i) => halfStartKeyOf(game, i),
+  });
+  const s = weSeries(game, we);
+  const halfSum = {};
+  for (const x of s) {
+    if (x.mine) continue;
+    const k = x.inning;
+    halfSum[k] = (halfSum[k] || 0) + x.delta;
+  }
+  for (const [inn, v] of Object.entries(halfSum)) {
+    assert.ok(v > 0, `${inn}回裏を無失点に抑えてマイナスはあり得ない: ${v}`);
+  }
+  // タイブレークの回でも同じ(ここが直す前にマイナスだった)
+  assert.ok(halfSum[10] > 0, `タイブレークの回も同じ: ${halfSum[10]}`);
+});
+
+test('WE: 状況キーは走者とアウトに戻せる', () => {
+  assert.deepEqual(stateOfKey('000|0'), { runners: { 1: false, 2: false, 3: false }, outs: 0 });
+  assert.deepEqual(stateOfKey('110|0'), { runners: { 1: true, 2: true, 3: false }, outs: 0 });
+  assert.deepEqual(stateOfKey('111|1'), { runners: { 1: true, 2: true, 3: true }, outs: 1 });
+  assert.deepEqual(stateOfKey(undefined), { runners: { 1: false, 2: false, 3: false }, outs: 0 });
+  // stateKey と往復する
+  for (const k of ['000|0', '100|2', '011|1', '111|0']) {
+    const st = stateOfKey(k);
+    assert.equal(stateKey(st.runners, st.outs), k);
+  }
 });

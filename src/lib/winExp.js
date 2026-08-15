@@ -193,8 +193,10 @@ export function buildWinModel({ dists, isHome, regulation, halfStartKey }) {
     }
     return p;
   }
-  // 半回の切れ目で「試合が終わったか」を判定するのに要るので、前提を持たせておく
+  // 半回の切れ目で「試合が終わったか」「次の半回はどの状態から始まるか」を
+  // 判定するのに要るので、前提を持たせておく
   winExp.regulation = Number(regulation) || 7;
   winExp.isHome = !!isHome;
+  winExp.halfStartKey = startKey;
   return winExp;
 }
