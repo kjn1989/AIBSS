@@ -2392,3 +2392,13 @@ button.manage-open {
 .fvls-tot { flex: none; display: flex; justify-content: space-around; font-variant-numeric: tabular-nums; }
 .fvls-tot > b { font-weight: 800; }
 .fvls-tot > i { font-style: normal; color: var(--text-dim); }
+
+/* ---- 勝利貢献 / 得点貢献 ---- */
+.cc-table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 8px; }
+.cc-table th { text-align: left; font-weight: 600; color: var(--text-dim); font-size: 11px; padding: 4px 6px; }
+.cc-table td { padding: 7px 6px; border-top: 1px solid var(--border); }
+.cc-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.cc-table .cc-name { font-weight: 600; }
+.cc-table td.up { color: var(--green); }
+.cc-table td.down { color: var(--amber); }
+.cc-table td.dim { color: var(--text-dim); }
