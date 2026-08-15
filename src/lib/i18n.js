@@ -389,6 +389,7 @@ export const MESSAGES = {
     'score.soConfirmBtn': '三振アウトで確定',
     // Undoバー
     'score.undoPrefix': '↩ 取り消し: {label}',
+    'score.undo.FLOW_TAG': '流れタグ',
     'score.undo.CONFIRM_PLAY': '打席確定',
     'score.undo.ADD_PITCH': '投球',
     'score.undo.RUNNER_EVENT': '走者イベント',
@@ -1653,6 +1654,7 @@ export const MESSAGES = {
     'score.undoMistap': '↩ Mistap (undo 1 pitch)',
     'score.soConfirmBtn': 'Confirm strikeout',
     'score.undoPrefix': '↩ Undo: {label}',
+    'score.undo.FLOW_TAG': 'Momentum tag',
     'score.undo.CONFIRM_PLAY': 'At-bat result',
     'score.undo.ADD_PITCH': 'Pitch',
     'score.undo.RUNNER_EVENT': 'Runner event',

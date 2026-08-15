@@ -557,7 +557,7 @@ function StrikeoutSheet({ game, batterName, initialSoType, onClose, onFurinige }
 // 「1球取り消し」との二重表示・パッドとの重なりを解消)。ラベルは score.undo.<action> で翻訳。
 const UNDO_ACTIONS = new Set([
   'CONFIRM_PLAY', 'ADD_PITCH', 'RUNNER_EVENT', 'SUBSTITUTE', 'SET_PITCHER',
-  'FORCE_CHANGE_HALF', 'SET_RUNNER', 'OPP_SUBSTITUTE', 'OPP_SET_PITCHER',
+  'FORCE_CHANGE_HALF', 'SET_RUNNER', 'OPP_SUBSTITUTE', 'OPP_SET_PITCHER', 'FLOW_TAG',
 ]);
 
 // ---- ルールエンジンの提案バナー(試合終了条件・時間制限・球数警告) ----
