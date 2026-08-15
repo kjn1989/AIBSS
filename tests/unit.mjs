@@ -13,7 +13,8 @@ import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarter
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
 import { tiebreakPlacement, backInOrder, halfHasPlays } from '../src/lib/tiebreak.js';
 import { aggregateScorers, rankScorers, scorerName, tagScorerId } from '../src/lib/scorers.js';
-import { stateKey, buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, formatRate, flowShape, BASE_RE, reOf, KOSHIEN_RE, baseReFor } from '../src/lib/flow.js';
+import { buildRunDists, buildWinModel, priorDist, remainingHalves, SCORE_PROB, MAX_RUNS } from '../src/lib/winExp.js';
+import { stateKey, buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, formatRate, weShape, weSeries, BASE_RE, reOf, KOSHIEN_RE, baseReFor } from '../src/lib/flow.js';
 import { teamPower, mostOff, formatPower } from '../src/lib/teamPower.js';
 import { RESULTS as RESULTS_FOR_OUT, newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions, attendeesOf, lastAttendees, autoLineupFrom, subRank, resultLabelOf, isIntentionalBB } from '../src/lib/model.js';
 import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf, oppLettersInGame, oppBaserunning } from '../src/lib/oppBox.js';
@@ -3730,8 +3731,12 @@ test('タイブレーク: 回の途中で宣言しても、その回から効く
 // ============================================================
 // 記録員(スコアラー)の読みの実績
 // ============================================================
-// 得点期待値は Map で持つので、テストでも同じ作り方で用意する
-const scRe = (games) => buildRunExpectancy(games, '草野球').re;
+// 勝率モデルはテストでも本番と同じ作り方で用意する
+const scRe = (games) => {
+  const { re } = buildRunExpectancy(games, '草野球');
+  const { dists } = buildRunDists(games, '草野球', re);
+  return buildWinModel({ dists, isHome: false, regulation: 9 });
+};
 // 流れが実際に動く形の試合を作る: 走者なし0アウトから走者が溜まって点が入る
 const scGame = (id, scorerId, tags) => {
   const pa = (i, runners, outs, runs = 0) => ({
@@ -3794,9 +3799,9 @@ test('記録員: 回数の足りない人は上位に出さない', () => {
   assert.equal(ranked[1].scorerId, 'b');
 });
 
-test('流れ: 積み上げ値は回の切れ目でそのときの点差と同じになる', () => {
-  // これが線の性質そのもの。終値を見出しに出すとスコアボードの言い直しになるので、
-  // 「終値は出さない」という判断の根拠をここで固定する。
+test('流れ: RE24の積み上げは回の切れ目で点差と一致する(勝率へ移した理由)', () => {
+  // 得点期待値の差を足し上げたものは、回の切れ目でそのときの点差と同じ値になる。
+  // つまり流れの土台にはならない。この性質を固定しておく。
   const re = new Map(Object.entries(BASE_RE));
   const N = { 1: false, 2: false, 3: false };
   const R1 = { 1: true, 2: false, 3: false };
@@ -3823,31 +3828,97 @@ test('流れ: 積み上げ値は回の切れ目でそのときの点差と同じ
 });
 
 test('流れ: 線の形をひとことで言う', () => {
-  const mk = (cums) => cums.map((c, i) => ({ cum: c, inning: i + 1, isTop: true }));
-  const them = flowShape(mk([-1, -2, -3, -1, 0.2]));
-  assert.equal(them.lean, 'them', '4/5が下なら相手に傾いていた試合');
-  assert.equal(them.leanPct, 80);
-  assert.equal(them.n, 5, '母数は打席数(経過時間は記録していない)');
-  assert.equal(them.lowest.cum, -3);
-  assert.equal(them.highest.cum, 0.2);
+  const mk = (rows) => rows.map(([we, diff], i) => ({ we, diff, inning: i + 1, isTop: true }));
+  const sh = weShape(mk([[0.5, 0], [0.3, -1], [0.18, -2], [0.6, 1], [0.94, 3]]));
+  assert.equal(sh.n, 5, '母数は打席数(経過時間は記録していない)');
+  assert.equal(sh.lowest.we, 0.18, 'いちばん苦しかった打席');
+  assert.equal(sh.highest.we, 0.94, 'いちばん良かった打席');
+  // 割合は点差だけで決まる(勝率は後攻が最後に打つぶん偏るので割合には使わない)
+  assert.equal(sh.aheadPct, 40);
+  assert.equal(sh.tiedPct, 20);
+  assert.equal(sh.behindPct, 40);
+  assert.equal(sh.aheadPct + sh.tiedPct + sh.behindPct, 100);
+  assert.equal(weShape([]), null);
+});
 
-  const us = flowShape(mk([1, 2, 3, 1, -0.2]));
-  assert.equal(us.lean, 'us');
-  assert.equal(us.leanPct, 80);
+// ============================================================
+// 勝利期待値(WE)
+// 流れの土台。RE24とちがい 50% が互角で、基準線が動かない
+// ============================================================
+const weModel = ({ isHome = false, regulation = 9, games = [] } = {}) => {
+  const { re } = buildRunExpectancy(games, null);
+  const { dists } = buildRunDists(games, null, re);
+  return buildWinModel({ dists, isHome, regulation });
+};
+const EMPTY = { 1: false, 2: false, 3: false };
 
-  // ちょうど半々を一方に振り分けない
-  assert.equal(flowShape(mk([1, -1, 1, -1])).lean, 'even');
-  assert.equal(flowShape([]), null);
+test('WE: 得点分布は平均と「0点で終わる確率」から組む', () => {
+  const d = priorDist(0.48, SCORE_PROB['000|0']);
+  const sum = d.reduce((a, b) => a + b, 0);
+  assert.ok(Math.abs(sum - 1) < 1e-9, `合計が1になる: ${sum}`);
+  const mean = d.reduce((a, b, k) => a + b * k, 0);
+  assert.ok(Math.abs(mean - 0.48) < 0.02, `平均が指定どおり: ${mean}`);
+  assert.ok(Math.abs(d[0] - (1 - SCORE_PROB['000|0'])) < 1e-9, '0点率が指定どおり');
+  assert.equal(d.length, MAX_RUNS + 1);
+  // 走者が詰まっているほど0点で終わりにくい
+  assert.ok(priorDist(2.29, SCORE_PROB['111|0'])[0] < d[0]);
+});
 
-  // 言い回しは6通りとも両言語にある
-  for (const lean of ['us', 'them', 'even']) {
-    for (const when of ['now', 'end']) {
-      // 打席数が必ず入ること。割合だけだと「何に対する70%か」が言えていない
-      const ja = translate('ja', `fv.lean.${lean}.${when}`, { p: 70, n: 42 });
-      const en = translate('en', `fv.lean.${lean}.${when}`, { p: 70, n: 42 });
-      assert.ok(ja.includes('42') && ja.includes('打席'), `ja ${lean}.${when}: ${ja}`);
-      assert.ok(en.includes('42') && en.includes('plate appearances'), `en ${lean}.${when}: ${en}`);
-      assert.ok(!ja.includes('時間'), `時間では測っていない: ${ja}`);
-    }
-  }
+test('WE: 残りの半回を正しく並べる', () => {
+  // 先攻(isHome=false)の1回表が進行中 → 次は1回裏から9回裏まで
+  const r = remainingHalves(false, 1, true, 9);
+  assert.equal(r.length, 17);
+  assert.deepEqual(r[0], { inning: 1, isTop: false, mine: false });
+  assert.deepEqual(r[16], { inning: 9, isTop: false, mine: false });
+  // 9回表が進行中なら残りは9回裏だけ
+  assert.deepEqual(remainingHalves(false, 9, true, 9), [{ inning: 9, isTop: false, mine: false }]);
+  // 規定を過ぎた延長は「この回で決まる」とみなす
+  assert.equal(remainingHalves(false, 11, true, 9).length, 1);
+  // 最後の半回が終わっていれば残りは無い
+  assert.equal(remainingHalves(false, 9, false, 9).length, 0);
+});
+
+test('WE: 試合開始は互角、点差に対して単調', () => {
+  const we = weModel();
+  const at = (diff) => we({ inning: 1, isTop: true, runners: EMPTY, outs: 0, diff });
+  assert.ok(Math.abs(at(0) - 0.5) < 0.01, `開始は50%: ${at(0)}`);
+  for (let d = -4; d < 4; d++) assert.ok(at(d) < at(d + 1), `点差が増えれば勝率も上がる (${d})`);
+  // 対称性: 先攻・後攻が同じ回数打つ規定では、+dと-dが表裏になる
+  assert.ok(Math.abs(at(3) + at(-3) - 1) < 0.01);
+});
+
+test('WE: 勝負がついた場面を正しく振り切る', () => {
+  const we = weModel(); // 自チームは先攻
+  // 9回裏2死、自チームが1点リード → ほぼ勝ち
+  assert.ok(we({ inning: 9, isTop: false, runners: EMPTY, outs: 2, diff: 1 }) > 0.9);
+  // 9回裏2死、自チームが1点ビハインド → 後攻が勝っているので負けが確定
+  assert.equal(we({ inning: 9, isTop: false, runners: EMPTY, outs: 2, diff: -1 }), 0);
+  // 走者を背負っているほど守り切りにくい
+  const clean = we({ inning: 9, isTop: false, runners: EMPTY, outs: 2, diff: 1 });
+  const jam = we({ inning: 9, isTop: false, runners: { 1: true, 2: true, 3: true }, outs: 2, diff: 1 });
+  assert.ok(jam < clean, '満塁のほうが苦しい');
+});
+
+test('WE: 線は0〜100%に収まり、打席ごとの動きが線の差になる', () => {
+  const we = weModel({ regulation: 2 });
+  let n = 0;
+  const pa = (kind, inn, isTop, runners, outs, runs = 0) =>
+    ({ id: 'w' + (++n), kind, inning: inn, isTop, text: '', payload: { beforeRunners: runners, outsBefore: outs, runs } });
+  const R1 = { 1: true, 2: false, 3: false };
+  const logs = [
+    pa('atbat', 1, true, EMPTY, 0), pa('atbat', 1, true, R1, 0), pa('atbat', 1, true, R1, 1, 2),
+    pa('defense', 1, false, EMPTY, 0), pa('defense', 1, false, EMPTY, 1), pa('defense', 1, false, EMPTY, 2),
+    pa('atbat', 2, true, EMPTY, 0), pa('atbat', 2, true, EMPTY, 1), pa('atbat', 2, true, EMPTY, 2),
+    pa('defense', 2, false, EMPTY, 0), pa('defense', 2, false, EMPTY, 1), pa('defense', 2, false, EMPTY, 2),
+  ];
+  const s = weSeries({ playLogs: logs, isHome: false }, we);
+  assert.equal(s.length, 12);
+  for (const x of s) assert.ok(x.we >= 0 && x.we <= 1, `勝率は0〜1: ${x.we}`);
+  // 2点入った打席は大きく上へ動く
+  assert.ok(s[2].delta > 0.15, `得点した打席は大きく動く: ${s[2].delta}`);
+  // 2点リードのまま終わったので最後は勝ち
+  assert.equal(s[s.length - 1].we, 1);
+  assert.equal(s[s.length - 1].diff, 2, '点差も持ち回る');
+  // 守備側でも自チーム視点なので符号を反転しなくていい(相手を抑えれば上がる)
+  assert.ok(s[5].we >= s[3].we, '相手を0点に抑えた半回は勝率が下がらない');
 });

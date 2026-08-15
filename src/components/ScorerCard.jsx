@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { useStore, useT } from '../state/store.jsx';
 import { buildRunExpectancy, formatRate } from '../lib/flow.js';
+import { buildRunDists, buildWinModel } from '../lib/winExp.js';
+import { currentRules } from '../lib/rules.js';
 import { aggregateScorers, rankScorers, scorerName } from '../lib/scorers.js';
 
 // ---- 記録員の読み ----
@@ -20,8 +22,29 @@ export default function ScorerCard({ games }) {
   const rows = useMemo(() => {
     const real = (games || []).filter((g) => g && !String(g.id).startsWith('demo-'));
     if (!real.length) return [];
-    const { re } = buildRunExpectancy(real, state.settings.edition || '草野球');
-    return rankScorers(aggregateScorers(real, re), MIN_TAGS);
+    const edition = state.settings.edition || '草野球';
+    const { re } = buildRunExpectancy(real, edition);
+    const { dists } = buildRunDists(real, edition, re);
+    // 勝率は先攻/後攻と規定回数で変わるので、試合ごとにモデルを作って渡す
+    const modelFor = (g) => buildWinModel({
+      dists, isHome: !!g.isHome, regulation: currentRules(g)?.innings || 7,
+    });
+    const merged = {};
+    for (const g of real) {
+      const one = aggregateScorers([g], modelFor(g));
+      for (const [id, v] of Object.entries(one)) {
+        if (!merged[id]) merged[id] = { ...v };
+        else {
+          const m = merged[id];
+          for (const k of ['games', 'tags', 'pre', 'post', 'miss', 'swings', 'caught']) m[k] += v[k];
+        }
+      }
+    }
+    for (const v of Object.values(merged)) {
+      v.hitRate = v.tags ? v.pre / v.tags : null;
+      v.catchRate = v.swings ? v.caught / v.swings : null;
+    }
+    return rankScorers(merged, MIN_TAGS);
   }, [games, state.settings.edition]);
 
   // 誰も記録員が設定されていない = この機能をまだ使っていない。空の表は出さない

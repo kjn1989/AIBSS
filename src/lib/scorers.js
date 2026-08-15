@@ -9,7 +9,7 @@
 // 記録員は選手とは別に持つ。スコアラーは選手とは限らない(監督・保護者・部員)し、
 // 選手として登録すると打席が無いのに打者一覧に出てきてしまう。
 // ============================================================
-import { flowSeries, judgeFlowTags } from './flow.js';
+import { weSeries, judgeFlowTags } from './flow.js';
 
 export const scorerName = (settings, id) =>
   (settings?.scorers || []).find((s) => s.id === id)?.name || '';
@@ -23,7 +23,7 @@ export const tagScorerId = (game, tag) => tag?.payload?.scorerId || game?.scorer
 //  読み当て率 = 押したタグのうち「予兆」だったもの / 押したタグ(タグ単位で数える)
 //  察知率     = 実際に大きく動いた区間のうち、押せていたもの / 動いた区間
 //               (区間は試合のもので、タグ1つに割り当てられない。試合の記録員に付ける)
-export function aggregateScorers(games, re, opts = {}) {
+export function aggregateScorers(games, winExp, opts = {}) {
   const map = {};
   const get = (id) => {
     if (!map[id]) {
@@ -38,8 +38,9 @@ export function aggregateScorers(games, re, opts = {}) {
   for (const g of games || []) {
     const tagLogs = (g.playLogs || []).filter((l) => l.kind === 'flow');
     if (!tagLogs.length && !g.scorerId) continue;
-    const series = flowSeries(g, re);
-    const j = judgeFlowTags(g, series, opts);
+    const series = weSeries(g, winExp);
+    // しきい値は勝率(0〜1)の単位。FlowViewの判定とそろえる
+    const j = judgeFlowTags(g, series, { minSwing: 0.12, reactSwing: 0.07, ...opts });
 
     for (const tag of j.tags) {
       const id = tagScorerId(g, tag);

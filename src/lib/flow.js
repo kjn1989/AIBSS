@@ -188,6 +188,89 @@ export function flowSeries(game, re) {
   return out;
 }
 
+// ------------------------------------------------------------
+// 1試合の流れ(勝利期待値)
+//
+// 画面に出す線はこちら。縦軸は「自チームが勝つ確率」で、50%が互角。
+// 打席の前後の差(WPA)が「その打席で勝率をどれだけ動かしたか」になる。
+// 守備側でも自チーム視点の確率なので、符号を反転する必要がない。
+//
+// 戻り値: [{ log, id, inning, isTop, mine, runs, we, delta }]
+//   we    … その打席を終えた時点の勝率
+//   delta … その打席で動いた勝率(WPA)
+// ------------------------------------------------------------
+// その半回を終えた時点で試合が終わっているか。
+// 延長に入るのは同点のときだけ。規定回の表を終えて後攻がリードしていれば裏は行われない。
+// (winExp モデルが規定回と先攻/後攻を持っているので、そこから判断する)
+export function gameDecided(model, inning, isTop, diff) {
+  const reg = Number(model?.regulation) || 7;
+  if ((Number(inning) || 0) < reg) return false;
+  if (!isTop) return diff !== 0;
+  return model?.isHome ? diff > 0 : diff < 0;
+}
+
+export function weSeries(game, winExp) {
+  if (!game || !Array.isArray(game.playLogs) || typeof winExp !== 'function') return [];
+  const pas = game.playLogs.filter(isPa);
+  if (!pas.length) return [];
+
+  const idxInHalf = new Map();
+  const halves = new Map();
+  for (const l of pas) {
+    const k = halfKey(l);
+    if (!halves.has(k)) halves.set(k, []);
+    idxInHalf.set(l.id, halves.get(k).length);
+    halves.get(k).push(l);
+  }
+
+  const out = [];
+  let diff = 0; // 自チーム − 相手
+  // 試合開始時(1回表・走者なし0アウト・0-0)の勝率。ここが線の出発点になる
+  const first = pas[0];
+  let prev = winExp({
+    inning: Number(first.inning) || 1, isTop: !!first.isTop,
+    runners: { 1: false, 2: false, 3: false }, outs: 0, diff: 0,
+  });
+  const start = prev;
+
+  for (const l of pas) {
+    const p = l.payload || {};
+    const runs = Number(p.runs) || 0;
+    const mine = l.kind === 'atbat';
+    diff += mine ? runs : -runs;
+
+    // 打席後の状況 = 同じ半回の次の打席の「打席前」。無ければその半回は終わり
+    const list = halves.get(halfKey(l)) || [];
+    const nxt = list[idxInHalf.get(l.id) + 1];
+    const np = nxt?.payload;
+    let we;
+    if (np?.beforeRunners && np.outsBefore != null && np.outsBefore <= 2) {
+      we = winExp({
+        inning: Number(l.inning) || 1, isTop: !!l.isTop,
+        runners: np.beforeRunners, outs: np.outsBefore, diff,
+      });
+    } else if (gameDecided(winExp, Number(l.inning) || 1, !!l.isTop, diff)) {
+      // 半回が終わって試合も終わった。延長に入るのは同点のときだけ
+      we = diff > 0 ? 1 : 0;
+    } else {
+      // 半回が終わった。次の半回の頭(走者なし0アウト)から見る
+      const nextTop = !l.isTop;
+      const nextInn = (Number(l.inning) || 1) + (l.isTop ? 0 : 1);
+      we = winExp({
+        inning: nextInn, isTop: nextTop,
+        runners: { 1: false, 2: false, 3: false }, outs: 0, diff,
+      });
+    }
+    out.push({
+      log: l, id: l.id, inning: Number(l.inning) || 0, isTop: !!l.isTop,
+      mine, runs, we, delta: we - prev, diff,
+    });
+    prev = we;
+  }
+  out.start = start;
+  return out;
+}
+
 // 続いた区間としての「流れ」。人が「流れが変わった」と言うのは1本のヒットではなく、
 // 同じ方向に続いた数打席のこと。だから同じ向きが続いた区間をまとめて取り出す。
 export function flowRuns(series = [], minSwing = 0.6) {
@@ -287,38 +370,36 @@ export function judgeFlowTags(game, series = [], opts = {}) {
 // ------------------------------------------------------------
 // 線の形をひとことで言う
 //
-// 線の終値そのものは出さない。デルタは半回ごとに打ち消し合うので、
-// 回の切れ目では積み上げ値は「そのときの点差」とぴったり同じ値になる
-// (半回の合計 = その半回の得点 − 開始状態の得点期待値。両チームが同じ回数
-//  ずつ攻撃すれば、開始状態ぶんは相殺される)。
-// つまり終値を見出しに出しても、すぐ上のスコアボードを分かりにくい単位で
-// 言い直しているだけになる。
+// 出すのは2つだけ。
+//  ・いちばん苦しかった打席と、いちばん良かった打席(勝率そのもの)
+//    勝率は0〜100%で基準が動かないので、そのまま読める。
+//  ・リードして進んだ打席・同点だった打席・リードされていた打席の割合
+//    こちらは点差だけで決まるので、どちらが先攻でも偏らない。
 //
-// スコアボードに書いていないのは「どれだけの打席をどちらに傾いた状態で過ごしたか」と
-// 「どこが底で、どこまで押し返したか」。線から読めるのはそこなので、そこを言う。
-//
-// 数えるのは打席数。グラフの横軸も打席なので、目で見ている割合とそのまま一致する。
-// (経過時間は記録していないので「時間の何割」とは言えない)
+// 「勝率が50%を下回っていた打席の割合」は出さない。後攻が最後に打つぶん
+// 同点の試合では先攻がずっと50%を下回るので(これは計算の作為ではなく
+// 本物の優位だが)、見出しの数字にすると互角の試合が劣勢に読めてしまう。
 // ------------------------------------------------------------
-export function flowShape(series = []) {
+export function weShape(series = []) {
   if (!series.length) return null;
   let lowest = series[0];
   let highest = series[0];
-  let below = 0;
+  let ahead = 0;
+  let tied = 0;
+  let behind = 0;
   for (const s of series) {
-    if (s.cum < lowest.cum) lowest = s;
-    if (s.cum > highest.cum) highest = s;
-    if (s.cum < 0) below += 1;
+    if (s.we < lowest.we) lowest = s;
+    if (s.we > highest.we) highest = s;
+    if (s.diff > 0) ahead += 1;
+    else if (s.diff < 0) behind += 1;
+    else tied += 1;
   }
-  const belowShare = below / series.length;
-  // 6割を境にする。5割ちょうどを「傾いていた」と言うと、
-  // ほぼ互角の試合まで一方に振り分けてしまう
-  const lean = belowShare >= 0.6 ? 'them' : belowShare <= 0.4 ? 'us' : 'even';
+  const n = series.length;
+  const pct = (x) => Math.round((x / n) * 100);
   return {
-    lowest, highest, belowShare, lean,
-    n: series.length, // 母数は打席数。見出しでも必ずこの数と一緒に出す
-    // 見出しに出す割合。傾いていた側の打席の割合
-    leanPct: Math.round((lean === 'them' ? belowShare : 1 - belowShare) * 100),
+    lowest, highest, n,
+    // 母数は両チームの全打席。経過時間は記録していないので「時間」では言えない
+    aheadPct: pct(ahead), tiedPct: pct(tied), behindPct: pct(behind),
   };
 }
 
