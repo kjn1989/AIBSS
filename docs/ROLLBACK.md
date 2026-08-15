@@ -6,12 +6,16 @@
 
 | 名前 | 何の時点か |
 |---|---|
-| `before-flow` | 流れ・チーム力を**入れる前**。試合ルール(タイブレーク・守備人数・全員打ち)までは入っている |
-| `with-flow` | 流れ・チーム力を**入れた後**。この文書を書いた時点の `main` |
+| `backup/before-flow` ブランチ<br>`7ad6d7f` | 流れ・チーム力を**入れる前**。試合ルール(タイブレーク・守備人数・全員打ち)までは入っている |
+| `main` | 流れ・チーム力を**入れた後**(いま) |
 
-```
-git tag -n5 -l          # 目印の一覧と説明
-git log before-flow..with-flow --oneline --first-parent   # 間に入ったもの
+同じ内容の注釈つきタグ `before-flow` / `with-flow` もありますが、
+**このリモートはタグの push を受け付けない**ため、ローカルにしかありません。
+確実に残るのは `backup/before-flow` ブランチのほうです。
+
+```bash
+# 間に何が入ったかを見る
+git log backup/before-flow..main --oneline --first-parent
 ```
 
 ## 撤回するもの
@@ -35,11 +39,18 @@ git log before-flow..with-flow --oneline --first-parent   # 間に入ったも�
 気が変わったらこの打ち消しをさらに打ち消せます。
 
 ```bash
+git fetch origin
 git checkout main
-git revert --no-commit before-flow..with-flow
+# この文書(docs/)だけ残して、それ以外を入れる前の状態に戻す
+git restore --source origin/backup/before-flow --staged --worktree -- . ':!docs'
 git commit -m "流れ・チーム力を撤回する"
 git push origin main
 ```
+
+`git revert` は使えません。この範囲にはマージコミットが含まれていて、
+`git revert A..B` はマージを打ち消せずに落ちます(実際に落ちることを確認済み)。
+上の `git restore` は打ち消しコミットを1つ積むだけなので履歴は残り、
+気が変わったらそのコミットをさらに打ち消せます。
 
 ### 方法2: その時点まで巻き戻す（履歴を書き換える）
 
@@ -47,17 +58,20 @@ git push origin main
 一人で使っているときだけ。
 
 ```bash
+git fetch origin
 git checkout main
-git reset --hard before-flow
+git reset --hard origin/backup/before-flow
 git push --force-with-lease origin main
 ```
+
+この方法では `docs/ROLLBACK.md`(この文書)も消えます。
 
 ## 一部だけ残したいとき
 
 機能ごとにコミットが分かれているので、選んで打ち消せます。
 
 ```bash
-git log before-flow..with-flow --oneline --first-parent
+git log backup/before-flow..main --oneline --first-parent
 ```
 
 | 残す/消す単位 | コミット |
@@ -75,6 +89,15 @@ git revert -m 1 <チーム力のコミット>
 
 後ろのものから順に打ち消してください。チーム力は流れの計算(`src/lib/flow.js`)を
 使っているので、流れを先に消すとチーム力が動かなくなります。
+
+## 確認済みのこと
+
+方法1の手順は実際にクローンで実行し、次を確認しています。
+
+- `src` / `tests` / `package.json` が `backup/before-flow` と**完全に一致**する
+- `src/lib/flow.js`・`teamPower.js`・`FlowView.jsx`・`TeamPowerCard.jsx` が消える
+- 単体テストが**215件すべて通る**(流れ・チーム力を入れる前の件数)
+- ja/en のキー整合が通る(1365キー)
 
 ## 記録したデータについて
 
