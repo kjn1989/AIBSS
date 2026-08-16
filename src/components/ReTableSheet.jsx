@@ -10,7 +10,7 @@ import Sheet from './Sheet.jsx';
 // 「うちのチームは無死一塁からこれくらい」が読める。
 
 // 走者の並びは「塁が進むほど下」。8通り × 3アウト = 24通り
-const RUNNER_ROWS = [
+export const RUNNER_ROWS = [
   { key: '000', runners: { 1: false, 2: false, 3: false } },
   { key: '100', runners: { 1: true, 2: false, 3: false } },
   { key: '010', runners: { 1: false, 2: true, 3: false } },
@@ -102,7 +102,16 @@ export default function ReTableSheet({ games, onClose }) {
       <p className="small dim">
         {t('ret.src', { n: total, pct: Math.round(ownShare * 100), k: SHRINK_K })}
       </p>
-      <p className="small dim">{t('ret.srcTiebreak')}</p>
+      {/* 数字は根拠が書いていないと嘘くさくなる。どこが実測でどこが借り物かを言い切る */}
+      <div className="we-part warn">
+        <div className="we-layer-head">
+          <b>{t('ret.baseTitle')}</b>
+          <span className="src-badge borrowed">{t('we.src.borrowed')}</span>
+        </div>
+        <p className="small dim">{t('ret.srcBase')}</p>
+        <p className="small dim">{t('ret.srcKoshien2')}</p>
+      </div>
+      <p className="small dim mt8">{t('ret.srcTiebreak')}</p>
 
       <div className="sheet-actions">
         <button className="primary" style={{ width: '100%' }} onClick={onClose}>{t('action.close')}</button>

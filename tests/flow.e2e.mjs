@@ -227,6 +227,36 @@ try {
   await ret.locator('.sheet-actions button:has-text("閉じる")').click();
   await page.waitForTimeout(500);
 
+  // --- 勝率の作り方も、出どころの札つきで開ける ---
+  // 数値は根拠が書いていないと嘘くさくなる。どこが実測でどこが借り物かを言い切ること
+  await cc.locator('button:has-text("勝率はどう出している")').click();
+  await page.waitForTimeout(800);
+  const wes = page.locator('.sheet:has-text("勝率の作り方")');
+  check('勝率の解説シートが開く', (await wes.count()) >= 1);
+  const weTxt = await wes.innerText();
+  check('実測は1段だけだと最初に言っている', weTxt.includes('実測なのは1段だけ'), weTxt.slice(0, 300));
+  check('借り物だと明言している', weTxt.includes('実測ではありません'), weTxt.slice(0, 1200));
+  check('設計上の選択だと明言している', weTxt.includes('設計上の選択'), weTxt.slice(0, 1200));
+  check('MLBの水準からの借り物だと書いてある', weTxt.includes('MLB'), weTxt.slice(0, 1200));
+  check('していないことを並べている', weTxt.includes('この計算がしていないこと'), weTxt.slice(-800));
+  check('チーム力を持っていないと書いてある', weTxt.includes('チームの強さも投手の質も持っていない'), weTxt.slice(-800));
+  // 出どころの札が実際に付いていること
+  const badges = await page.evaluate(() =>
+    [...document.querySelectorAll('.sheet .src-badge')].map((b) => b.textContent));
+  check('出どころの札が付いている', badges.length >= 5, JSON.stringify(badges));
+  check('実測と借り物の両方の札がある',
+    badges.some((b) => b.includes('実測')) && badges.some((b) => b.includes('実測ではない')),
+    JSON.stringify(badges));
+  // 1点以上入る確率の表が24通り出ている
+  const probRows = await page.evaluate(() =>
+    [...document.querySelectorAll('.sheet .ret-table tbody tr')].map((tr) => tr.querySelectorAll('td.num').length));
+  check('「1点以上入る確率」も24通り出ている',
+    probRows.length === 8 && probRows.every((c) => c === 3), JSON.stringify(probRows));
+  const weOver = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+  check('勝率の解説も横あふれなし', !weOver);
+  await wes.locator('.sheet-actions button:has-text("閉じる")').click();
+  await page.waitForTimeout(500);
+
   // --- 横あふれなし ---
   const over = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   check('横あふれなし', !over);

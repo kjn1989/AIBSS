@@ -7,6 +7,7 @@ import { halfStartKeyOf } from '../lib/tiebreak.js';
 import { aggregateScorers, scorerName } from '../lib/scorers.js';
 import ScorerPicker from './ScorerPicker.jsx';
 import ReTableSheet from './ReTableSheet.jsx';
+import WinExpSheet from './WinExpSheet.jsx';
 import { computeBoxScore, hitsByInning } from '../lib/boxscore.js';
 import Sheet from './Sheet.jsx';
 
@@ -274,6 +275,7 @@ export default function FlowView({ game, onClose }) {
   const t = useT();
   // 線の土台になっている24通りの表そのものを、ここからも開けるようにする
   const [showRe, setShowRe] = useState(false);
+  const [showWe, setShowWe] = useState(false);
 
   // 得点期待値は「自分たちの試合」から作る。相手の打席も材料になる。
   const edition = state.settings.edition || '草野球';
@@ -457,6 +459,9 @@ export default function FlowView({ game, onClose }) {
                 n: KOSHIEN_SOURCE.states, data: KOSHIEN_SOURCE.data, where: KOSHIEN_SOURCE.where,
               })}</>
             )}
+            <button className="small mt8" style={{ width: '100%' }} onClick={() => setShowWe(true)}>
+              {t('we.open')}
+            </button>
             <button className="small mt8" style={{ width: '100%' }} onClick={() => setShowRe(true)}>
               {t('ret.open')}
             </button>
@@ -465,6 +470,7 @@ export default function FlowView({ game, onClose }) {
       )}
 
       {showRe && <ReTableSheet onClose={() => setShowRe(false)} />}
+      {showWe && <WinExpSheet onClose={() => setShowWe(false)} />}
 
       <div className="sheet-actions">
         <button className="primary" onClick={onClose}>{t('action.close')}</button>
