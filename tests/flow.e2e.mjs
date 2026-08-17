@@ -235,17 +235,18 @@ try {
   check('勝率の解説シートが開く', (await wes.count()) >= 1);
   const weTxt = await wes.innerText();
   check('実測は1段だけだと最初に言っている', weTxt.includes('実測なのは1段だけ'), weTxt.slice(0, 300));
-  check('借り物だと明言している', weTxt.includes('実測ではありません'), weTxt.slice(0, 1200));
+  check('自チームの実測ではないと明言している', weTxt.includes('あなたのチームの実測ではない'), weTxt.slice(0, 1600));
   check('設計上の選択だと明言している', weTxt.includes('設計上の選択'), weTxt.slice(0, 1200));
-  check('MLBの水準からの借り物だと書いてある', weTxt.includes('MLB'), weTxt.slice(0, 1200));
+  check('土台の出どころを名指ししている', weTxt.includes('baseball.piupapp.com'), weTxt.slice(0, 1600));
+  check('土台の対象と期間を書いてある', weTxt.includes('NPB') && weTxt.includes('2023'), weTxt.slice(0, 1600));
   check('していないことを並べている', weTxt.includes('この計算がしていないこと'), weTxt.slice(-800));
   check('チーム力を持っていないと書いてある', weTxt.includes('チームの強さも投手の質も持っていない'), weTxt.slice(-800));
   // 出どころの札が実際に付いていること
   const badges = await page.evaluate(() =>
     [...document.querySelectorAll('.sheet .src-badge')].map((b) => b.textContent));
   check('出どころの札が付いている', badges.length >= 5, JSON.stringify(badges));
-  check('実測と借り物の両方の札がある',
-    badges.some((b) => b.includes('実測')) && badges.some((b) => b.includes('実測ではない')),
+  check('自チーム実測とNPB実測の札を区別している',
+    badges.some((b) => b.includes('自チーム実測')) && badges.some((b) => b.includes('自チームではない')),
     JSON.stringify(badges));
   // 1点以上入る確率の表が24通り出ている
   const probRows = await page.evaluate(() =>
