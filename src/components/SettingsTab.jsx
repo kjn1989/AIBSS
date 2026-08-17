@@ -1,3 +1,4 @@
+import { downloadBackup } from '../lib/backup.js';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useStore, usePlayerName, persist, useT } from '../state/store.jsx';
 import { parseFirebaseConfig } from '../lib/cloud.js';
@@ -976,7 +977,6 @@ function DangerZoneCard() {
 function BackupCard() {
   const { state, dispatch } = useStore();
   const t = useT();
-  const stamp = new Date().toISOString().slice(0, 10);
 
   // データ消失対策のリマインド: 最終バックアップからの経過を表示し、古ければ警告する
   const last = state.settings.lastBackupAt;
@@ -989,27 +989,11 @@ function BackupCard() {
     window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true;
 
   const exportBackup = () => {
-    const payload = {
-      // リブランド後も旧バージョンのアプリで復元できるよう、識別子は旧名のまま維持する
-      app: 'aibss-baseball-scorer',
-      version: 1,
-      exportedAt: new Date().toISOString(),
-      players: state.players,
-      members: state.members || [],
-      games: state.games,
-      currentGameId: state.currentGameId,
-      settings: state.settings,
-      demoLoaded: state.demoLoaded,
-    };
-    const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    // 一部ブラウザは非ASCIIのdownload属性を無視するためASCIIファイル名にする
-    a.download = `aibss-backup_${stamp}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    dispatch({ type: 'UPDATE_SETTINGS', patch: { lastBackupAt: Date.now() } });
+    // 中身と書き出しは lib/backup.js に置いてある。画面が落ちたときの受け皿
+    // (ErrorBoundary)からも同じものを呼ぶので、ここで持たない
+    if (downloadBackup(state)) {
+      dispatch({ type: 'UPDATE_SETTINGS', patch: { lastBackupAt: Date.now() } });
+    }
   };
 
   const importBackup = (file) => {

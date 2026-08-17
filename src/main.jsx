@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.jsx';
+import ErrorBoundary from './components/ErrorBoundary.jsx';
 import WatchView from './components/WatchView.jsx';
 import { StoreProvider } from './state/store.jsx';
 import { recoverIfNeeded, requestPersistentStorage } from './lib/durableStore.js';
@@ -15,9 +16,13 @@ const isWatchMode = new URLSearchParams(window.location.search).get('watch') ===
 function mount() {
   ReactDOM.createRoot(document.getElementById('root')).render(
     <React.StrictMode>
-      <StoreProvider>
-        {isWatchMode ? <WatchView /> : <App />}
-      </StoreProvider>
+      {/* いちばん外側の受け皿。ヘッダーやタブバー、ストア自体が落ちたときは
+          タブ単位の境界では受けきれないので、ここでも受ける */}
+      <ErrorBoundary>
+        <StoreProvider>
+          {isWatchMode ? <WatchView /> : <App />}
+        </StoreProvider>
+      </ErrorBoundary>
     </React.StrictMode>
   );
 }

@@ -2537,3 +2537,23 @@ button.manage-open {
   background: var(--bg-2); opacity: .7;
 }
 .fv-story-tag.own { background: var(--accent-2); color: #fff; opacity: 1; }
+
+/* ---- 画面が落ちたときの受け皿 ---- */
+/* 屋外で片手で使う道具なので、まず「記録は消えていない」を大きく出す。
+   次にバックアップ。再読み込みで直らない場合の唯一の逃げ道なので、
+   再読み込みより上に置く */
+.crash { padding: 18px 16px; }
+.crash h2 { margin: 0 0 10px; font-size: 17px; }
+.crash-safe {
+  margin: 0 0 10px; padding: 10px 12px; border-radius: 10px;
+  background: var(--bg-3); font-size: 15px; font-weight: 700;
+}
+.crash button { width: 100%; margin-top: 8px; }
+.crash-ok { color: var(--accent-2); font-weight: 700; margin: 6px 0 0; }
+.crash-detail { margin-top: 14px; }
+.crash-detail summary { font-size: 12px; opacity: .6; cursor: pointer; }
+.crash-detail pre {
+  margin: 8px 0 0; padding: 10px; border-radius: 8px; background: var(--bg-3);
+  font-size: 10.5px; line-height: 1.45; white-space: pre-wrap; word-break: break-all;
+  max-height: 220px; overflow: auto;
+}

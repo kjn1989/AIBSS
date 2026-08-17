@@ -11,6 +11,7 @@ import { swapTargetIndex, timingAnchor } from '../src/lib/logOrder.js';
 import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, assignResultTargets, mergeResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parsePositionSwaps, keepsBattingOrder, explicitOrderChange, stripInningFractions, parseInningRange, parseSlotBatters, parseAtBatDeletions, parseShortResult, isExplicitSubText, inGamePlayerIds, preferInGamePlayers } from '../src/lib/correctionParser.js';
 import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarters, findPositionIssues, alignmentByInning } from '../src/lib/lineupBox.js';
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
+import { backupPayload, backupFileName } from '../src/lib/backup.js';
 import { draftNarrative, noteOf, noteKeyOf, MAX_CLAUSES } from '../src/lib/narrative.js';
 import { tiebreakPlacement, backInOrder, halfHasPlays, halfStartKeyOf } from '../src/lib/tiebreak.js';
 import { aggregateScorers, rankScorers, scorerName, tagScorerId } from '../src/lib/scorers.js';
@@ -4743,4 +4744,46 @@ test('物語: 記録員が書いた文があれば、そちらを使う', () => 
 
 test('物語: 新しい試合は書き直しの入れ物を持っている', () => {
   assert.deepEqual(newGame({}).flowNotes, {});
+});
+
+
+// ============================================================
+// バックアップの書き出し
+//
+// 設定画面の中に閉じていたが、画面が落ちたときの逃げ道としても要る。
+// 設定画面まで辿り着けない場面こそ、いちばん書き出したい。
+// 中身は復元側と揃っていないと意味が無いので、形を固定しておく。
+// ============================================================
+test('バックアップ: 復元できる形を保つ', () => {
+  const p = backupPayload({
+    players: [{ id: 'a' }], members: [{ id: 'm' }], games: { g1: { id: 'g1' } },
+    currentGameId: 'g1', settings: { teamName: 'X' }, demoLoaded: true,
+  });
+  // 識別子とversionは旧バージョンのアプリで復元するための約束。変えない
+  assert.equal(p.app, 'aibss-baseball-scorer');
+  assert.equal(p.version, 1);
+  assert.deepEqual(Object.keys(p), [
+    'app', 'version', 'exportedAt', 'players', 'members', 'games',
+    'currentGameId', 'settings', 'demoLoaded',
+  ]);
+  assert.equal(p.currentGameId, 'g1');
+  assert.equal(Object.keys(p.games).length, 1);
+});
+
+test('バックアップ: 状態が壊れていても書き出せる形になる', () => {
+  // 落ちている最中に呼ばれる。ここでさらに落ちたら逃げ道が無くなる
+  for (const bad of [null, undefined, {}, { games: null }]) {
+    const p = backupPayload(bad);
+    assert.equal(p.app, 'aibss-baseball-scorer');
+    assert.deepEqual(p.players, []);
+    assert.deepEqual(p.games, {});
+    assert.doesNotThrow(() => JSON.stringify(p));
+  }
+});
+
+test('バックアップ: ファイル名はASCIIのみ', () => {
+  // 一部ブラウザは非ASCIIのdownload属性を無視する
+  const name = backupFileName(new Date('2026-08-17T09:00:00Z'));
+  assert.equal(name, 'aibss-backup_2026-08-17.json');
+  assert.ok(/^[\x20-\x7E]+$/.test(name), name);
 });
