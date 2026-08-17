@@ -1,5 +1,7 @@
-// インフィールドフライ e2e
+// 打球パッド下段(ダブルプレー / インフィールドフライ)e2e
 // 守りたいこと:
+//  - ダブルプレーを押したら走者が既定でアウトになり、そのあと打球方向を
+//    押しても消えない(組み直しで消えて確定できなくなっていた)
 //  - 一二塁・2アウト未満のときだけ押せる(規則どおり)
 //  - 押したら選択状態になり、確定まで通る
 //  - 確認文にi18nのキー名が漏れない / 日本語に余計な空白が入らない
@@ -20,7 +22,7 @@ function resolveChromium() {
   for (const c of candidates) if (fs.existsSync(c) && fs.statSync(c).isFile()) return c;
   return undefined;
 }
-const PORT = 4211;
+const PORT = 4212;
 const URL_ = `http://localhost:${PORT}/`;
 const server = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { cwd: root, stdio: 'ignore' });
 for (let i = 0; i < 60; i++) { try { if ((await fetch(URL_)).ok) break; } catch { /* 起動待ち */ } await new Promise((r) => setTimeout(r, 500)); }
@@ -197,7 +199,66 @@ try {
   const defOne = page.locator('.sheet .cpad-foot button:has-text("インフィールドフライ")');
   check('守備側・1死一二塁でも押せる(報告の場面)', !(await defOne.isDisabled()));
 
-  console.log(failures === 0 ? '\n✓ infield fly PASS' : `\n✗ infield fly FAIL (${failures})`);
+    // ============================================================
+  // ダブルプレー: 押したら走者が既定でアウトになり、方向を押しても消えない
+  // ============================================================
+  await page.locator('.sheet-actions button.ghost').click();
+  await page.waitForTimeout(400);
+  // 走者を一塁だけにする
+  for (let i = 0; i < 3; i++) {
+    if ((await baseOn(1)) > 0 && (await baseOn(2)) === 0) break;
+    await page.click('.result-pad button:has-text("三振")');
+    await page.waitForTimeout(700);
+    const c2 = page.locator('.sheet-actions button:has-text("確定")');
+    if (await c2.count()) { await c2.click(); await page.waitForTimeout(700); }
+    for (let k = 0; k < 8; k++) {
+      const locked = await page.locator('.input-locked').count();
+      if (!locked) break;
+      const sel2 = page.locator('select').first();
+      const os2 = await sel2.locator('option').evaluateAll((os) => os.map((o) => o.value).filter(Boolean));
+      if (os2.length) await sel2.selectOption(os2[0]);
+      await page.waitForTimeout(400);
+    }
+    if ((await baseOn(1)) === 0) {
+      await page.click('.result-pad button:has-text("ヒット")');
+      await page.waitForTimeout(350);
+      await pickDir();
+      await page.click('.sheet-actions button:has-text("確定")');
+      await page.waitForTimeout(600);
+    }
+  }
+  check('一塁に走者が居る', (await baseOn(1)) > 0);
+
+  await page.click('.result-pad button:has-text("凡打")');
+  await page.waitForTimeout(500);
+  // 打球方向より先にダブルプレーを押す(報告された順序)
+  const dp = page.locator('.sheet .cpad-foot button:has-text("ダブルプレー")');
+  check('ダブルプレーが押せる', !(await dp.isDisabled()));
+  await dp.click();
+  await page.waitForTimeout(350);
+  // 走者の行き先は .runner-move .dests の中。選択中は 'sel'、アウトは 'sel out'
+  const runnerOut = () => page.evaluate(() => {
+    const row = document.querySelector('.sheet .runner-move');
+    if (!row) return null;
+    const sel = row.querySelector('.dests button.sel');
+    return sel ? sel.textContent.trim() : null;
+  });
+  check('押した時点で走者がアウトになる', (await runnerOut()) === 'アウト', String(await runnerOut()));
+
+  // ここで打球方向を押しても、走者のアウトが消えないこと(消えていた)
+  await pickDir();
+  const warn = await page.locator('.sheet').innerText();
+  check('方向を押しても走者のアウトが残る', (await runnerOut()) === 'アウト', String(await runnerOut()));
+  check('警告が出ない', !warn.includes('ダブルプレーには走者のアウトが必要'), warn.slice(0, 400));
+  check('ダブルプレーのまま確定できる',
+    !(await page.locator('.sheet-actions button.primary').isDisabled()));
+  const outsBefore = await outs();
+  await page.click('.sheet-actions button:has-text("確定")');
+  await page.waitForTimeout(700);
+  check('アウトが2つ増えた', (await outs()) === outsBefore + 2 || (await outs()) < outsBefore,
+    `${outsBefore} → ${await outs()}`);
+
+  console.log(failures === 0 ? '\n✓ out types PASS' : `\n✗ out types FAIL (${failures})`);
 } finally {
   await browser.close();
   server.kill();
