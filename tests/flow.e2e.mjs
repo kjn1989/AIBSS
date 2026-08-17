@@ -238,8 +238,36 @@ try {
   await page.waitForTimeout(400);
   check('マスを押すと数字が読める', (await hm.locator('.hm-read').innerText()).includes('点'),
     await hm.locator('.hm-read').innerText());
-  const hmOver = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
-  check('ヒートマップも横あふれなし', !hmOver);
+  // --- 24マスが1画面に収まっていること ---
+  // 横スクロールにすると右端の「満塁」がいつも隠れる。いちばん見たいマスなので、
+  // 縮めてでも全部見せる。グリッドの子に min-width:0 が無いと右端が切れる
+  const layout = await page.evaluate(() => {
+    const wrap = document.querySelector('.hm-wrap');
+    const cells = [...document.querySelectorAll('.hm-cell')];
+    const labs = [...document.querySelectorAll('.hm-collab')];
+    const clip = (el) => el.scrollWidth > el.clientWidth + 0.5 || el.scrollHeight > el.clientHeight + 0.5;
+    let overlap = 0;
+    for (let i = 0; i < cells.length; i++) {
+      const a = cells[i].getBoundingClientRect();
+      for (let j = i + 1; j < cells.length; j++) {
+        const c = cells[j].getBoundingClientRect();
+        if (a.right > c.left + 0.5 && c.right > a.left + 0.5
+          && a.bottom > c.top + 0.5 && c.bottom > a.top + 0.5) overlap += 1;
+      }
+    }
+    return {
+      page: document.documentElement.scrollWidth - window.innerWidth,
+      wrapScroll: wrap ? wrap.scrollWidth - wrap.clientWidth : -1,
+      clipped: cells.filter(clip).map((c) => c.textContent),
+      labClipped: labs.filter(clip).map((c) => c.textContent),
+      overlap,
+    };
+  });
+  check('ヒートマップも横あふれなし', layout.page <= 1, JSON.stringify(layout));
+  check('横スクロールせずに24マス入る', layout.wrapScroll === 0, String(layout.wrapScroll));
+  check('マスの数字が切れていない', layout.clipped.length === 0, JSON.stringify(layout.clipped));
+  check('列見出しが切れていない', layout.labClipped.length === 0, JSON.stringify(layout.labClipped));
+  check('マスどうしが重なっていない', layout.overlap === 0, String(layout.overlap));
   await hm.locator('.sheet-actions button:has-text("閉じる")').click();
   await page.waitForTimeout(500);
 
