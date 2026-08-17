@@ -99,17 +99,32 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
   const [batterTo, setBatterTo] = useState(initial.batterTo ?? proposal.batterTo);
 
   // 方向を選び直したら走者の既定を組み直す(レフト前↔ライト前で二塁走者が変わる)。
-  // ただし走者を手で動かしたあとは、その判断を上書きしない
+  // ただし走者を手で動かしたあとは、その判断を上書きしない。
+  //
+  // 実際に起きた不具合: ここの判定が initial.outType(シートを開いたときの値)を
+  // 見ていた。シートの中で併殺打を押してから打球方向を押すと、initial は 'dp' では
+  // ないので組み直しが走り、せっかく付けた走者のアウトが消えていた。
+  // 「ダブルプレーには走者のアウトが必要です」が出て確定できなくなる。
+  // いま選ばれている outType を見て、併殺打のあいだは走者のアウトを守る。
   const firstDir = useRef(true);
   useEffect(() => {
     if (firstDir.current) { firstDir.current = false; return; }
-    if (dirTouched || initial.outType === 'dp') return;
-    setDests(() => {
+    if (dirTouched) return;
+    setDests((prev) => {
       const d = {};
       for (const b of [1, 2, 3]) {
         if (!runnersOn[b]) continue;
         const mv = proposal.moves.find((m) => m.from === b);
         d[b] = mv ? mv.to : b;
+      }
+      if (outType === 'dp') {
+        // すでにアウトにしてある走者はそのまま。1人も居なければフォース走者を落とす
+        const wereOut = [1, 2, 3].filter((b) => runnersOn[b] && prev[b] === 'out');
+        if (wereOut.length) for (const b of wereOut) d[b] = 'out';
+        else {
+          const forced = [1, 2, 3].find((b) => runnersOn[b]);
+          if (forced) d[forced] = 'out';
+        }
       }
       return d;
     });
