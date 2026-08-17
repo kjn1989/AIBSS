@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useStore, useT } from '../state/store.jsx';
-import { RESULTS, DIRECTIONS, SO_TYPES, outTypeLabel, allowsFoul } from '../lib/model.js';
+import { RESULTS, DIRECTIONS, SO_TYPES, outTypeLabel, allowsFoul, infieldFlyPossible } from '../lib/model.js';
 import { depthBand, isFoul } from '../lib/battedBall.js';
 import FieldPad from './FieldPad.jsx';
 import BattedBallPad from './BattedBallPad.jsx';
@@ -133,15 +133,19 @@ export default function EditPlaySheet({ game, log, draft, onClose }) {
       <div className="section-title">{t('playsheet.battedBall')}</div>
       {/* 併殺は、その打席が始まった時点で2アウト未満のときだけ。
           既に2アウトなら1つ目のアウトでその回が終わるので起こりえない。
-          古いログには outsBefore が無いので、その場合は従来どおり許す */}
+          古いログには outsBefore が無いので、その場合は従来どおり許す。
+          インフィールドフライは一二塁(満塁を含む)・2アウト未満のときだけ */}
       <BattedBallPad
-        trajectory={outType === 'dp' ? null : outType}
+        trajectory={outType === 'dp' || outType === 'ifly' ? null : outType}
         contact={contact}
         depth={point ? point.depth : null}
         onChange={(tr, c) => { setOutType(tr); setContact(c); }}
         dp={outType === 'dp'}
         onDp={() => setOutType(outType === 'dp' ? 'ground' : 'dp')}
         dpDisabled={result !== 'out' || (p.outsBefore ?? 0) >= 2}
+        ifly={outType === 'ifly'}
+        onIfly={() => setOutType(outType === 'ifly' ? 'fly' : 'ifly')}
+        iflyDisabled={result !== 'out' || !infieldFlyPossible(p.beforeRunners, p.outsBefore ?? 0)}
       />
       {result === 'so' && (
         <>

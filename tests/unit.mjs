@@ -19,7 +19,7 @@ import { aggregateScorersOver, swingScale, OPEN_MIN_SWING, OPEN_REACT_SWING } fr
 import { aggregateContrib, rankContrib, formatContrib } from '../src/lib/contrib.js';
 import { stateKey, buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, formatRate, weShape, weSeries, stateOfKey, BASE_RE, reOf, KOSHIEN_RE, KOSHIEN_WEIGHTS, KOSHIEN_LEVEL, isKoshienMeasured, baseReFor } from '../src/lib/flow.js';
 import { teamPower, mostOff, formatPower } from '../src/lib/teamPower.js';
-import { RESULTS as RESULTS_FOR_OUT, newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions, attendeesOf, lastAttendees, autoLineupFrom, subRank, resultLabelOf, isIntentionalBB } from '../src/lib/model.js';
+import { RESULTS as RESULTS_FOR_OUT, OUT_TYPES, outTypeLabel, infieldFlyPossible, newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions, attendeesOf, lastAttendees, autoLineupFrom, subRank, resultLabelOf, isIntentionalBB } from '../src/lib/model.js';
 import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf, oppLettersInGame, oppBaserunning } from '../src/lib/oppBox.js';
 import { remapPlayerInGame, fillPlayerGaps } from '../src/lib/mergePlayers.js';
 import { computeBoxScore, halfPlayed } from '../src/lib/boxscore.js';
@@ -4449,4 +4449,43 @@ test('監査: 再集計の数え方が、その場の記録(addRun)と同じに�
     assert.equal(erOf({ ...payload, outsOnPlay: 0 }).earnedRuns, live,
       `${c.result} runs=${c.runs}: その場の記録と一致する`);
   }
+});
+
+
+// ============================================================
+// インフィールドフライ
+//
+// 一二塁(満塁を含む)・2アウト未満でしか宣告されない。打者は捕球されなくても
+// アウトで、走者は自分の危険で進める。フライだが犠飛にはならない。
+// 場面が成り立たないのに選べると、記録としてそのまま誤りになる。
+// ============================================================
+test('インフィールドフライ: 一二塁・2アウト未満のときだけ宣告されうる', () => {
+  const on = (a, b, c) => ({ 1: a, 2: b, 3: c });
+  assert.equal(infieldFlyPossible(on(1, 1, 0), 0), true, '一二塁・無死');
+  assert.equal(infieldFlyPossible(on(1, 1, 0), 1), true, '一二塁・1死');
+  assert.equal(infieldFlyPossible(on(1, 1, 1), 0), true, '満塁');
+  assert.equal(infieldFlyPossible(on(1, 1, 0), 2), false, '2アウトでは宣告されない');
+  assert.equal(infieldFlyPossible(on(1, 0, 0), 0), false, '一塁だけでは成立しない');
+  assert.equal(infieldFlyPossible(on(0, 1, 0), 0), false, '二塁だけでは成立しない');
+  assert.equal(infieldFlyPossible(on(0, 1, 1), 0), false, '二三塁は対象外(封殺の状況ではない)');
+  assert.equal(infieldFlyPossible(on(0, 0, 0), 0), false, '走者なし');
+  assert.equal(infieldFlyPossible(null, 0), false, '走者が無くても落ちない');
+});
+
+test('インフィールドフライ: 打数に数えるアウトで、犠飛にはならない', () => {
+  // result は 'out' のまま。内訳(outType)だけが ifly。
+  // 結果種別を増やすと打率の分母を通る道が二重になる
+  assert.equal(OUT_TYPES.ifly, 'インフィールドフライ');
+  assert.equal(RESULTS_FOR_OUT.out.ab, true, '打数に数える');
+  assert.equal(RESULTS_FOR_OUT.out.onBase, false, '打者はアウト');
+  // 犠飛の自動認定は outType === 'fly' が条件。ifly はそこに入らない
+  assert.notEqual('ifly', 'fly');
+});
+
+test('インフィールドフライ: 表示名は全エディション共通', () => {
+  // 少年野球で言い換えるのは併殺打(ゲッツー)だけ。規則の名前は変えない
+  for (const ed of ['草野球', 'ブカツ(中高大)', '少年野球']) {
+    assert.equal(outTypeLabel('ifly', ed), 'インフィールドフライ', ed);
+  }
+  assert.equal(outTypeLabel('dp', '少年野球'), 'ゲッツー', '併殺打だけは言い換える');
 });
