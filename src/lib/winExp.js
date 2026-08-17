@@ -171,8 +171,13 @@ function foldHalf(next, dist, mine) {
 // ふつうの回は '000|0'(走者なし0アウト)だが、タイブレークの回は走者を置いて
 // 始まるので、そこを渡さないと「まだ点が入りやすい回が残っている」ことを
 // 見落として勝率がずれる。
-export function buildWinModel({ dists, isHome, regulation, halfStartKey }) {
+// oppDists … 相手が攻めている半回に使う分布。省略すると dists と同じ(＝互角)。
+// チーム差を入れると「こちらの期待得点は下がり、期待失点は上がる」と逆向きに
+// 動くので、1つの分布では表せない。攻める側で持ち替える。
+export function buildWinModel({ dists, oppDists, isHome, regulation, halfStartKey }) {
   const startKey = typeof halfStartKey === 'function' ? halfStartKey : () => '000|0';
+  const theirs = oppDists || dists;
+  const distFor = (mine, key) => distOf(mine ? dists : theirs, key);
   const cache = new Map(); // "inningT" -> 「その半回が終わった直後」の勝率表
   const tableAfter = (inning, isTop) => {
     const key = `${inning}${isTop ? 'T' : 'B'}`;
@@ -180,7 +185,7 @@ export function buildWinModel({ dists, isHome, regulation, halfStartKey }) {
     let w = terminal();
     const rest = remainingHalves(isHome, inning, isTop, regulation);
     for (let j = rest.length - 1; j >= 0; j--) {
-      w = foldHalf(w, distOf(dists, startKey(rest[j].inning)), rest[j].mine);
+      w = foldHalf(w, distFor(rest[j].mine, startKey(rest[j].inning)), rest[j].mine);
     }
     cache.set(key, w);
     return w;
@@ -193,7 +198,7 @@ export function buildWinModel({ dists, isHome, regulation, halfStartKey }) {
     // 半回が終わっている(アウト3つ)なら、この半回はもう畳まない
     const o = Number(outs);
     if (!(o >= 0 && o <= 2)) return after[clampDiff(diff) + MAX_DIFF];
-    const dist = distOf(dists, stateKey(runners, o));
+    const dist = distFor(mine, stateKey(runners, o));
     let p = 0;
     for (let k = 0; k < dist.length; k++) {
       if (!dist[k]) continue;

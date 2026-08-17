@@ -14,6 +14,7 @@ import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
 import { tiebreakPlacement, backInOrder, halfHasPlays, halfStartKeyOf } from '../src/lib/tiebreak.js';
 import { aggregateScorers, rankScorers, scorerName, tagScorerId } from '../src/lib/scorers.js';
 import { buildRunDists, buildWinModel, priorDist, remainingHalves, SCORE_PROB, MAX_RUNS } from '../src/lib/winExp.js';
+import { TEAM_GAPS, buildGapModel, gapTables, gapOf, scaleDist, scaleDists, S_EXP } from '../src/lib/teamGap.js';
 import { aggregateContrib, rankContrib, formatContrib } from '../src/lib/contrib.js';
 import { stateKey, buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, formatRate, weShape, weSeries, stateOfKey, BASE_RE, reOf, KOSHIEN_RE, KOSHIEN_WEIGHTS, KOSHIEN_LEVEL, isKoshienMeasured, baseReFor } from '../src/lib/flow.js';
 import { teamPower, mostOff, formatPower } from '../src/lib/teamPower.js';
@@ -4168,4 +4169,127 @@ test('WE: 状況キーは走者とアウトに戻せる', () => {
     const st = stateOfKey(k);
     assert.equal(stateKey(st.runners, st.outs), k);
   }
+});
+
+
+// ============================================================
+// 相手との力の差
+//
+// 「得点期待値を0.85倍」ではなく「10回中何回勝てるか」で入れる。倍率は
+// そこから逆に解くので、こちらが決めた数字ではなくなる。
+// 確かめ方: 設定した勝率が、そのままプレイボール時点の勝率になっていること。
+// ============================================================
+const gapDists = () => {
+  const { re } = buildRunExpectancy([], '草野球');
+  return buildRunDists([], '草野球', re).dists;
+};
+const gapModel = (gap, opts = {}) => buildGapModel({
+  dists: gapDists(),
+  isHome: opts.isHome ?? false,
+  regulation: opts.regulation ?? 7,
+  halfStartKey: () => '000|0',
+  gap,
+});
+
+test('チーム差: 設定した勝率が、そのまま開始時の勝率になる', () => {
+  // これが成り立たないと、設定が効いているかを誰も確かめられない
+  for (const g of TEAM_GAPS) {
+    for (const isHome of [false, true]) {
+      const m = gapModel(g.id, { isHome });
+      assert.ok(Math.abs(m.opening - g.win) < 0.002,
+        `${g.id}: 目標 ${g.win} に対し ${m.opening.toFixed(4)}`);
+    }
+  }
+});
+
+test('チーム差: 互角なら倍率はちょうど1で、いままでと1ビットも変わらない', () => {
+  const m = gapModel('even');
+  assert.equal(m.factor, 1, '互角は解かずに1と決め打つ');
+  const dists = gapDists();
+  for (const [k, d] of dists) {
+    assert.deepEqual([...m.own.get(k)], [...d], `${k}: 攻撃時は素通し`);
+    assert.deepEqual([...m.opp.get(k)], [...d], `${k}: 守備時は素通し`);
+  }
+});
+
+test('チーム差: 格上ほど倍率が大きく、順番が入れ替わらない', () => {
+  const fs = TEAM_GAPS.map((g) => gapModel(g.id).factor);
+  for (let i = 1; i < fs.length; i++) {
+    assert.ok(fs[i] < fs[i - 1], `${TEAM_GAPS[i].id} は1つ前より倍率が小さい`);
+  }
+  assert.ok(fs[0] > 1, '胸を借りる = 相手のほうが強い');
+  assert.ok(fs[fs.length - 1] < 1, '胸を貸す = こちらのほうが強い');
+});
+
+test('チーム差: 攻撃時は下がり、守備時は上がる(表が2枚に割れる)', () => {
+  const { re } = buildRunExpectancy([], '草野球');
+  const m = gapModel('challenge');
+  const { off, def } = gapTables(re, m.factor);
+  for (const [k, v] of re) {
+    assert.ok(off.get(k) < v, `${k}: 期待得点は下がる`);
+    assert.ok(def.get(k) > v, `${k}: 期待失点は上がる`);
+    // 同じ倍率で反対向きなので、掛け合わせると元に戻る
+    assert.ok(Math.abs(off.get(k) * def.get(k) - v * v) < 1e-9, `${k}: 反対向きに同じだけ`);
+  }
+});
+
+test('チーム差: 試合が短いほど、同じ勝率を作るのに大きな差が要る', () => {
+  // 短い試合は番狂わせが起きやすい。手で倍率を決めていたら出てこない挙動
+  for (const id of ['borrow', 'challenge']) {
+    const short = gapModel(id, { regulation: 7 }).factor;
+    const long = gapModel(id, { regulation: 9 }).factor;
+    assert.ok(short > long, `${id}: 7回制(${short.toFixed(3)}) > 9回制(${long.toFixed(3)})`);
+  }
+});
+
+test('チーム差: 平均を動かすと「1点以上入る確率」もついてくる', () => {
+  // 平均だけ動かして0点率を据え置くと、「点は入りにくいが入ると大量点」に歪む
+  const d = priorDist(0.5, 0.25);
+  const up = scaleDist(d, 1.5);
+  const mean = (a) => a.reduce((s, p, k) => s + p * k, 0);
+  // priorDist は12点で打ち切るので、平均はその分わずかに足りない。
+  // 見たいのは絶対値ではなく比なので、比で確かめる
+  assert.ok(Math.abs(mean(up) / mean(d) - 1.5) < 1e-3, `平均は1.5倍になる: ${(mean(up) / mean(d)).toFixed(5)}`);
+  assert.ok(1 - up[0] > 1 - d[0], '0点で終わる確率は下がる');
+  // s ≒ RE^0.894 の関係(NPBの2つの表から測った傾き)
+  assert.ok(Math.abs((1 - up[0]) - 0.25 * Math.pow(1.5, S_EXP)) < 1e-6);
+  assert.deepEqual([...scaleDist(d, 1)], [...d], '倍率1なら何もしない');
+});
+
+test('チーム差: 指数0.894はNPBの2つの表から測った値で、よく合っている', () => {
+  // 借り物の係数ではなく、載せている表そのものから出した値であること
+  const keys = Object.keys(BASE_RE);
+  let n = 0; let sx = 0; let sy = 0; let sxx = 0; let sxy = 0;
+  for (const k of keys) {
+    const x = Math.log(BASE_RE[k]); const y = Math.log(SCORE_PROB[k]);
+    n += 1; sx += x; sy += y; sxx += x * x; sxy += x * y;
+  }
+  const slope = (n * sxy - sx * sy) / (n * sxx - sx * sx);
+  assert.equal(Number(slope.toFixed(3)), S_EXP, 'コードの指数は回帰の傾きと一致する');
+});
+
+test('チーム差: 5段階の勝率は両端を0/100%にしていない', () => {
+  // 勝率0%からは動きようがない。WPAが全員ゼロになり、線が真っ平らになる
+  for (const g of TEAM_GAPS) {
+    assert.ok(g.win > 0 && g.win < 1, `${g.id}: ${g.win}`);
+  }
+  assert.equal(TEAM_GAPS.length, 5);
+  assert.equal(gapOf('even').win, 0.5);
+  assert.equal(gapOf('存在しないid').id, 'even', '知らない値は互角に倒す');
+});
+
+test('チーム差: 勝率モデルは攻撃側と守備側で別の分布を使える', () => {
+  const dists = gapDists();
+  const base = { isHome: false, regulation: 7, halfStartKey: () => '000|0' };
+  const at = (we) => we({ inning: 1, isTop: true, runners: { 1: false, 2: false, 3: false }, outs: 0, diff: 0 });
+  // oppDists を渡さなければ今までどおり(片方だけの分布)
+  assert.ok(Math.abs(at(buildWinModel({ dists, ...base })) - 0.5) < 1e-9, '同じ分布なら五分');
+  // 相手だけ強くすれば勝率は下がる
+  const weaker = buildWinModel({ dists, oppDists: scaleDists(dists, 1.3), ...base });
+  assert.ok(at(weaker) < 0.5, '相手の攻撃だけ上げれば勝率は下がる');
+});
+
+test('チーム差: 新しい試合の既定は互角', () => {
+  assert.equal(newGame({}).teamGap, 'even');
+  assert.equal(newGame({ teamGap: 'challenge' }).teamGap, 'challenge');
 });

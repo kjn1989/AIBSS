@@ -98,6 +98,9 @@ export default function ContribCard({ games }) {
       <p className="small dim mt8">{t('cc.note.wpa')}</p>
       <p className="small dim">{t(`cc.note.${side}`)}</p>
       <p className="small dim">{t('cc.noWar')}</p>
+      {/* 相手との力の差を入れた試合が混ざると、格上と当たった日に出ていた選手だけが
+          上に来てしまう。通算は互角(50%)基準にそろえる */}
+      <p className="small dim">{t('gap.statsNote')}</p>
       <button className="small mt8" style={{ width: '100%' }} onClick={() => setShowRe(true)}>
         {t('ret.open')}
       </button>

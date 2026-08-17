@@ -25,6 +25,7 @@ import { RULE_PRESETS, presetById, presetLabel, describeRules, initialPresetIdFo
 import LiveRulesSheet from './LiveRulesSheet.jsx';
 import FlowView from './FlowView.jsx';
 import ScorerPicker from './ScorerPicker.jsx';
+import TeamGapPicker from './TeamGapPicker.jsx';
 import InningFlowSheet from './InningFlowSheet.jsx';
 import EditPlaySheet from './EditPlaySheet.jsx';
 
@@ -199,6 +200,8 @@ function GameSetup() {
   // 記録員(スコアラー)。流れタグの読みを積み上げる相手なので、試合ごとに決める。
   // 前回と同じ人が付けることがほとんどなので、前回の人を初期値にする
   const [scorerId, setScorerId] = useState(state.settings.lastScorerId || null);
+  // 相手との力の差。既定は互角で、そのときは何も変わらない
+  const [teamGap, setTeamGap] = useState('even');
   const ongoing = Object.values(state.games).filter((g) => g.status === 'ongoing' && !g.id.startsWith('demo-'));
   // 既存試合で使われたシーズン名(サジェスト用)
   const knownSeasons = [...new Set(Object.values(state.games).map((g) => g.season).filter(Boolean))];
@@ -229,7 +232,7 @@ function GameSetup() {
         // 表記ゆれを入口で止める: 過去に対戦した相手なら、その書き方に揃える
         opponent: matched ? matched.name : opponent.trim(),
         isHome, season: season.trim(), rules: { ...resolveRulesFrom(presetId, custom), ...live }, allowReentry,
-        attendees, scorerId,
+        attendees, scorerId, teamGap,
         oppRoster: carryOver && recall ? recall : null,
       },
     });
@@ -298,6 +301,9 @@ function GameSetup() {
 
         <label className="small dim mt12" style={{ display: 'block' }}>{t('scorer.label')}</label>
         <ScorerPicker value={scorerId} onChange={setScorerId} />
+
+        <label className="small dim mt12" style={{ display: 'block' }}>{t('gap.label')}</label>
+        <TeamGapPicker value={teamGap} onChange={setTeamGap} />
 
         <button className="primary" style={{ width: '100%' }} onClick={() => setAtt(true)}>
           {t('gamesetup.start')}
