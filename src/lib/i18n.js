@@ -220,7 +220,8 @@ export const MESSAGES = {
     'playsheet.sacBuntNoAdvance': '⚠️ 犠打は走者が進んではじめて成立します。走者の行き先を進塁にするか、「凡打(アウト)」で記録してください。',
     'playsheet.dropThirdIllegal': '⚠️ 2アウト未満で一塁に走者が居るときは振り逃げできません(規則5.05)。打者の行き先を「アウト」にしてください。',
     'playsheet.confirmQ': '{summary}でよろしいですか？',
-    'playsheet.needDirection': '打球が落ちたところを図で押してください（確定はそのあとです）',
+    'playsheet.needDirection': '打球が落ちたところが未記録です。図で押すと確定できます',
+    'playsheet.goToField': '図へ戻る ↑',
     'playsheet.runsSuffix': '・{n}点',
 
     // オーダー/交代
@@ -1730,7 +1731,8 @@ export const MESSAGES = {
     'playsheet.sacBuntNoAdvance': '⚠️ A sacrifice bunt requires a runner to advance. Advance a runner, or record it as an out.',
     'playsheet.dropThirdIllegal': '⚠️ No dropped third strike with a runner on first and fewer than two out (Rule 5.05). Set the batter to “Out”.',
     'playsheet.confirmQ': 'Confirm: {summary}?',
-    'playsheet.needDirection': 'Tap the field to mark where the ball landed, then confirm',
+    'playsheet.needDirection': 'Where the ball landed is not recorded yet. Mark it on the field to confirm',
+    'playsheet.goToField': 'Go to the field ↑',
     'playsheet.runsSuffix': ' · {n} run(s)',
 
     'half.top': 'Top', 'half.bottom': 'Bot',

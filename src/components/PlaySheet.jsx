@@ -57,6 +57,17 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
   );
   // 方向未選択時のみ広いフィールド図を開いておく。選択後は折りたたんでスクロールを減らす
   const [dirOpen, setDirOpen] = useState(!initial.direction);
+  // 打球方向の図はシートのいちばん上にある。打球の種類や走者を触るために下へ
+  // スクロールすると図は画面の外に出るので、確定できない理由だけ読めても
+  // どこを押せばいいのか分からない。案内を押したら図まで戻す。
+  const dirRef = useRef(null);
+  const goToDir = () => {
+    setDirOpen(true);
+    // 折りたたみが開くのを待ってから位置を合わせる
+    requestAnimationFrame(() => {
+      dirRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
   // 音声や取り込みで併殺が指定されていても、成立しない状況なら併殺では始めない。
   // ボタンが押せないのに併殺のまま固まって、解除できなくなるのを防ぐ
   const [outType, setOutType] = useState(
@@ -263,7 +274,7 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
   return (
     <Sheet title={`${batterName ? batterName + ': ' : t('playsheet.oppBatter')}${resultLabel}`} onClose={onClose}>
       {needsDir && (
-        <>
+        <div ref={dirRef}>
           <div className="section-title" style={{ marginTop: 0 }}>{t('playsheet.direction')}</div>
           {dirOpen ? (
             <FieldPad
@@ -285,7 +296,7 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
               <span className="change">{t('playsheet.change')}</span>
             </button>
           )}
-        </>
+        </div>
       )}
 
       {result === 'so' && (
@@ -457,11 +468,16 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
       {/* 押せない理由を書かずに問いだけ出すと、確定が灰色のまま理由が分からない。
           打球方向は凡打・安打では必須なので、そこを名指しで言う */}
       <div className="confirm-card mt16" style={{ marginBottom: 0, padding: 12 }}>
-        <div className="q" style={{ fontSize: 16, marginBottom: 0 }}>
-          {needsDir && !direction
-            ? t('playsheet.needDirection')
-            : t('playsheet.confirmQ', { summary: summary() })}
-        </div>
+        {needsDir && !direction ? (
+          <button type="button" className="need-dir" onClick={goToDir}>
+            <span>{t('playsheet.needDirection')}</span>
+            <span className="need-dir-go">{t('playsheet.goToField')}</span>
+          </button>
+        ) : (
+          <div className="q" style={{ fontSize: 16, marginBottom: 0 }}>
+            {t('playsheet.confirmQ', { summary: summary() })}
+          </div>
+        )}
       </div>
 
       <div className="sheet-actions">
