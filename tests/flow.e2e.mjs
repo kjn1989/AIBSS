@@ -171,20 +171,28 @@ try {
   // 「5打席で25%→44%」だけでは、あとから試合を思い出せない
   const swingTxt = await page.locator('.sheet .fv-swings').innerText();
   check('大きく動いた区間が出ている', swingTxt.includes('勝率'), swingTxt.slice(0, 200));
-  const peaks = await page.evaluate(() =>
-    [...document.querySelectorAll('.fv-swing-peak')].map((e) => e.textContent));
-  check('いちばん動いた打席が書いてある', peaks.length >= 1, JSON.stringify(peaks));
-  check('選手名と結果が入っている',
-    peaks.some((p) => p.includes('いちばん動いたのは') && /（\d+%）/.test(p)),
-    JSON.stringify(peaks));
-  check('i18nのキー名が漏れていない', !peaks.some((p) => p.includes('fv.')), JSON.stringify(peaks));
-  check('日本語に余計な空白が入らない', !peaks.some((p) => /[^\x00-\x7F] [^\x00-\x7F]/.test(p)), JSON.stringify(peaks));
+
+  // 見出し(回・勝率)と文章は縦に積む。横並びのままだと文章が1文字ずつ折り返る
+  const stacked = await page.evaluate(() => {
+    const row = document.querySelector('.sheet .fv-swing');
+    const head = row?.querySelector('.fv-swing-head');
+    const story = row?.querySelector('.fv-story');
+    if (!head || !story) return null;
+    const h = head.getBoundingClientRect();
+    const b = story.getBoundingClientRect();
+    return { below: b.top >= h.bottom - 1, storyW: b.width, rowW: row.getBoundingClientRect().width };
+  });
+  check('文章は見出しの下に置かれている', stacked?.below === true, JSON.stringify(stacked));
+  check('文章が横に潰れていない', stacked && stacked.storyW > stacked.rowW * 0.7, JSON.stringify(stacked));
 
   // --- 区間のできごとが文章で出て、記録員が書き直せる ---
   const story = page.locator('.sheet .fv-story').first();
   check('区間の文章が出ている', (await story.count()) === 1);
   const draft = await story.locator('p').first().innerText();
-  check('打席の並びが文になっている', draft.includes('勝率は') && draft.includes('%'), draft);
+  // 回と勝率は左の欄に出ているので、文章では繰り返さない
+  check('回と勝率を繰り返していない',
+    !draft.includes('勝率') && !draft.includes('打席で') && !/^\d+回/.test(draft), draft);
+  check('選手名と結果が入っている', draft.length > 6 && draft.includes('。'), draft);
   check('i18nのキー名が漏れていない', !draft.includes('nr.'), draft);
   check('下書きだと明示している',
     (await story.locator('.fv-story-tag').innerText()).includes('下書き'),

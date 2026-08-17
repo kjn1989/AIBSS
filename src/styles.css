@@ -2094,7 +2094,6 @@ button.manage-open {
   .bf-mark.drop, .pad-coach .ripple { animation: none; }
 }
 
-
 /* ---- 打点の目印(帯・くさび・波紋) ----
    指がフィールドに重なると、自分がどこを指しているのか見えない。
    一度は拡大鏡を出したが、芝には拡大するほどの細部が無く、図の1/3を
@@ -2262,10 +2261,13 @@ button.manage-open {
 .fv-now { text-align: center; font-size: 13.5px; margin-top: 9px; }
 .fv-swings { display: flex; flex-direction: column; gap: 6px; }
 .fv-swing {
-  display: flex; align-items: baseline; gap: 8px; padding: 8px 11px; border-radius: 9px;
+  display: flex; flex-direction: column; padding: 8px 11px; border-radius: 9px;
   font-size: 12.5px; background: var(--bg-3); border: 1px solid var(--border);
 }
-.fv-swing > b { flex: none; }
+/* 見出し(回・勝率の動き)は1行に。文章は必ずその下に置く。
+   縦積みにしないと、文章が横に押し潰されて1文字ずつ折り返る */
+.fv-swing-head { display: flex; align-items: baseline; gap: 8px; }
+.fv-swing-head > b { flex: none; }
 .fv-swing.up { border-left: 3px solid var(--green); }
 .fv-swing.down { border-left: 3px solid var(--amber); }
 .fv-rates { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -2516,10 +2518,6 @@ button.manage-open {
 .need-dir-go { flex: 0 0 auto; font-size: 12px; font-weight: 700; color: var(--accent-2); white-space: nowrap; }
 
 /* 大きく動いた区間の「いちばん動いた1打席」。数字だけでは試合を思い出せない */
-.fv-swing-peak {
-  display: block; margin-top: 3px;
-  font-size: 11.5px; font-style: normal; line-height: 1.35; opacity: .72;
-}
 
 /* 区間のできごと。自動の下書きと、記録員が書いた文を見分けられるようにする */
 .fv-story { margin-top: 8px; padding: 9px 10px; border-radius: 9px; background: var(--bg-3); }
