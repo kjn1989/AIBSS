@@ -104,7 +104,7 @@ export function maskNames(text, names = []) {
 // ---------------- 音声発話の解釈(旧Anthropic版から統一。Geminiで実行) ----------------
 // VoiceControlのオフラインエンジンの信頼度が低いときだけ呼ぶ。戻り値: 解釈JSON or null。
 const VOICE_SYSTEM = `あなたは野球のスコアラー補助AIです。日本語の実況発話を解釈し、次のJSONだけを出力してください(説明文は禁止):
-{"kind":"play"|"pitch"|"sb"|"cs"|"unknown","result":"single"|"double"|"triple"|"hr"|"out"|"bb"|"hbp"|"so"|"error"|"sacBunt"|"sacFly"|null,"outType":"ground"|"fly"|"liner"|"dp"|null,"direction":"P"|"C"|"1B"|"2B"|"3B"|"SS"|"LF"|"CF"|"RF"|null,"pitchType":"ball"|"strike"|"foul"|null,"confidence":0.0〜1.0}
+{"kind":"play"|"pitch"|"sb"|"cs"|"unknown","result":"single"|"double"|"triple"|"hr"|"out"|"bb"|"hbp"|"so"|"error"|"sacBunt"|"sacFly"|null,"outType":"ground"|"fly"|"liner"|"dp"|"ifly"|null,"direction":"P"|"C"|"1B"|"2B"|"3B"|"SS"|"LF"|"CF"|"RF"|null,"pitchType":"ball"|"strike"|"foul"|null,"confidence":0.0〜1.0}
 kindの意味: play=打撃結果, pitch=1球の判定のみ, sb=盗塁成功, cs=盗塁死。判断できない場合はkind="unknown"。`;
 
 export async function interpretUtterance(text, apiKey) {
@@ -131,6 +131,7 @@ ${memo}
 - 「弾く/はじく/後逸/トンネル/こぼす」→ error を第一候補
 - 「振り逃げ」→ result:"so", batterTo:1
 - 「ゲッツー/併殺/ダブルプレー」→ result:"out", outType:"dp"
+- 「インフィールドフライ」→ result:"out", outType:"ifly"(一二塁・2アウト未満でのみ宣告される)
 - 守備位置番号: 1投 2捕 3一 4二 5三 6遊 7左 8中 9右。方向はP/C/1B/2B/3B/SS/LF/CF/RF
 - batterTo は打者の到達塁(1/2/3、4=得点、"out"=アウト)
 - 曖昧なら candidates を最大3件、confidence降順で

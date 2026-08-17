@@ -100,11 +100,12 @@ const DIRECTION_DICT = {
 };
 
 const RESULT_DICT = {
-  single: ['ヒット', '単打', 'シングル', 'シングルヒット', '内野安打', 'ポテンヒット', 'テキサス', 'クリーンヒット', '抜けた', '前ヒット', 'ぬけた', 'セーフティバント', 'セーフティーバント', 'セーフティ'],
+  single: ['ヒット', '単打', 'シングル', 'シングルヒット', '内野安打', 'ポテンヒット', 'テキサス', 'インフィールドヒット', '内野安打', 'クリーンヒット', '抜けた', '前ヒット', 'ぬけた', 'セーフティバント', 'セーフティーバント', 'セーフティ'],
   double: ['ツーベース', '二塁打', 'ツーベースヒット', 'ダブル', 'フェンス直撃', '2ベース'],
   triple: ['スリーベース', '三塁打', 'トリプル', '3ベース'],
   hr: ['ホームラン', '本塁打', 'ホーマー', '柵越え', 'スタンドイン', '場外', 'アーチ'],
-  out: ['ゴロ', 'フライ', 'ライナー', '凡打', 'ポップ', 'アウト', 'ゲッツー', '併殺', 'ダブルプレー', '正面', '刺された'],
+  out: ['ゴロ', 'フライ', 'ライナー', '凡打', 'ポップ', 'アウト', 'ゲッツー', '併殺', 'ダブルプレー', '正面', '刺された',
+    'インフィールドフライ'],
   bb: ['フォアボール', '四球', 'フォア', '歩いた', '歩かせ', 'ボール4', 'ボールフォア', '押し出し', '敬遠', '故意四球', '申告敬遠'],
   hbp: ['デッドボール', '死球', '当てた', '当たった', 'ぶつけた'],
   so: ['三振', '空振り三振', '見逃し三振', 'サンシン', '空振った', '振り逃げ'],
@@ -118,6 +119,11 @@ const OUT_TYPE_DICT = {
   fly: ['フライ', 'ポップ', '打ち上げ', 'ふらい', 'ポテン', 'ぽてん', '大飛球'],
   liner: ['ライナー', '直撃', 'らいなー'],
   dp: ['ゲッツー', '併殺', 'ダブルプレー', '併殺打'],
+  // 「フライ」を含むので、辞書に足さないと必ず fly に食われる。
+  // matchScore は一致した語の長さを返すため、長いこちらが勝つ
+  // 「インフィールド」だけは入れない。「インフィールドヒット」(内野安打)を
+  // 食ってしまう(7文字なので「ヒット」3文字より強い)
+  ifly: ['インフィールドフライ', 'インフィールドフライアウト', 'インフィルドフライ', 'インフィールドフラい'],
 };
 
 // 打球の強さ。実況で毎日使われている言葉をそのまま拾う。
@@ -168,6 +174,9 @@ export function parseUtterance(rawText) {
   const dirScores = scoreDict(text, DIRECTION_DICT);
   const resScores = scoreDict(text, RESULT_DICT);
   const outTypeScores = scoreDict(text, OUT_TYPE_DICT);
+  // インフィールドフライは長い語なので、あいまい一致だと「インフィールドヒット」
+  // (内野安打)まで拾ってしまう。実際に「ふらい」と言っていなければ落とす
+  if (outTypeScores.ifly && !text.includes('ふらい')) delete outTypeScores.ifly;
   const contactScores = scoreDict(text, CONTACT_DICT);
   const contact = topKey(contactScores) || null;
   const pitchScores = scoreDict(text, PITCH_DICT);
@@ -212,8 +221,10 @@ export function parseUtterance(rawText) {
     // 軌道はヒットのときも拾う(これまでアウト以外は捨てていた)。
     // アウトだけは今までどおり既定をゴロにする(記録上の後退を避けるため)
     const spokenTraj = topKey(outTypeScores) || null;
+    // dp と ifly は打球の軌道ではなく「そのアウトが何だったか」。
+    // ヒットに付くことはないので、アウト以外では落とす
     const outType = result === 'out' ? spokenTraj || 'ground'
-      : (spokenTraj && spokenTraj !== 'dp' ? spokenTraj : null);
+      : (spokenTraj && spokenTraj !== 'dp' && spokenTraj !== 'ifly' ? spokenTraj : null);
     // 三振: 発話に「見逃し/空振り」が含まれていれば確定、なければ確認カードで選ばせる
     const soExplicit = result === 'so' && (text.includes('見逃') || text.includes('空振') || text.includes('からぶ'));
     const soType = result === 'so' ? (text.includes('見逃') ? 'looking' : 'swinging') : null;
@@ -382,7 +393,9 @@ export function needsComplexConfirm(cand) {
   if (['double', 'triple', 'hr'].includes(cand.result) && !cand.direction) return true;
   if (['sacBunt', 'sacFly'].includes(cand.result)) return true;
   if (cand.result === 'error') return true;
-  if (cand.result === 'out' && cand.outType === 'dp') return true;
+  // インフィールドフライは打者が捕球されなくてもアウトになり、走者は自分の
+  // 危険で進める。走者の処理が割れるので、併殺と同じく画面で確かめる
+  if (cand.result === 'out' && (cand.outType === 'dp' || cand.outType === 'ifly')) return true;
   return false;
 }
 

@@ -509,6 +509,7 @@ const SHORT_RESULT_MAP = {
   安: { result: 'single' },
   本: { result: 'hr' },
   飛: { result: 'out', outType: 'fly' },
+  イ飛: { result: 'out', outType: 'ifly' }, // インフィールドフライのスコア略号
   ゴ: { result: 'out', outType: 'ground' },
   直: { result: 'out', outType: 'liner' },
   犠飛: { result: 'sacFly' },
