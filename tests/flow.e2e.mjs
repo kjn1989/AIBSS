@@ -167,6 +167,86 @@ try {
   check('前と後の勝率が両方出ている', (read.match(/\d+%/g) || []).length >= 2, read);
   check('勝率だと分かる言葉が付いている', read.includes('勝率'), read);
 
+  // --- 相手との力の差 ---
+  // 設定の確かめ方は「30%と入れたらチャートが30%から始まる」の一点。
+  // ここが合っていないと、倍率がどこから来たのか誰にも確かめられない
+  const gapChips = page.locator('.sheet .gap-chip');
+  check('5段階のチップが出ている', (await gapChips.count()) === 5, String(await gapChips.count()));
+  const gapNames = await page.evaluate(() =>
+    [...document.querySelectorAll('.sheet .gap-chip b')].map((b) => b.textContent));
+  check('胸を借りる〜胸を貸すの5つ',
+    ['胸を借りる', '挑戦', '互角', '受けて立つ', '胸を貸す'].every((n) => gapNames.includes(n)),
+    JSON.stringify(gapNames));
+  const gapSubs = await page.evaluate(() =>
+    [...document.querySelectorAll('.sheet .gap-chip i')].map((b) => b.textContent).join('|'));
+  check('10回中何回かが併記されている', gapSubs.includes('10回中3回') && gapSubs.includes('10回中7回'), gapSubs);
+
+  // 互角のあいだは開始線が無い(50%の線と重なるので引いていない)
+  const beforeLine = await page.evaluate(() => document.querySelector('.fv-chart').innerHTML.includes('開始時'));
+  check('互角なら開始線は出ない', !beforeLine);
+
+  await page.locator('.sheet .gap-chip:has-text("挑戦")').click();
+  await page.waitForTimeout(900);
+  const gapTxt = await page.locator('.sheet .fv-gap').innerText();
+  check('選んだ段階と開始時の勝率が出る', gapTxt.includes('挑戦') && gapTxt.includes('30%'), gapTxt);
+  check('解けた倍率も出ている', /×\d\.\d{3}/.test(gapTxt), gapTxt);
+
+  const lineTxt = await page.locator('.fv-chart').innerText();
+  check('チャートに開始時の水準線が出る', lineTxt.includes('開始時 30%'), lineTxt.slice(0, 300));
+
+  // 線の左端(プレイボール直後)が、設定した30%のあたりから始まっていること
+  const startY = await page.evaluate(() => {
+    const svg = document.querySelector('.fv-chart svg');
+    const vb = svg.viewBox.baseVal;
+    const path = [...svg.querySelectorAll('path')].find((p) => (p.getAttribute('d') || '').startsWith('M'));
+    const m = /^M([\d.]+),([\d.]+)/.exec(path.getAttribute('d'));
+    // y は 0=100%, H=0%。H は viewBox 高からラベル余白を引いた値だが、
+    // ここでは 50% の線(実線)の y を基準にして割り出す
+    // 50%の線だけ実線(dasharray '0')で引いてある
+    const solid = [...svg.querySelectorAll('line')].find((l) => l.getAttribute('stroke-dasharray') === '0');
+    return { y: Number(m[2]), half: Number(solid.getAttribute('y1')), vb: vb.height };
+  });
+  // 50%が half、0%が 2*half。開始が30%なら y は half*1.4 のあたり
+  check('線の出発点が30%のあたりにある',
+    Math.abs(startY.y - startY.half * 1.4) < startY.half * 0.25,
+    JSON.stringify(startY));
+
+  // --- ヒートマップ ---
+  await page.locator('.sheet button:has-text("ヒートマップで見る")').click();
+  await page.waitForTimeout(900);
+  const hm = page.locator('.sheet:has-text("得点期待値ヒートマップ")').last();
+  check('ヒートマップが開く', (await hm.count()) >= 1);
+  const hmCells = hm.locator('.hm-cell');
+  check('24マスある', (await hmCells.count()) === 24, String(await hmCells.count()));
+  const hmTxt = await hm.innerText();
+  check('攻撃時と守備時に分かれている', hmTxt.includes('攻撃時') && hmTxt.includes('守備時'), hmTxt.slice(0, 400));
+  check('倍率の出どころを書いている', hmTxt.includes('二分探索') && hmTxt.includes('30%'), hmTxt.slice(0, 1600));
+  check('していないことを並べている', hmTxt.includes('していないこと'), hmTxt.slice(-900));
+  check('四死球・失策は持っていないと明言している', hmTxt.includes('失策'), hmTxt.slice(-900));
+  check('通算は互角基準だと書いてある', hmTxt.includes('互角（50%）'), hmTxt.slice(-600));
+
+  // 攻撃時は下がり、守備時は上がる
+  const offVals = await hm.locator('.hm-cell').allInnerTexts();
+  await hm.locator('.toggle-row button:has-text("守備時")').click();
+  await page.waitForTimeout(500);
+  const defVals = await hm.locator('.hm-cell').allInnerTexts();
+  const lower = offVals.every((v, i) => Number(v) <= Number(defVals[i]));
+  check('攻撃時のほうが守備時より低い(格上が相手なので)', lower,
+    JSON.stringify([offVals.slice(0, 4), defVals.slice(0, 4)]));
+
+  await hm.locator('.hm-cell').first().click();
+  await page.waitForTimeout(400);
+  check('マスを押すと数字が読める', (await hm.locator('.hm-read').innerText()).includes('点'),
+    await hm.locator('.hm-read').innerText());
+  const hmOver = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+  check('ヒートマップも横あふれなし', !hmOver);
+  await hm.locator('.sheet-actions button:has-text("閉じる")').click();
+  await page.waitForTimeout(500);
+
+  // 互角に戻して、あとの検査に影響を残さない
+  await page.locator('.sheet .gap-chip:has-text("互角")').click();
+  await page.waitForTimeout(700);
+
   // --- 成績タブに勝利貢献・得点貢献が出る ---
   await page.locator('.sheet button:has-text("閉じる")').last().click();
   await page.waitForTimeout(500);

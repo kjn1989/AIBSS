@@ -1,11 +1,14 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { useStore, useT } from '../state/store.jsx';
 import { buildRunExpectancy, weSeries, flowRuns, judgeFlowTags, formatRate, weShape, KOSHIEN_RE, KOSHIEN_SOURCE } from '../lib/flow.js';
-import { buildRunDists, buildWinModel } from '../lib/winExp.js';
+import { buildRunDists } from '../lib/winExp.js';
+import { buildGapModel } from '../lib/teamGap.js';
 import { currentRules } from '../lib/rules.js';
 import { halfStartKeyOf } from '../lib/tiebreak.js';
 import { aggregateScorers, scorerName } from '../lib/scorers.js';
 import ScorerPicker from './ScorerPicker.jsx';
+import TeamGapPicker from './TeamGapPicker.jsx';
+import HeatmapSheet from './HeatmapSheet.jsx';
 import ReTableSheet from './ReTableSheet.jsx';
 import WinExpSheet from './WinExpSheet.jsx';
 import { computeBoxScore, hitsByInning } from '../lib/boxscore.js';
@@ -100,7 +103,7 @@ function AlignedLinescore({ game, cols, t }) {
   );
 }
 
-function Chart({ series, tags, order, t, linescore }) {
+function Chart({ series, tags, order, t, linescore, opening }) {
   const svgRef = useRef(null);
   // 押した打席。線を見て「ここは何%?」と思ったときに読めるようにする
   const [sel, setSel] = useState(null);
@@ -191,6 +194,19 @@ function Chart({ series, tags, order, t, linescore }) {
           <clipPath id="fvBot"><rect x="0" y={half} width={VBW} height={H - half} /></clipPath>
         </defs>
 
+        {/* 相手との力の差を入れた試合の開始時の水準。0-0でも35%から始まるので、
+            この線が無いと「押されている」と読み違える。線より上なら予想を上回っている */}
+        {opening != null && Math.abs(opening - 0.5) > 0.01 && (
+          <g>
+            <line x1={PADL} y1={y(opening)} x2={PADL + W} y2={y(opening)}
+              stroke="var(--accent-2)" strokeWidth="1.2" strokeDasharray="5 3" opacity="0.85" />
+            <text x={PADL + W} y={y(opening) - 3} fontSize="8" textAnchor="end"
+              fill="var(--accent-2)" style={{ fontVariantNumeric: 'tabular-nums' }}>
+              {t('gap.startLine', { pct: Math.round(opening * 100) })}
+            </text>
+          </g>
+        )}
+
         {/* 縦軸: 勝率。50%が互角の線 */}
         {ticks.map((v) => (
           <g key={v}>
@@ -276,6 +292,7 @@ export default function FlowView({ game, onClose }) {
   // 線の土台になっている24通りの表そのものを、ここからも開けるようにする
   const [showRe, setShowRe] = useState(false);
   const [showWe, setShowWe] = useState(false);
+  const [showHeat, setShowHeat] = useState(false);
 
   // 得点期待値は「自分たちの試合」から作る。相手の打席も材料になる。
   const edition = state.settings.edition || '草野球';
@@ -285,17 +302,21 @@ export default function FlowView({ game, onClose }) {
   }, [state.games, game, edition]);
   const usesKoshien = edition === 'ブカツ(中高大)';
 
-  // 勝率モデル。得点分布も「自分たちの試合」から作る(相手の打席も材料になる)
-  const winExp = useMemo(() => {
+  // 勝率モデル。得点分布も「自分たちの試合」から作る(相手の打席も材料になる)。
+  // 相手との力の差を入れている試合は、その設定どおりの勝率から始まるように
+  // 得点の倍率を解いたうえでモデルを作る(互角なら倍率1で、いままでと同じ)
+  const { winExp, opening, factor } = useMemo(() => {
     const games = Object.values(state.games || {}).filter((g) => g && !String(g.id).startsWith('demo-'));
     const { dists } = buildRunDists(games.length ? games : [game], edition, re);
-    return buildWinModel({
+    const m = buildGapModel({
       dists,
       isHome: !!game.isHome,
       regulation: currentRules(game)?.innings || 7,
       halfStartKey: (inn) => halfStartKeyOf(game, inn),
+      gap: game.teamGap || 'even',
     });
-  }, [state.games, game, edition, re]);
+    return { winExp: m.we, opening: m.opening, factor: m.factor };
+  }, [state.games, game, edition, re, game.teamGap]);
 
   // 線の縦軸は勝率。50%が互角で、基準線が動かない
   const series = useMemo(() => weSeries(game, winExp), [game, winExp]);
@@ -335,7 +356,30 @@ export default function FlowView({ game, onClose }) {
           <Chart
             series={series} tags={judged.tags} order={order} t={t}
             linescore={(cols) => <AlignedLinescore game={game} cols={cols} t={t} />}
+            opening={opening}
           />
+          {/* 相手との力の差。ここで変えると線の出発点がその場で動くので、
+              設定が効いているかがその場で分かる */}
+          <div className="fv-scorer fv-gap mt8">
+            <span className="small dim">{t('gap.label')}</span>
+            <TeamGapPicker
+              compact
+              value={game.teamGap || 'even'}
+              onChange={(id) => dispatch({ type: 'SET_TEAM_GAP', gameId: game.id, gap: id })}
+            />
+            {(game.teamGap || 'even') !== 'even' && (
+              <p className="small dim mt8">
+                {t('gap.applied', {
+                  name: t(`gap.${game.teamGap}`),
+                  pct: Math.round(opening * 100),
+                  f: factor.toFixed(3),
+                })}
+              </p>
+            )}
+            <button className="small mt8" style={{ width: '100%' }} onClick={() => setShowHeat(true)}>
+              {t('hm.open')}
+            </button>
+          </div>
           {/* 回が1つも進んでいない = アウトが記録されていない。
               このとき線は必ず右肩上がりになり、流れとして読めない */}
           {oneHalf && series.length > 8 && (
@@ -471,6 +515,7 @@ export default function FlowView({ game, onClose }) {
 
       {showRe && <ReTableSheet onClose={() => setShowRe(false)} />}
       {showWe && <WinExpSheet onClose={() => setShowWe(false)} />}
+      {showHeat && <HeatmapSheet game={game} onClose={() => setShowHeat(false)} />}
 
       <div className="sheet-actions">
         <button className="primary" onClick={onClose}>{t('action.close')}</button>

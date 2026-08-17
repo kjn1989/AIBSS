@@ -315,7 +315,7 @@ export function newMember(name, role = 'マネージャー') {
   };
 }
 
-export function newGame({ opponent = '', isHome = false, date = null, season = '', rules = null, allowReentry = false, attendees = null, scorerId = null } = {}) {
+export function newGame({ opponent = '', isHome = false, date = null, season = '', rules = null, allowReentry = false, attendees = null, scorerId = null, teamGap = 'even' } = {}) {
   return {
     id: uid(),
     date: date || new Date().toISOString().slice(0, 10),
@@ -335,6 +335,10 @@ export function newGame({ opponent = '', isHome = false, date = null, season = '
     // 誰が付けた試合かが分からないと読みの正答率を積み上げられない。
     // null = 未設定(この項目より前に作られた試合。集計から外れるだけで記録は壊れない)
     scorerId,
+    // 相手との力の差(lib/teamGap.js)。'even' が既定で、そのときは何も変わらない。
+    // 「10回やって何回勝てるか」で入れて、そこから得点期待値の倍率を逆に解く。
+    // 流れチャートの出発点がこの設定そのものになる(30%なら30%から始まる)。
+    teamGap,
     startedAt: Date.now(), // 試合開始時刻(時間制限ルールの判定に使用)
     status: 'ongoing', // 'ongoing' | 'finished'
     inning: 1,

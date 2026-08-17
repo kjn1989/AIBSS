@@ -619,6 +619,15 @@ export function reducer(state, action) {
       g.updatedAt = Date.now();
       return { ...state, games: { ...state.games, [g.id]: g } };
     }
+    // 相手との力の差。記録そのものは1つも変わらず、読み方(勝率・流れ)だけが変わる。
+    // 途中で気づいて直せるように、試合中でも変更できるようにしてある
+    case 'SET_TEAM_GAP': {
+      const g = deep(state.games[action.gameId]);
+      if (!g) return state;
+      g.teamGap = action.gap || 'even';
+      g.updatedAt = Date.now();
+      return { ...state, games: { ...state.games, [g.id]: g } };
+    }
 
     // ===== デモデータ =====
     case 'LOAD_DEMO': {
