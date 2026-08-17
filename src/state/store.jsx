@@ -619,6 +619,19 @@ export function reducer(state, action) {
       g.updatedAt = Date.now();
       return { ...state, games: { ...state.games, [g.id]: g } };
     }
+    // 区間の文章を記録員が書き直したもの。自動の下書きは記録からしか組めないので、
+    // 見ていたことを書けるのは記録員だけ。空にしたら下書きへ戻す(消すのではなく戻す)
+    case 'SET_FLOW_NOTE': {
+      const g = deep(state.games[action.gameId]);
+      if (!g) return state;
+      if (!g.flowNotes) g.flowNotes = {};
+      const text = String(action.text || '').trim();
+      if (text) g.flowNotes[action.key] = text;
+      else delete g.flowNotes[action.key];
+      g.updatedAt = Date.now();
+      return { ...state, games: { ...state.games, [g.id]: g } };
+    }
+
     // 相手との力の差。記録そのものは1つも変わらず、読み方(勝率・流れ)だけが変わる。
     // 途中で気づいて直せるように、試合中でも変更できるようにしてある
     case 'SET_TEAM_GAP': {

@@ -349,6 +349,9 @@ export function newGame({ opponent = '', isHome = false, date = null, season = '
     // 「10回やって何回勝てるか」で入れて、そこから得点期待値の倍率を逆に解く。
     // 流れチャートの出発点がこの設定そのものになる(30%なら30%から始まる)。
     teamGap,
+    // 流れの区間ごとに、記録員が書き直した文 { 区間の先頭打席ID: 文 }。
+    // 自動の下書きは記録からしか組めないので、見ていたことは記録員が書く
+    flowNotes: {},
     startedAt: Date.now(), // 試合開始時刻(時間制限ルールの判定に使用)
     status: 'ongoing', // 'ongoing' | 'finished'
     inning: 1,

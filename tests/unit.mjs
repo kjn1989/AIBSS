@@ -11,6 +11,7 @@ import { swapTargetIndex, timingAnchor } from '../src/lib/logOrder.js';
 import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, assignResultTargets, mergeResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parsePositionSwaps, keepsBattingOrder, explicitOrderChange, stripInningFractions, parseInningRange, parseSlotBatters, parseAtBatDeletions, parseShortResult, isExplicitSubText, inGamePlayerIds, preferInGamePlayers } from '../src/lib/correctionParser.js';
 import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarters, findPositionIssues, alignmentByInning } from '../src/lib/lineupBox.js';
 import { rebuildPitchingStats } from '../src/lib/pitchingRebuild.js';
+import { draftNarrative, noteOf, noteKeyOf, MAX_CLAUSES } from '../src/lib/narrative.js';
 import { tiebreakPlacement, backInOrder, halfHasPlays, halfStartKeyOf } from '../src/lib/tiebreak.js';
 import { aggregateScorers, rankScorers, scorerName, tagScorerId } from '../src/lib/scorers.js';
 import { buildRunDists, buildWinModel, priorDist, remainingHalves, SCORE_PROB, MAX_RUNS } from '../src/lib/winExp.js';
@@ -4658,4 +4659,88 @@ test('表示: 日本語のプレイ名に余計な空白を入れない', () => 
   assert.equal(playLabel('out', 'SS', 'ground', null, undefined, 'ja'), '遊撃ゴロ・アウト');
   // 英語は語の区切りに空白が要る
   assert.equal(playLabel('single', 'LF', null, null, undefined, 'en'), 'LF Hit');
+});
+
+
+// ============================================================
+// 区間のできごとを文章にする(下書き)
+//
+// 「5打席で25%→44%」だけでは何が起きたのか思い出せない。記録から組める
+// ところまでを下書きにして、あとは記録員が書き直す。
+// ============================================================
+const nrT = (k, p) => translate('ja', k, p);
+const nrNames = { p1: '田中', p2: '佐藤', p3: '鈴木', p4: '山本' };
+const nrCtx = {
+  nameOf: (id) => nrNames[id], oppNameOf: (l) => `相手${l}`,
+  edition: '草野球', lang: 'ja', t: nrT,
+  innOf: (s) => `${s.inning}回${s.isTop ? '表' : '裏'}`,
+};
+const nrPa = (id, who, result, dir, runs, before, mine = true, delta = 0.08) => ({
+  id, mine, delta, we: 0.5, inning: 2, isTop: mine,
+  log: { id, payload: { playerId: who, letter: who, result, direction: dir, runs, beforeRunners: before } },
+});
+const nrRun = (items, a, b) => {
+  const r = { items, from: items[0], to: items[items.length - 1], n: items.length, dir: 1 };
+  r.from.we = a + r.from.delta; r.to.we = b;
+  return r;
+};
+
+test('物語: 打席の並びが文になる', () => {
+  const items = [
+    nrPa('1', 'p1', 'single', 'LF', 0, {}),
+    nrPa('2', 'p2', 'bb', null, 0, { 1: true }),
+    nrPa('3', 'p3', 'out', 'SS', 0, { 1: true, 2: true }),
+    nrPa('4', 'p4', 'double', 'CF', 2, { 1: true, 2: true }),
+  ];
+  const s = draftNarrative(nrRun(items, 0.25, 0.61), nrCtx);
+  assert.ok(s.includes('田中の左翼ヒット'), s);
+  assert.ok(s.includes('佐藤の四球で一二塁'), '次の打席の走者から塁状況を出す');
+  assert.ok(s.includes('山本の中堅ツーベースで2点'), s);
+  assert.ok(s.includes('勝率は25%から61%へ'), s);
+  // 文の中では「・アウト」は硬い。「〜は」がもうアウトを表している
+  assert.ok(s.includes('鈴木は遊撃ゴロ'), s);
+  assert.ok(!s.includes('ゴロ・アウト'), s);
+});
+
+test('物語: 守備の区間は相手打者が主語になる', () => {
+  const items = [
+    nrPa('a', 'A', 'single', 'RF', 0, {}, false, -0.07),
+    nrPa('b', 'B', 'hr', 'LF', 2, { 1: true }, false, -0.25),
+  ];
+  const s = draftNarrative(nrRun(items, 0.67, 0.28), nrCtx);
+  assert.ok(s.includes('相手A'), s);
+  assert.ok(s.includes('相手Bの左翼ホームランで2点'), s);
+});
+
+test('物語: 打席が多いときは間引いて、落としたぶんを書く', () => {
+  // 黙って落とすと、文章と記録が食い違ったまま残る
+  const items = Array.from({ length: 9 }, (_, i) =>
+    nrPa(`m${i}`, 'p1', 'single', 'LF', i === 8 ? 3 : 0, {}, true, i === 8 ? 0.3 : 0.02));
+  const s = draftNarrative(nrRun(items, 0.28, 0.75), nrCtx);
+  assert.ok(s.includes('ほか5打席'), s);
+  assert.ok(s.includes('で3点'), 'いちばん動いた打席は必ず入る');
+  // 句は上限まで
+  assert.equal(s.split('、').length, MAX_CLAUSES, `句は${MAX_CLAUSES}つまで`);
+});
+
+test('物語: ほとんど動いていない区間は文にしない', () => {
+  const items = [nrPa('x', 'p1', 'out', 'SS', 0, {}, true, 0.001)];
+  assert.equal(draftNarrative(nrRun(items, 0.5, 0.5), nrCtx), '');
+  assert.equal(draftNarrative(null, nrCtx), '');
+  assert.equal(draftNarrative({ items: [] }, nrCtx), '');
+});
+
+test('物語: 記録員が書いた文があれば、そちらを使う', () => {
+  const items = [nrPa('1', 'p1', 'single', 'LF', 0, {})];
+  const run = nrRun(items, 0.3, 0.4);
+  assert.equal(noteKeyOf(run), '1', '区間の先頭打席のIDで引く');
+  assert.equal(noteOf({ flowNotes: { 1: 'ベンチが静かになった' } }, run), 'ベンチが静かになった');
+  assert.equal(noteOf({}, run), '', '書かれていなければ空(下書きに戻る)');
+  assert.equal(noteOf({ flowNotes: {} }, run), '');
+  // 打席を直して区間の切れ目が変わっても、記録は壊れずに下書きへ戻るだけ
+  assert.equal(noteOf({ flowNotes: { 99: 'ずれた文' } }, run), '');
+});
+
+test('物語: 新しい試合は書き直しの入れ物を持っている', () => {
+  assert.deepEqual(newGame({}).flowNotes, {});
 });
