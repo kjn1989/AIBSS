@@ -8,6 +8,8 @@ import BattedBallPad from './BattedBallPad.jsx';
 import { depthBand, isFoul } from '../lib/battedBall.js';
 
 const NEEDS_DIRECTION = ['single', 'double', 'triple', 'hr', 'out', 'error', 'sacBunt', 'sacFly'];
+// 打球の強さ(弱い/平凡/強い)の呼び名を持つのはこの3つだけ
+const TRAJECTORY_TYPES = ['ground', 'liner', 'fly'];
 
 // プレイ確定シート: 方向・走者進塁・打点をまとめて確認して1タップ確定
 export default function PlaySheet({ game, initial, batterName, onClose }) {
@@ -200,7 +202,10 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
     const dir = direction ? (lang === 'ja' ? DIRECTIONS[direction] : t(`dir.${direction}`)) : '';
     // 強さまで選んでいれば「大飛球」のような呼び名で返す。選んでいなければ従来どおり
     // 犠飛にするときは「フライ」を重ねない(「中堅フライ 犠牲フライ」になってしまう)
-    const ot = asSacFly ? '' : contact && outType && outType !== 'dp'
+    // 打球の強さの呼び名(ボテボテ・大飛球など)があるのは ゴロ/ライナー/フライ だけ。
+    // 併殺打とインフィールドフライは軌道ではなく「そのアウトが何だったか」なので、
+    // ここに混ぜるとキー名がそのまま画面に出る(battedBall.ifly.normal と表示されていた)
+    const ot = asSacFly ? '' : contact && outType && TRAJECTORY_TYPES.includes(outType)
       ? t(`battedBall.${outType}.${contact}`)
       : result === 'out' && outType ? outLabel(outType) : '';
     const soLabel = lang === 'ja' ? SO_TYPES[soType] : t(`soType.${soType}`);
@@ -209,7 +214,8 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
       : asSacFly ? (lang === 'ja' ? RESULTS.sacFly.label : t('result.sacFly'))
         : result === 'out' ? '' : (result === 'bb' && intentional) ? t('result.ibb') : resultLabel;
     const runsSuffix = runs ? t('playsheet.runsSuffix', { n: runs }) : '';
-    if (lang === 'ja') return `${[dir, ot, label].filter(Boolean).join(' ')}${runsSuffix}`;
+    // 日本語は語のあいだに空白を入れない(「投手 フライ でよろしいですか?」になっていた)
+    if (lang === 'ja') return `${[dir, ot, label].filter(Boolean).join('')}${runsSuffix}`;
     // 英語は語順が異なるため、空でない要素を半角スペースで連結
     return `${[dir, ot, label].filter(Boolean).join(' ')}${runsSuffix}`;
   };
@@ -448,9 +454,13 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
       {dpNoRunnerOut && <div className="warn-box mt12">{t('playsheet.dpNoOut')}</div>}
       {blockers.map((k) => <div key={k} className="warn-box mt12">{t(k)}</div>)}
 
+      {/* 押せない理由を書かずに問いだけ出すと、確定が灰色のまま理由が分からない。
+          打球方向は凡打・安打では必須なので、そこを名指しで言う */}
       <div className="confirm-card mt16" style={{ marginBottom: 0, padding: 12 }}>
         <div className="q" style={{ fontSize: 16, marginBottom: 0 }}>
-          {t('playsheet.confirmQ', { summary: summary() })}
+          {needsDir && !direction
+            ? t('playsheet.needDirection')
+            : t('playsheet.confirmQ', { summary: summary() })}
         </div>
       </div>
 

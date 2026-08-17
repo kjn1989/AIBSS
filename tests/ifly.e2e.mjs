@@ -1,0 +1,129 @@
+// インフィールドフライ e2e
+// 守りたいこと:
+//  - 一二塁・2アウト未満のときだけ押せる(規則どおり)
+//  - 押したら選択状態になり、確定まで通る
+//  - 確認文にi18nのキー名が漏れない / 日本語に余計な空白が入らない
+//  - 打球方向を押す前は「確定できない理由」が出る
+import { chromium } from 'playwright-core';
+import { spawn } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+function resolveChromium() {
+  const base = '/opt/pw-browsers';
+  const candidates = [path.join(base, 'chromium')];
+  for (const d of fs.existsSync(base) ? fs.readdirSync(base) : []) {
+    if (d.startsWith('chromium-')) candidates.push(path.join(base, d, 'chrome-linux', 'chrome'));
+  }
+  for (const c of candidates) if (fs.existsSync(c) && fs.statSync(c).isFile()) return c;
+  return undefined;
+}
+const PORT = 4211;
+const URL_ = `http://localhost:${PORT}/`;
+const server = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { cwd: root, stdio: 'ignore' });
+for (let i = 0; i < 60; i++) { try { if ((await fetch(URL_)).ok) break; } catch { /* 起動待ち */ } await new Promise((r) => setTimeout(r, 500)); }
+
+let failures = 0;
+const check = (n, c, d = '') => { console.log(`${c ? 'ok' : 'NG'} - ${n}${c ? '' : ` :: ${d}`}`); if (!c) failures++; };
+const browser = await chromium.launch({ executablePath: resolveChromium() });
+
+try {
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  page.on('pageerror', (e) => { console.log('PAGE EXCEPTION:', e.message); failures++; });
+  page.on('dialog', (d) => d.accept());
+  await page.goto(URL_, { waitUntil: 'load' });
+  await page.waitForTimeout(800);
+
+  await page.click('button[aria-label="設定"]');
+  await page.waitForTimeout(400);
+  const demo = page.locator('button:has-text("デモデータを投入")');
+  if (await demo.count()) { await demo.click(); await page.waitForTimeout(400); }
+  await page.click('nav button:has-text("スコア入力")');
+  await page.waitForTimeout(400);
+  await page.fill('input[placeholder="対戦相手名"]', 'インフィールドフライ');
+  await page.click('button:has-text("試合開始")');
+  await page.waitForTimeout(600);
+  const att = page.locator('.sheet').filter({ hasText: '今日のメンバー' });
+  if (await att.count()) { await page.click('.sheet-actions button.primary'); await page.waitForTimeout(500); }
+  const autoSet = page.locator('button:has-text("登録選手から打順を自動セット")');
+  if (await autoSet.count()) { await autoSet.click(); await page.waitForTimeout(400); }
+
+  const outs = () => page.locator('.out-dot.on').count();
+  const baseOn = (b) => page.locator(`.base.b${b}.occupied`).count();
+  const pickDir = async () => {
+    const coach = page.locator('.pad-coach button');
+    if (await coach.count()) { await coach.click(); await page.waitForTimeout(200); }
+    const f = page.locator('.field-pad button.field-pos').first();
+    if (await f.count()) { await f.click(); await page.waitForTimeout(650); }
+  };
+
+  // --- 走者なしでは押せない ---
+  await page.click('.result-pad button:has-text("凡打")');
+  await page.waitForTimeout(500);
+  const noRunner = page.locator('.sheet .cpad-foot button:has-text("インフィールドフライ")');
+  check('走者なしでは押せない', await noRunner.isDisabled());
+  await page.click('.sheet-actions button.ghost');
+  await page.waitForTimeout(400);
+
+  // --- 一二塁・0アウトを作る ---
+  for (let i = 0; i < 2; i++) {
+    await page.click('.result-pad button:has-text("ヒット")');
+    await page.waitForTimeout(350);
+    await pickDir();
+    await page.click('.sheet-actions button:has-text("確定")');
+    await page.waitForTimeout(500);
+  }
+  check('一二塁になっている', (await baseOn(1)) > 0 && (await baseOn(2)) > 0);
+  check('0アウトのまま', (await outs()) === 0, String(await outs()));
+
+  await page.click('.result-pad button:has-text("凡打")');
+  await page.waitForTimeout(500);
+
+  // 打球方向を押す前は、確定できない理由が出ていること。
+  // 問いだけ出して確定が灰色のままだと、何を待たれているのか分からない
+  const before = await page.locator('.sheet .confirm-card').innerText();
+  check('方向を押す前は理由が出る', before.includes('打球が落ちたところ'), before);
+  check('その間は確定できない', await page.locator('.sheet-actions button.primary').isDisabled());
+
+  await pickDir();
+  // 実機と同じ順: 打球の強さを選んでからインフィールドフライを押す
+  await page.locator('.sheet .cpad-cell:has-text("フライ")').first().click();
+  await page.waitForTimeout(250);
+  const ifly = page.locator('.sheet .cpad-foot button:has-text("インフィールドフライ")');
+  check('一二塁・0アウトなら押せる', !(await ifly.isDisabled()));
+  await ifly.click();
+  await page.waitForTimeout(300);
+  check('押すと選択状態になる', (await ifly.getAttribute('class')).includes('primary'),
+    await ifly.getAttribute('class'));
+
+  const q = await page.locator('.sheet .confirm-card').innerText();
+  check('確認文にキー名が漏れていない', !q.includes('battedBall.'), q);
+  check('インフィールドフライだと書いてある', q.includes('インフィールドフライ'), q);
+  check('日本語に余計な空白が入らない', !/ でよろしいですか/.test(q), q);
+  check('確定できる', !(await page.locator('.sheet-actions button.primary').isDisabled()));
+
+  await page.click('.sheet-actions button:has-text("確定")');
+  await page.waitForTimeout(600);
+  check('打者はアウトになった', (await outs()) === 1, String(await outs()));
+  check('走者は残っている', (await baseOn(1)) > 0 && (await baseOn(2)) > 0);
+
+  // --- 2アウトになったら押せない ---
+  await page.click('.result-pad button:has-text("凡打")');
+  await page.waitForTimeout(400);
+  await pickDir();
+  await page.click('.sheet-actions button:has-text("確定")');
+  await page.waitForTimeout(600);
+  check('2アウトになった', (await outs()) === 2, String(await outs()));
+  await page.click('.result-pad button:has-text("凡打")');
+  await page.waitForTimeout(500);
+  const twoOut = page.locator('.sheet .cpad-foot button:has-text("インフィールドフライ")');
+  check('2アウトでは押せない', await twoOut.isDisabled());
+
+  console.log(failures === 0 ? '\n✓ infield fly PASS' : `\n✗ infield fly FAIL (${failures})`);
+} finally {
+  await browser.close();
+  server.kill();
+}
+process.exit(failures === 0 ? 0 : 1);
