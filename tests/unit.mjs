@@ -4392,3 +4392,61 @@ test('監査: ヒートマップの色の物差しが振り切れない', () => 
     assert.ok(top >= Math.max(...[...def.values()]), '2枚の大きいほうに合わせる');
   }
 });
+
+
+// ============================================================
+// 監査: 再集計で自責点の判定が消えていた
+//
+// 実際に起きうる筋道:
+//   1. 失策絡みの失点を、記録員がその場で「非自責」と付ける(防御率に響かない)
+//   2. あとから投手交代を直す → 投手成績の再集計が走る
+//   3. 非自責の判定が読まれず、全部が自責に戻って防御率が黙って悪化する
+// 判定はログに残っているので、再集計でも同じ数え方をする。
+// ============================================================
+const erGame = (payload) => ({
+  id: 'g', isHome: true, status: 'finished', inning: 1, isTop: true,
+  pitchingRecords: [{ id: 'r1', playerId: 'p1', runs: 0, earnedRuns: 0, outsRecorded: 0 }],
+  startingPitcherId: 'p1', currentPitcherId: 'p1',
+  playLogs: [
+    { id: 'd1', kind: 'defense', inning: 1, isTop: true, payload },
+    { id: 'd2', kind: 'defense', inning: 1, isTop: true, payload: { result: 'so', runs: 0, outsOnPlay: 3 } },
+  ],
+});
+const erOf = (payload) => rebuildPitchingStats(erGame(payload)).records[0];
+
+test('監査: 再集計しても「非自責」の判定が残る', () => {
+  const r = erOf({ result: 'error', runs: 2, outsOnPlay: 0, unearnedRuns: { 2: true, 3: true }, unearnedBatter: true });
+  assert.equal(r.runs, 2, '失点には入る');
+  assert.equal(r.earnedRuns, 0, '自責点にはしない');
+});
+
+test('監査: 非自責が付いていない失点は、これまでどおり自責点', () => {
+  const r = erOf({ result: 'single', runs: 2, outsOnPlay: 0 });
+  assert.equal(r.earnedRuns, 2);
+});
+
+test('監査: 同じ打席で自責と非自責が混ざっても数を取り違えない', () => {
+  const r = erOf({ result: 'single', runs: 2, outsOnPlay: 0, unearnedRuns: { 3: true } });
+  assert.equal(r.earnedRuns, 1, '2失点のうち1つだけ外す');
+});
+
+test('監査: 非自責の印が失点数より多くても、自責点は負にならない', () => {
+  const r = erOf({ result: 'error', runs: 1, outsOnPlay: 0, unearnedRuns: { 1: true, 2: true, 3: true }, unearnedBatter: true });
+  assert.equal(r.earnedRuns, 0);
+  assert.ok(r.earnedRuns >= 0);
+});
+
+test('監査: 再集計の数え方が、その場の記録(addRun)と同じになっている', () => {
+  // live と再集計で食い違うと、画面を開き直すたびに防御率が変わる
+  const cases = [
+    { result: 'error', runs: 1, unearnedBatter: true, live: 0 },
+    { result: 'error', runs: 1, unearnedBatter: false, live: 1 },
+    { result: 'single', runs: 1, unearnedRuns: { 3: true }, live: 0 },
+    { result: 'single', runs: 1, live: 1 },
+  ];
+  for (const c of cases) {
+    const { live, ...payload } = c;
+    assert.equal(erOf({ ...payload, outsOnPlay: 0 }).earnedRuns, live,
+      `${c.result} runs=${c.runs}: その場の記録と一致する`);
+  }
+});
