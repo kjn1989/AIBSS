@@ -14,6 +14,7 @@ import WinExpSheet from './WinExpSheet.jsx';
 import { computeBoxScore, hitsByInning } from '../lib/boxscore.js';
 import { oppNameOf as oppNameFor } from '../lib/oppBox.js';
 import { playLabel } from '../lib/voiceParser.js';
+import { draftNarrative, noteOf, noteKeyOf } from '../lib/narrative.js';
 import Sheet from './Sheet.jsx';
 
 // ---- 試合の流れ ----
@@ -124,6 +125,49 @@ function peakLine(peak, { nameOf, oppNameOf, edition, lang, t }) {
   return t(peak.runs ? 'fv.peakRuns' : 'fv.peak', {
     who, what, pct, runs: peak.runs,
   });
+}
+
+// ---- 区間のできごとを文章で ----
+// 出すのは下書き。記録から機械的に組んだ文なので、見ていたことは書けない。
+// 記録員がそのまま書き直せるようにして、直された文があればそちらを優先する。
+function SwingStory({ game, run, draft, onSave, t }) {
+  const saved = noteOf(game, run);
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(saved || draft);
+  if (!draft && !saved) return null;
+
+  const open = () => { setText(saved || draft); setEditing(true); };
+  const save = () => { onSave(noteKeyOf(run), text); setEditing(false); };
+  const reset = () => { onSave(noteKeyOf(run), ''); setText(draft); setEditing(false); };
+
+  if (!editing) {
+    return (
+      <div className="fv-story">
+        <p>{saved || draft}</p>
+        <div className="fv-story-foot">
+          <span className={`fv-story-tag${saved ? ' own' : ''}`}>
+            {t(saved ? 'nr.edited' : 'nr.draft')}
+          </span>
+          <button className="small" onClick={open}>{t('nr.edit')}</button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="fv-story editing">
+      <textarea
+        value={text}
+        rows={4}
+        placeholder={t('nr.placeholder')}
+        onChange={(e) => setText(e.target.value)}
+      />
+      <p className="small dim">{t('nr.note')}</p>
+      <div className="fv-story-foot">
+        <button className="small" onClick={reset}>{t('nr.reset')}</button>
+        <button className="small primary" onClick={save}>{t('nr.save')}</button>
+      </div>
+    </div>
+  );
 }
 
 function Chart({ series, tags, order, t, linescore, opening }) {
@@ -477,6 +521,13 @@ export default function FlowView({ game, onClose }) {
                       })}</span>
                       {/* 何が起きたのかが分からないと、あとから試合を思い出せない */}
                       {line && <i className="fv-swing-peak">{line}</i>}
+                      <SwingStory
+                        game={game}
+                        run={sw}
+                        draft={draftNarrative(sw, { nameOf, oppNameOf, edition, lang, t, innOf })}
+                        onSave={(key, text) => dispatch({ type: 'SET_FLOW_NOTE', gameId: game.id, key, text })}
+                        t={t}
+                      />
                     </div>
                   );
                 })}

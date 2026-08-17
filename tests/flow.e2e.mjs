@@ -180,6 +180,38 @@ try {
   check('i18nのキー名が漏れていない', !peaks.some((p) => p.includes('fv.')), JSON.stringify(peaks));
   check('日本語に余計な空白が入らない', !peaks.some((p) => /[^\x00-\x7F] [^\x00-\x7F]/.test(p)), JSON.stringify(peaks));
 
+  // --- 区間のできごとが文章で出て、記録員が書き直せる ---
+  const story = page.locator('.sheet .fv-story').first();
+  check('区間の文章が出ている', (await story.count()) === 1);
+  const draft = await story.locator('p').first().innerText();
+  check('打席の並びが文になっている', draft.includes('勝率は') && draft.includes('%'), draft);
+  check('i18nのキー名が漏れていない', !draft.includes('nr.'), draft);
+  check('下書きだと明示している',
+    (await story.locator('.fv-story-tag').innerText()).includes('下書き'),
+    await story.locator('.fv-story-tag').innerText());
+
+  // 書き直す → 保存すると、記録員の文として残る
+  await story.locator('button:has-text("書き直す")').click();
+  await page.waitForTimeout(300);
+  await story.locator('textarea').fill('ベンチが静かになった回。相手の代えどきが遅れた。');
+  await story.locator('button:has-text("保存")').click();
+  await page.waitForTimeout(500);
+  const after = await story.locator('p').first().innerText();
+  check('書いた文が残る', after.includes('ベンチが静かになった'), after);
+  check('記録員の文だと分かる',
+    (await story.locator('.fv-story-tag').innerText()).includes('記録員'),
+    await story.locator('.fv-story-tag').innerText());
+
+  // 下書きに戻せる
+  await story.locator('button:has-text("書き直す")').click();
+  await page.waitForTimeout(300);
+  await story.locator('button:has-text("下書きに戻す")').click();
+  await page.waitForTimeout(500);
+  const back = await story.locator('p').first().innerText();
+  check('下書きに戻せる', back === draft, `${back} / ${draft}`);
+  check('札も下書きに戻る',
+    (await story.locator('.fv-story-tag').innerText()).includes('下書き'));
+
   // --- 相手との力の差 ---
   // 設定の確かめ方は「30%と入れたらチャートが30%から始まる」の一点。
   // ここが合っていないと、倍率がどこから来たのか誰にも確かめられない
