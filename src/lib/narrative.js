@@ -4,23 +4,30 @@
 // 「1回裏〜2回表 から5打席で 勝率25% → 44%」だけでは、あとから試合を
 // 見返しても何が起きたのか思い出せない。効くのは「誰が何をしたか」。
 //
+// ---- 羅列にしない ----
+// 打席をそのまま「、」でつなぐと「Cは遊撃フライ、Dは一塁フライ、Eは左翼ゴロ」
+// という表になる。読めるが、実況にも解説にもなっていない。
+// 人が話すときは、こうしている:
+//   ・続けて打ち取った打者はまとめる  → 「C、Dを連続で打ち取り」
+//   ・回が変わるところで文を切る      → 「…打ち取った。続く1回裏、」
+//   ・点が入ったら点差で呼び分ける    → 「先制」「同点」「逆転」「2点」
+//   ・最後だけ言い切りにする          → 「…出塁」で終える
+// この4つを入れる。
+//
+// 回と勝率は左の欄に出ているので、文章では繰り返さない。
+//
 // ---- これは下書きである ----
 // ここが作るのは、記録から機械的に組んだ文。試合を見ていた記録員の言葉には
 // 到底かなわない。「あの回はベンチが静かになった」も「相手が代えどきを
 // 間違えた」も、記録には残っていない。
 // だから完成品として出さない。記録員がそのまま書き直せる下書きとして出し、
 // 直された文があればそちらを常に優先する。
-//
-// ---- 何を1文に入れるか ----
-// 打席を全部並べると読めない。動いた打席だけを時系列で拾い、上限を置く。
-// 拾わなかったぶんは「ほか◯打席」と正直に書く(黙って落とすと、文章が
-// 記録と食い違ったまま残る)。
 // ============================================================
 import { RESULTS } from './model.js';
 import { playLabel } from './voiceParser.js';
 
-// 文に入れる打席の上限。これ以上並べても読めない
-export const MAX_CLAUSES = 4;
+// 文に入れるできごとの上限。これ以上並べても読めない
+export const MAX_EVENTS = 4;
 // この程度しか動いていない打席は、話の筋に関係ない
 export const MIN_DELTA = 0.01;
 
@@ -40,72 +47,178 @@ function basesAfter(items, i) {
   return key === '000' ? null : key;
 }
 
-// 打席1つを句にする。
-//   点が入った  … 「田中の左翼ヒットで2点」
-//   出塁した    … 「佐藤の四球で一二塁」(塁状況が分かるときだけ添える)
-//   アウト      … 「山本は遊撃ゴロ」
-function clauseOf(item, basesKey, ctx) {
-  const p = item.log?.payload;
-  if (!p || !p.result) return null;
-  const def = RESULTS[p.result];
-  if (!def) return null;
-  const who = item.mine ? ctx.nameOf(p.playerId) : ctx.oppNameOf(p.letter);
-  if (!who) return null;
-  const what = playLabel(p.result, p.direction, p.outType, p.soType, ctx.edition, ctx.lang,
+const sameHalf = (a, b) => a && b && a.inning === b.inning && a.isTop === b.isTop;
+const payloadOf = (item) => item?.log?.payload || null;
+const isOutPlay = (p) => {
+  const def = RESULTS[p?.result];
+  return !!def && !def.onBase && !(Number(p.runs) || 0);
+};
+
+// 打席の呼び名。文の中では「遊撃ゴロ・アウト」が硬いので、末尾の「・アウト」は
+// 落とす(ログの表記はそのまま残す)
+function whatOf(p, ctx) {
+  const s = playLabel(p.result, p.direction, p.outType, p.soType, ctx.edition, ctx.lang,
     { hitAngle: p.hitAngle, intentional: p.intentional });
-  const runs = Number(p.runs) || 0;
-  if (runs > 0) return ctx.t('nr.runs', { who, what, n: runs });
-  if (def.onBase) {
-    return basesKey
-      ? ctx.t('nr.reachBases', { who, what, bases: ctx.t(`ret.r.${basesKey}`) })
-      : ctx.t('nr.reach', { who, what });
+  return ctx.lang === 'en' ? s : s.replace(/・アウト$/, '');
+}
+const whoOf = (item, ctx) => {
+  const p = payloadOf(item);
+  return item.mine ? ctx.nameOf(p?.playerId) : ctx.oppNameOf(p?.letter);
+};
+
+// ---- 点が入ったときの呼び分け ----
+// 「2点」とだけ言うのと「逆転」と言うのでは、同じ2点でも意味がまるで違う。
+// 点差はすでに記録から分かるので、そこは言い分ける。
+function scoreWord(item, before, ctx, end, runsOverride) {
+  const runs = runsOverride ?? (Number(payloadOf(item)?.runs) || 0);
+  const f = end ? 'end' : 'mid';
+  // 「先制」「逆転」だけだと何点入ったのかが消える。2点以上なら点数も残す
+  const withRuns = (w) => (runs >= 2 ? ctx.t(`nr.sc.multi.${f}`, { n: runs, w }) : w);
+  if (!before) return ctx.t(`nr.sc.runs.${f}`, { n: runs });
+  const diff = before.my - before.opp;      // 自チームから見た点差(その打席の前)
+  const after = item.mine ? diff + runs : diff - runs;
+  if (item.mine) {
+    if (before.my === 0 && before.opp === 0) return withRuns(ctx.t(`nr.sc.first.${f}`, { n: runs }));
+    if (diff < 0 && after === 0) return withRuns(ctx.t(`nr.sc.tie.${f}`, { n: runs }));
+    if (diff < 0 && after > 0) return withRuns(ctx.t(`nr.sc.comeback.${f}`, { n: runs }));
+    if (diff === 0 && after > 0) return withRuns(ctx.t(`nr.sc.ahead.${f}`, { n: runs }));
+    return ctx.t(`nr.sc.runs.${f}`, { n: runs });
   }
-  // 「鈴木は遊撃ゴロ・アウト」は文の中では硬い。「〜は」がもうアウトを表して
-  // いるので、末尾の「・アウト」は落とす(ログの表記はそのまま残す)
-  return ctx.t('nr.out', { who, what: what.replace(/・アウト$/, '') });
+  // 守備側。こちらから見れば失点
+  if (diff > 0 && after < 0) return withRuns(ctx.t(`nr.sc.lost.${f}`, { n: runs }));
+  if (diff > 0 && after === 0) return withRuns(ctx.t(`nr.sc.caught.${f}`, { n: runs }));
+  return ctx.t(`nr.sc.allowed.${f}`, { n: runs });
+}
+
+// ---- 打席をできごとにまとめる ----
+// 続けて打ち取った(出塁もせず点も入らない)打者は1つにまとめる。
+// 「C、Dを連続で打ち取り」のほうが、2つ並べるより実際の話し方に近い。
+function toEvents(items, ctx) {
+  const events = [];
+  for (let i = 0; i < items.length; i += 1) {
+    const p = payloadOf(items[i]);
+    if (!p || !p.result || !RESULTS[p.result]) continue;
+    if (isOutPlay(p)) {
+      const group = [items[i]];
+      while (i + 1 < items.length) {
+        const np = payloadOf(items[i + 1]);
+        if (!np || !isOutPlay(np) || items[i + 1].mine !== items[i].mine
+          || !sameHalf(items[i + 1], items[i])) break;
+        group.push(items[i + 1]);
+        i += 1;
+      }
+      events.push({ kind: 'outs', items: group, at: group[0], mine: group[0].mine });
+    } else {
+      // 続けて出塁した打者もまとめる。「秦の1点、若山の1点、竹丸の1点」と
+      // 並べるより「秦、若山、竹丸の3連打で3点」のほうが実際の話し方に近い
+      const group = [items[i]];
+      let j = i;
+      while (j + 1 < items.length) {
+        const np = payloadOf(items[j + 1]);
+        if (!np || !np.result || !RESULTS[np.result] || isOutPlay(np)) break;
+        if (items[j + 1].mine !== items[i].mine || !sameHalf(items[j + 1], items[i])) break;
+        group.push(items[j + 1]);
+        j += 1;
+      }
+      if (group.length >= 2) {
+        events.push({ kind: 'rally', items: group, at: group[0], mine: group[0].mine, index: i });
+        i = j;
+      } else {
+        events.push({ kind: 'play', items: [items[i]], at: items[i], mine: items[i].mine, index: i });
+      }
+    }
+  }
+  return events;
+}
+
+// できごと1つを句にする。end=true なら言い切りの形にする
+function phraseOf(ev, ctx, items, end) {
+  const side = ev.mine ? 'o' : 'd';   // o=自チームの攻撃 / d=守備
+  const tail = end ? 'end' : 'mid';
+  if (ev.kind === 'outs') {
+    const names = ev.items.map((x) => whoOf(x, ctx)).filter(Boolean);
+    if (!names.length) return null;
+    if (names.length === 1) {
+      return ctx.t(`nr.${side}.out.${tail}`, { who: names[0], what: whatOf(payloadOf(ev.at), ctx) });
+    }
+    return ctx.t(`nr.${side}.outs.${tail}`, { who: names.join(ctx.lang === 'en' ? ', ' : '、'), n: names.length });
+  }
+  if (ev.kind === 'rally') {
+    const names = ev.items.map((x) => whoOf(x, ctx)).filter(Boolean);
+    const runs = ev.items.reduce((n, x) => n + (Number(payloadOf(x)?.runs) || 0), 0);
+    if (!names.length) return null;
+    const who = names.join(ctx.lang === 'en' ? ', ' : '、');
+    // 全部が安打なら「連打」、四球やエラーが混じるなら「続けて出塁」
+    const allHits = ev.items.every((x) => RESULTS[payloadOf(x)?.result]?.hit);
+    const kind = allHits ? 'rally' : 'chain';
+    if (!runs) return ctx.t(`nr.${side}.${kind}0.${tail}`, { who, n: names.length });
+    return ctx.t(`nr.${side}.${kind}.${tail}`, {
+      who, n: names.length,
+      score: scoreWord(ev.items[ev.items.length - 1], ctx.scoreBefore?.(ev.at), ctx, end, runs),
+    });
+  }
+  const p = payloadOf(ev.at);
+  const who = whoOf(ev.at, ctx);
+  if (!who) return null;
+  const what = whatOf(p, ctx);
+  const runs = Number(p.runs) || 0;
+  if (runs > 0) {
+    return ctx.t(`nr.${side}.runs.${tail}`, {
+      who, what, score: scoreWord(ev.at, ctx.scoreBefore?.(ev.at), ctx, end),
+    });
+  }
+  const bases = ev.index != null ? basesAfter(items, ev.index) : null;
+  if (bases) {
+    return ctx.t(`nr.${side}.reachBases.${tail}`, { who, what, bases: ctx.t(`ret.r.${bases}`) });
+  }
+  return ctx.t(`nr.${side}.reach.${tail}`, { who, what });
 }
 
 // ------------------------------------------------------------
 // 区間 → 下書きの文
 //
 // run … flowRuns の1要素 { items, from, to, n, dir }
-// ctx … { nameOf, oppNameOf, edition, lang, t, innOf }
+// ctx … { nameOf, oppNameOf, edition, lang, t, innOf, scoreBefore? }
 // ------------------------------------------------------------
 export function draftNarrative(run, ctx) {
   if (!run || !Array.isArray(run.items) || !run.items.length) return '';
   const items = run.items;
 
-  // 動いた打席だけを時系列で。多すぎるときは動いた順に選んで、並べ直す
-  const moved = items
-    .map((s, i) => ({ s, i }))
-    .filter((x) => Math.abs(x.s.delta) >= MIN_DELTA);
-  const picked = (moved.length > MAX_CLAUSES
-    ? [...moved].sort((a, b) => Math.abs(b.s.delta) - Math.abs(a.s.delta)).slice(0, MAX_CLAUSES)
+  const all = toEvents(items, ctx);
+  // 動いたできごとだけ。まとめたアウトは、まとめて1つぶんの動きで見る
+  const moved = all.filter((ev) =>
+    ev.items.reduce((sum, x) => sum + Math.abs(x.delta || 0), 0) >= MIN_DELTA);
+  const picked = (moved.length > MAX_EVENTS
+    ? [...moved].sort((a, b) => {
+      const w = (e) => e.items.reduce((s, x) => s + Math.abs(x.delta || 0), 0);
+      return w(b) - w(a);
+    }).slice(0, MAX_EVENTS)
     : moved
-  ).sort((a, b) => a.i - b.i);
+  ).sort((a, b) => items.indexOf(a.at) - items.indexOf(b.at));
+  if (!picked.length) return '';
 
-  const clauses = [];
-  for (const x of picked) {
-    const c = clauseOf(x.s, basesAfter(items, x.i), ctx);
-    if (c) clauses.push(c);
-  }
-  if (!clauses.length) return '';
-
+  // 回が変わるところで文を切る。人が話すときも、そこで一度切っている
   const sep = ctx.lang === 'en' ? ', ' : '、';
-  const head = ctx.t('nr.head', {
-    inn: ctx.innOf(run.from) === ctx.innOf(run.to)
-      ? ctx.innOf(run.from)
-      : `${ctx.innOf(run.from)}〜${ctx.innOf(run.to)}`,
-    n: run.n,
-  });
+  let out = '';
+  for (let i = 0; i < picked.length; i += 1) {
+    const ev = picked[i];
+    const prev = picked[i - 1];
+    const newHalf = i > 0 && !sameHalf(ev.at, prev.at);
+    const isLast = i === picked.length - 1;
+    // 回をまたぐ手前は言い切って、次の回を頭に置く
+    const phrase = phraseOf(ev, ctx, items, isLast || (i + 1 < picked.length && !sameHalf(picked[i + 1].at, ev.at)));
+    if (!phrase) continue;
+    if (i === 0) out = phrase;
+    else if (newHalf) out += `${ctx.t('nr.period')}${ctx.t('nr.next', { inn: ctx.innOf(ev.at) })}${phrase}`;
+    else out += `${sep}${phrase}`;
+  }
+  if (!out) return '';
+  out += ctx.t('nr.period');
+
   // 拾わなかった打席は黙って落とさない。文章と記録が食い違ったまま残るので
-  const rest = items.length - picked.length;
-  const more = rest > 0 ? ctx.t('nr.more', { n: rest }) : '';
-  const tail = ctx.t('nr.tail', {
-    a: Math.round((run.from.we - run.from.delta) * 100),
-    b: Math.round(run.to.we * 100),
-  });
-  return `${head}${clauses.join(sep)}${ctx.t('nr.period')}${more}${tail}`;
+  const shown = picked.reduce((n, ev) => n + ev.items.length, 0);
+  const rest = items.length - shown;
+  return rest > 0 ? `${out}${ctx.t('nr.more', { n: rest })}` : out;
 }
 
 // 記録員が直した文の置き場所。区間の先頭打席のIDで引く。

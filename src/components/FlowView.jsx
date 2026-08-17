@@ -397,6 +397,19 @@ export default function FlowView({ game, onClose }) {
   const sw = useMemo(() => swingScale(game, opening), [game.teamGap, opening]);
   const judged = useMemo(() => judgeFlowTags(game, series, sw), [game, series, sw]);
   const swings = useMemo(() => flowRuns(series, sw.minSwing).slice(0, 3), [series, sw]);
+  // 「2点」と「逆転」では、同じ2点でも意味がまるで違う。文章で言い分けるために
+  // 各打席の「前」の得点を先に作っておく
+  const scoreBefore = useMemo(() => {
+    const m = new Map();
+    let my = 0;
+    let opp = 0;
+    for (const s of series) {
+      m.set(s.id, { my, opp });
+      const r = Number(s.log?.payload?.runs) || 0;
+      if (s.mine) my += r; else opp += r;
+    }
+    return (item) => m.get(item?.id) || null;
+  }, [series]);
 
   const order = useMemo(() => {
     const m = new Map();
@@ -509,28 +522,25 @@ export default function FlowView({ game, onClose }) {
             <>
               <div className="section-title">{t('fv.swingTitle')}</div>
               <div className="fv-swings">
-                {swings.map((sw) => {
-                  const line = peakLine(sw.peak, { nameOf, oppNameOf, edition, lang, t });
-                  return (
+                {swings.map((sw) => (
                     <div className={`fv-swing ${sw.dir > 0 ? 'up' : 'down'}`} key={sw.from.id}>
-                      <b>{innOf(sw.from) === innOf(sw.to) ? innOf(sw.from) : `${innOf(sw.from)}〜${innOf(sw.to)}`}</b>
-                      <span>{t('fv.swingRange', {
-                        n: sw.n,
-                        a: Math.round((sw.from.we - sw.from.delta) * 100),
-                        b: Math.round(sw.to.we * 100),
-                      })}</span>
-                      {/* 何が起きたのかが分からないと、あとから試合を思い出せない */}
-                      {line && <i className="fv-swing-peak">{line}</i>}
+                      <div className="fv-swing-head">
+                        <b>{innOf(sw.from) === innOf(sw.to) ? innOf(sw.from) : `${innOf(sw.from)}〜${innOf(sw.to)}`}</b>
+                        <span>{t('fv.swingRange', {
+                          n: sw.n,
+                          a: Math.round((sw.from.we - sw.from.delta) * 100),
+                          b: Math.round(sw.to.we * 100),
+                        })}</span>
+                      </div>
                       <SwingStory
                         game={game}
                         run={sw}
-                        draft={draftNarrative(sw, { nameOf, oppNameOf, edition, lang, t, innOf })}
+                        draft={draftNarrative(sw, { nameOf, oppNameOf, edition, lang, t, innOf, scoreBefore })}
                         onSave={(key, text) => dispatch({ type: 'SET_FLOW_NOTE', gameId: game.id, key, text })}
                         t={t}
                       />
                     </div>
-                  );
-                })}
+                ))}
               </div>
             </>
           )}
