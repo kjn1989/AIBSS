@@ -6,7 +6,7 @@ import { proposeMoves, judgeAdvance, batterDestOptions } from '../src/lib/plays.
 import { gameEndCheck, initialPresetIdFor, describeRules, rulesAtInning, currentRules, fieldCountAt, isTiebreakInning, diffLiveRules, describeRulePatch, runnersPlaced, placedRunsScored, halfKeyOf, DEFAULT_TIEBREAK, ALL_BAT_MAX, TIEBREAK_RUNNERS, allBatSize, lineupSlotsFor } from '../src/lib/rules.js';
 import { aggregateBatting, aggregatePitching, battingMetrics, pitchingMetrics, titleLeaders, DETAIL_METRICS, detailRanking, defaultInningBasis } from '../src/lib/stats.js';
 import { translate } from '../src/lib/i18n.js';
-import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, parseDirectionOnly, parseContact, playLabel } from '../src/lib/voiceParser.js';
+import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, needsComplexConfirm, parseDirectionOnly, parseContact, playLabel } from '../src/lib/voiceParser.js';
 import { swapTargetIndex, timingAnchor } from '../src/lib/logOrder.js';
 import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, assignResultTargets, mergeResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parsePositionSwaps, keepsBattingOrder, explicitOrderChange, stripInningFractions, parseInningRange, parseSlotBatters, parseAtBatDeletions, parseShortResult, isExplicitSubText, inGamePlayerIds, preferInGamePlayers } from '../src/lib/correctionParser.js';
 import { buildLineupRows, posChar, roleTag, assignAtBatsByPlayer, resolveStarters, findPositionIssues, alignmentByInning } from '../src/lib/lineupBox.js';
@@ -4488,4 +4488,54 @@ test('インフィールドフライ: 表示名は全エディション共通', 
     assert.equal(outTypeLabel('ifly', ed), 'インフィールドフライ', ed);
   }
   assert.equal(outTypeLabel('dp', '少年野球'), 'ゲッツー', '併殺打だけは言い換える');
+});
+
+
+// ============================================================
+// 音声: インフィールドフライ
+//
+// 実際に起きた不具合。「インフィールドフライ」と言うと「フライ・アウト」に
+// なっていた。辞書に無いので、中に含まれる「フライ」だけが拾われていた。
+// ============================================================
+test('音声: インフィールドフライを言い当てる', () => {
+  for (const say of ['インフィールドフライ', 'ショートへインフィールドフライ',
+    'インフィールドフライアウト', 'インフィールドフライで1アウト', 'いんふぃーるどふらい']) {
+    const c = parseUtterance(say)[0];
+    assert.equal(c?.result, 'out', `${say}: アウト`);
+    assert.equal(c?.outType, 'ifly', `${say}: インフィールドフライ`);
+  }
+  // 方向も一緒に読める
+  assert.equal(parseUtterance('ショートへインフィールドフライ')[0].direction, 'SS');
+});
+
+test('音声: ただの「フライ」はインフィールドフライにしない', () => {
+  for (const say of ['センターフライ', 'ショートフライ', 'ファウルフライ', '詰まったフライ']) {
+    const c = parseUtterance(say)[0];
+    assert.equal(c?.outType, 'fly', `${say}: ふつうのフライ`);
+  }
+});
+
+test('音声: 「インフィールドヒット」を食わない', () => {
+  // あいまい一致だと「インフィールドフライ」に化ける(10文字あるので「ヒット」より強い)。
+  // 実際に「ふらい」と言っていなければ落とす、というガードが要る
+  for (const say of ['インフィールドヒット', '内野安打']) {
+    const c = parseUtterance(say)[0];
+    assert.equal(c?.result, 'single', `${say}: 内野安打は単打`);
+    assert.notEqual(c?.outType, 'ifly', `${say}: インフィールドフライにしない`);
+  }
+});
+
+test('音声: インフィールドフライは画面で走者を確かめさせる', () => {
+  // 打者は捕球されなくてもアウトで、走者は自分の危険で進める。
+  // 走者の処理が割れるので、併殺と同じく確認を挟む
+  assert.equal(needsComplexConfirm({ kind: 'play', result: 'out', outType: 'ifly' }), true);
+  assert.equal(needsComplexConfirm({ kind: 'play', result: 'out', outType: 'dp' }), true);
+  assert.equal(needsComplexConfirm({ kind: 'play', result: 'out', outType: 'fly' }), false);
+});
+
+test('音声: 軌道ではないので、ヒットには付かない', () => {
+  // dp と同じ。「インフィールドフライ」と言いつつヒットと解釈された場合に
+  // outType だけ残ると、打球の軌道として保存されてしまう
+  const c = parseUtterance('インフィールドヒット')[0];
+  assert.equal(c?.outType ?? null, null);
 });
