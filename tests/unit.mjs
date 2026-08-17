@@ -4539,3 +4539,84 @@ test('音声: 軌道ではないので、ヒットには付かない', () => {
   const c = parseUtterance('インフィールドヒット')[0];
   assert.equal(c?.outType ?? null, null);
 });
+
+
+// ============================================================
+// 音声辞書の点検で見つかったもの
+// ============================================================
+
+test('音声: 妨害3種を聞き取れる', () => {
+  // スコア入力パッドには前からあるのに辞書に無く、「打撃妨害」が単打として
+  // 通っていた。黙って別の記録になるのがいちばん困る
+  const want = {
+    打撃妨害: 'interference',
+    キャッチャー妨害: 'interference',
+    守備妨害: 'fieldInterference',
+    走塁妨害: 'obstruction',
+    オブストラクション: 'obstruction',
+  };
+  for (const [say, result] of Object.entries(want)) {
+    const c = parseUtterance(say)[0];
+    assert.equal(c?.result, result, `${say} → ${result}`);
+  }
+});
+
+test('音声: 妨害3種は必ず画面で確かめる', () => {
+  // 誰がアウトになり走者がどこまで進むかが場面で変わる
+  for (const result of ['interference', 'fieldInterference', 'obstruction']) {
+    assert.equal(needsComplexConfirm({ kind: 'play', result }), true, result);
+  }
+});
+
+test('音声: 盗塁死を盗塁成功として記録しない', () => {
+  // 「死」は盗塁死の判定には入っていたが、成功側の打ち消しに入っていなかった。
+  // その結果、両方が同じ確からしさで並び、先に積まれた成功が勝っていた
+  const cs = parseUtterance('盗塁死')[0];
+  assert.equal(cs?.kind, 'cs', '盗塁死は盗塁死');
+  for (const say of ['盗塁失敗', '盗塁でアウト', '二塁で刺された盗塁']) {
+    assert.equal(parseUtterance(say)[0]?.kind, 'cs', say);
+  }
+  // 成功はこれまでどおり
+  for (const say of ['盗塁成功', '盗塁', 'ダブルスチール']) {
+    assert.equal(parseUtterance(say)[0]?.kind, 'sb', say);
+  }
+});
+
+test('音声: 二盗・三盗も盗塁として拾う', () => {
+  for (const say of ['二盗', '三盗']) {
+    assert.equal(parseUtterance(say)[0]?.kind, 'sb', say);
+  }
+});
+
+test('音声: 暴投・捕逸・牽制死・ボークを聞き取れる', () => {
+  // 記録できる出来事なのに辞書に無く、「ワイルドピッチ」が単打、
+  // 「パスボール」が四球として通っていた
+  const want = {
+    ワイルドピッチ: 'wp', 暴投: 'wp',
+    パスボール: 'pb', 捕逸: 'pb',
+    牽制死: 'pickoff', ピックオフ: 'pickoff',
+    ボーク: 'balk',
+  };
+  for (const [say, kind] of Object.entries(want)) {
+    const c = parseUtterance(say)[0];
+    assert.equal(c?.kind, kind, `${say} → ${kind}`);
+    assert.equal(c?.result ?? null, null, `${say} は打席結果ではない`);
+  }
+});
+
+test('音声: 「ボーク」を「ボール」と取り違えない', () => {
+  assert.equal(parseUtterance('ボーク')[0]?.kind, 'balk');
+  assert.equal(parseUtterance('ボール')[0]?.pitchType, 'ball');
+});
+
+test('音声: 打席の結果は走者イベントに食われない', () => {
+  // 走者イベントを先に見るようにしたので、ふつうの打撃が巻き込まれないこと
+  const keep = {
+    'ライト前ヒット': 'single', 'ショートゴロ': 'out', 'フォアボール': 'bb',
+    'デッドボール': 'hbp', '見逃し三振': 'so', 'ショートのエラー': 'error',
+    '送りバント': 'sacBunt', '犠牲フライ': 'sacFly', 'ライトへホームラン': 'hr',
+  };
+  for (const [say, result] of Object.entries(keep)) {
+    assert.equal(parseUtterance(say)[0]?.result, result, say);
+  }
+});
