@@ -24,7 +24,7 @@ const GLYPH = {
   fly: 'M2,15 Q14,-6 26,15',
 };
 
-export default function BattedBallPad({ trajectory, contact, depth, onChange, dp, onDp, dpDisabled }) {
+export default function BattedBallPad({ trajectory, contact, depth, onChange, dp, onDp, dpDisabled, ifly, onIfly, iflyDisabled }) {
   const t = useT();
   const cand = contactCandidate(trajectory, depth);
 
@@ -68,6 +68,8 @@ export default function BattedBallPad({ trajectory, contact, depth, onChange, dp
           </React.Fragment>
         ))}
       </div>
+      {/* 併殺とインフィールドフライは打球の軌道ではなく「そのアウトが何だったか」。
+          場面が成り立たないときは押せないようにする(一二塁2アウト未満でだけ宣告される) */}
       <div className="cpad-foot">
         <button
           type="button"
@@ -77,6 +79,17 @@ export default function BattedBallPad({ trajectory, contact, depth, onChange, dp
         >
           {t('outType.dp')}
         </button>
+        {onIfly && (
+          <button
+            type="button"
+            className={`small${ifly ? ' primary' : ''}`}
+            onClick={onIfly}
+            disabled={iflyDisabled}
+            title={iflyDisabled ? t('outType.iflyWhen') : undefined}
+          >
+            {t('outType.ifly')}
+          </button>
+        )}
         <span className="dim small">{t('battedBall.optional')}</span>
       </div>
     </>

@@ -50,6 +50,21 @@ export function resolveStartPitcher(game) {
 // 引数の game は呼び出し側でコピー済みであることを前提とし、
 // 守備ログの payload.pitcherId(対左右split用)だけ正しい投手に書き戻す。
 // 戻り値: { records, lastPitcherId, filledOuts } (filledOuts = 3アウト照合で補った数)
+// ---- その打席で「非自責」と記録された得点の数 ----
+// 実際に起きた不具合。記録員が失策絡みの失点を非自責として付けていても、
+// 投手を後から入れ替えて再集計した瞬間に全部が自責に戻り、防御率が黙って悪化していた。
+// 判定はログに残っている(unearnedRuns / unearnedBatter)ので、そこから数え直す。
+// 数え方は addRun(state/store.jsx) と同じにする。片方だけ直すと live と再集計で食い違う。
+//
+// 拾えないもの: 失策で出塁した走者が「あとの打席で」還った場合。live では走者に
+// 付いた viaError を見ているが、その印はログに残っていない。そこは手動調整で補う。
+function unearnedOnPlay(p) {
+  let n = 0;
+  for (const v of Object.values(p?.unearnedRuns || {})) if (v) n += 1;
+  if (p?.result === 'error' && p?.unearnedBatter !== false) n += 1; // 打者自身の生還
+  return Math.min(Number(p?.runs) || 0, n);
+}
+
 export function rebuildPitchingStats(game) {
   const startPitcher = resolveStartPitcher(game);
   const prevDec = {};
@@ -132,8 +147,9 @@ export function rebuildPitchingStats(game) {
       if (p.pitchCount) { const k = String(l.inning); pr.pitchesByInning[k] = (pr.pitchesByInning[k] || 0) + p.pitchCount; }
       l.payload = { ...p, pitcherId: cur }; // どの投手が投げたかを再設定(対左右split用)
       const h = touchHalf(l, cur);
-      // 近似(自責=失点)。タイブレークで置いた走者ぶんだけ外す。手動調整で補正可
-      pr.earnedRuns += earnedOf(h, p.runs || 0);
+      // 記録員がその場で付けた非自責の判定を先に引く。そのうえで、タイブレークで
+      // 置いた走者ぶんを外す。残りを自責点にする
+      pr.earnedRuns += earnedOf(h, Math.max(0, (p.runs || 0) - unearnedOnPlay(p)));
       if (h) h.outs += p.outsOnPlay || 0;
     } else if (l.kind === 'runner' || l.kind === 'sb') {
       // 走塁アウト(盗塁死・牽制死等)。守備側のときだけ投手のアウトに数える。

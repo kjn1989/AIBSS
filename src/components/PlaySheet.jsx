@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import Sheet from './Sheet.jsx';
 import { useStore, useT, usePlayerName, isMyTeamBatting } from '../state/store.jsx';
-import { RESULTS, DIRECTIONS, SO_TYPES, outTypeLabel, allowsFoul } from '../lib/model.js';
+import { RESULTS, DIRECTIONS, SO_TYPES, outTypeLabel, allowsFoul , infieldFlyPossible } from '../lib/model.js';
 import { proposeMoves, batterDestOptions, runnerDestOptions, judgeAdvance } from '../lib/plays.js';
 import FieldPad from './FieldPad.jsx';
 import BattedBallPad from './BattedBallPad.jsx';
@@ -38,6 +38,9 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
   // 既に2アウトなら起こりえない(1つ目のアウトでその回が終わる)。
   // 走者が居ないときも成立しない。
   const dpPossible = result === 'out' && (runnersOn[1] || runnersOn[2] || runnersOn[3]) && game.outs < 2;
+  // インフィールドフライは一二塁(満塁を含む)・2アウト未満でしか宣告されない。
+  // 場面が成り立たないのに押せると、記録として誤りになる
+  const iflyPossible = result === 'out' && infieldFlyPossible(runnersOn, game.outs);
 
   const [direction, setDirection] = useState(initial.direction || null);
   // 走者の既定は打球方向で変わる(レフト前の二塁走者は三塁、など)。
@@ -55,7 +58,7 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
   // 音声や取り込みで併殺が指定されていても、成立しない状況なら併殺では始めない。
   // ボタンが押せないのに併殺のまま固まって、解除できなくなるのを防ぐ
   const [outType, setOutType] = useState(
-    initial.outType === 'dp' && !dpPossible
+    (initial.outType === 'dp' && !dpPossible) || (initial.outType === 'ifly' && !iflyPossible)
       ? 'ground'
       : (initial.outType || (result === 'out' ? 'ground' : null)),
   );
@@ -311,13 +314,16 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
         <>
           <div className="section-title">{t('playsheet.battedBall')}</div>
           <BattedBallPad
-            trajectory={outType === 'dp' ? null : outType}
+            trajectory={outType === 'dp' || outType === 'ifly' ? null : outType}
             contact={contact}
             depth={point ? point.depth : null}
             onChange={(tr, c) => { setOutType(tr); setContact(c); }}
             dp={outType === 'dp'}
             onDp={() => (outType === 'dp' ? setOutType('ground') : selectOutType('dp'))}
             dpDisabled={!dpPossible}
+            ifly={outType === 'ifly'}
+            onIfly={() => (outType === 'ifly' ? setOutType('fly') : selectOutType('ifly'))}
+            iflyDisabled={!iflyPossible}
           />
         </>
       )}

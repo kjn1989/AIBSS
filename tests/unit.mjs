@@ -19,7 +19,7 @@ import { aggregateScorersOver, swingScale, OPEN_MIN_SWING, OPEN_REACT_SWING } fr
 import { aggregateContrib, rankContrib, formatContrib } from '../src/lib/contrib.js';
 import { stateKey, buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, formatRate, weShape, weSeries, stateOfKey, BASE_RE, reOf, KOSHIEN_RE, KOSHIEN_WEIGHTS, KOSHIEN_LEVEL, isKoshienMeasured, baseReFor } from '../src/lib/flow.js';
 import { teamPower, mostOff, formatPower } from '../src/lib/teamPower.js';
-import { RESULTS as RESULTS_FOR_OUT, newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions, attendeesOf, lastAttendees, autoLineupFrom, subRank, resultLabelOf, isIntentionalBB } from '../src/lib/model.js';
+import { RESULTS as RESULTS_FOR_OUT, OUT_TYPES, outTypeLabel, infieldFlyPossible, newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions, attendeesOf, lastAttendees, autoLineupFrom, subRank, resultLabelOf, isIntentionalBB } from '../src/lib/model.js';
 import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf, oppLettersInGame, oppBaserunning } from '../src/lib/oppBox.js';
 import { remapPlayerInGame, fillPlayerGaps } from '../src/lib/mergePlayers.js';
 import { computeBoxScore, halfPlayed } from '../src/lib/boxscore.js';
@@ -4391,4 +4391,101 @@ test('監査: ヒートマップの色の物差しが振り切れない', () => 
     // 攻撃時と守備時で同じ物差しであること(別々だと「守備が赤い」の意味が消える)
     assert.ok(top >= Math.max(...[...def.values()]), '2枚の大きいほうに合わせる');
   }
+});
+
+
+// ============================================================
+// 監査: 再集計で自責点の判定が消えていた
+//
+// 実際に起きうる筋道:
+//   1. 失策絡みの失点を、記録員がその場で「非自責」と付ける(防御率に響かない)
+//   2. あとから投手交代を直す → 投手成績の再集計が走る
+//   3. 非自責の判定が読まれず、全部が自責に戻って防御率が黙って悪化する
+// 判定はログに残っているので、再集計でも同じ数え方をする。
+// ============================================================
+const erGame = (payload) => ({
+  id: 'g', isHome: true, status: 'finished', inning: 1, isTop: true,
+  pitchingRecords: [{ id: 'r1', playerId: 'p1', runs: 0, earnedRuns: 0, outsRecorded: 0 }],
+  startingPitcherId: 'p1', currentPitcherId: 'p1',
+  playLogs: [
+    { id: 'd1', kind: 'defense', inning: 1, isTop: true, payload },
+    { id: 'd2', kind: 'defense', inning: 1, isTop: true, payload: { result: 'so', runs: 0, outsOnPlay: 3 } },
+  ],
+});
+const erOf = (payload) => rebuildPitchingStats(erGame(payload)).records[0];
+
+test('監査: 再集計しても「非自責」の判定が残る', () => {
+  const r = erOf({ result: 'error', runs: 2, outsOnPlay: 0, unearnedRuns: { 2: true, 3: true }, unearnedBatter: true });
+  assert.equal(r.runs, 2, '失点には入る');
+  assert.equal(r.earnedRuns, 0, '自責点にはしない');
+});
+
+test('監査: 非自責が付いていない失点は、これまでどおり自責点', () => {
+  const r = erOf({ result: 'single', runs: 2, outsOnPlay: 0 });
+  assert.equal(r.earnedRuns, 2);
+});
+
+test('監査: 同じ打席で自責と非自責が混ざっても数を取り違えない', () => {
+  const r = erOf({ result: 'single', runs: 2, outsOnPlay: 0, unearnedRuns: { 3: true } });
+  assert.equal(r.earnedRuns, 1, '2失点のうち1つだけ外す');
+});
+
+test('監査: 非自責の印が失点数より多くても、自責点は負にならない', () => {
+  const r = erOf({ result: 'error', runs: 1, outsOnPlay: 0, unearnedRuns: { 1: true, 2: true, 3: true }, unearnedBatter: true });
+  assert.equal(r.earnedRuns, 0);
+  assert.ok(r.earnedRuns >= 0);
+});
+
+test('監査: 再集計の数え方が、その場の記録(addRun)と同じになっている', () => {
+  // live と再集計で食い違うと、画面を開き直すたびに防御率が変わる
+  const cases = [
+    { result: 'error', runs: 1, unearnedBatter: true, live: 0 },
+    { result: 'error', runs: 1, unearnedBatter: false, live: 1 },
+    { result: 'single', runs: 1, unearnedRuns: { 3: true }, live: 0 },
+    { result: 'single', runs: 1, live: 1 },
+  ];
+  for (const c of cases) {
+    const { live, ...payload } = c;
+    assert.equal(erOf({ ...payload, outsOnPlay: 0 }).earnedRuns, live,
+      `${c.result} runs=${c.runs}: その場の記録と一致する`);
+  }
+});
+
+
+// ============================================================
+// インフィールドフライ
+//
+// 一二塁(満塁を含む)・2アウト未満でしか宣告されない。打者は捕球されなくても
+// アウトで、走者は自分の危険で進める。フライだが犠飛にはならない。
+// 場面が成り立たないのに選べると、記録としてそのまま誤りになる。
+// ============================================================
+test('インフィールドフライ: 一二塁・2アウト未満のときだけ宣告されうる', () => {
+  const on = (a, b, c) => ({ 1: a, 2: b, 3: c });
+  assert.equal(infieldFlyPossible(on(1, 1, 0), 0), true, '一二塁・無死');
+  assert.equal(infieldFlyPossible(on(1, 1, 0), 1), true, '一二塁・1死');
+  assert.equal(infieldFlyPossible(on(1, 1, 1), 0), true, '満塁');
+  assert.equal(infieldFlyPossible(on(1, 1, 0), 2), false, '2アウトでは宣告されない');
+  assert.equal(infieldFlyPossible(on(1, 0, 0), 0), false, '一塁だけでは成立しない');
+  assert.equal(infieldFlyPossible(on(0, 1, 0), 0), false, '二塁だけでは成立しない');
+  assert.equal(infieldFlyPossible(on(0, 1, 1), 0), false, '二三塁は対象外(封殺の状況ではない)');
+  assert.equal(infieldFlyPossible(on(0, 0, 0), 0), false, '走者なし');
+  assert.equal(infieldFlyPossible(null, 0), false, '走者が無くても落ちない');
+});
+
+test('インフィールドフライ: 打数に数えるアウトで、犠飛にはならない', () => {
+  // result は 'out' のまま。内訳(outType)だけが ifly。
+  // 結果種別を増やすと打率の分母を通る道が二重になる
+  assert.equal(OUT_TYPES.ifly, 'インフィールドフライ');
+  assert.equal(RESULTS_FOR_OUT.out.ab, true, '打数に数える');
+  assert.equal(RESULTS_FOR_OUT.out.onBase, false, '打者はアウト');
+  // 犠飛の自動認定は outType === 'fly' が条件。ifly はそこに入らない
+  assert.notEqual('ifly', 'fly');
+});
+
+test('インフィールドフライ: 表示名は全エディション共通', () => {
+  // 少年野球で言い換えるのは併殺打(ゲッツー)だけ。規則の名前は変えない
+  for (const ed of ['草野球', 'ブカツ(中高大)', '少年野球']) {
+    assert.equal(outTypeLabel('ifly', ed), 'インフィールドフライ', ed);
+  }
+  assert.equal(outTypeLabel('dp', '少年野球'), 'ゲッツー', '併殺打だけは言い換える');
 });

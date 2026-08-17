@@ -57,7 +57,17 @@ export const OUT_TYPES = {
   fly: 'フライ',
   liner: 'ライナー',
   dp: 'ダブルプレー',
+  ifly: 'インフィールドフライ',
 };
+
+// インフィールドフライが宣告されうる場面か。
+// 一二塁(または満塁)で2アウト未満のときだけ。打者は捕球されなくてもアウトで、
+// 走者は自分の危険で進める。フライ扱いなので犠飛にはならない。
+// バントの小飛球は対象外だが、そこは記録員の判断に委ねる(規則上も打球で分かれる)。
+export function infieldFlyPossible(runners, outs) {
+  const on = runners || {};
+  return !!(on[1] && on[2]) && Number(outs) < 2;
+}
 
 // プレイ結果の分類(スコアシート・ログの色分け用。画面とPDFで同一のクラス名を使う)。
 // hit=ヒット / outres=アウト / walk=四死球 / error=エラー / sac=犠打犠飛 / intf=妨害 / other=その他
