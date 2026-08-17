@@ -193,6 +193,7 @@ try {
   check('回と勝率を繰り返していない',
     !draft.includes('勝率') && !draft.includes('打席で') && !/^\d+回/.test(draft), draft);
   check('選手名と結果が入っている', draft.length > 6 && draft.includes('。'), draft);
+  check('打順も入っている', /\d+番・/.test(draft), draft);
   check('i18nのキー名が漏れていない', !draft.includes('nr.'), draft);
   check('下書きだと明示している',
     (await story.locator('.fv-story-tag').innerText()).includes('下書き'),
