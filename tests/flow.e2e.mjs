@@ -212,9 +212,9 @@ try {
     JSON.stringify(startY));
 
   // --- ヒートマップ ---
-  await page.locator('.sheet button:has-text("ヒートマップで見る")').click();
+  await page.locator('.sheet button:has-text("期待得点・期待失点表")').click();
   await page.waitForTimeout(900);
-  const hm = page.locator('.sheet:has-text("ヒートマップ")').last();
+  const hm = page.locator('.sheet:has-text("期待得点・期待失点表")').last();
   check('ヒートマップが開く', (await hm.count()) >= 1);
   const hmCells = hm.locator('.hm-cell');
   check('24マスある', (await hmCells.count()) === 24, String(await hmCells.count()));

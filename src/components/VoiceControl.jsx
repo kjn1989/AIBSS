@@ -182,6 +182,24 @@ export default function VoiceControl({ game }) {
       setMode('idle');
       return;
     }
+    // 暴投・捕逸・ボークは全走者が1つ進む。牽制死は先頭の走者がアウト。
+    // ここを通さないと、解釈できても何も記録されずに消える
+    if (cand.kind === 'wp' || cand.kind === 'pb' || cand.kind === 'balk') {
+      const moves = [3, 2, 1]
+        .filter((b) => game.runners[b])
+        .map((b) => ({ from: b, to: b + 1 >= 4 ? 4 : b + 1 }));
+      if (!moves.length) { setMode('idle'); return; }
+      dispatch({ type: 'RUNNER_EVENT', gameId: game.id, event: cand.kind, moves });
+      setMode('idle');
+      return;
+    }
+    if (cand.kind === 'pickoff') {
+      const from = [3, 2, 1].find((b) => game.runners[b]);
+      if (!from) { setMode('idle'); return; }
+      dispatch({ type: 'RUNNER_EVENT', gameId: game.id, event: 'pickoff', moves: [{ from, to: 'out' }] });
+      setMode('idle');
+      return;
+    }
     if (cand.kind === 'sb' || cand.kind === 'cs') {
       // 次塁が空いている最も先の走者を対象にする
       const from = [3, 2, 1].find((b) => game.runners[b] && (b === 3 || !game.runners[b + 1]));

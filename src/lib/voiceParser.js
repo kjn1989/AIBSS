@@ -112,6 +112,11 @@ const RESULT_DICT = {
   error: ['エラー', '失策', 'トンネル', '悪送球', 'お手玉', '落とした', 'ファンブル'],
   sacBunt: ['送りバント', '犠打', 'バント成功', 'バント', 'スクイズ', 'すくいず', 'スクイズバント'],
   sacFly: ['犠牲フライ', '犠飛', 'タッチアップ', '犠牲フライで生還'],
+  // 妨害3種。パッドには前からあるのに辞書に無く、「打撃妨害」が単打として
+  // 通っていた(「妨害」より「打撃」のほうが単打側の語に近かったため)
+  interference: ['打撃妨害', 'キャッチャー妨害', '捕手妨害', 'バッターインターフェア'],
+  fieldInterference: ['守備妨害', '走者の妨害', '走塁妨害ではない守備妨害'],
+  obstruction: ['走塁妨害', 'オブストラクション', 'おぶすとらくしょん', '進塁妨害'],
 };
 
 const OUT_TYPE_DICT = {
@@ -152,7 +157,22 @@ const PITCH_DICT = {
 // 修飾語: 解釈のヒント
 const HINT_HIT = ['抜けた', '落ちた', '間を破', 'ぬけた', 'ポテン', '深く', 'ふかく'];
 const HINT_UNCERTAIN = ['際どい', 'きわどい', '微妙', 'たぶん', 'ぎりぎり', 'かな'];
-const SB_WORDS = ['盗塁', 'スチール', 'すちーる'];
+const SB_WORDS = ['盗塁', 'スチール', 'すちーる', '二盗', '三盗', 'にとう', 'さんとう'];
+// 盗塁が失敗だったことを示す語。成功の打ち消しと、盗塁死の判定で同じものを使う
+const FAIL_WORDS = ['あうと', '失敗', 'しっぱい', '死', '刺され', 'ささ'];
+
+// ---- 走者まわりの出来事(打席の結果ではないもの) ----
+// 暴投・捕逸・牽制死・ボークは記録できるのに辞書に無く、「ワイルドピッチ」が
+// 単打、「パスボール」が四球として通っていた
+const RUNNER_EVENT_DICT = {
+  wp: ['ワイルドピッチ', '暴投', 'わいるどぴっち'],
+  pb: ['パスボール', '捕逸', 'ぱすぼーる', 'キャッチャーが後ろに逸らし'],
+  // 「牽制でアウト」は入れない。「盗塁であうと」と語尾が同じで、あいまい一致が
+  // ちょうど閾値に乗ってしまう(盗塁死が牽制死になっていた)
+  pickoff: ['牽制死', 'けん制死', '牽制アウト', 'ピックオフ'],
+  balk: ['ボーク', 'ぼーく'],
+};
+const RUNNER_EVENT_LABEL = { wp: '暴投', pb: '捕逸', pickoff: '牽制死', balk: 'ボーク' };
 
 function scoreDict(text, dict) {
   const scores = {};
@@ -185,15 +205,30 @@ export function parseUtterance(rawText) {
   const uncertain = HINT_UNCERTAIN.some((w) => text.includes(normalize(w)));
   const hitHint = HINT_HIT.some((w) => text.includes(normalize(w)));
 
+  // --- 走者まわりの出来事(暴投・捕逸・牽制死・ボーク) ---
+  // 打席の結果より先に見る。ここに当たる発話は打撃結果ではない
+  const reScores = scoreDict(text, RUNNER_EVENT_DICT);
+  // 盗塁と言っているなら盗塁の話。走者イベント側で先に食わない
+  const isSteal = SB_WORDS.some((w) => text.includes(normalize(w)));
+  // 「盗塁でアウト」の「アウト」を凡打として拾わない。盗塁死は打球ではないので、
+  // 打撃結果の「アウト」候補を落とす(「アウト」3文字が「盗塁」2文字に勝っていた)
+  if (isSteal) delete resScores.out;
+  const reBest = isSteal ? null : topKey(reScores);
+  if (reBest) {
+    return [{ kind: reBest, label: RUNNER_EVENT_LABEL[reBest], confidence: norm(reScores[reBest]) }];
+  }
+
   // --- 盗塁 ---
   const sbScore = Math.max(...SB_WORDS.map((w) => matchScore(text, w)), 0);
   if (sbScore > 0) {
     candidates.push({
       kind: 'sb',
       label: '盗塁成功',
-      confidence: norm(sbScore) * (text.includes('しっぱい') || text.includes('あうと') || text.includes('失敗') ? 0 : 1),
+      // 打ち消し語は cs 側の条件とそろえる。「盗塁死」は「死」しか手がかりが
+      // 無いので、ここに入れておかないと成功として記録されてしまう
+      confidence: norm(sbScore) * (FAIL_WORDS.some((w) => text.includes(w)) ? 0 : 1),
     });
-    if (text.includes('あうと') || text.includes('失敗') || text.includes('しっぱい') || text.includes('死')) {
+    if (FAIL_WORDS.some((w) => text.includes(w))) {
       candidates.push({ kind: 'cs', label: '盗塁死', confidence: norm(sbScore) });
     }
   }
@@ -267,8 +302,10 @@ export function parseUtterance(rawText) {
   // --- 方向だけ聞き取れた場合のフォールバック ---
   // 例:「ライトゴロ」の「ゴロ」が認識落ちして「ライト」だけになったケース。
   // その方向の代表的な結果(単打/ゴロ/フライ)を候補として提示する。
+  // 盗塁と言っている発話は打撃ではないので、ここには落とさない
+  // (「二塁で刺された盗塁」の「二塁」を方向と取って単打を出していた)
   const hasPlay = candidates.some((c) => c.kind === 'play');
-  if (bestDir && !hasPlay) {
+  if (bestDir && !hasPlay && !isSteal) {
     candidates.push(
       { kind: 'play', result: 'single', direction: bestDir, outType: null, soType: null, label: playLabel('single', bestDir), confidence: 0.5 },
       { kind: 'play', result: 'out', direction: bestDir, outType: 'ground', soType: null, label: playLabel('out', bestDir, 'ground'), confidence: 0.45 },
@@ -393,6 +430,9 @@ export function needsComplexConfirm(cand) {
   if (['double', 'triple', 'hr'].includes(cand.result) && !cand.direction) return true;
   if (['sacBunt', 'sacFly'].includes(cand.result)) return true;
   if (cand.result === 'error') return true;
+  // 妨害3種は年に数回の記録で、誰がアウトになり走者がどこまで進むかが場面で変わる。
+  // 音声だけで確定させず、必ず画面で確かめる
+  if (['interference', 'fieldInterference', 'obstruction'].includes(cand.result)) return true;
   // インフィールドフライは打者が捕球されなくてもアウトになり、走者は自分の
   // 危険で進める。走者の処理が割れるので、併殺と同じく画面で確かめる
   if (cand.result === 'out' && (cand.outType === 'dp' || cand.outType === 'ifly')) return true;
