@@ -4620,3 +4620,42 @@ test('音声: 打席の結果は走者イベントに食われない', () => {
     assert.equal(parseUtterance(say)[0]?.result, result, say);
   }
 });
+
+
+// ============================================================
+// 大きく動いた区間に「いちばん動いた1打席」を持たせる
+//
+// 「5打席で25%→44%」だけでは、あとから試合を思い出せない。
+// 効くのは「誰が何をしたか」なので、区間の山になった打席を1つ控えておく。
+// ============================================================
+test('流れ: 大きく動いた区間は、いちばん動いた打席を持っている', () => {
+  const s = (id, delta) => ({ id, delta, we: 0.5, inning: 1, isTop: true, log: { id } });
+  // 上げ幅: 0.1 → 0.5 → 0.1 (真ん中がいちばん大きい)
+  const runs = flowRuns([s('a', 0.1), s('b', 0.5), s('c', 0.1)], 0.6);
+  assert.equal(runs.length, 1);
+  assert.equal(runs[0].peak.id, 'b', '山になった打席を持つ');
+  assert.equal(runs[0].n, 3);
+  assert.equal(Number(runs[0].swing.toFixed(2)), 0.7);
+});
+
+test('流れ: 1打席だけの区間は、その打席が山', () => {
+  const s = (id, delta) => ({ id, delta, we: 0.5, inning: 1, isTop: true, log: { id } });
+  const runs = flowRuns([s('a', 0.8)], 0.6);
+  assert.equal(runs[0].peak.id, 'a');
+});
+
+test('流れ: 下げの区間でも、いちばん動いた打席は絶対値で選ぶ', () => {
+  const s = (id, delta) => ({ id, delta, we: 0.5, inning: 1, isTop: true, log: { id } });
+  const runs = flowRuns([s('a', -0.2), s('b', -0.7), s('c', -0.1)], 0.6);
+  assert.equal(runs[0].peak.id, 'b');
+  assert.equal(runs[0].dir, -1);
+});
+
+test('表示: 日本語のプレイ名に余計な空白を入れない', () => {
+  // 「左翼 ホームラン」になっていた。凡打の行は元から空白なしで不揃いだった
+  assert.equal(playLabel('single', 'LF', null, null, undefined, 'ja'), '左翼ヒット');
+  assert.equal(playLabel('hr', 'LF', null, null, undefined, 'ja'), '左翼ホームラン');
+  assert.equal(playLabel('out', 'SS', 'ground', null, undefined, 'ja'), '遊撃ゴロ・アウト');
+  // 英語は語の区切りに空白が要る
+  assert.equal(playLabel('single', 'LF', null, null, undefined, 'en'), 'LF Hit');
+});

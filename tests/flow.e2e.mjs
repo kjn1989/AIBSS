@@ -167,6 +167,19 @@ try {
   check('前と後の勝率が両方出ている', (read.match(/\d+%/g) || []).length >= 2, read);
   check('勝率だと分かる言葉が付いている', read.includes('勝率'), read);
 
+  // --- 大きく動いたところに「誰が何をしたか」が出る ---
+  // 「5打席で25%→44%」だけでは、あとから試合を思い出せない
+  const swingTxt = await page.locator('.sheet .fv-swings').innerText();
+  check('大きく動いた区間が出ている', swingTxt.includes('勝率'), swingTxt.slice(0, 200));
+  const peaks = await page.evaluate(() =>
+    [...document.querySelectorAll('.fv-swing-peak')].map((e) => e.textContent));
+  check('いちばん動いた打席が書いてある', peaks.length >= 1, JSON.stringify(peaks));
+  check('選手名と結果が入っている',
+    peaks.some((p) => p.includes('いちばん動いたのは') && /（\d+%）/.test(p)),
+    JSON.stringify(peaks));
+  check('i18nのキー名が漏れていない', !peaks.some((p) => p.includes('fv.')), JSON.stringify(peaks));
+  check('日本語に余計な空白が入らない', !peaks.some((p) => /[^\x00-\x7F] [^\x00-\x7F]/.test(p)), JSON.stringify(peaks));
+
   // --- 相手との力の差 ---
   // 設定の確かめ方は「30%と入れたらチャートが30%から始まる」の一点。
   // ここが合っていないと、倍率がどこから来たのか誰にも確かめられない
@@ -222,6 +235,10 @@ try {
   check('攻撃時と守備時に分かれている', hmTxt.includes('攻撃時') && hmTxt.includes('守備時'), hmTxt.slice(0, 400));
   check('倍率の出どころを書いている', hmTxt.includes('二分探索') && hmTxt.includes('30%'), hmTxt.slice(0, 1600));
   check('していないことを並べている', hmTxt.includes('していないこと'), hmTxt.slice(-900));
+  // 倍率の根拠だけ書いて土台の出どころが抜けていると、色の付いた数字が宙に浮く
+  check('土台の出どころが書いてある', hmTxt.includes('この表はどこから来ているか'), hmTxt.slice(-1800));
+  check('出どころを名指ししている', hmTxt.includes('baseball.piupapp.com'), hmTxt.slice(-1800));
+  check('自チームの実測割合も出ている', /自前の割合\s*\d+%/.test(hmTxt), hmTxt.slice(-1800));
   check('四死球・失策は持っていないと明言している', hmTxt.includes('失策'), hmTxt.slice(-900));
   check('通算は互角基準だと書いてある', hmTxt.includes('互角（50%）'), hmTxt.slice(-600));
 

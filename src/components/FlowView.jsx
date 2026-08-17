@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { useStore, useT } from '../state/store.jsx';
+import { useStore, useT, usePlayerName } from '../state/store.jsx';
 import { buildRunExpectancy, weSeries, flowRuns, judgeFlowTags, formatRate, weShape, KOSHIEN_RE, KOSHIEN_SOURCE } from '../lib/flow.js';
 import { buildRunDists, buildWinModel } from '../lib/winExp.js';
 import { buildGapModel } from '../lib/teamGap.js';
@@ -12,6 +12,8 @@ import HeatmapSheet from './HeatmapSheet.jsx';
 import ReTableSheet from './ReTableSheet.jsx';
 import WinExpSheet from './WinExpSheet.jsx';
 import { computeBoxScore, hitsByInning } from '../lib/boxscore.js';
+import { oppNameOf as oppNameFor } from '../lib/oppBox.js';
+import { playLabel } from '../lib/voiceParser.js';
 import Sheet from './Sheet.jsx';
 
 // ---- 試合の流れ ----
@@ -101,6 +103,27 @@ function AlignedLinescore({ game, cols, t }) {
       {row('home', home, false)}
     </div>
   );
+}
+
+// ---- その区間でいちばん動かした1打席を、言葉にする ----
+// 「5打席で25%→44%」だけでは何が起きたのか思い出せない。試合を見返すときに
+// 効くのは「誰が何をしたか」なので、山になった打席を名前と結果で1行にする。
+// 自チームの攻撃なら打者、守備なら相手打者(記号か、入力されていれば名前)。
+function peakLine(peak, { nameOf, oppNameOf, edition, lang, t }) {
+  const p = peak?.log?.payload;
+  if (!p || !p.result) return null;
+  const who = peak.mine
+    ? nameOf(p.playerId)
+    : oppNameOf(p.letter);
+  const what = playLabel(p.result, p.direction, p.outType, p.soType, edition, lang,
+    { hitAngle: p.hitAngle, intentional: p.intentional });
+  if (!who || !what) return null;
+  const pct = Math.abs(Math.round(peak.delta * 100));
+  // 動きが小さすぎる打席をわざわざ名指ししても意味が薄い
+  if (pct < 1) return null;
+  return t(peak.runs ? 'fv.peakRuns' : 'fv.peak', {
+    who, what, pct, runs: peak.runs,
+  });
 }
 
 function Chart({ series, tags, order, t, linescore, opening }) {
@@ -296,6 +319,9 @@ export default function FlowView({ game, onClose }) {
 
   // 得点期待値は「自分たちの試合」から作る。相手の打席も材料になる。
   const edition = state.settings.edition || '草野球';
+  const lang = state.settings.lang || 'ja';
+  const nameOf = usePlayerName();
+  const oppNameOf = (letter) => oppNameFor(game, letter);
   const { re, total, ownShare } = useMemo(() => {
     const games = Object.values(state.games || {}).filter((g) => g && !String(g.id).startsWith('demo-'));
     return buildRunExpectancy(games.length ? games : [game], edition);
@@ -439,16 +465,21 @@ export default function FlowView({ game, onClose }) {
             <>
               <div className="section-title">{t('fv.swingTitle')}</div>
               <div className="fv-swings">
-                {swings.map((sw) => (
-                  <div className={`fv-swing ${sw.dir > 0 ? 'up' : 'down'}`} key={sw.from.id}>
-                    <b>{innOf(sw.from) === innOf(sw.to) ? innOf(sw.from) : `${innOf(sw.from)}〜${innOf(sw.to)}`}</b>
-                    <span>{t('fv.swingRange', {
-                      n: sw.n,
-                      a: Math.round((sw.from.we - sw.from.delta) * 100),
-                      b: Math.round(sw.to.we * 100),
-                    })}</span>
-                  </div>
-                ))}
+                {swings.map((sw) => {
+                  const line = peakLine(sw.peak, { nameOf, oppNameOf, edition, lang, t });
+                  return (
+                    <div className={`fv-swing ${sw.dir > 0 ? 'up' : 'down'}`} key={sw.from.id}>
+                      <b>{innOf(sw.from) === innOf(sw.to) ? innOf(sw.from) : `${innOf(sw.from)}〜${innOf(sw.to)}`}</b>
+                      <span>{t('fv.swingRange', {
+                        n: sw.n,
+                        a: Math.round((sw.from.we - sw.from.delta) * 100),
+                        b: Math.round(sw.to.we * 100),
+                      })}</span>
+                      {/* 何が起きたのかが分からないと、あとから試合を思い出せない */}
+                      {line && <i className="fv-swing-peak">{line}</i>}
+                    </div>
+                  );
+                })}
               </div>
             </>
           )}
