@@ -1,10 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import { useStore, useT } from '../state/store.jsx';
-import { buildRunExpectancy, stateKey } from '../lib/flow.js';
+import { buildRunExpectancy, stateKey, SHRINK_K } from '../lib/flow.js';
 import { buildRunDists } from '../lib/winExp.js';
 import { currentRules } from '../lib/rules.js';
 import { halfStartKeyOf } from '../lib/tiebreak.js';
 import { buildGapModel, gapTables, gapOf } from '../lib/teamGap.js';
+import { KOSHIEN_LEVEL } from '../lib/flow.js';
+import ReTableSheet from './ReTableSheet.jsx';
 import { RUNNER_ROWS } from './ReTableSheet.jsx';
 import Sheet from './Sheet.jsx';
 
@@ -36,11 +38,12 @@ export default function HeatmapSheet({ game, games, onClose }) {
   const edition = state.settings.edition || '草野球';
   const [side, setSide] = useState('off');
   const [pick, setPick] = useState(null);
+  const [showRe, setShowRe] = useState(false);
 
-  const { off, def, top, factor, opening, gap } = useMemo(() => {
+  const { off, def, top, factor, opening, gap, total, ownShare } = useMemo(() => {
     const real = (games || Object.values(state.games || {}))
       .filter((g) => g && !String(g.id).startsWith('demo-'));
-    const { re } = buildRunExpectancy(real, edition);
+    const { re, total, ownShare } = buildRunExpectancy(real, edition);
     const { dists } = buildRunDists(real, edition, re);
     const id = game?.teamGap || 'even';
     const m = buildGapModel({
@@ -51,7 +54,7 @@ export default function HeatmapSheet({ game, games, onClose }) {
       gap: id,
     });
     const tables = gapTables(re, m.factor);
-    return { ...tables, top: topOf(tables.off, tables.def), factor: m.factor, opening: m.opening, gap: id };
+    return { ...tables, top: topOf(tables.off, tables.def), factor: m.factor, opening: m.opening, gap: id, total, ownShare };
   }, [game, games, state.games, edition]);
 
   const table = side === 'off' ? off : def;
@@ -60,6 +63,7 @@ export default function HeatmapSheet({ game, games, onClose }) {
   const innings = rules?.innings || 7;
   const g = gapOf(gap);
   const split = gap !== 'even';
+  const school = edition === 'ブカツ(中高大)';
 
   return (
     <Sheet title={t('hm.title')} onClose={onClose}>
@@ -148,6 +152,32 @@ export default function HeatmapSheet({ game, games, onClose }) {
         </>
       )}
 
+      {/* この表がどこから来ているか。倍率の根拠だけ書いて土台の出どころが
+          抜けていると、色の付いた数字が宙に浮く */}
+      <div className="section-title">{t('hm.srcTitle')}</div>
+      <div className="we-part">
+        <div className="we-layer-head">
+          <b>{t('ret.srcTitle')}</b>
+          <span className="src-badge mixed">{t('we.src.mixed')}</span>
+        </div>
+        <p className="small dim">
+          {t('ret.src', { n: total, pct: Math.round(ownShare * 100), k: SHRINK_K })}
+        </p>
+        <p className="small dim">{t('ret.srcBase')}</p>
+        {school && <p className="small dim">{t('ret.srcKoshien2')}</p>}
+        {school && (
+          <p className="small dim">
+            {t('ret.srcKoshienLevel', {
+              lv: KOSHIEN_LEVEL.toFixed(3),
+              pct: Math.round((KOSHIEN_LEVEL - 1) * 100),
+            })}
+          </p>
+        )}
+      </div>
+      <button className="small mt8" style={{ width: '100%' }} onClick={() => setShowRe(true)}>
+        {t('ret.open')}
+      </button>
+
       <div className="section-title">{t('hm.limitTitle')}</div>
       <ul className="we-limits">
         <li>{t('hm.limit1')}</li>
@@ -160,6 +190,7 @@ export default function HeatmapSheet({ game, games, onClose }) {
       <div className="sheet-actions">
         <button className="primary" style={{ width: '100%' }} onClick={onClose}>{t('action.close')}</button>
       </div>
+      {showRe && <ReTableSheet games={games} onClose={() => setShowRe(false)} />}
     </Sheet>
   );
 }

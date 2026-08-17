@@ -2514,3 +2514,9 @@ button.manage-open {
   font-size: 15px; font-weight: 700; text-align: left; line-height: 1.35;
 }
 .need-dir-go { flex: 0 0 auto; font-size: 12px; font-weight: 700; color: var(--accent-2); white-space: nowrap; }
+
+/* 大きく動いた区間の「いちばん動いた1打席」。数字だけでは試合を思い出せない */
+.fv-swing-peak {
+  display: block; margin-top: 3px;
+  font-size: 11.5px; font-style: normal; line-height: 1.35; opacity: .72;
+}

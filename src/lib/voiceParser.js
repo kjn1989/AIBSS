@@ -375,6 +375,9 @@ export function playLabel(result, direction, outType, soType, edition, lang = 'j
     return en ? `${dir ? dir + ' ' : ''}${ot}${foul}` : `${dir}${ot}${foul}・アウト`;
   }
   const rlabel = en ? translate('en', `result.${result}`) : (RESULTS[result]?.label || result);
+  // 日本語は語のあいだに空白を入れない(「左翼 ホームラン」になっていた)。
+  // すぐ上の凡打の行は元から空白なしなので、そちらに合わせる
+  if (!en) return `${dir}${rlabel}${foul}`;
   return `${dir ? dir + ' ' : ''}${rlabel}${foul}`;
 }
 

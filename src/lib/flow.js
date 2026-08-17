@@ -364,9 +364,12 @@ export function flowRuns(series = [], minSwing = 0.6) {
     const dir = s.delta > 0 ? 1 : -1;
     if (cur && cur.dir === dir) {
       cur.swing += s.delta; cur.to = s; cur.n += 1;
+      // その区間でいちばん動かした1打席。「5打席で25%→44%」だけだと
+      // 何が起きたのか分からないので、山になった打席を1つ持っておく
+      if (Math.abs(s.delta) > Math.abs(cur.peak.delta)) cur.peak = s;
     } else {
       if (cur && Math.abs(cur.swing) >= minSwing) out.push(cur);
-      cur = { dir, swing: s.delta, from: s, to: s, n: 1 };
+      cur = { dir, swing: s.delta, from: s, to: s, n: 1, peak: s };
     }
   }
   if (cur && Math.abs(cur.swing) >= minSwing) out.push(cur);
