@@ -12,13 +12,19 @@ import Sheet from './Sheet.jsx';
 // 表の数字を縦に読むのは訓練が要る。色にすると「どこが重い場面か」が一目で入る。
 // チーム差を入れると攻撃時と守備時で表が分かれるので、2枚をタブで切り替える。
 //
-// 色は得点期待値そのものに対応させる(0点=青 → 満塁級=赤)。上限は満塁無死の
-// あたりに固定して、攻撃時と守備時で同じ物差しにする。物差しが動くと
-// 「守備のときのほうが赤い」が力の差なのか色の付け方なのか分からなくなる。
-const MAXV = 2.6;
+// 色は得点期待値そのものに対応させる(0点=青 → 満塁級=赤)。
+// 物差しは攻撃時と守備時で必ず共通にする。別々にすると「守備のほうが赤い」が
+// 力の差なのか色の付け方なのか分からなくなる。
+//
+// 上限を2.6に固定していたら、「胸を借りる」(倍率2.49)の試合で守備時の24マス中
+// 8マスが上限を振り切り、全部おなじ真っ赤になって読めなくなっていた。
+// 2枚のうち大きいほうの最大値から決める。
+const MIN_TOP = 2.6;
+const topOf = (off, def) =>
+  Math.max(MIN_TOP, ...[...off.values(), ...def.values()]);
 
-function heat(v) {
-  const x = Math.max(0, Math.min(1, v / MAXV));
+function heat(v, top) {
+  const x = Math.max(0, Math.min(1, v / top));
   // 青(220) → 緑(120) → 黄(60) → 赤(0)
   const hue = 220 - 220 * Math.pow(x, 0.85);
   return `hsl(${hue.toFixed(0)} 62% ${(46 - 8 * x).toFixed(0)}%)`;
@@ -31,7 +37,7 @@ export default function HeatmapSheet({ game, games, onClose }) {
   const [side, setSide] = useState('off');
   const [pick, setPick] = useState(null);
 
-  const { off, def, factor, opening, gap } = useMemo(() => {
+  const { off, def, top, factor, opening, gap } = useMemo(() => {
     const real = (games || Object.values(state.games || {}))
       .filter((g) => g && !String(g.id).startsWith('demo-'));
     const { re } = buildRunExpectancy(real, edition);
@@ -44,7 +50,8 @@ export default function HeatmapSheet({ game, games, onClose }) {
       halfStartKey: (inn) => halfStartKeyOf(game, inn),
       gap: id,
     });
-    return { ...gapTables(re, m.factor), factor: m.factor, opening: m.opening, gap: id };
+    const tables = gapTables(re, m.factor);
+    return { ...tables, top: topOf(tables.off, tables.def), factor: m.factor, opening: m.opening, gap: id };
   }, [game, games, state.games, edition]);
 
   const table = side === 'off' ? off : def;
@@ -83,7 +90,7 @@ export default function HeatmapSheet({ game, games, onClose }) {
                   <button
                     key={key}
                     className={`hm-cell${on ? ' on' : ''}`}
-                    style={{ background: heat(v) }}
+                    style={{ background: heat(v, top) }}
                     onClick={() => setPick(on ? null : key)}
                     aria-label={t('hm.cell', { sit: t(`ret.r.${row.key}`), outs: o, v: v.toFixed(2) })}
                   >
@@ -147,7 +154,8 @@ export default function HeatmapSheet({ game, games, onClose }) {
         <li>{t('hm.limit2')}</li>
         <li>{t('hm.limit3')}</li>
       </ul>
-      <p className="small dim mt8">{t('gap.statsNote')}</p>
+      <p className="small dim mt8">{t('gap.swingNote')}</p>
+      <p className="small dim">{t('gap.statsNote')}</p>
 
       <div className="sheet-actions">
         <button className="primary" style={{ width: '100%' }} onClick={onClose}>{t('action.close')}</button>

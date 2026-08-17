@@ -4,7 +4,7 @@ import { buildRunExpectancy, formatRate } from '../lib/flow.js';
 import { buildRunDists, buildWinModel } from '../lib/winExp.js';
 import { currentRules } from '../lib/rules.js';
 import { halfStartKeyOf } from '../lib/tiebreak.js';
-import { aggregateScorers, rankScorers, scorerName } from '../lib/scorers.js';
+import { aggregateScorersOver, rankScorers, scorerName } from '../lib/scorers.js';
 
 // ---- 記録員の読み ----
 // 打った・投げたは選手の成績になるが、「いま流れが来た」を押した判断は
@@ -31,22 +31,7 @@ export default function ScorerCard({ games }) {
       dists, isHome: !!g.isHome, regulation: currentRules(g)?.innings || 7,
       halfStartKey: (inn) => halfStartKeyOf(g, inn),
     });
-    const merged = {};
-    for (const g of real) {
-      const one = aggregateScorers([g], modelFor(g));
-      for (const [id, v] of Object.entries(one)) {
-        if (!merged[id]) merged[id] = { ...v };
-        else {
-          const m = merged[id];
-          for (const k of ['games', 'tags', 'pre', 'post', 'miss', 'swings', 'caught']) m[k] += v[k];
-        }
-      }
-    }
-    for (const v of Object.values(merged)) {
-      v.hitRate = v.tags ? v.pre / v.tags : null;
-      v.catchRate = v.swings ? v.caught / v.swings : null;
-    }
-    return rankScorers(merged, MIN_TAGS);
+    return rankScorers(aggregateScorersOver(real, modelFor), MIN_TAGS);
   }, [games, state.settings.edition]);
 
   // 誰も記録員が設定されていない = この機能をまだ使っていない。空の表は出さない
