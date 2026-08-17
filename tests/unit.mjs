@@ -15,6 +15,7 @@ import { tiebreakPlacement, backInOrder, halfHasPlays, halfStartKeyOf } from '..
 import { aggregateScorers, rankScorers, scorerName, tagScorerId } from '../src/lib/scorers.js';
 import { buildRunDists, buildWinModel, priorDist, remainingHalves, SCORE_PROB, MAX_RUNS } from '../src/lib/winExp.js';
 import { TEAM_GAPS, buildGapModel, gapTables, gapOf, scaleDist, scaleDists, S_EXP } from '../src/lib/teamGap.js';
+import { aggregateScorersOver, swingScale, OPEN_MIN_SWING, OPEN_REACT_SWING } from '../src/lib/scorers.js';
 import { aggregateContrib, rankContrib, formatContrib } from '../src/lib/contrib.js';
 import { stateKey, buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, formatRate, weShape, weSeries, stateOfKey, BASE_RE, reOf, KOSHIEN_RE, KOSHIEN_WEIGHTS, KOSHIEN_LEVEL, isKoshienMeasured, baseReFor } from '../src/lib/flow.js';
 import { teamPower, mostOff, formatPower } from '../src/lib/teamPower.js';
@@ -4292,4 +4293,102 @@ test('チーム差: 勝率モデルは攻撃側と守備側で別の分布を使
 test('チーム差: 新しい試合の既定は互角', () => {
   assert.equal(newGame({}).teamGap, 'even');
   assert.equal(newGame({ teamGap: 'challenge' }).teamGap, 'challenge');
+});
+
+
+// ============================================================
+// チーム差を入れたあとの穴(監査で見つけたもの)
+// ============================================================
+
+test('監査: 記録員の通算は、どの試合を開いていても同じ数字になる', () => {
+  // 直した不具合。呼び出し側が「いま開いている試合のモデル」を1つ渡して
+  // 全試合を数えていたので、先攻/後攻・規定回数・力の差が混ざり、
+  // 同じ記録員の通算が「どの画面から見たか」で変わっていた
+  const pa = (id, inn, isTop, kind, r, o, runs = 0) => ({
+    id, gameId: 'x', inning: inn, isTop, kind, text: '',
+    payload: { beforeRunners: { 1: !!r[0], 2: !!r[1], 3: !!r[2] }, outsBefore: o, runs },
+  });
+  const mk = (id, isHome, teamGap) => ({
+    id, isHome, teamGap, scorerId: 's1', rules: { innings: 7 },
+    playLogs: [
+      pa('a1', 1, true, 'atbat', [0, 0, 0], 0),
+      pa('a2', 1, true, 'atbat', [1, 0, 0], 0, 3),
+      { id: 't1', gameId: id, inning: 1, isTop: true, kind: 'flow', text: '', payload: { dir: 'up' } },
+      pa('a3', 1, true, 'atbat', [0, 0, 0], 1),
+      pa('b1', 1, false, 'defense', [0, 0, 0], 0),
+      pa('b2', 1, false, 'defense', [1, 1, 0], 0, 2),
+    ],
+  });
+  const games = [mk('g1', false, 'even'), mk('g2', true, 'challenge')];
+  const { re } = buildRunExpectancy([], '草野球');
+  const { dists } = buildRunDists([], '草野球', re);
+  const modelFor = (g) => buildWinModel({
+    dists, isHome: !!g.isHome, regulation: 7, halfStartKey: () => '000|0',
+  });
+
+  const over = aggregateScorersOver(games, modelFor).s1;
+  // 1試合ずつ数えて足したものと、まとめて数えたものが一致すること
+  const one = aggregateScorersOver([games[0]], modelFor).s1;
+  const two = aggregateScorersOver([games[1]], modelFor).s1;
+  for (const k of ['games', 'tags', 'pre', 'post', 'miss', 'swings', 'caught']) {
+    assert.equal(over[k], one[k] + two[k], `${k} が試合ごとの合計と一致する`);
+  }
+  // 壊れていたやり方(1つのモデルで全試合)は、渡すモデルによって答えが変わる。
+  // 直したやり方は、どの試合から呼んでも同じ
+  const viaG1 = aggregateScorersOver(games, modelFor).s1;
+  const viaG2 = aggregateScorersOver([...games].reverse(), modelFor).s1;
+  assert.deepEqual(
+    ['games', 'tags', 'pre', 'swings', 'caught'].map((k) => viaG1[k]),
+    ['games', 'tags', 'pre', 'swings', 'caught'].map((k) => viaG2[k]),
+    '並び順にも開いている試合にも依らない',
+  );
+});
+
+test('監査: 力の差を入れた試合は、流れタグのしきい値も一緒に縮む', () => {
+  // 「胸を借りる」の試合は勝率が動ける幅そのものが狭い。互角前提の12%のままだと、
+  // 記録員がどれだけ正しく読んでも「大きく動いた」が成立せず、読み当て率が0に沈む
+  const even = swingScale({ teamGap: 'even' });
+  assert.equal(even.minSwing, OPEN_MIN_SWING, '互角は今までどおり');
+  assert.equal(even.reactSwing, OPEN_REACT_SWING);
+  const hard = swingScale({ teamGap: 'borrow' });
+  assert.ok(hard.minSwing < even.minSwing * 0.4, `胸を借りるは大きく縮む: ${hard.minSwing}`);
+  // 縮めすぎると誤差を拾うので下限がある
+  assert.ok(hard.minSwing >= OPEN_MIN_SWING * 0.25 - 1e-12, '下限を割らない');
+  // 対称: 勝率5%と95%は同じだけ狭い
+  assert.equal(swingScale({ teamGap: 'lend' }).minSwing, hard.minSwing);
+  // 設定が無い古い試合は互角あつかい
+  assert.equal(swingScale({}).minSwing, OPEN_MIN_SWING);
+  assert.equal(swingScale(null).minSwing, OPEN_MIN_SWING);
+});
+
+test('監査: しきい値の縮め方が、実際の勝率の動きの縮み方と合っている', () => {
+  // 4p(1-p) は思いつきではなく、実際の圧縮率に合っていることを確かめる
+  const { re } = buildRunExpectancy([], '草野球');
+  const { dists } = buildRunDists([], '草野球', re);
+  const move = (gap) => {
+    const m = buildGapModel({ dists, isHome: false, regulation: 7, halfStartKey: () => '000|0', gap });
+    const a = m.we({ inning: 1, isTop: true, runners: { 1: false, 2: false, 3: false }, outs: 0, diff: 0 });
+    const b = m.we({ inning: 1, isTop: true, runners: { 1: true, 2: true, 3: true }, outs: 0, diff: 0 });
+    return b - a;
+  };
+  const ratio = move('borrow') / move('even');           // 実際の圧縮率
+  const scaled = swingScale({ teamGap: 'borrow' }).minSwing / OPEN_MIN_SWING; // しきい値の縮め方
+  assert.ok(Math.abs(ratio - scaled) < 0.1,
+    `実際 ${ratio.toFixed(3)} としきい値 ${scaled.toFixed(3)} が近い`);
+});
+
+test('監査: ヒートマップの色の物差しが振り切れない', () => {
+  // 上限を2.6に固定していたら、「胸を借りる」の守備時24マス中8マスが振り切れて
+  // 全部おなじ真っ赤になり、どこが重い場面か読めなくなっていた
+  const { re } = buildRunExpectancy([], '草野球');
+  const { dists } = buildRunDists([], '草野球', re);
+  for (const gap of ['even', 'challenge', 'borrow', 'lend']) {
+    const m = buildGapModel({ dists, isHome: false, regulation: 7, halfStartKey: () => '000|0', gap });
+    const { off, def } = gapTables(re, m.factor);
+    const top = Math.max(2.6, ...[...off.values(), ...def.values()]);
+    for (const [k, v] of def) assert.ok(v <= top, `${gap} ${k}: 守備時が物差しに収まる`);
+    for (const [k, v] of off) assert.ok(v <= top, `${gap} ${k}: 攻撃時が物差しに収まる`);
+    // 攻撃時と守備時で同じ物差しであること(別々だと「守備が赤い」の意味が消える)
+    assert.ok(top >= Math.max(...[...def.values()]), '2枚の大きいほうに合わせる');
+  }
 });

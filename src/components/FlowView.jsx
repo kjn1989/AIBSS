@@ -1,11 +1,11 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { useStore, useT } from '../state/store.jsx';
 import { buildRunExpectancy, weSeries, flowRuns, judgeFlowTags, formatRate, weShape, KOSHIEN_RE, KOSHIEN_SOURCE } from '../lib/flow.js';
-import { buildRunDists } from '../lib/winExp.js';
+import { buildRunDists, buildWinModel } from '../lib/winExp.js';
 import { buildGapModel } from '../lib/teamGap.js';
 import { currentRules } from '../lib/rules.js';
 import { halfStartKeyOf } from '../lib/tiebreak.js';
-import { aggregateScorers, scorerName } from '../lib/scorers.js';
+import { aggregateScorersOver, scorerName, swingScale } from '../lib/scorers.js';
 import ScorerPicker from './ScorerPicker.jsx';
 import TeamGapPicker from './TeamGapPicker.jsx';
 import HeatmapSheet from './HeatmapSheet.jsx';
@@ -305,7 +305,7 @@ export default function FlowView({ game, onClose }) {
   // 勝率モデル。得点分布も「自分たちの試合」から作る(相手の打席も材料になる)。
   // 相手との力の差を入れている試合は、その設定どおりの勝率から始まるように
   // 得点の倍率を解いたうえでモデルを作る(互角なら倍率1で、いままでと同じ)
-  const { winExp, opening, factor } = useMemo(() => {
+  const { winExp, opening, factor, scorerDists } = useMemo(() => {
     const games = Object.values(state.games || {}).filter((g) => g && !String(g.id).startsWith('demo-'));
     const { dists } = buildRunDists(games.length ? games : [game], edition, re);
     const m = buildGapModel({
@@ -315,15 +315,18 @@ export default function FlowView({ game, onClose }) {
       halfStartKey: (inn) => halfStartKeyOf(game, inn),
       gap: game.teamGap || 'even',
     });
-    return { winExp: m.we, opening: m.opening, factor: m.factor };
+    return { winExp: m.we, opening: m.opening, factor: m.factor, scorerDists: dists };
   }, [state.games, game, edition, re, game.teamGap]);
 
   // 線の縦軸は勝率。50%が互角で、基準線が動かない
   const series = useMemo(() => weSeries(game, winExp), [game, winExp]);
   // しきい値は勝率(0〜1)の単位。1本のヒットで5%前後動くので、
   // 「大きく動いた」は12%、「もう動いていた」は7%あたりに置く
-  const judged = useMemo(() => judgeFlowTags(game, series, { minSwing: 0.12, reactSwing: 0.07 }), [game, series]);
-  const swings = useMemo(() => flowRuns(series, 0.12).slice(0, 3), [series]);
+  // しきい値は勝率(0〜1)の単位。力の差を入れた試合は勝率が動ける幅そのものが
+  // 狭いので、互角前提の12%のままだと何を読んでも「大きく動いた」にならない
+  const sw = useMemo(() => swingScale(game, opening), [game.teamGap, opening]);
+  const judged = useMemo(() => judgeFlowTags(game, series, sw), [game, series, sw]);
+  const swings = useMemo(() => flowRuns(series, sw.minSwing).slice(0, 3), [series, sw]);
 
   const order = useMemo(() => {
     const m = new Map();
@@ -335,8 +338,18 @@ export default function FlowView({ game, onClose }) {
   const career = useMemo(() => {
     if (!game.scorerId) return null;
     const games = Object.values(state.games || {}).filter((g) => g && !String(g.id).startsWith('demo-'));
-    return aggregateScorers(games, winExp)[game.scorerId] || null;
-  }, [state.games, game.scorerId, winExp]);
+    // 通算は試合ごとにモデルを作って数える。先攻/後攻も規定回数も力の差も
+    // 試合ごとに違うので、1つのモデルで全試合を数えると、同じ記録員の通算が
+    // 「どの試合を開いているか」で変わってしまう。
+    // 力の差は入れない(互角基準)。成績タブの数字と食い違わせないため
+    const modelFor = (g) => buildWinModel({
+      dists: scorerDists,
+      isHome: !!g.isHome,
+      regulation: currentRules(g)?.innings || 7,
+      halfStartKey: (inn) => halfStartKeyOf(g, inn),
+    });
+    return aggregateScorersOver(games, modelFor)[game.scorerId] || null;
+  }, [state.games, game.scorerId, scorerDists]);
 
   const shape = useMemo(() => weShape(series), [series]);
   const over = game.status === 'finished';
