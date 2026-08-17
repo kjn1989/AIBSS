@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useStore, useT } from './state/store.jsx';
+import ErrorBoundary, { CrashProbe } from './components/ErrorBoundary.jsx';
 import HomeTab from './components/HomeTab.jsx';
 import ScoreTab from './components/ScoreTab.jsx';
 import OrderTab from './components/OrderTab.jsx';
@@ -107,6 +108,10 @@ export default function App() {
   // Android物理/ジェスチャー「戻る」: ホーム以外ならホームタブへ、ホームなら最小化(Webでは無効)
   const tabRef = useRef(tab);
   tabRef.current = tab;
+  // 落ちた画面からバックアップを書き出すために、いまの状態を参照で渡す。
+  // ErrorBoundary はクラスなので useStore を呼べない
+  const stateRef = useRef(state);
+  stateRef.current = state;
   useEffect(() => {
     return registerBackButtonHandler(() => tabRef.current === 'home', () => setTab('home'));
   }, []);
@@ -183,13 +188,18 @@ export default function App() {
         </button>
       </header>
 
+      {/* 1つのタブが落ちても下のタブバーは生きている。別のタブへ移れば記録は続く。
+          resetKey にタブを渡してあるので、移った先ではもう一度描画を試す */}
       <main className="main">
-        {tab === 'home' && <HomeTab onNavigate={setTab} />}
-        {tab === 'score' && <ScoreTab />}
-        {tab === 'order' && <OrderTab />}
-        {tab === 'stats' && <StatsTab />}
-        {tab === 'result' && <ResultTab />}
-        {tab === 'settings' && <SettingsTab />}
+        <ErrorBoundary resetKey={tab} lang={state.settings.lang || 'ja'} stateRef={stateRef}>
+          <CrashProbe tab={tab} />
+          {tab === 'home' && <HomeTab onNavigate={setTab} />}
+          {tab === 'score' && <ScoreTab />}
+          {tab === 'order' && <OrderTab />}
+          {tab === 'stats' && <StatsTab />}
+          {tab === 'result' && <ResultTab />}
+          {tab === 'settings' && <SettingsTab />}
+        </ErrorBoundary>
       </main>
 
       <nav className="tabbar">
