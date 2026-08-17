@@ -2467,20 +2467,41 @@ button.manage-open {
 .gap-pick.compact .gap-chip { padding: 5px 2px; }
 
 /* ---- 得点期待値ヒートマップ ---- */
-/* 8列(走者なし〜満塁)×3行(0/1/2死)。狭い画面でははみ出すので中で横スクロール */
-.hm-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -4px; padding: 0 4px; }
+/* 8列(走者なし〜満塁)×3行(0/1/2死)。横スクロールはさせない。
+   スクロールさせると右端の「満塁」がいつも隠れる。満塁はいちばん見たいマスなので、
+   1画面に必ず全部入るようにする。
+   列を縮められるようにするには、グリッドの子に min-width:0 が要る(既定の auto だと
+   中身の幅より縮まず、右端がはみ出して切れる)。 */
+.hm-wrap { width: 100%; }
 .hm-grid {
-  display: grid; grid-template-columns: 34px repeat(8, minmax(38px, 1fr));
-  gap: 3px; min-width: 340px;
+  display: grid;
+  grid-template-columns: 2.1em repeat(8, minmax(0, 1fr));
+  gap: 2px;
+  width: 100%;
 }
-.hm-rowlab { display: flex; align-items: center; font-size: 10px; opacity: .7; }
-.hm-collab { font-size: 9px; opacity: .7; text-align: center; padding-top: 3px; line-height: 1.15; }
+.hm-grid > * { min-width: 0; }
+.hm-rowlab {
+  display: flex; align-items: center; justify-content: flex-end;
+  padding-right: 3px;
+  font-size: 10px; opacity: .7; white-space: nowrap;
+}
+.hm-collab {
+  display: flex; align-items: flex-start; justify-content: center;
+  min-height: 2.2em; padding-top: 3px;
+  font-size: clamp(7.5px, 2.3vw, 9.5px); line-height: 1.15;
+  opacity: .7; text-align: center; word-break: break-all;
+}
 .hm-cell {
-  aspect-ratio: 1 / .72; border: none; border-radius: 6px; padding: 0;
-  color: #fff; font-size: 11px; font-weight: 700;
+  height: 34px; border: none; border-radius: 5px; padding: 0;
+  color: #fff; font-weight: 700;
+  font-size: clamp(9px, 2.9vw, 12px);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.02em;
+  overflow: hidden;
   text-shadow: 0 1px 2px rgba(0, 0, 0, .35);
 }
-.hm-cell.on { outline: 2px solid var(--fg); outline-offset: 1px; }
+/* 選択枠を outline で外に描くと隣のマスに重なる。内側に描いて場所を取らせない */
+.hm-cell.on { box-shadow: inset 0 0 0 2px var(--fg); }
 .hm-read { margin-top: 10px; padding: 9px 11px; border-radius: 10px; background: var(--bg-3); }
 .hm-read b { font-size: 13px; }
 .hm-read p { margin: 3px 0 0; }
