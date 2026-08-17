@@ -15,7 +15,7 @@ import { tiebreakPlacement, backInOrder, halfHasPlays, halfStartKeyOf } from '..
 import { aggregateScorers, rankScorers, scorerName, tagScorerId } from '../src/lib/scorers.js';
 import { buildRunDists, buildWinModel, priorDist, remainingHalves, SCORE_PROB, MAX_RUNS } from '../src/lib/winExp.js';
 import { aggregateContrib, rankContrib, formatContrib } from '../src/lib/contrib.js';
-import { stateKey, buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, formatRate, weShape, weSeries, stateOfKey, BASE_RE, reOf, KOSHIEN_RE, baseReFor } from '../src/lib/flow.js';
+import { stateKey, buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, formatRate, weShape, weSeries, stateOfKey, BASE_RE, reOf, KOSHIEN_RE, KOSHIEN_WEIGHTS, KOSHIEN_LEVEL, isKoshienMeasured, baseReFor } from '../src/lib/flow.js';
 import { teamPower, mostOff, formatPower } from '../src/lib/teamPower.js';
 import { RESULTS as RESULTS_FOR_OUT, newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions, attendeesOf, lastAttendees, autoLineupFrom, subRank, resultLabelOf, isIntentionalBB } from '../src/lib/model.js';
 import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf, oppLettersInGame, oppBaserunning } from '../src/lib/oppBox.js';
@@ -3016,27 +3016,64 @@ test('甲子園の実測4状況: 論文の表から重み付けした値と一�
   assert.equal(Object.keys(KOSHIEN_RE).length, 4, '論文にあるのは4状況だけ');
 });
 
-test('baseReFor: ブカツだけ実測値を使い、他のエディションには持ち込まない', () => {
+test('KOSHIEN_LEVEL: 重なる4状況の水準比を、出現回数で重み付けして求めている', () => {
+  // 状況ごとの比を単純平均すると、1回しか起きない場面と600回起きる場面が
+  // 同じ重さになる。合計どうしの比にすることでそれを避けている
+  let ko = 0;
+  let npb = 0;
+  for (const [key, w] of Object.entries(KOSHIEN_WEIGHTS)) {
+    ko += KOSHIEN_RE[key] * w;
+    npb += BASE_RE[key] * w;
+  }
+  assert.equal(Number(ko.toFixed(2)), 1332.75, '甲子園側の重み付き合計');
+  assert.equal(Number(npb.toFixed(2)), 1166.85, 'NPB側の重み付き合計');
+  assert.equal(Number(KOSHIEN_LEVEL.toFixed(3)), 1.142);
+  // 4状況のうち3つは甲子園のほうが高く、無死一二塁だけ低い(バントが半分以上)
+  assert.ok(KOSHIEN_RE['110|0'] < BASE_RE['110|0'], '無死一二塁だけNPBより低い');
+});
+
+test('baseReFor: ブカツは実測4状況＋残り20状況に水準補正、他のエディションには持ち込まない', () => {
   const bukatsu = baseReFor('ブカツ(中高大)');
-  assert.equal(bukatsu['100|0'], 0.79, 'ブカツは甲子園の実測値');
-  assert.equal(bukatsu['000|0'], BASE_RE['000|0'], '実測が無い状況は一般値のまま');
+  assert.equal(bukatsu['100|0'], 0.79, '実測のある状況は甲子園の値そのもの');
   assert.equal(Object.keys(bukatsu).length, 24, '24状態そろっている');
-  // 草野球・少年野球はバントがここまで多くないので持ち込まない
+  // 実測が無い20状況は、NPB値に水準比をかけて表の中の水準をそろえる。
+  // 4状況だけ差し替えて残りをNPBのままにすると、1つの表に水準が2つ同居する
+  for (const key of Object.keys(BASE_RE)) {
+    if (isKoshienMeasured(key)) continue;
+    assert.equal(
+      bukatsu[key], Number((BASE_RE[key] * KOSHIEN_LEVEL).toFixed(2)),
+      `${key}: NPB値 × ${KOSHIEN_LEVEL.toFixed(3)}`,
+    );
+    assert.ok(bukatsu[key] >= BASE_RE[key], `${key}: 補正で下がることはない`);
+  }
+  // 草野球・少年野球は実測が公開されていないので、NPBの値をそのまま使う
   for (const ed of ['草野球', '少年野球', null, undefined]) {
-    assert.equal(baseReFor(ed)['100|0'], BASE_RE['100|0'], `${ed} には持ち込まない`);
+    for (const key of ['100|0', '000|0', '111|2']) {
+      assert.equal(baseReFor(ed)[key], BASE_RE[key], `${ed} には持ち込まない`);
+    }
   }
 });
 
-test('baseReFor: 実測を入れても表の形が壊れない', () => {
-  const b = baseReFor('ブカツ(中高大)');
-  // 走者が進むほど高い / アウトが増えるほど低い、が崩れると流れの符号が狂う
-  for (const outs of [0, 1, 2]) {
-    assert.ok(b[`000|${outs}`] < b[`100|${outs}`], `${outs}死: 走者なし < 一塁`);
-    assert.ok(b[`100|${outs}`] < b[`110|${outs}`], `${outs}死: 一塁 < 一二塁`);
-  }
-  for (const st of ['100', '110']) {
-    assert.ok(b[`${st}|0`] > b[`${st}|1`], `${st}: 無死 > 1死`);
-    assert.ok(b[`${st}|1`] > b[`${st}|2`], `${st}: 1死 > 2死`);
+test('baseReFor: 実測と補正を混ぜても表の形が壊れない', () => {
+  // 走者が進むほど高い / アウトが増えるほど低い、が崩れると流れの符号が狂う。
+  // 出どころが3つ(甲子園実測・NPB×補正・自チーム)混ざる表なので、24状況すべて見る
+  const order = ['000', '100', '010', '110', '001', '101', '011', '111'];
+  const under = { '000': [], '100': ['000'], '010': ['000'], '001': ['000'],
+    '110': ['100', '010'], '101': ['100', '001'], '011': ['010', '001'],
+    '111': ['110', '101', '011'] };
+  for (const ed of ['ブカツ(中高大)', '草野球']) {
+    const b = baseReFor(ed);
+    for (const outs of [0, 1, 2]) {
+      for (const st of order) {
+        for (const lo of under[st]) {
+          assert.ok(b[`${st}|${outs}`] >= b[`${lo}|${outs}`], `${ed} ${outs}死: ${lo} <= ${st}`);
+        }
+      }
+    }
+    for (const st of order) {
+      assert.ok(b[`${st}|0`] > b[`${st}|1`], `${ed} ${st}: 無死 > 1死`);
+      assert.ok(b[`${st}|1`] > b[`${st}|2`], `${ed} ${st}: 1死 > 2死`);
+    }
   }
 });
 
@@ -3523,7 +3560,12 @@ test('流れタグ: 回の終わりに押して、そのあと大きく動いた
   const j = judgeFlowTags(g, flowSeries(g, null));
   assert.equal(j.verdict.tag, 'pre', 'あとの動きのほうが大きいので予兆');
   assert.equal(j.hitRate, 1);
-  assert.equal(j.catchRate, 1, '言い当てた区間として察知率に入る');
+  // 察知率の分母は「その試合で起きた大きな動き」全部。向きは問わない。
+  // この並びは表の攻撃(+0.41)と裏の失点(−2.41)で2区間ある。押したのは down だけなので
+  // 言い当てたのは1つ、分母は2つ。押さなかった区間が分母に残るのが察知率の役目。
+  assert.equal(j.swings.length, 2, '向きの違う大きな動きが2つある');
+  assert.equal(j.caught, 1, '言い当てた区間として察知率の分子に入る');
+  assert.equal(j.catchRate, 0.5);
 });
 
 test('流れタグ: 大きく動いた直後に押して、あとが静かなら反応のまま', () => {

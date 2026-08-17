@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { useStore, useT } from '../state/store.jsx';
-import { buildRunExpectancy, reOf, stateKey, SHRINK_K } from '../lib/flow.js';
+import { buildRunExpectancy, reOf, stateKey, SHRINK_K, KOSHIEN_LEVEL, isKoshienMeasured } from '../lib/flow.js';
 import Sheet from './Sheet.jsx';
 
 // ---- 期待得点・期待失点の解説 ----
@@ -34,6 +34,10 @@ export default function ReTableSheet({ games, onClose }) {
 
   const val = (row, outs) => reOf(re, stateKey(row.runners, outs));
   const n = (row, outs) => samples.get(stateKey(row.runners, outs)) || 0;
+  // ブカツのときだけ、土台が甲子園の実測そのものである4状況に★を付ける。
+  // 実測と、そこから引いた補正値を、同じ表の中で見分けられるようにする
+  const school = edition === 'ブカツ(中高大)';
+  const star = (row, outs) => school && isKoshienMeasured(stateKey(row.runners, outs));
 
   // 例は表の実値から作る(文章だけ固定値にすると、表と食い違ったときに気づけない)
   const empty0 = val(RUNNER_ROWS[0], 0);
@@ -47,6 +51,7 @@ export default function ReTableSheet({ games, onClose }) {
 
       <div className="section-title">{t('ret.tableTitle')}</div>
       <p className="small dim" style={{ marginTop: -4 }}>{t('ret.tableNote')}</p>
+      {school && <p className="small dim" style={{ marginTop: -4 }}>{t('ret.koshienMark')}</p>}
       <div className="ret-wrap">
         <table className="ret-table">
           <thead>
@@ -63,7 +68,7 @@ export default function ReTableSheet({ games, onClose }) {
                 <td className="ret-sit">{t(`ret.r.${row.key}`)}</td>
                 {[0, 1, 2].map((o) => (
                   <td key={o} className="num">
-                    <b>{val(row, o).toFixed(2)}</b>
+                    <b>{val(row, o).toFixed(2)}{star(row, o) ? '★' : ''}</b>
                     <i>{t('ret.times', { n: n(row, o) })}</i>
                   </td>
                 ))}
@@ -109,8 +114,34 @@ export default function ReTableSheet({ games, onClose }) {
           <span className="src-badge borrowed">{t('we.src.borrowed')}</span>
         </div>
         <p className="small dim">{t('ret.srcBase')}</p>
-        <p className="small dim">{t('ret.srcKoshien2')}</p>
       </div>
+      {/* 甲子園の実測(4状況)と、そこから引いた補正(20状況)は出どころが違う。
+          札を分けないと、補正値まで実測に見えてしまう */}
+      {school && (
+        <>
+          <div className="we-part">
+            <div className="we-layer-head">
+              <b>{t('ret.koshienTitle')}</b>
+              <span className="src-badge borrowed">{t('ret.src.koshien')}</span>
+            </div>
+            <p className="small dim">{t('ret.srcKoshien2')}</p>
+            <p className="small dim">{t('ret.srcKoshienNote')}</p>
+          </div>
+          <div className="we-part warn">
+            <div className="we-layer-head">
+              <b>{t('ret.levelTitle')}</b>
+              <span className="src-badge chosen">{t('we.src.chosen')}</span>
+            </div>
+            <p className="small dim">
+              {t('ret.srcKoshienLevel', {
+                lv: KOSHIEN_LEVEL.toFixed(3),
+                pct: Math.round((KOSHIEN_LEVEL - 1) * 100),
+              })}
+            </p>
+          </div>
+        </>
+      )}
+      <p className="small dim mt8">{t('ret.koshienEdition')}</p>
       <p className="small dim mt8">{t('ret.srcTiebreak')}</p>
 
       <div className="sheet-actions">
