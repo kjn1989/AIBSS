@@ -109,17 +109,93 @@ try {
   check('打者はアウトになった', (await outs()) === 1, String(await outs()));
   check('走者は残っている', (await baseOn(1)) > 0 && (await baseOn(2)) > 0);
 
-  // --- 2アウトになったら押せない ---
+  // --- 1死一二塁でも押せる(報告のあった場面) ---
   await page.click('.result-pad button:has-text("凡打")');
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(500);
+  const oneOut = page.locator('.sheet .cpad-foot button:has-text("インフィールドフライ")');
+  check('1死一二塁でも押せる', !(await oneOut.isDisabled()));
+  await oneOut.click();
+  await page.waitForTimeout(300);
+  check('1死でも選択状態になる', (await oneOut.getAttribute('class')).includes('primary'),
+    await oneOut.getAttribute('class'));
+
+  // 確定できない理由は押せて、押すと打球方向の図まで戻れること。
+  // 図はシートの最上部にあり、下までスクロールすると画面の外に出てしまう
+  const needDir = page.locator('.sheet .need-dir');
+  check('確定できない理由が押せる形で出ている', (await needDir.count()) === 1);
+  await needDir.click();
+  await page.waitForTimeout(700);
+  const fieldSeen = await page.evaluate(() => {
+    const el = document.querySelector('.sheet .field-pad');
+    if (!el) return false;
+    const r = el.getBoundingClientRect();
+    return r.top < window.innerHeight && r.bottom > 0;
+  });
+  check('押すと打球方向の図が画面に出る', fieldSeen);
   await pickDir();
+  check('方向を入れたら確定できる', !(await page.locator('.sheet-actions button.primary').isDisabled()));
   await page.click('.sheet-actions button:has-text("確定")');
   await page.waitForTimeout(600);
+
+  // --- 2アウトになったら押せない ---
   check('2アウトになった', (await outs()) === 2, String(await outs()));
   await page.click('.result-pad button:has-text("凡打")');
   await page.waitForTimeout(500);
   const twoOut = page.locator('.sheet .cpad-foot button:has-text("インフィールドフライ")');
   check('2アウトでは押せない', await twoOut.isDisabled());
+
+  // --- 守備側(相手打者)でも同じように押せる ---
+  // 報告のあった場面は1回裏の守備側。攻撃側とは別のシートを通るので、そちらも見る
+  await page.locator('.sheet-actions button.ghost').click();
+  await page.waitForTimeout(400);
+  await page.click('.result-pad button:has-text("三振")');
+  await page.waitForTimeout(900);
+  const conf = page.locator('.sheet-actions button:has-text("確定")');
+  if (await conf.count()) { await conf.click(); await page.waitForTimeout(700); }
+  // 守備側に切り替わるまで待つ(守備確認が挟まることがある)
+  for (let i = 0; i < 10; i++) {
+    if ((await page.locator('.result-pad button:has-text("凡打")').count()) > 0
+      && !(await page.locator('.result-pad button:has-text("凡打")').isDisabled())) break;
+    const go = page.locator('.sheet-actions button.primary, button:has-text("この守備で開始")');
+    if (await go.count()) { await go.first().click(); }
+    await page.waitForTimeout(600);
+  }
+  const half = await page.locator('body').innerText();
+  check('守備側(1回裏)に変わった', half.includes('1回裏') && half.includes('相手打者'), half.slice(0, 200));
+
+  // 守備側は投手を決めるまで入力がロックされる(仕様)。まず投手を選ぶ
+  const psel = page.locator('select').filter({ has: page.locator('option') }).first();
+  const opts = await psel.locator('option').evaluateAll((os) => os.map((o) => o.value).filter(Boolean));
+  if (opts.length) { await psel.selectOption(opts[0]); await page.waitForTimeout(500); }
+  check('投手を決めたら入力できる',
+    (await page.locator('.input-locked').count()) === 0,
+    String(await page.locator('.input-locked').count()));
+
+  for (let i = 0; i < 2; i++) {
+    await page.click('.result-pad button:has-text("ヒット")');
+    await page.waitForTimeout(350);
+    await pickDir();
+    await page.click('.sheet-actions button:has-text("確定")');
+    await page.waitForTimeout(600);
+  }
+  check('守備側でも一二塁になった', (await baseOn(1)) > 0 && (await baseOn(2)) > 0);
+  await page.click('.result-pad button:has-text("凡打")');
+  await page.waitForTimeout(500);
+  const defIfly = page.locator('.sheet .cpad-foot button:has-text("インフィールドフライ")');
+  check('守備側・0死一二塁でも押せる', !(await defIfly.isDisabled()));
+  await defIfly.click();
+  await page.waitForTimeout(300);
+  check('守備側でも選択状態になる', (await defIfly.getAttribute('class')).includes('primary'),
+    await defIfly.getAttribute('class'));
+  await pickDir();
+  check('守備側でも確定できる', !(await page.locator('.sheet-actions button.primary').isDisabled()));
+  await page.click('.sheet-actions button:has-text("確定")');
+  await page.waitForTimeout(700);
+  check('守備側でも1死になった', (await outs()) === 1, String(await outs()));
+  await page.click('.result-pad button:has-text("凡打")');
+  await page.waitForTimeout(500);
+  const defOne = page.locator('.sheet .cpad-foot button:has-text("インフィールドフライ")');
+  check('守備側・1死一二塁でも押せる(報告の場面)', !(await defOne.isDisabled()));
 
   console.log(failures === 0 ? '\n✓ infield fly PASS' : `\n✗ infield fly FAIL (${failures})`);
 } finally {

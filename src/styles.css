@@ -2505,3 +2505,12 @@ button.manage-open {
 .hm-read { margin-top: 10px; padding: 9px 11px; border-radius: 10px; background: var(--bg-3); }
 .hm-read b { font-size: 13px; }
 .hm-read p { margin: 3px 0 0; }
+
+/* 確定できない理由。読ませるだけでなく、押せば図まで戻れるようにする
+   (図はシートの最上部にあり、下までスクロールすると画面の外に出てしまう) */
+.need-dir {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  width: 100%; margin: 0; padding: 2px 0; background: none; border: none;
+  font-size: 15px; font-weight: 700; text-align: left; line-height: 1.35;
+}
+.need-dir-go { flex: 0 0 auto; font-size: 12px; font-weight: 700; color: var(--accent-2); white-space: nowrap; }
