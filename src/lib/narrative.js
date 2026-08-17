@@ -61,9 +61,15 @@ function whatOf(p, ctx) {
     { hitAngle: p.hitAngle, intentional: p.intentional });
   return ctx.lang === 'en' ? s : s.replace(/・アウト$/, '');
 }
+// 打者の呼び名。打順が記録されていれば「4番・田中」と添える。
+// 実況が必ず打順を言うのは、それが打線のどこで起きたかを一言で示すため。
+// 古い記録には打順が入っていないことがあるので、そのときは名前だけにする。
 const whoOf = (item, ctx) => {
   const p = payloadOf(item);
-  return item.mine ? ctx.nameOf(p?.playerId) : ctx.oppNameOf(p?.letter);
+  const name = item.mine ? ctx.nameOf(p?.playerId) : ctx.oppNameOf(p?.letter);
+  if (!name) return '';
+  const order = Number(p?.order);
+  return order > 0 ? ctx.t('nr.who', { n: order, who: name }) : name;
 };
 
 // ---- 点が入ったときの呼び分け ----

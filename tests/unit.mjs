@@ -4678,9 +4678,9 @@ const nrCtx = (score = {}) => ({
   innOf: (s) => `${s.inning}回${s.isTop ? '表' : '裏'}`,
   scoreBefore: (x) => score[x.id] || { my: 0, opp: 0 },
 });
-const nrPa = (id, who, result, dir, runs, mine = true, delta = 0.08, inning = 1, isTop = true) => ({
+const nrPa = (id, who, result, dir, runs, mine = true, delta = 0.08, inning = 1, isTop = true, order = null) => ({
   id, mine, delta, we: 0.5, inning, isTop,
-  log: { id, payload: { playerId: who, letter: who, result, direction: dir, runs, beforeRunners: {} } },
+  log: { id, payload: { playerId: who, letter: who, order, result, direction: dir, runs, beforeRunners: {} } },
 });
 const nrRun = (items) => ({ items, from: items[0], to: items[items.length - 1], n: items.length, dir: 1 });
 
@@ -4760,6 +4760,31 @@ test('物語: 記録員が書いた文があれば、そちらを使う', () => 
   assert.equal(noteOf({}, run), '', '書かれていなければ空(下書きに戻る)');
   // 打席を直して区間の切れ目が変わっても、記録は壊れずに下書きへ戻るだけ
   assert.equal(noteOf({ flowNotes: { 99: 'ずれた文' } }, run), '');
+});
+
+test('物語: 打順が記録されていれば「◯番・◎◎」と呼ぶ', () => {
+  // 実況が必ず打順を言うのは、打線のどこで起きたかを一言で示すため
+  const s = draftNarrative(
+    nrRun([nrPa('a', 'p1', 'single', 'LF', 1, true, 0.15, 1, true, 4)]),
+    nrCtx({ a: { my: 0, opp: 0 } }),
+  );
+  assert.ok(s.includes('4番・平山'), s);
+});
+
+test('物語: 打順が無い古い記録は、名前だけで呼ぶ', () => {
+  const s = draftNarrative(
+    nrRun([nrPa('a', 'p1', 'single', 'LF', 1, true, 0.15)]),
+    nrCtx({ a: { my: 0, opp: 0 } }),
+  );
+  assert.ok(s.includes('平山') && !s.includes('番'), s);
+});
+
+test('物語: まとめた打者にも打順が付く', () => {
+  const items = [
+    nrPa('1', 'C', 'out', 'SS', 0, false, -0.05, 1, false, 3),
+    nrPa('2', 'D', 'out', '1B', 0, false, -0.05, 1, false, 4),
+  ];
+  assert.equal(draftNarrative(nrRun(items), nrCtx()), '3番・C、4番・Dを連続で打ち取った。');
 });
 
 test('物語: 新しい試合は書き直しの入れ物を持っている', () => {
