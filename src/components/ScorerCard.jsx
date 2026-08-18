@@ -10,9 +10,10 @@ import { aggregateScorersOver, rankScorers, scorerName } from '../lib/scorers.js
 // 打った・投げたは選手の成績になるが、「いま流れが来た」を押した判断は
 // 記録員のもの。当たり外れが残らないと、その人が試合に居た意味が記録に出ない。
 //
-// 測るのは1つだけ: 押したタグのうち、動く前に読めていたものの割合。
-// 分母は押した回数だけなので、何と何を比べているのか迷わない。
-// 押した数が少ないうちは率が跳ねるので、回数を必ず併記する。
+// 確度 = 押したタグのうち、動く前に読めていたものの割合(分母は押した回数)
+// 大きさ = 読めたときに勝率が動いた幅の平均      (分母は読めた回数)
+// 順番に読む2つで、競合する物差しではない。
+// 押した数が少ないうちは跳ねるので、回数を必ず併記する。
 const MIN_TAGS = 5;
 
 export default function ScorerCard({ games }) {
@@ -47,6 +48,7 @@ export default function ScorerCard({ games }) {
           <tr>
             <th>{t('sc.name')}</th>
             <th className="num">{t('sc.readRate')}</th>
+            <th className="num">{t('sc.readSize')}</th>
             <th className="num">{t('sc.tags')}</th>
           </tr>
         </thead>
@@ -55,6 +57,7 @@ export default function ScorerCard({ games }) {
             <tr key={s.scorerId} className={s.tags < MIN_TAGS ? 'thin' : ''}>
               <td className="sc-name">{scorerName(state.settings, s.scorerId) || t('sc.unknown')}</td>
               <td className="num"><b>{formatRate(s.hitRate)}</b></td>
+              <td className="num">{s.avgMove == null ? '—' : `${Math.round(s.avgMove * 100)}pt`}</td>
               <td className="num">{t('sc.tagsN', { n: s.tags, g: s.games })}</td>
             </tr>
           ))}

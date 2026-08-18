@@ -232,23 +232,44 @@ try {
   check('札も下書きに戻る',
     (await story.locator('.fv-story-tag').innerText()).includes('下書き'));
 
-  // --- 出す数字は1つだけ。押したうち、動く前に読めていたのが何回か ---
+  // --- 確度と大きさ。分母が違うが、順番に読む鎖になっているか ---
   const rates = await page.evaluate(() =>
     [...document.querySelectorAll('.sheet .fv-rate')].map((el) => ({
       name: el.querySelector('b')?.textContent,
       v: el.querySelector('.v')?.textContent,
       note: el.querySelector('.n')?.textContent,
     })));
-  check('流れタグの成績は1つだけ', rates.length === 1, JSON.stringify(rates));
-  check('読めたかどうかだと書いてある', rates[0]?.name?.includes('読めた'), JSON.stringify(rates));
+  check('確度と大きさが並んでいる', rates.length === 2, JSON.stringify(rates));
+  check('片方は確度', rates[0]?.name?.includes('確度'), JSON.stringify(rates));
+  check('もう片方は大きさ', rates[1]?.name?.includes('大きさ'), JSON.stringify(rates));
   // 分母が見えないと「.500」が何のうちの半分なのか分からない
-  check('分数で出ている', /\d+\/\d+/.test(rates[0]?.v || ''), JSON.stringify(rates));
+  check('確度は分数で出ている', /\d+\/\d+/.test(rates[0]?.v || ''), JSON.stringify(rates));
+  check('大きさは勝率ポイントで出ている', /\d+pt/.test(rates[1]?.v || ''), JSON.stringify(rates));
+
   const sheetTxt = await page.locator('.sheet').last().innerText();
-  check('測っているものを1つに言い切っている',
-    sheetTxt.includes('「動く前に読めていたか」だけ'), sheetTxt.slice(0, 300));
+  // 2つの関係を鎖で言い切る。並べただけだと、どちらを見ればいいのか分からない
+  check('押した→読めた→動いた の順で繋いである',
+    /押した\d+回 → 読めた\d+回（\.\d+）→ そのとき勝率は平均\d+ポイント動いた/.test(sheetTxt),
+    sheetTxt.slice(0, 400));
+  check('大きさの分母を書いてある',
+    sheetTxt.includes('大きさの分母は「読めた回数」'), sheetTxt.slice(0, 400));
   // 押していない動きを率にすると「感じたときだけでOK」と矛盾する。事実として置く
   check('押していない動きで下がらないと書いてある',
-    sheetTxt.includes('成績は下がりません'), sheetTxt.slice(0, 300));
+    sheetTxt.includes('成績は下がりません'), sheetTxt.slice(0, 400));
+
+  // 大きさは読めた回数で割る。押した回数で割ると読めなかった回に薄められる
+  const chain = sheetTxt.match(/押した(\d+)回 → 読めた(\d+)回（\.(\d+)）→ そのとき勝率は平均(\d+)ポイント/);
+  const rowMoves = await page.evaluate(() =>
+    [...document.querySelectorAll('.sheet .fv-tag')]
+      .filter((el) => el.querySelector('.vd')?.textContent === '読めた')
+      .map((el) => Number((el.querySelector('.fv-tag-move .am')?.textContent || '').match(/(\d+)/)?.[1] || 0)));
+  check('大きさが読めた回の平均と一致する', !!chain && rowMoves.length > 0
+    && Math.abs(Number(chain[4]) - rowMoves.reduce((a, b) => a + b, 0) / rowMoves.length) <= 1,
+    JSON.stringify({ chain: chain && chain[0], rowMoves }));
+  check('大きさは押した回数では割っていない', !!chain
+    && Number(chain[1]) !== Number(chain[2])
+    && Math.abs(Number(chain[4]) - rowMoves.reduce((a, b) => a + b, 0) / Number(chain[1])) > 1,
+    JSON.stringify({ chain: chain && chain[0], rowMoves }));
 
   // --- タグ1つずつに「押した後の勝率の上下」が出ている ---
   const tagRows = await page.evaluate(() =>
