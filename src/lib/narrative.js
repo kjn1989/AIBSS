@@ -31,23 +31,29 @@ export const MAX_EVENTS = 4;
 // この程度しか動いていない打席は、話の筋に関係ない
 export const MIN_DELTA = 0.01;
 
+const sameHalf = (a, b) => a && b && a.inning === b.inning && a.isTop === b.isTop;
+
 const runnersKey = (r) => {
   const on = r || {};
   return `${on[1] ? 1 : 0}${on[2] ? 1 : 0}${on[3] ? 1 : 0}`;
 };
 
 // その打席の「あと」の塁状況。同じ半回の次の打席の「前」がそれにあたる。
-// 半回の最後の打席は次が無いので分からない(null)。
-function basesAfter(items, i) {
+//
+// 実際に起きた問題: 区間の中だけを見ていたので、区間の最後の打席では塁状況が
+// 出なかった。タイブレークの無死一二塁から死球で満塁になった打席が
+// 「死球で出塁」としか書かれず、なぜ勝率が18ポイントも動いたのか読めなかった。
+// 区間の外(試合全体の並び)まで見て、同じ半回に次の打席があればそこから読む。
+function basesAfter(items, i, ctx) {
   const cur = items[i];
-  const next = items[i + 1];
-  if (!cur || !next) return null;
-  if (next.inning !== cur.inning || next.isTop !== cur.isTop) return null;
+  const next = items[i + 1] && sameHalf(items[i + 1], cur)
+    ? items[i + 1]
+    : ctx?.nextInHalf?.(cur);
+  if (!cur || !next || !sameHalf(next, cur)) return null;
   const key = runnersKey(next.log?.payload?.beforeRunners);
   return key === '000' ? null : key;
 }
 
-const sameHalf = (a, b) => a && b && a.inning === b.inning && a.isTop === b.isTop;
 const payloadOf = (item) => item?.log?.payload || null;
 const isOutPlay = (p) => {
   const def = RESULTS[p?.result];
@@ -173,7 +179,7 @@ function phraseOf(ev, ctx, items, end) {
       who, what, score: scoreWord(ev.at, ctx.scoreBefore?.(ev.at), ctx, end),
     });
   }
-  const bases = ev.index != null ? basesAfter(items, ev.index) : null;
+  const bases = ev.index != null ? basesAfter(items, ev.index, ctx) : null;
   if (bases) {
     return ctx.t(`nr.${side}.reachBases.${tail}`, { who, what, bases: ctx.t(`ret.r.${bases}`) });
   }
@@ -212,6 +218,16 @@ export function draftNarrative(run, ctx) {
   const sideLabel = (ev) => ctx.t(ev.mine ? 'nr.side.own' : 'nr.side.opp', {
     team: ev.mine ? ctx.teamName : ctx.oppName,
   });
+  // タイブレークの回は走者を置いて始まる。そこを書かないと「先頭が出ただけで
+  // 大きく動いた」と読めてしまう(実際は無死一二塁から満塁になっている)
+  const tbLead = (ev) => {
+    const key = ctx.tiebreakAt?.(ev.at.inning);
+    if (!key) return '';
+    const [runners, outs] = String(key).split('|');
+    return ctx.t('nr.tb', {
+      state: `${ctx.t(`nr.outs.${Math.min(2, Number(outs) || 0)}`)}${ctx.t(`ret.r.${runners}`)}`,
+    });
+  };
   let out = '';
   for (let i = 0; i < picked.length; i += 1) {
     const ev = picked[i];
@@ -222,7 +238,7 @@ export function draftNarrative(run, ctx) {
     // 回をまたぐ手前は言い切って、次の回を頭に置く
     const body = phraseOf(ev, ctx, items, isLast || (i + 1 < picked.length && !sameHalf(picked[i + 1].at, ev.at)));
     if (!body) continue;
-    const phrase = newSide ? `${sideLabel(ev)}${body}` : body;
+    const phrase = newSide ? `${tbLead(ev)}${sideLabel(ev)}${body}` : body;
     if (i === 0) out = phrase;
     else if (newHalf) out += `${ctx.t('nr.period')}${ctx.t('nr.next', { inn: ctx.innOf(ev.at) })}${phrase}`;
     else out += `${sep}${phrase}`;

@@ -4822,6 +4822,44 @@ test('物語: チーム名が同じ側で二度続けて出ない', () => {
   assert.equal(s.split('自チーム').length - 1, 1, `1回だけ: ${s}`);
 });
 
+test('物語: タイブレークの回は、走者を置いて始まったことを書く', () => {
+  // 実際に読み違えが起きた。無死一二塁から死球で満塁になったのに、文章は
+  // 「死球で出塁」としか書かず、なぜ勝率が18ポイントも動いたのか読めなかった
+  const items = [
+    nrPa('1', 'A', 'out', 'SS', 0, false, -0.07, 9, false, 7),
+    nrPa('2', 'B', 'out', '1B', 0, false, -0.06, 9, false, 8),
+    nrPa('3', 'p1', 'hbp', null, 0, true, 0.18, 10, true, 3),
+  ];
+  items[2].log.payload.beforeRunners = { 1: true, 2: true };
+  const after = nrPa('4', 'p2', 'out', 'SS', 0, true, -0.05, 10, true, 4);
+  after.log.payload.beforeRunners = { 1: true, 2: true, 3: true };
+  const s = draftNarrative(nrRun(items), {
+    ...nrCtx(),
+    nextInHalf: (x) => (x.id === '3' ? after : null),
+    tiebreakAt: (inn) => (inn >= 10 ? '110|0' : null),
+  });
+  assert.ok(s.includes('タイブレークの無死一二塁から'), `始まりの走者を書く: ${s}`);
+  assert.ok(s.includes('満塁'), `死球で満塁になったことを書く: ${s}`);
+});
+
+test('物語: 区間の外まで見て塁状況を出す', () => {
+  // 区間の最後の打席は、区間の中だけ見ても「次」が無い。試合全体の並びから引く
+  const items = [nrPa('1', 'p1', 'single', 'LF', 0, true, 0.12, 3, true, 1)];
+  const after = nrPa('2', 'p2', 'out', 'SS', 0, true, -0.04, 3, true, 2);
+  after.log.payload.beforeRunners = { 1: true };
+  const withNext = draftNarrative(nrRun(items), { ...nrCtx(), nextInHalf: () => after });
+  assert.ok(withNext.includes('一塁'), `次の打席から塁状況を読む: ${withNext}`);
+  // 引けないときは、これまでどおり塁状況なしで成立する
+  const without = draftNarrative(nrRun(items), nrCtx());
+  assert.ok(without.includes('出塁') && !without.includes('一塁'), without);
+});
+
+test('物語: タイブレークでない回には書かない', () => {
+  const items = [nrPa('1', 'p1', 'single', 'LF', 0, true, 0.12, 3, true, 1)];
+  const s = draftNarrative(nrRun(items), { ...nrCtx(), tiebreakAt: () => null });
+  assert.ok(!s.includes('タイブレーク'), s);
+});
+
 test('物語: 新しい試合は書き直しの入れ物を持っている', () => {
   assert.deepEqual(newGame({}).flowNotes, {});
 });
