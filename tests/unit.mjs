@@ -4677,6 +4677,7 @@ const nrCtx = (score = {}) => ({
   edition: '草野球', lang: 'ja', t: nrT,
   innOf: (s) => `${s.inning}回${s.isTop ? '表' : '裏'}`,
   scoreBefore: (x) => score[x.id] || { my: 0, opp: 0 },
+  teamName: '自チーム', oppName: '相手チーム',
 });
 const nrPa = (id, who, result, dir, runs, mine = true, delta = 0.08, inning = 1, isTop = true, order = null) => ({
   id, mine, delta, we: 0.5, inning, isTop,
@@ -4698,7 +4699,7 @@ test('物語: 続けて打ち取った打者はまとめる', () => {
     nrPa('3', 'E', 'out', 'LF', 0, false, -0.05),
   ];
   const s = draftNarrative(nrRun(items), nrCtx());
-  assert.equal(s, 'C、D、Eを連続で打ち取った。', s);
+  assert.equal(s, '相手チームのC、D、Eを連続で打ち取った。', s);
 });
 
 test('物語: 回が変わるところで文を切り、次の回を頭に置く', () => {
@@ -4715,7 +4716,7 @@ test('物語: 続けて出塁した打者は連打としてまとめる', () => 
   const items = ['a', 'b', 'c', 'd'].map((id, i) =>
     nrPa(id, `p${i + 1}`, 'single', '3B', 1, true, 0.06));
   const s = draftNarrative(nrRun(items), nrCtx({ a: { my: 0, opp: 0 } }));
-  assert.equal(s, '平山、秦、若山、竹丸の4連打で4点、先制。', s);
+  assert.equal(s, '自チームは平山、秦、若山、竹丸の4連打で4点、先制。', s);
 });
 
 test('物語: 点は点差で呼び分ける', () => {
@@ -4784,7 +4785,41 @@ test('物語: まとめた打者にも打順が付く', () => {
     nrPa('1', 'C', 'out', 'SS', 0, false, -0.05, 1, false, 3),
     nrPa('2', 'D', 'out', '1B', 0, false, -0.05, 1, false, 4),
   ];
-  assert.equal(draftNarrative(nrRun(items), nrCtx()), '3番・C、4番・Dを連続で打ち取った。');
+  assert.equal(draftNarrative(nrRun(items), nrCtx()), '相手チームの3番・C、4番・Dを連続で打ち取った。');
+});
+
+test('物語: どちらのチームの打者かを必ず言う', () => {
+  // 「打ち取った」なら相手、「倒れ」なら自チーム、と動詞で暗示はできるが、
+  // 回をまたぐと2つの打線が続けて出てくるので、暗示だけでは読み手が追えない
+  const items = [
+    nrPa('1', 'C', 'out', 'SS', 0, false, -0.05, 10, false, 9),
+    nrPa('2', 'D', 'out', '1B', 0, false, -0.05, 10, false, 1),
+    nrPa('3', 'p1', 'single', 'LF', 0, true, 0.12, 11, true, 6),
+  ];
+  const s = draftNarrative(nrRun(items), nrCtx());
+  assert.ok(s.startsWith('相手チームの'), `守備の区間は相手の名前から: ${s}`);
+  assert.ok(s.includes('続く11回表、自チームは'), `攻撃に変わったら自チームの名前: ${s}`);
+  // どちらのチームの打者かが、名前を見なくても分かること
+  assert.ok(s.indexOf('相手チーム') < s.indexOf('自チーム'), s);
+});
+
+test('物語: 側が変わらない区間でも、どちらの打線かは言う', () => {
+  const items = [
+    nrPa('1', 'p1', 'out', 'SS', 0, true, -0.08, 10, true, 4),
+    nrPa('2', 'p2', 'out', '2B', 0, true, -0.08, 10, true, 5),
+  ];
+  assert.equal(draftNarrative(nrRun(items), nrCtx()), '自チームは4番・平山、5番・秦が続けて倒れた。');
+});
+
+test('物語: チーム名が同じ側で二度続けて出ない', () => {
+  // 側が変わったときだけ置く。毎回付けると文がうるさくなる
+  const items = [
+    nrPa('1', 'p1', 'single', 'LF', 0, true, 0.08, 1, true, 1),
+    nrPa('2', 'p2', 'out', 'SS', 0, true, -0.05, 1, true, 2),
+    nrPa('3', 'p3', 'single', 'CF', 1, true, 0.15, 1, true, 3),
+  ];
+  const s = draftNarrative(nrRun(items), nrCtx({ 3: { my: 0, opp: 0 } }));
+  assert.equal(s.split('自チーム').length - 1, 1, `1回だけ: ${s}`);
 });
 
 test('物語: 新しい試合は書き直しの入れ物を持っている', () => {

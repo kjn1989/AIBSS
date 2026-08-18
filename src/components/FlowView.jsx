@@ -535,7 +535,11 @@ export default function FlowView({ game, onClose }) {
                       <SwingStory
                         game={game}
                         run={sw}
-                        draft={draftNarrative(sw, { nameOf, oppNameOf, edition, lang, t, innOf, scoreBefore })}
+                        draft={draftNarrative(sw, {
+                          nameOf, oppNameOf, edition, lang, t, innOf, scoreBefore,
+                          teamName: state.settings.teamName || t('app.teamFallback'),
+                          oppName: game.opponent || t('nr.side.oppFallback'),
+                        })}
                         onSave={(key, text) => dispatch({ type: 'SET_FLOW_NOTE', gameId: game.id, key, text })}
                         t={t}
                       />
