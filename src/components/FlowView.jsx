@@ -605,6 +605,7 @@ export default function FlowView({ game, onClose }) {
                   name: scorerName(state.settings, game.scorerId),
                   n: career.tags,
                   hit: formatRate(career.hitRate),
+                  d: career.avgMove == null ? '—' : Math.round(career.avgMove * 100),
                 })}
               </p>
             )}
@@ -613,9 +614,9 @@ export default function FlowView({ game, onClose }) {
             <p className="small dim" style={{ marginTop: -2 }}>{t('fv.noTags')}</p>
           ) : (
             <>
-              {/* 出す数字は1つだけ。押したうち、動く前に読めていたのが何回か。
-                  合計や1回あたりの平均も作れるが、どちらも「読めたか」に答えていない */}
-              <div className="fv-rates one">
+              {/* 2つを順番に読む形にする。確度の分母は押した回数、大きさの分母は
+                  読めた回数。競合する物差しではなく鎖なので、下に文で繋いでおく */}
+              <div className="fv-rates">
                 <div className="fv-rate">
                   <b>{t('fv.readTitle')}</b>
                   <div className="v num">
@@ -624,7 +625,25 @@ export default function FlowView({ game, onClose }) {
                   </div>
                   <div className="n">{t('fv.readNote', { a: judged.counts.pre, b: judged.tags.length })}</div>
                 </div>
+                <div className="fv-rate">
+                  <b>{t('fv.sizeTitle')}</b>
+                  <div className="v num">
+                    {judged.avgMove == null ? '—' : Math.round(judged.avgMove * 100)}
+                    {judged.avgMove != null && <span className="unit">pt</span>}
+                  </div>
+                  <div className="n">{t('fv.sizeNote', { a: judged.counts.pre })}</div>
+                </div>
               </div>
+              <p className="small dim mt8"><b>
+                {judged.counts.pre
+                  ? t('fv.chain', {
+                    n: judged.tags.length,
+                    a: judged.counts.pre,
+                    rate: formatRate(judged.hitRate),
+                    d: Math.round(judged.avgMove * 100),
+                  })
+                  : t('fv.chainNone', { n: judged.tags.length })}
+              </b></p>
               <p className="small dim">{t('fv.verdictNote')}</p>
               {/* 押していない大きな動きは、率にせず事実として置く。
                   率にすると「感じたときだけでOK」と書いてあるタグを、

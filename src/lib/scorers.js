@@ -21,7 +21,9 @@ export const scorersOf = (settings) => (settings?.scorers || []);
 export const tagScorerId = (game, tag) => tag?.payload?.scorerId || game?.scorerId || null;
 
 // 記録員ごとの実績。
-//  hitRate = 押したタグのうち「読めた」もの / 押したタグ(タグ単位で押した人に付く)
+//  hitRate = 確度。押したタグのうち「読めた」もの / 押したタグ
+//  avgMove = 大きさ。読めたときに勝率が動いた幅 / 読めた回数
+//            (どちらもタグ単位なので、押した人に付く)
 // 「押していない大きな動き」も数えておく(swings / caught)。ただし成績にはしない。
 // 率にすると「感じたときだけでOK」と書いてあるタグを、押さなかったことで罰する形になる。
 //             (区間は試合のもので、タグ1つに割り当てられない。試合の記録員に付ける)
@@ -31,7 +33,7 @@ export function aggregateScorers(games, winExp, opts = {}) {
     if (!map[id]) {
       map[id] = {
         scorerId: id, games: 0, tags: 0, pre: 0, post: 0, miss: 0,
-        swings: 0, caught: 0,
+        swings: 0, caught: 0, points: 0,
       };
     }
     return map[id];
@@ -54,6 +56,8 @@ export function aggregateScorers(games, winExp, opts = {}) {
       if (v === 'pre') s.pre += 1;
       else if (v === 'post') s.post += 1;
       else s.miss += 1;
+      // 読めた回に勝率がどれだけ動いたか。読めなかった回の gain は0
+      s.points += j.moves?.[tag.id]?.gain || 0;
     }
     // 押していない動きの数は試合単位のものなので、試合の記録員に付ける
     if (g.scorerId) {
@@ -67,6 +71,7 @@ export function aggregateScorers(games, winExp, opts = {}) {
   for (const s of Object.values(map)) {
     s.hitRate = s.tags ? s.pre / s.tags : null;
     s.catchRate = s.swings ? s.caught / s.swings : null;
+    s.avgMove = s.pre ? s.points / s.pre : null;
   }
   return map;
 }
@@ -105,7 +110,7 @@ function openingOf(game) {
 // 違うので、同じ記録員の通算成績が「どの試合を開いているか」で変わっていた。
 // modelFor(game) を受け取って、試合ごとに正しいモデルで数える。
 // ------------------------------------------------------------
-const SUM_KEYS = ['games', 'tags', 'pre', 'post', 'miss', 'swings', 'caught'];
+const SUM_KEYS = ['games', 'tags', 'pre', 'post', 'miss', 'swings', 'caught', 'points'];
 
 export function aggregateScorersOver(games, modelFor, opts = {}) {
   const merged = {};
@@ -119,6 +124,7 @@ export function aggregateScorersOver(games, modelFor, opts = {}) {
   for (const s of Object.values(merged)) {
     s.hitRate = s.tags ? s.pre / s.tags : null;
     s.catchRate = s.swings ? s.caught / s.swings : null;
+    s.avgMove = s.pre ? s.points / s.pre : null;
   }
   return merged;
 }

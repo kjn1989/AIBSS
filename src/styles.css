@@ -2586,4 +2586,5 @@ button.manage-open {
 .fv-rate .v { font-variant-numeric: tabular-nums; }
 .fv-rate .v .of { font-size: 17px; font-weight: 700; opacity: .55; margin-left: 1px; }
 /* 率は添え物。分数のほうが分母まで見えるので、そちらを大きく出す */
-.fv-rate .v .rate { font-size: 14px; font-weight: 700; opacity: .5; margin-left: 8px; }
+.fv-rate .v .rate { font-size: 14px; font-weight: 700; opacity: .5; margin-left: 6px; }
+.fv-rate .v .unit { font-size: 15px; font-weight: 700; opacity: .55; margin-left: 1px; }

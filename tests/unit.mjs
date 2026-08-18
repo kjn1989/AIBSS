@@ -2991,7 +2991,7 @@ test('judgeFlowTags: 何も起きなければ空振り。押していない動�
   assert.equal(j2.catchRate, 0, '動いたのに押していないので押せていた割合は0');
 });
 
-test('judgeFlowTags: 測るのは「動く前に読めていたか」', () => {
+test('judgeFlowTags: 確度は押した回数が分母', () => {
   // 打席1で大きく動く試合。動く前に押す = そのぶんが点になる
   const mk = (tagAt) => {
     const logs = [];
@@ -3089,6 +3089,48 @@ test('judgeFlowTags: 「流れ切れた」が読めたときは勝率が下が�
   assert.equal(m.weAt, 0.60);
   assert.ok(Math.abs(m.wePeak - 0.35) < 1e-9, `山は下がった側: ${m.wePeak}`);
   assert.ok(m.wePeak < m.weAt, '読めた「流れ切れた」は勝率が下がって出る');
+});
+
+test('judgeFlowTags: 大きさは「読めた回数」で割る', () => {
+  // 3回押して、読めたのは1回。その1回で勝率が30ポイント動いた。
+  // 押した回数(3)で割ると10ptになり、「どれくらい当たるか」でも
+  // 「当たるとどれくらい大きいか」でもない数になる。
+  const logs = [];
+  const series = [];
+  let we = 0.50;
+  const push = (id, delta) => {
+    we += delta;
+    logs.push({ id, kind: 'atbat', inning: 1, isTop: true, payload: {} });
+    series.push({ id, log: logs[logs.length - 1], mine: true, delta, we });
+  };
+  logs.push({ id: 't1', kind: 'flow', inning: 1, isTop: true, payload: { dir: 'up' } });
+  push('a', 0.30);           // t1 は読めた(+30)
+  logs.push({ id: 't2', kind: 'flow', inning: 1, isTop: true, payload: { dir: 'up' } });
+  push('b', 0.00);           // t2 は動かず
+  logs.push({ id: 't3', kind: 'flow', inning: 1, isTop: true, payload: { dir: 'up' } });
+  push('c', 0.00);           // t3 も動かず
+  series.start = 0.50;
+
+  const g = { id: 'g', playLogs: logs };
+  const j = judgeFlowTags(g, series, { minSwing: 0.12, reactSwing: 0.07 });
+  assert.equal(j.counts.pre, 1, '読めたのは1回');
+  assert.equal(j.tags.length, 3, '押したのは3回');
+  assert.ok(Math.abs(j.hitRate - 1 / 3) < 1e-9, `確度は 1/3: ${j.hitRate}`);
+  assert.ok(Math.abs(j.avgMove - 0.30) < 1e-9, `大きさは読めた1回ぶん: ${j.avgMove}`);
+  assert.ok(Math.abs(j.avgMove - j.points / j.tags.length) > 0.1,
+    '押した回数で割った値とは別物であること');
+});
+
+test('judgeFlowTags: 一度も読めていなければ大きさは出さない', () => {
+  // 0で埋めると「平均0ポイント」になり、実績が無いのに数字が立つ
+  const logs = [
+    { id: 'tag', kind: 'flow', inning: 1, isTop: true, payload: { dir: 'up' } },
+    paLog(1, { kind: 'atbat', r: [0, 0, 0], outs: 0, runs: 0 }),
+  ];
+  const g = { id: 'g', playLogs: logs };
+  const j = judgeFlowTags(g, flowSeries(g, null));
+  assert.equal(j.hitRate, 0, '確度は0');
+  assert.equal(j.avgMove, null, '大きさは「—」にできるよう null');
 });
 
 test('movePlays: 攻撃中に押したか守備中に押したかで中身を分ける', () => {
