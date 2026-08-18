@@ -2271,6 +2271,7 @@ button.manage-open {
 .fv-swing.up { border-left: 3px solid var(--green); }
 .fv-swing.down { border-left: 3px solid var(--amber); }
 .fv-rates { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.fv-rates.one { grid-template-columns: 1fr; }
 .fv-rate { background: var(--bg-3); border: 1px solid var(--border); border-radius: 12px; padding: 10px 11px; }
 .fv-rate > b { display: block; font-size: 11px; color: var(--text-dim); }
 .fv-rate .v { font-size: 25px; font-weight: 800; margin: 2px 0 1px; letter-spacing: -.01em; }
@@ -2290,6 +2291,9 @@ button.manage-open {
 .fv-tag-move .mv { font-weight: 700; font-variant-numeric: tabular-nums; }
 .fv-tag.up .fv-tag-move .mv.pre { color: var(--green); }
 .fv-tag.down .fv-tag-move .mv.pre { color: var(--amber); }
+.fv-tag-move .am { font-weight: 700; }
+.fv-tag.up .fv-tag-move .am { color: var(--green); }
+.fv-tag.down .fv-tag-move .am { color: var(--amber); }
 .fv-tag-move .wt { min-width: 0; }
 .fv-tag .tg { flex: none; font-weight: 800; }
 .fv-tag.up .tg { color: var(--green); }
@@ -2579,5 +2583,7 @@ button.manage-open {
 .sig-table tr.sig-sum td { border-top: 1px solid var(--fg); background: var(--bg-2); }
 
 /* 流れタグの成績。単位は勝率ポイントひとつ(合計と1回あたり) */
-.fv-rate .v .unit { font-size: 14px; font-weight: 700; opacity: .6; margin-left: 2px; }
 .fv-rate .v { font-variant-numeric: tabular-nums; }
+.fv-rate .v .of { font-size: 17px; font-weight: 700; opacity: .55; margin-left: 1px; }
+/* 率は添え物。分数のほうが分母まで見えるので、そちらを大きく出す */
+.fv-rate .v .rate { font-size: 14px; font-weight: 700; opacity: .5; margin-left: 8px; }

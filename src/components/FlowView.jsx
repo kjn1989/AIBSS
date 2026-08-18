@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { useStore, useT, usePlayerName } from '../state/store.jsx';
-import { buildRunExpectancy, weSeries, flowRuns, judgeFlowTags, movePlays, weShape, KOSHIEN_RE, KOSHIEN_SOURCE } from '../lib/flow.js';
+import { buildRunExpectancy, weSeries, flowRuns, judgeFlowTags, movePlays, formatRate, weShape, KOSHIEN_RE, KOSHIEN_SOURCE } from '../lib/flow.js';
 import { buildRunDists, buildWinModel } from '../lib/winExp.js';
 import { buildGapModel } from '../lib/teamGap.js';
 import { currentRules } from '../lib/rules.js';
@@ -453,10 +453,14 @@ export default function FlowView({ game, onClose }) {
   const shape = useMemo(() => weShape(series), [series]);
   const over = game.status === 'finished';
   const VD = { pre: t('fv.pre'), post: t('fv.post'), miss: t('fv.miss') };
-  // 勝率は0〜1で持っているが、読むのはポイント。動かなかったものは「+0」ではなく「0」
-  const pt = (x) => {
-    const v = Math.round((x || 0) * 100);
-    return v > 0 ? `+${v}` : String(v);
+  // 勝率がどちらへ動いたかは言葉で書く。符号を付けると、下がったのが正解だった
+  // 「流れ切れた」の的中が「+25pt」になり、上がったように読めてしまう。
+  // 上げ下げは押した向きからではなく、隣に出している2つの勝率そのものから決める。
+  // 押した向きから決めると、表示している数字と食い違う余地が残る。
+  const moveWord = (mv) => {
+    const d = Math.round((mv?.gain || 0) * 100);
+    if (!d) return '';
+    return t(mv.wePeak < mv.weAt ? 'fv.tagDown' : 'fv.tagUp', { d });
   };
   // その勝率を動かしたのは何だったのか。攻撃中に押したのか守備中に押したのかで
   // 中身が変わる(自軍が打った / 相手を抑えた)ので、両方を数える
@@ -600,8 +604,7 @@ export default function FlowView({ game, onClose }) {
                 {t('scorer.career', {
                   name: scorerName(state.settings, game.scorerId),
                   n: career.tags,
-                  total: pt(career.points),
-                  each: pt(career.perTag),
+                  hit: formatRate(career.hitRate),
                 })}
               </p>
             )}
@@ -610,23 +613,18 @@ export default function FlowView({ game, onClose }) {
             <p className="small dim" style={{ marginTop: -2 }}>{t('fv.noTags')}</p>
           ) : (
             <>
-              {/* 軸は勝率ポイントひとつ。合計と1回あたりは、打点と打率のような
-                  同じ単位の2つの読み方で、分母の違いを説明せずに済む */}
-              <div className="fv-rates">
+              {/* 出す数字は1つだけ。押したうち、動く前に読めていたのが何回か。
+                  合計や1回あたりの平均も作れるが、どちらも「読めたか」に答えていない */}
+              <div className="fv-rates one">
                 <div className="fv-rate">
-                  <b>{t('fv.ptTotal')}</b>
-                  <div className="v num">{pt(judged.points)}<span className="unit">pt</span></div>
-                  <div className="n">{t('fv.ptTotalNote', { n: judged.tags.length })}</div>
-                </div>
-                <div className="fv-rate">
-                  <b>{t('fv.ptEach')}</b>
-                  <div className="v num">{pt(judged.perTag)}<span className="unit">pt</span></div>
-                  <div className="n">{t('fv.ptEachNote', {
-                    a: judged.counts.pre, b: judged.tags.length,
-                  })}</div>
+                  <b>{t('fv.readTitle')}</b>
+                  <div className="v num">
+                    {judged.counts.pre}<span className="of">/{judged.tags.length}</span>
+                    <span className="rate">{formatRate(judged.hitRate)}</span>
+                  </div>
+                  <div className="n">{t('fv.readNote', { a: judged.counts.pre, b: judged.tags.length })}</div>
                 </div>
               </div>
-              <p className="small dim mt8"><b>{t('fv.ptNote')}</b></p>
               <p className="small dim">{t('fv.verdictNote')}</p>
               {/* 押していない大きな動きは、率にせず事実として置く。
                   率にすると「感じたときだけでOK」と書いてあるタグを、
@@ -649,8 +647,8 @@ export default function FlowView({ game, onClose }) {
                         <span className={`mv ${v}`}>{t('fv.tagMove', {
                           a: Math.round((mv?.weAt ?? 0) * 100),
                           b: Math.round((mv?.wePeak ?? mv?.weAt ?? 0) * 100),
-                          d: pt(mv?.gain),
                         })}</span>
+                        {v === 'pre' && <span className="am">{moveWord(mv)}</span>}
                         {v === 'pre' && <span className="wt">{movedBy(mv)}</span>}
                       </div>
                     </div>
