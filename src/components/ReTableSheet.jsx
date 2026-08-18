@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { useStore, useT } from '../state/store.jsx';
-import { buildRunExpectancy, reOf, stateKey, SHRINK_K, KOSHIEN_LEVEL, isKoshienMeasured } from '../lib/flow.js';
+import { buildRunExpectancy, reOf, stateKey, SHRINK_K, LEVEL_K, LEVEL_MIN, LEVEL_MAX, KOSHIEN_LEVEL, isKoshienMeasured } from '../lib/flow.js';
 import Sheet from './Sheet.jsx';
 
 // ---- 期待得点・期待失点の解説 ----
@@ -26,7 +26,7 @@ export default function ReTableSheet({ games, onClose }) {
   const t = useT();
   const edition = state.settings.edition || '草野球';
 
-  const { re, samples, total, ownShare } = useMemo(() => {
+  const { re, samples, total, ownShare, level, halfCount, halfRuns, levelShare, rawBase } = useMemo(() => {
     const real = (games || Object.values(state.games || {}))
       .filter((g) => g && !String(g.id).startsWith('demo-'));
     return buildRunExpectancy(real, edition);
@@ -37,6 +37,7 @@ export default function ReTableSheet({ games, onClose }) {
   // ブカツのときだけ、土台が甲子園の実測そのものである4状況に★を付ける。
   // 実測と、そこから引いた補正値を、同じ表の中で見分けられるようにする
   const school = edition === 'ブカツ(中高大)';
+  const youth = edition === '少年野球';
   const star = (row, outs) => school && isKoshienMeasured(stateKey(row.runners, outs));
 
   // 例は表の実値から作る(文章だけ固定値にすると、表と食い違ったときに気づけない)
@@ -114,6 +115,31 @@ export default function ReTableSheet({ games, onClose }) {
           <span className="src-badge borrowed">{t('we.src.borrowed')}</span>
         </div>
         <p className="small dim">{t('ret.srcBase')}</p>
+      </div>
+      {/* 土台の高さは自分たちの記録に合わせて動く。ここを書かずに数字だけ出すと、
+          「NPBの表を使っている」という説明と画面の値が食い違う */}
+      <div className="we-part">
+        <div className="we-layer-head">
+          <b>{t('ret.levelTitle2')}</b>
+          <span className="src-badge measured">{t('we.src.measured')}</span>
+        </div>
+        <p className="small dim">
+          {t('ret.level', {
+            lv: level.toFixed(3),
+            halves: halfCount,
+            runs: halfRuns,
+            own: halfCount ? (halfRuns / halfCount).toFixed(2) : '—',
+            base: (rawBase['000|0'] || 0).toFixed(2),
+          })}
+        </p>
+        <p className="small dim">{t('ret.levelWhy')}</p>
+        <p className="small dim">
+          {t('ret.levelShrink', {
+            k: LEVEL_K, pct: Math.round(levelShare * 100),
+            min: LEVEL_MIN.toFixed(1), max: LEVEL_MAX.toFixed(1),
+          })}
+        </p>
+        {youth && <p className="small dim">{t('ret.levelYouth')}</p>}
       </div>
       {/* 甲子園の実測(4状況)と、そこから引いた補正(20状況)は出どころが違う。
           札を分けないと、補正値まで実測に見えてしまう */}

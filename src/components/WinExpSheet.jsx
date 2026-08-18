@@ -40,15 +40,23 @@ export default function WinExpSheet({ games, onClose }) {
   // 分布が変われば、この例の数字も一緒に動く(食い違いようがない)。
   const sigma = useMemo(() => {
     const term = (x) => (x > 0 ? 1 : x === 0 ? 0.5 : 0);
-    // 表を短く保つため、この点数以上はまとめる
+    // 表を短く保つため、この点数以上はまとめる。
+    // まとめた行の勝率は、確率で重み付けした平均にする。4点のときの勝率で
+    // 代表させると、5点以上のぶんを取りこぼして合計がモデルとズレる
     const CAP = 4;
     const lump = (k) => (k === CAP ? empty0.slice(CAP).reduce((a, b) => a + b, 0) : empty0[k]);
+    const lumpW = (wOf) => {
+      let p = 0;
+      let pw = 0;
+      for (let k = CAP; k < empty0.length; k += 1) { p += empty0[k]; pw += empty0[k] * wOf(k); }
+      return p > 0 ? pw / p : wOf(CAP);
+    };
     // 例1: 最終回の裏、1点ビハインドの攻撃。点数から勝ち負けが直に決まる
     const ex1 = [];
     let sum1 = 0;
     for (let k = 0; k <= CAP; k += 1) {
       const p = lump(k);
-      const w = term(-1 + k);
+      const w = k === CAP ? lumpW((j) => term(-1 + j)) : term(-1 + k);
       sum1 += p * w;
       ex1.push({ k, p, w, diff: -1 + k, mul: p * w });
     }
@@ -62,7 +70,7 @@ export default function WinExpSheet({ games, onClose }) {
     let sum2 = 0;
     for (let k = 0; k <= CAP; k += 1) {
       const p = lump(k);
-      const w = after(k);
+      const w = k === CAP ? lumpW(after) : after(k);
       sum2 += p * w;
       ex2.push({ k, p, w, mul: p * w });
     }

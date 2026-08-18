@@ -19,7 +19,7 @@ import { buildRunDists, buildWinModel, priorDist, remainingHalves, SCORE_PROB, M
 import { TEAM_GAPS, buildGapModel, gapTables, gapOf, scaleDist, scaleDists, S_EXP } from '../src/lib/teamGap.js';
 import { aggregateScorersOver, swingScale, OPEN_MIN_SWING, OPEN_REACT_SWING } from '../src/lib/scorers.js';
 import { aggregateContrib, rankContrib, formatContrib } from '../src/lib/contrib.js';
-import { stateKey, buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, formatRate, weShape, weSeries, stateOfKey, BASE_RE, reOf, KOSHIEN_RE, KOSHIEN_WEIGHTS, KOSHIEN_LEVEL, isKoshienMeasured, baseReFor } from '../src/lib/flow.js';
+import { LEVEL_K, LEVEL_MIN, LEVEL_MAX, stateKey, buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, formatRate, weShape, weSeries, stateOfKey, BASE_RE, reOf, KOSHIEN_RE, KOSHIEN_WEIGHTS, KOSHIEN_LEVEL, isKoshienMeasured, baseReFor } from '../src/lib/flow.js';
 import { teamPower, mostOff, formatPower } from '../src/lib/teamPower.js';
 import { RESULTS as RESULTS_FOR_OUT, OUT_TYPES, outTypeLabel, infieldFlyPossible, newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions, attendeesOf, lastAttendees, autoLineupFrom, subRank, resultLabelOf, isIntentionalBB } from '../src/lib/model.js';
 import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf, oppLettersInGame, oppBaserunning } from '../src/lib/oppBox.js';
@@ -2872,15 +2872,17 @@ test('buildRunExpectancy: 自分たちの記録から作り、回数が少ない
     logs.push(paLog(i++, { inning: inn, r: [0,0,0], outs: 1, runs: 0 }));
     logs.push(paLog(i++, { inning: inn, r: [0,0,0], outs: 2, runs: 0 }));
   }
-  const { re, samples, total, ownShare } = buildRunExpectancy([{ id: 'g', playLogs: logs }]);
+  const { re, samples, total, ownShare, level } = buildRunExpectancy([{ id: 'g', playLogs: logs }]);
   assert.equal(samples.get('000|0'), 10, '回数を持っている');
   assert.equal(total, 30);
   // 自前は3.0だが10回しかないので、基準表(0.48)との間に来る
   const v = re.get('000|0');
   assert.ok(v > BASE_RE['000|0'] && v < 3.0, `寄せがかかる: ${v}`);
   assert.ok(ownShare > 0 && ownShare < 0.5, `まだ基準表の影響が大きい: ${ownShare}`);
-  // 記録が無い状態は基準表のまま
-  assert.equal(Number(re.get('111|0').toFixed(2)), BASE_RE['111|0']);
+  // 一度も起きていない状態は、水準を合わせた土台のまま
+  // (基準表そのままではない。この記録は半回3点なので土台の高さが上がっている)
+  assert.equal(Number(re.get('111|0').toFixed(3)), Number((BASE_RE['111|0'] * level).toFixed(3)));
+  assert.ok(level > 1, `点が入る記録なので土台は上がる: ${level}`);
 });
 
 test('buildRunExpectancy: タイブレークの回は混ぜない', () => {
@@ -4939,4 +4941,98 @@ test('バックアップ: ファイル名はASCIIのみ', () => {
   const name = backupFileName(new Date('2026-08-17T09:00:00Z'));
   assert.equal(name, 'aibss-backup_2026-08-17.json');
   assert.ok(/^[\x20-\x7E]+$/.test(name), name);
+});
+
+
+// ============================================================
+// 土台の高さを、自分たちの得点環境に合わせる
+//
+// 少年野球には得点期待値の実測表も1試合平均得点も公開されていない。
+// 「少年野球はNPBの◯倍」と書き入れると根拠のない数字になるので、倍率は
+// 必ず自分たちの記録から出す。半回ごとに数えるので、24状況それぞれの平均より
+// ずっと早く、その環境の高さに合う。
+// ============================================================
+const lvGame = (n, runsPerHalf, innings = 6) => ({
+  id: `lv${n}`,
+  playLogs: Array.from({ length: innings }, (_, i) => i + 1).flatMap((inn) =>
+    [true, false].flatMap((isTop) =>
+      Array.from({ length: 4 }, (_, k) => ({
+        id: `${n}-${inn}-${isTop}-${k}`, kind: isTop ? 'atbat' : 'defense', inning: inn, isTop,
+        payload: { beforeRunners: {}, outsBefore: Math.min(2, k), runs: k === 3 ? runsPerHalf : 0 },
+      })))),
+});
+
+test('土台の水準: 記録が無ければ倍率は1（これまでどおり）', () => {
+  const r = buildRunExpectancy([], '少年野球');
+  assert.equal(r.level, 1);
+  assert.equal(r.halfCount, 0);
+  assert.equal(Number(r.re.get('000|0').toFixed(2)), BASE_RE['000|0']);
+});
+
+test('土台の水準: 点が入る環境ほど土台が高くなり、24状況すべてに効く', () => {
+  const low = buildRunExpectancy([lvGame(1, 0), lvGame(2, 0)], '少年野球');
+  const high = buildRunExpectancy([lvGame(1, 2), lvGame(2, 2)], '少年野球');
+  assert.ok(high.level > low.level, `${high.level} > ${low.level}`);
+  // 一度も起きていない状況にも、同じ倍率がかかっている
+  for (const key of ['111|0', '011|2', '101|1']) {
+    assert.equal(high.samples.get(key), 0, `${key} は一度も起きていない`);
+    assert.equal(
+      Number(high.re.get(key).toFixed(4)),
+      Number((BASE_RE[key] * high.level).toFixed(4)),
+      key,
+    );
+  }
+});
+
+test('土台の水準: 半回あたりの得点から出している', () => {
+  const r = buildRunExpectancy([lvGame(1, 1)], '少年野球');
+  assert.equal(r.halfCount, 12, '6回制なら12半回');
+  assert.equal(r.halfRuns, 12, '半回1点 × 12');
+  // 倍率 = (総得点 + K×土台) / (半回数 + K) / 土台
+  const want = (r.halfRuns + LEVEL_K * BASE_RE['000|0']) / (r.halfCount + LEVEL_K) / BASE_RE['000|0'];
+  assert.equal(Number(r.level.toFixed(4)), Number(want.toFixed(4)));
+});
+
+test('土台の水準: 倍率も寄せてあるので、1試合では振り切らない', () => {
+  // 1試合の大量点で土台が跳ねると、そのあとの全部の数字が狂う
+  const one = buildRunExpectancy([lvGame(1, 3)], '少年野球');
+  const raw = (one.halfRuns / one.halfCount) / BASE_RE['000|0'];
+  assert.ok(one.level < raw / 2, `生の比 ${raw.toFixed(2)} よりずっと控えめ: ${one.level.toFixed(2)}`);
+  // 記録が増えるほど生の比へ近づく
+  const many = buildRunExpectancy(Array.from({ length: 10 }, (_, i) => lvGame(i, 3)), '少年野球');
+  assert.ok(many.level > one.level, '記録が増えるほど自分たちの環境へ寄る');
+  assert.ok(many.levelShare > one.levelShare);
+});
+
+test('土台の水準: 壊れた記録でも外枠を越えない', () => {
+  const absurd = buildRunExpectancy(Array.from({ length: 20 }, (_, i) => lvGame(i, 99)), '少年野球');
+  assert.equal(absurd.level, LEVEL_MAX);
+  const none = buildRunExpectancy(Array.from({ length: 20 }, (_, i) => lvGame(i, 0)), '少年野球');
+  assert.equal(none.level, LEVEL_MIN);
+});
+
+test('土台の水準: 外枠は、ふつうの学童の得点環境を止めない', () => {
+  // 半回1点(6回制で1チーム6点)は学童ではごく普通。ここで頭打ちになっていた
+  const r = buildRunExpectancy(Array.from({ length: 6 }, (_, i) => lvGame(i, 1)), '少年野球');
+  assert.ok(r.level < LEVEL_MAX, `頭打ちにならない: ${r.level}`);
+  assert.ok(r.level > 1.8, `それでも土台はしっかり上がる: ${r.level}`);
+});
+
+test('土台の水準: ブカツは甲子園の補正の上に、自分たちの環境が乗る', () => {
+  const games = Array.from({ length: 6 }, (_, i) => lvGame(i, 1, 7));
+  const r = buildRunExpectancy(games, 'ブカツ(中高大)');
+  // 土台は甲子園ベース(NPB×1.142)。そこへさらに自分たちの倍率がかかる
+  assert.equal(Number(r.rawBase['100|0'].toFixed(2)), 0.79, '甲子園の実測値が土台');
+  assert.equal(
+    Number(r.re.get('111|2').toFixed(4)),
+    Number((r.rawBase['111|2'] * r.level).toFixed(4)),
+    '一度も起きていない状況は 甲子園ベース × 自分たちの倍率',
+  );
+});
+
+test('土台の水準: 草野球のふつうのチームでは土台を大きく歪めない', () => {
+  // 半回0.5点あたりなら、倍率は1の近くに収まってほしい
+  const games = [lvGame(1, 0), lvGame(2, 1), lvGame(3, 0), lvGame(4, 1)];
+  const r = buildRunExpectancy(games, '草野球');
+  assert.ok(r.level > 0.9 && r.level < 1.5, `1の近くに収まる: ${r.level}`);
 });
