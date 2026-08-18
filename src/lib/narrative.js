@@ -120,14 +120,20 @@ function toEvents(items, ctx) {
         i += 1;
       }
       events.push({ kind: 'outs', items: group, at: group[0], mine: group[0].mine });
+    } else if (!RESULTS[p.result].onBase) {
+      // 点は入ったが打者は出塁していない(犠飛・スクイズなど)。
+      // 「続けて出塁」のまとめに混ぜると、出ていない打者を出塁させてしまう
+      events.push({ kind: 'play', items: [items[i]], at: items[i], mine: items[i].mine, index: i });
     } else {
-      // 続けて出塁した打者もまとめる。「秦の1点、若山の1点、竹丸の1点」と
+      // 続けて出塁した打者はまとめる。「秦の1点、若山の1点、竹丸の1点」と
       // 並べるより「秦、若山、竹丸の3連打で3点」のほうが実際の話し方に近い
       const group = [items[i]];
       let j = i;
       while (j + 1 < items.length) {
         const np = payloadOf(items[j + 1]);
-        if (!np || !np.result || !RESULTS[np.result] || isOutPlay(np)) break;
+        if (!np || !np.result || !RESULTS[np.result]) break;
+        // まとめてよいのは「実際に塁に出た」打者だけ
+        if (!RESULTS[np.result].onBase) break;
         if (items[j + 1].mine !== items[i].mine || !sameHalf(items[j + 1], items[i])) break;
         group.push(items[j + 1]);
         j += 1;
@@ -223,6 +229,12 @@ export function draftNarrative(run, ctx) {
   const tbLead = (ev) => {
     const key = ctx.tiebreakAt?.(ev.at.inning);
     if (!key) return '';
+    // 半回の途中から始まる区間に「無死一二塁から」と書くと、記録に無いことを
+    // 書いたことになる。その打席が本当にその半回の1人目のときだけ 書く
+    const p0 = payloadOf(ev.at);
+    const startedHere = p0
+      && `${runnersKey(p0.beforeRunners)}|${Math.min(2, Number(p0.outsBefore) || 0)}` === String(key);
+    if (!startedHere) return '';
     const [runners, outs] = String(key).split('|');
     return ctx.t('nr.tb', {
       state: `${ctx.t(`nr.outs.${Math.min(2, Number(outs) || 0)}`)}${ctx.t(`ret.r.${runners}`)}`,

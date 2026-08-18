@@ -4860,6 +4860,41 @@ test('物語: タイブレークでない回には書かない', () => {
   assert.ok(!s.includes('タイブレーク'), s);
 });
 
+test('物語: 犠牲フライを「続けて出塁」に混ぜない', () => {
+  // 犠飛は点は入るが打者は出塁していない。まとめに混ぜると、塁に出ていない
+  // 打者を出塁させたことになる
+  const items = [
+    nrPa('1', 'p1', 'single', 'LF', 0, true, 0.08, 5, true, 3),
+    nrPa('2', 'p2', 'sacFly', 'CF', 1, true, 0.06, 5, true, 4),
+  ];
+  const s = draftNarrative(nrRun(items), nrCtx({ 2: { my: 2, opp: 2 } }));
+  assert.ok(!s.includes('続けて出塁'), `犠飛は出塁ではない: ${s}`);
+  assert.ok(s.includes('犠牲フライ'), s);
+  // 実際に塁に出た打者どうしは、これまでどおりまとめる
+  const hits = [
+    nrPa('1', 'p1', 'single', 'LF', 1, true, 0.1, 5, true, 1),
+    nrPa('2', 'p2', 'single', 'CF', 1, true, 0.1, 5, true, 2),
+  ];
+  assert.ok(draftNarrative(nrRun(hits), nrCtx({ 1: { my: 2, opp: 2 } })).includes('2連打'));
+});
+
+test('物語: タイブレークの走者は、その半回の先頭から始まる区間にだけ書く', () => {
+  // 半回の途中から始まる区間に「無死一二塁から」と書くと、記録に無いことを
+  // 書いたことになる
+  const tb = { ...nrCtx(), tiebreakAt: (inn) => (inn >= 10 ? '110|0' : null) };
+  const head = nrPa('1', 'p1', 'hbp', null, 0, true, 0.18, 10, true, 3);
+  head.log.payload.beforeRunners = { 1: true, 2: true };
+  head.log.payload.outsBefore = 0;
+  assert.ok(draftNarrative(nrRun([head]), tb).includes('タイブレークの無死一二塁から'),
+    '先頭の打席なら書く');
+
+  const mid = nrPa('2', 'p1', 'single', 'LF', 1, true, 0.12, 10, true, 5);
+  mid.log.payload.beforeRunners = { 1: true };
+  mid.log.payload.outsBefore = 1;
+  const s = draftNarrative(nrRun([mid]), tb);
+  assert.ok(!s.includes('タイブレーク'), `途中から始まる区間には書かない: ${s}`);
+});
+
 test('物語: 新しい試合は書き直しの入れ物を持っている', () => {
   assert.deepEqual(newGame({}).flowNotes, {});
 });
