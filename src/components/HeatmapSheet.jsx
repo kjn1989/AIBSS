@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useStore, useT } from '../state/store.jsx';
-import { buildRunExpectancy, stateKey, SHRINK_K } from '../lib/flow.js';
+import { buildRunExpectancy, stateKey, SHRINK_K, LEVEL_K } from '../lib/flow.js';
 import { buildRunDists } from '../lib/winExp.js';
 import { currentRules } from '../lib/rules.js';
 import { halfStartKeyOf } from '../lib/tiebreak.js';
@@ -40,10 +40,10 @@ export default function HeatmapSheet({ game, games, onClose }) {
   const [pick, setPick] = useState(null);
   const [showRe, setShowRe] = useState(false);
 
-  const { off, def, top, factor, opening, gap, total, ownShare } = useMemo(() => {
+  const { off, def, top, factor, opening, gap, total, ownShare, level, halfCount, halfRuns, rawBase } = useMemo(() => {
     const real = (games || Object.values(state.games || {}))
       .filter((g) => g && !String(g.id).startsWith('demo-'));
-    const { re, total, ownShare } = buildRunExpectancy(real, edition);
+    const { re, total, ownShare, level, halfCount, halfRuns, rawBase } = buildRunExpectancy(real, edition);
     const { dists } = buildRunDists(real, edition, re);
     const id = game?.teamGap || 'even';
     const m = buildGapModel({
@@ -54,7 +54,7 @@ export default function HeatmapSheet({ game, games, onClose }) {
       gap: id,
     });
     const tables = gapTables(re, m.factor);
-    return { ...tables, top: topOf(tables.off, tables.def), factor: m.factor, opening: m.opening, gap: id, total, ownShare };
+    return { ...tables, top: topOf(tables.off, tables.def), factor: m.factor, opening: m.opening, gap: id, total, ownShare, level, halfCount, halfRuns, rawBase };
   }, [game, games, state.games, edition]);
 
   const table = side === 'off' ? off : def;
@@ -164,6 +164,15 @@ export default function HeatmapSheet({ game, games, onClose }) {
           {t('ret.src', { n: total, pct: Math.round(ownShare * 100), k: SHRINK_K })}
         </p>
         <p className="small dim">{t('ret.srcBase')}</p>
+        <p className="small dim">
+          {t('ret.level', {
+            lv: level.toFixed(3),
+            halves: halfCount,
+            runs: halfRuns,
+            own: halfCount ? (halfRuns / halfCount).toFixed(2) : '—',
+            base: (rawBase['000|0'] || 0).toFixed(2),
+          })}
+        </p>
         {school && <p className="small dim">{t('ret.srcKoshien2')}</p>}
         {school && (
           <p className="small dim">

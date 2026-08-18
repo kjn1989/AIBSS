@@ -145,6 +145,34 @@ export const isKoshienMeasured = (key) => Object.prototype.hasOwnProperty.call(K
 // K回ぶんの「基準表どおりの結果」を最初から持っていた、とみなす。
 export const SHRINK_K = 30;
 
+// ---- 土台の水準を、自分たちの得点環境に合わせる ----
+//
+// 少年野球には得点期待値の実測表が無い。1試合平均得点すら公開されていない
+// (探した範囲では見つからない)。だから「少年野球はNPBの◯倍」という倍率は
+// 作れない。作れば根拠のない数字になる。
+//
+// 代わりに、倍率は自分たちの記録から出す。24状況それぞれの平均を埋めるには
+// 何試合も要るが、「半回あたり平均何点入るか」なら1試合でもそれなりに測れる。
+// 打席1つずつではなく半回ごとに数えるので、同じ試合数でも桁違いに標本が多い。
+//
+//   土台の水準 = 基準表の「走者なし0アウト」= その半回に入る平均得点
+//   自分たちの水準 = 記録した半回の総得点 ÷ 半回数
+//   倍率 = 自分たちの水準 ÷ 土台の水準
+//
+// この倍率を24状況すべてにかけてから寄せる。少年野球でも草野球でも、
+// 記録が入った時点で土台の高さがその環境に合う。記録が無ければ倍率は1で、
+// これまでどおり基準表そのまま。
+//
+// 倍率そのものも寄せる。1試合しか無いのに大量点の試合だと倍率が跳ねるので、
+// LEVEL_K 半回ぶんの「基準表どおり」を持っていたことにして薄める。
+export const LEVEL_K = 40;
+// 壊れた記録で土台が飛ばないようにする外枠。実際の得点環境を否定するための
+// ものではないので、広めに取る。
+// 学童は半回1点(6回制で1チーム6点)でも土台のNPB比は2.6倍になる。ここを2.5で
+// 止めていたら、ごく普通の学童の試合ですら頭打ちになっていた。
+export const LEVEL_MIN = 0.4;
+export const LEVEL_MAX = 5.0;
+
 const isPa = (l) => l && (l.kind === 'atbat' || l.kind === 'defense');
 const halfKey = (l) => `${Number(l.inning) || 0}${l.isTop ? 'T' : 'B'}`;
 
@@ -153,8 +181,11 @@ const halfKey = (l) => `${Number(l.inning) || 0}${l.isTop ? 'T' : 'B'}`;
 // 戻り値: { re(key)->点, samples(key)->回数, total, ownShare }
 // ------------------------------------------------------------
 export function buildRunExpectancy(games = [], edition = null) {
-  const base = baseReFor(edition);
+  const rawBase = baseReFor(edition);
   const acc = new Map(); // key -> { n, runs }
+  // 得点環境の測り方: 記録した半回の数と、そこで入った点の合計
+  let halfCount = 0;
+  let halfRuns = 0;
   for (const g of games) {
     if (!g || !Array.isArray(g.playLogs)) continue;
     // 半回ごとに、その回に入った点を後ろから積む
@@ -169,6 +200,10 @@ export function buildRunExpectancy(games = [], edition = null) {
     }
     for (const logs of halves.values()) {
       const total = logs.reduce((s, l) => s + (Number(l.payload?.runs) || 0), 0);
+      // 途中で終わった半回(試合終了・サヨナラ)も含める。点が入りやすい環境ほど
+      // 早く終わる回が増えるので、外すと得点環境を低く見積もることになる
+      halfCount += 1;
+      halfRuns += total;
       let done = 0;
       for (const l of logs) {
         const p = l.payload || {};
@@ -183,6 +218,18 @@ export function buildRunExpectancy(games = [], edition = null) {
     }
   }
 
+  // ---- 土台の高さを、自分たちの得点環境へ合わせてから寄せる ----
+  const baseRate = rawBase['000|0'] || 0;
+  // 倍率も寄せる(半回が少ないうちは1に近い)
+  const ownRate = baseRate > 0
+    ? (halfRuns + LEVEL_K * baseRate) / (halfCount + LEVEL_K)
+    : baseRate;
+  const level = baseRate > 0
+    ? Math.min(LEVEL_MAX, Math.max(LEVEL_MIN, ownRate / baseRate))
+    : 1;
+  const base = {};
+  for (const [k, v] of Object.entries(rawBase)) base[k] = v * level;
+
   const samples = new Map();
   const re = new Map();
   let total = 0;
@@ -195,7 +242,12 @@ export function buildRunExpectancy(games = [], edition = null) {
   }
   // 自分たちの記録がどれだけ効いているか(0=基準表のまま, 1=完全に自前)
   const ownShare = total / (total + SHRINK_K * 24);
-  return { re, samples, total, ownShare, base };
+  return {
+    re, samples, total, ownShare, base, rawBase,
+    // 土台の高さをどれだけ動かしたか(画面で出す)
+    level, halfCount, halfRuns,
+    levelShare: halfCount / (halfCount + LEVEL_K),
+  };
 }
 
 // 期待値を引く。表に無ければ基準表、それも無ければ0。

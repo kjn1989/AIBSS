@@ -282,6 +282,10 @@ try {
   check('土台の出どころが書いてある', hmTxt.includes('この表はどこから来ているか'), hmTxt.slice(-1800));
   check('出どころを名指ししている', hmTxt.includes('baseball.piupapp.com'), hmTxt.slice(-1800));
   check('自チームの実測割合も出ている', /自前の割合\s*\d+%/.test(hmTxt), hmTxt.slice(-1800));
+  // 土台の高さは自分たちの記録に合わせて動く。書かずに数字だけ出すと、
+  // 「NPBの表を使っている」という説明と画面の値が食い違う
+  check('土台の高さを合わせていると書いてある', /いまの倍率 ×[\d.]+/.test(hmTxt), hmTxt.slice(-1800));
+  check('倍率の出どころ(半回数と得点)も出ている', /記録した \d+ 半回で \d+ 点/.test(hmTxt), hmTxt.slice(-1800));
   check('四死球・失策は持っていないと明言している', hmTxt.includes('失策'), hmTxt.slice(-900));
   check('通算は互角基準だと書いてある', hmTxt.includes('互角（50%）'), hmTxt.slice(-600));
 
