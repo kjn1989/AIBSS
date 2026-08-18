@@ -75,6 +75,11 @@ try {
   };
   const change = async () => { await page.click('button:has-text("手動チェンジ")'); await page.waitForTimeout(600); };
 
+  // 流れタグの成績は「押したあと勝率がどれだけ動いたか」なので、
+  // 動く前に押しておかないと全部「動かず」になり、当たったときの見え方を確かめられない
+  await page.click('.flow-tap .ft-up');
+  await page.waitForTimeout(400);
+
   // 打席数の違う回を作る(回ごとに列幅が変わることを見たいので、あえて数を変える)
   for (const l of ['ヒット', 'ヒット', 'ヒット', 'ホームラン', '凡打', '凡打', '凡打']) await play(l);
   await change();
@@ -83,9 +88,7 @@ try {
   for (const l of ['ヒット', 'ヒット', '凡打', '凡打', '凡打']) await play(l);
   await change();
 
-  // 読みの精度・広さのタイルは流れタグが1つも無いと出ない。開く前に押しておく
-  await page.click('.flow-tap .ft-up');
-  await page.waitForTimeout(400);
+  // こちらは何も起きない場面で押す(「動かず」の見え方を確かめる)
   await page.click('.flow-tap .ft-down');
   await page.waitForTimeout(400);
 
@@ -229,7 +232,7 @@ try {
   check('札も下書きに戻る',
     (await story.locator('.fv-story-tag').innerText()).includes('下書き'));
 
-  // --- 読みの精度と広さ。分母が違うことが分かる形で出ているか ---
+  // --- 軸は勝率ポイント。単位が同じ2つが並んでいるか ---
   const rates = await page.evaluate(() =>
     [...document.querySelectorAll('.sheet .fv-rate')].map((el) => ({
       name: el.querySelector('b')?.textContent,
@@ -237,20 +240,41 @@ try {
       note: el.querySelector('.n')?.textContent,
     })));
   // ここを if で囲うと、タイルが出ていないときに黙って素通りしてしまう
-  check('読みの2指標が出ている', rates.length === 2, JSON.stringify(rates));
-  {
-    check('2つの名前が別の軸に見える',
-      rates[0]?.name === '読みの精度' && rates[1]?.name === '読みの広さ', JSON.stringify(rates));
-    // .273 だけ並べると分母の違いが見えない。分数を主表示にしてある
-    check('分母が数字として出ている',
-      rates.length === 2 && rates.every((r) => /\d+\/\d+/.test(r.v)), JSON.stringify(rates));
-    check('分母が2つで違う',
-      (rates[0]?.v.match(/\/(\d+)/) || [])[1] !== (rates[1]?.v.match(/\/(\d+)/) || [])[1]
-        || rates[0]?.note !== rates[1]?.note,
-      JSON.stringify(rates));
-    const axis = await page.locator('.sheet').last().innerText();
-    check('分母が違うと最初に書いてある', axis.includes('2つは分母が違います'), axis.slice(0, 200));
-  }
+  check('流れタグの成績が2つ出ている', rates.length === 2, JSON.stringify(rates));
+  check('どちらも同じ単位(勝率ポイント)',
+    rates.length === 2 && rates.every((r) => /pt$/.test((r.v || '').trim())), JSON.stringify(rates));
+  check('合計と1回あたりが並んでいる',
+    rates[0]?.name?.includes('合計') && rates[1]?.name?.includes('1回'), JSON.stringify(rates));
+  const sheetTxt = await page.locator('.sheet').last().innerText();
+  check('押しただけでは増えないと書いてある',
+    sheetTxt.includes('押しただけでは増えません'), sheetTxt.slice(0, 300));
+  // 押していない動きを率にすると「感じたときだけでOK」と矛盾する。事実として置く
+  check('押していない動きで下がらないと書いてある',
+    sheetTxt.includes('成績は下がりません'), sheetTxt.slice(0, 300));
+
+  // --- タグ1つずつに「押した後の勝率の上下」が出ている ---
+  const tagRows = await page.evaluate(() =>
+    [...document.querySelectorAll('.sheet .fv-tag')].map((el) => ({
+      vd: el.querySelector('.vd')?.textContent,
+      mv: el.querySelector('.fv-tag-move .mv')?.textContent,
+      wt: el.querySelector('.fv-tag-move .wt')?.textContent || '',
+    })));
+  check('押したタグが並んでいる', tagRows.length >= 2, JSON.stringify(tagRows));
+  check('どのタグにも押した後の勝率が出ている',
+    tagRows.length > 0 && tagRows.every((r) => /\d+% → \d+%/.test(r.mv || '')), JSON.stringify(tagRows));
+  check('動いた量がポイントで添えてある',
+    tagRows.every((r) => /[(（][-+]?\d+pt[)）]/.test(r.mv || '')), JSON.stringify(tagRows));
+  // 動かなかったタグは 0pt。ここが「+0」だと当たったように見える
+  const preRows = tagRows.filter((r) => r.vd === '予兆');
+  check('当たったタグがある(見え方を確かめるため)', preRows.length > 0, JSON.stringify(tagRows));
+  check('当たったタグは勝率が上がっている',
+    preRows.every((r) => /[(（]\+\d+pt[)）]/.test(r.mv || '')), JSON.stringify(preRows));
+  // 勝率が動いた中身を実際の記録で言う。数字だけだと何が起きたのか読めない
+  check('何が起きて動いたかが書いてある',
+    preRows.every((r) => /安打|得点|四死球|抑えた/.test(r.wt || '')), JSON.stringify(preRows));
+  const missRows = tagRows.filter((r) => r.vd === '動かず');
+  check('動かなかったタグは0pt',
+    missRows.length > 0 && missRows.every((r) => /[(（]0pt[)）]/.test(r.mv || '')), JSON.stringify(missRows));
 
   // --- 相手との力の差 ---
   // 設定の確かめ方は「30%と入れたらチャートが30%から始まる」の一点。
