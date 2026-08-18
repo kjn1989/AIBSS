@@ -22,6 +22,7 @@
 // 試合が貯まるほど基準表の影響は薄まり、自分たちの数字になる。
 // ============================================================
 import { isTiebreakInning } from './rules.js';
+import { RESULTS } from './model.js';
 
 // 24状態のキー: 走者(一二三の順に0/1) + アウト
 export const stateKey = (runners, outs) => {
@@ -437,8 +438,12 @@ export function flowRuns(series = [], minSwing = 0.6) {
 //   予兆 … 押した後、windowAfter打席以内に、その向きへ minSwing 以上動いた
 //   反応 … 押す直前 windowBefore打席以内に、もうその向きへ動いていた
 //   空振り… どちらでもない
-// 成績は必ず2つセットで出す。読みの精度だけだと「確信があるときしか押さない」で
-// 高くできてしまうので、押さなければ下がる読みの広さと並べる。
+// 成績の軸は勝率にする。「押したあと、勝率がその向きへどれだけ動いたか」。
+// 率を2つ並べていた頃は、分母が「押した数」と「試合で起きた動き全部」で
+// 食い違っていて、何と何を比べているのか読み取れなかった。しかも後者は
+// 「感じたときだけでOK」と書いてあるタグを、押さないと下がる形で罰していた。
+// 勝率ポイントなら分母が要らない。合計は「たくさん押して当てる」ほど伸び、
+// 1回あたりは「外さない」ほど高い。単位はどちらも同じ勝率ポイント。
 // ------------------------------------------------------------
 export function judgeFlowTags(game, series = [], opts = {}) {
   const windowAfter = opts.windowAfter ?? 5;
@@ -459,6 +464,8 @@ export function judgeFlowTags(game, series = [], opts = {}) {
   const swings = flowRuns(series, minSwing);
   const verdict = {};
   const caught = new Set();
+  // タグごとの「押したあとどうなったか」。勝率の起点・山・そこまでの打席。
+  const moves = {};
 
   for (const tag of tags) {
     const at = order.get(tag.id) ?? 0;
@@ -468,11 +475,16 @@ export function judgeFlowTags(game, series = [], opts = {}) {
     // 窓の端まで足してはいけない。その向きへ動いたあと戻した場合、
     // 合計だと打ち消し合って「何も起きなかった」ことになってしまう。
     // 途中でいちばん動いたところを見る。
+    // upto は山までの打席数。そこまでに何が起きたかを文章にするのに使う。
     const best = (arr) => {
       let acc = 0;
       let top = 0;
-      for (const x of arr) { acc += want * x.s.delta; if (acc > top) top = acc; }
-      return top;
+      let upto = 0;
+      for (let i = 0; i < arr.length; i++) {
+        acc += want * arr[i].s.delta;
+        if (acc > top) { top = acc; upto = i + 1; }
+      }
+      return { top, upto };
     };
 
     // 押す直前にも動き、押したあとにも動く、ということは普通に起きる。
@@ -480,32 +492,74 @@ export function judgeFlowTags(game, series = [], opts = {}) {
     // 大きく動く。ここで直前だけを見て「反応」に決めてしまうと、
     // これから起きることを言い当てていても評価されない。
     // どちらが大きいかで決める。あとの動きのほうが大きければ、それは読めていたということ。
-    const beforeBest = best([...before].reverse());
-    const afterBest = best(after);
-    if (afterBest >= minSwing && afterBest >= beforeBest) { /* 予兆 */ }
-    else if (beforeBest >= reactSwing) { verdict[tag.id] = 'post'; continue; }
-    if (afterBest >= minSwing) {
-      verdict[tag.id] = 'pre';
-      // どの区間を先に読めたか(読みの広さの分子)
-      for (const sw of swings) {
-        if (sw.dir !== want) continue;
-        const from = order.get(sw.from.id) ?? 0;
-        const to = order.get(sw.to.id) ?? 0;
-        if (at <= to && at >= from - windowAfter) { caught.add(sw.from.id); break; }
-      }
-      continue;
+    const beforeBest = best([...before].reverse()).top;
+    const a = best(after);
+    const afterBest = a.top;
+    let v;
+    if (afterBest >= minSwing && afterBest >= beforeBest) v = 'pre';
+    else if (beforeBest >= reactSwing) v = 'post';
+    else if (afterBest >= minSwing) v = 'pre';
+    else v = 'miss';
+    verdict[tag.id] = v;
+
+    // 押した瞬間の勝率。直前の打席を終えた時点の値がそれにあたる。
+    // 得点期待値の線(flowSeries)で呼ばれることもあり、そちらは we を持たない。
+    // その場合は動いた量だけを返し、%の対は出さない。
+    const raw = before.length ? before[before.length - 1].s.we : series.start;
+    const weAt = Number.isFinite(raw) ? raw : null;
+    const mv = { gain: 0, weAt, wePeak: weAt, plays: [] };
+    moves[tag.id] = mv;
+
+    if (v !== 'pre') continue;
+    // 勝率を軸にする。動いた向きは押した向きなので、符号を戻して山の勝率に直す。
+    // (want=+1 なら窓内の最大、want=−1 なら最小。どちらも実際にあった値)
+    mv.gain = afterBest;
+    mv.wePeak = weAt == null ? null : weAt + want * afterBest;
+    mv.plays = after.slice(0, a.upto).map((x) => x.s);
+    // どの区間を先に読めたか(押せていた動きの数)
+    for (const sw of swings) {
+      if (sw.dir !== want) continue;
+      const from = order.get(sw.from.id) ?? 0;
+      const to = order.get(sw.to.id) ?? 0;
+      if (at <= to && at >= from - windowAfter) { caught.add(sw.from.id); break; }
     }
-    verdict[tag.id] = 'miss';
   }
 
   const c = { pre: 0, post: 0, miss: 0 };
   for (const tg of tags) c[verdict[tg.id]] = (c[verdict[tg.id]] || 0) + 1;
+  // 押したあとに動いた勝率の合計(0〜1の単位)。空振りは0なので、押しただけでは伸びない
+  let points = 0;
+  for (const tg of tags) points += moves[tg.id]?.gain || 0;
   return {
-    tags, verdict, counts: c, swings,
-    hitRate: tags.length ? c.pre / tags.length : null,   // 読みの精度
-    catchRate: swings.length ? caught.size / swings.length : null, // 読みの広さ
+    tags, verdict, counts: c, swings, moves,
+    points,
+    perTag: tags.length ? points / tags.length : null,
+    hitRate: tags.length ? c.pre / tags.length : null,
+    catchRate: swings.length ? caught.size / swings.length : null,
     caught: caught.size,
   };
+}
+
+// 押したあとの山までに何が起きたか。勝率が動いた中身を実際の記録で言う。
+// 攻撃中に押したか守備中に押したかで、同じ「勝率が上がった」の中身が変わる
+// (自軍が打った / 相手を抑えた)。だから攻守を分けて数える。
+export function movePlays(plays = []) {
+  const c = { hits: 0, onBase: 0, runs: 0, allowedHits: 0, allowedOnBase: 0, allowedRuns: 0, outs: 0 };
+  for (const p of plays) {
+    const def = RESULTS[p.log?.payload?.result];
+    const runs = Number(p.log?.payload?.runs) || 0;
+    if (p.mine) {
+      if (def?.hit) c.hits++;
+      if (def?.onBase) c.onBase++;
+      c.runs += runs;
+    } else {
+      if (def?.hit) c.allowedHits++;
+      if (def?.onBase) c.allowedOnBase++;
+      c.allowedRuns += runs;
+      if (def && !def.onBase) c.outs++;
+    }
+  }
+  return c;
 }
 
 // ------------------------------------------------------------

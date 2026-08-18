@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { useStore, useT, usePlayerName } from '../state/store.jsx';
-import { buildRunExpectancy, weSeries, flowRuns, judgeFlowTags, formatRate, weShape, KOSHIEN_RE, KOSHIEN_SOURCE } from '../lib/flow.js';
+import { buildRunExpectancy, weSeries, flowRuns, judgeFlowTags, movePlays, weShape, KOSHIEN_RE, KOSHIEN_SOURCE } from '../lib/flow.js';
 import { buildRunDists, buildWinModel } from '../lib/winExp.js';
 import { buildGapModel } from '../lib/teamGap.js';
 import { currentRules } from '../lib/rules.js';
@@ -453,6 +453,24 @@ export default function FlowView({ game, onClose }) {
   const shape = useMemo(() => weShape(series), [series]);
   const over = game.status === 'finished';
   const VD = { pre: t('fv.pre'), post: t('fv.post'), miss: t('fv.miss') };
+  // 勝率は0〜1で持っているが、読むのはポイント。動かなかったものは「+0」ではなく「0」
+  const pt = (x) => {
+    const v = Math.round((x || 0) * 100);
+    return v > 0 ? `+${v}` : String(v);
+  };
+  // その勝率を動かしたのは何だったのか。攻撃中に押したのか守備中に押したのかで
+  // 中身が変わる(自軍が打った / 相手を抑えた)ので、両方を数える
+  const movedBy = (mv) => {
+    const c = movePlays(mv?.plays || []);
+    const parts = [];
+    if (c.hits) parts.push(t('fv.mvHits', { n: c.hits }));
+    if (c.onBase > c.hits) parts.push(t('fv.mvWalk', { n: c.onBase - c.hits }));
+    if (c.runs) parts.push(t('fv.mvRuns', { n: c.runs }));
+    if (c.allowedHits) parts.push(t('fv.mvAllowedHits', { n: c.allowedHits }));
+    if (c.allowedRuns) parts.push(t('fv.mvAllowedRuns', { n: c.allowedRuns }));
+    if (!parts.length && c.outs) parts.push(t('fv.mvOuts', { n: c.outs }));
+    return parts.join(t('fv.mvSep'));
+  };
   const innOf = (s) => t(s.isTop ? 'scoreboard.top' : 'scoreboard.bottom', { n: s.inning });
   // 全部の打席が同じ半回に入っている = 回が進んでいない
   const oneHalf = series.length > 0
@@ -582,8 +600,8 @@ export default function FlowView({ game, onClose }) {
                 {t('scorer.career', {
                   name: scorerName(state.settings, game.scorerId),
                   n: career.tags,
-                  hit: formatRate(career.hitRate),
-                  catch: formatRate(career.catchRate),
+                  total: pt(career.points),
+                  each: pt(career.perTag),
                 })}
               </p>
             )}
@@ -592,39 +610,52 @@ export default function FlowView({ game, onClose }) {
             <p className="small dim" style={{ marginTop: -2 }}>{t('fv.noTags')}</p>
           ) : (
             <>
+              {/* 軸は勝率ポイントひとつ。合計と1回あたりは、打点と打率のような
+                  同じ単位の2つの読み方で、分母の違いを説明せずに済む */}
               <div className="fv-rates">
-                {/* 分母を主表示にする。.273 と .375 だけ並べると、分母が違うことが
-                    見えないので「どちらも同じような正答率」に読めてしまう */}
                 <div className="fv-rate">
-                  <b>{t('fv.hitRate')}</b>
-                  <div className="v num">
-                    {judged.counts.pre}<span className="of">/{judged.tags.length}</span>
-                    <span className="rate">{formatRate(judged.hitRate)}</span>
-                  </div>
-                  <div className="n">{t('fv.hitRateNote', { a: judged.counts.pre, b: judged.tags.length })}</div>
+                  <b>{t('fv.ptTotal')}</b>
+                  <div className="v num">{pt(judged.points)}<span className="unit">pt</span></div>
+                  <div className="n">{t('fv.ptTotalNote', { n: judged.tags.length })}</div>
                 </div>
                 <div className="fv-rate">
-                  <b>{t('fv.catchRate')}</b>
-                  <div className="v num">
-                    {judged.caught}<span className="of">/{judged.swings.length}</span>
-                    <span className="rate">{formatRate(judged.catchRate)}</span>
-                  </div>
-                  <div className="n">{t('fv.catchRateNote', { a: judged.caught, b: judged.swings.length })}</div>
+                  <b>{t('fv.ptEach')}</b>
+                  <div className="v num">{pt(judged.perTag)}<span className="unit">pt</span></div>
+                  <div className="n">{t('fv.ptEachNote', {
+                    a: judged.counts.pre, b: judged.tags.length,
+                  })}</div>
                 </div>
               </div>
-              {/* 2つの違いは分母。ここを最初に言わないと、名前だけでは伝わらない */}
-              <p className="small dim mt8"><b>{t('fv.axisNote')}</b></p>
+              <p className="small dim mt8"><b>{t('fv.ptNote')}</b></p>
               <p className="small dim">{t('fv.verdictNote')}</p>
-              <p className="small dim">{t('fv.pairNote')}</p>
+              {/* 押していない大きな動きは、率にせず事実として置く。
+                  率にすると「感じたときだけでOK」と書いてあるタグを、
+                  押さなかったことで罰する形になる */}
+              <p className="small dim">{t('fv.coverNote', { a: judged.caught, b: judged.swings.length })}</p>
               <div className="fv-tags">
-                {judged.tags.map((tg) => (
-                  <div className={`fv-tag ${tg.payload?.dir === 'down' ? 'down' : 'up'}`} key={tg.id}>
-                    <span className="tg">{tg.payload?.dir === 'down' ? '▼' : '▲'}</span>
-                    <span className="wh">{t(tg.isTop ? 'scoreboard.top' : 'scoreboard.bottom', { n: tg.inning })}</span>
-                    <span className="bd">{tg.text}</span>
-                    <span className={`vd ${judged.verdict[tg.id]}`}>{VD[judged.verdict[tg.id]]}</span>
-                  </div>
-                ))}
+                {judged.tags.map((tg) => {
+                  const mv = judged.moves?.[tg.id];
+                  const v = judged.verdict[tg.id];
+                  return (
+                    <div className={`fv-tag ${tg.payload?.dir === 'down' ? 'down' : 'up'}`} key={tg.id}>
+                      <div className="fv-tag-head">
+                        <span className="tg">{tg.payload?.dir === 'down' ? '▼' : '▲'}</span>
+                        <span className="wh">{t(tg.isTop ? 'scoreboard.top' : 'scoreboard.bottom', { n: tg.inning })}</span>
+                        <span className="bd">{String(tg.text || '').replace(/^[▲▼]\s*/, '')}</span>
+                        <span className={`vd ${v}`}>{VD[v]}</span>
+                      </div>
+                      {/* 押したあと勝率がどこまで動いたか。動かなかったものも同じ形で出す */}
+                      <div className="fv-tag-move">
+                        <span className={`mv ${v}`}>{t('fv.tagMove', {
+                          a: Math.round((mv?.weAt ?? 0) * 100),
+                          b: Math.round((mv?.wePeak ?? mv?.weAt ?? 0) * 100),
+                          d: pt(mv?.gain),
+                        })}</span>
+                        {v === 'pre' && <span className="wt">{movedBy(mv)}</span>}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </>
           )}

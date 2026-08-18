@@ -19,7 +19,7 @@ import { buildRunDists, buildWinModel, priorDist, remainingHalves, SCORE_PROB, M
 import { TEAM_GAPS, buildGapModel, gapTables, gapOf, scaleDist, scaleDists, S_EXP } from '../src/lib/teamGap.js';
 import { aggregateScorersOver, swingScale, OPEN_MIN_SWING, OPEN_REACT_SWING } from '../src/lib/scorers.js';
 import { aggregateContrib, rankContrib, formatContrib } from '../src/lib/contrib.js';
-import { LEVEL_K, LEVEL_MIN, LEVEL_MAX, stateKey, buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, formatRate, weShape, weSeries, stateOfKey, BASE_RE, reOf, KOSHIEN_RE, KOSHIEN_WEIGHTS, KOSHIEN_LEVEL, isKoshienMeasured, baseReFor } from '../src/lib/flow.js';
+import { LEVEL_K, LEVEL_MIN, LEVEL_MAX, stateKey, buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, movePlays, formatRate, weShape, weSeries, stateOfKey, BASE_RE, reOf, KOSHIEN_RE, KOSHIEN_WEIGHTS, KOSHIEN_LEVEL, isKoshienMeasured, baseReFor } from '../src/lib/flow.js';
 import { teamPower, mostOff, formatPower } from '../src/lib/teamPower.js';
 import { RESULTS as RESULTS_FOR_OUT, OUT_TYPES, outTypeLabel, infieldFlyPossible, newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions, attendeesOf, lastAttendees, autoLineupFrom, subRank, resultLabelOf, isIntentionalBB } from '../src/lib/model.js';
 import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf, oppLettersInGame, oppBaserunning } from '../src/lib/oppBox.js';
@@ -2967,10 +2967,10 @@ test('judgeFlowTags: 一致ではなく順番で測る', () => {
   const after = mk('after');
   const ja = judgeFlowTags(after, flowSeries(after, null));
   assert.equal(ja.verdict.tag, 'post', '動いた後に押したら反応(なぞっただけ)');
-  assert.equal(ja.hitRate, 0, '読みの精度は上がらない');
+  assert.equal(ja.hitRate, 0, '当てた数には入らない');
 });
 
-test('judgeFlowTags: 何も起きなければ空振り、押さなければ読みの広さが下がる', () => {
+test('judgeFlowTags: 何も起きなければ空振り。押していない動きも数えておく', () => {
   const logs = [
     { id: 'tag', kind: 'flow', inning: 1, isTop: true, payload: { dir: 'up' } },
     paLog(1, { kind: 'atbat', r: [0,0,0], outs: 0, runs: 0 }),
@@ -2981,14 +2981,113 @@ test('judgeFlowTags: 何も起きなければ空振り、押さなければ読�
   assert.equal(j.verdict.tag, 'miss', '動かなければ空振り');
   assert.equal(j.hitRate, 0);
 
-  // 押さずに大きく動いた試合 = 読みの広さ0
+  // 押さずに大きく動いた試合 = 押せていた動きは0
   const g2 = { id: 'g', playLogs: [
     paLog(1, { kind: 'atbat', r: [0,1,0], outs: 0, runs: 3 }),
     paLog(2, { kind: 'atbat', r: [0,0,0], outs: 0, runs: 0 }),
   ] };
   const j2 = judgeFlowTags(g2, flowSeries(g2, null));
-  assert.equal(j2.hitRate, null, '押していなければ読みの精度は出さない');
-  assert.equal(j2.catchRate, 0, '動いたのに押していないので読みの広さは0');
+  assert.equal(j2.hitRate, null, '押していなければ当てた割合は出さない');
+  assert.equal(j2.catchRate, 0, '動いたのに押していないので押せていた割合は0');
+});
+
+test('judgeFlowTags: 軸は勝率。押したあとに動いたぶんだけ積む', () => {
+  // 打席1で大きく動く試合。動く前に押す = そのぶんが点になる
+  const mk = (tagAt) => {
+    const logs = [];
+    if (tagAt === 'before') logs.push({ id: 'tag', kind: 'flow', inning: 1, isTop: true, payload: { dir: 'up' } });
+    logs.push(paLog(1, { kind: 'atbat', r: [0, 1, 0], outs: 0, runs: 2 }));
+    logs.push(paLog(2, { kind: 'atbat', r: [0, 0, 0], outs: 0, runs: 0 }));
+    if (tagAt === 'after') logs.push({ id: 'tag', kind: 'flow', inning: 1, isTop: true, payload: { dir: 'up' } });
+    return { id: 'g', playLogs: logs };
+  };
+  const before = mk('before');
+  const jb = judgeFlowTags(before, flowSeries(before, null));
+  assert.ok(jb.points > 0, `動く前に押していれば点が入る: ${jb.points}`);
+  assert.equal(jb.points, jb.moves.tag.gain, '合計はタグごとの動きの和');
+  assert.equal(jb.perTag, jb.points, '1回押しただけなら合計と1回あたりは同じ');
+
+});
+
+test('judgeFlowTags: 反応は0点。押したあとに動いていても点にしない', () => {
+  // 大きく動いた「後」に押し、そのあとにも少し動く形。
+  // ここを0点にしないと、走者一掃の直後に押すのがいちばん得になってしまう。
+  const g = {
+    id: 'g',
+    playLogs: [
+      { id: 'a', kind: 'atbat', inning: 1, isTop: true, payload: {} },
+      { id: 'tag', kind: 'flow', inning: 1, isTop: true, payload: { dir: 'up' } },
+      { id: 'b', kind: 'atbat', inning: 1, isTop: true, payload: {} },
+    ],
+  };
+  const series = [
+    { id: 'a', log: g.playLogs[0], mine: true, delta: 0.30, we: 0.80 },
+    { id: 'b', log: g.playLogs[2], mine: true, delta: 0.10, we: 0.90 },
+  ];
+  series.start = 0.50;
+  const j = judgeFlowTags(g, series, { minSwing: 0.12, reactSwing: 0.07 });
+  assert.equal(j.verdict.tag, 'post', '押す前にもう動いていたので反応');
+  assert.equal(j.moves.tag.gain, 0, '押したあとに10ポイント動いていても点にしない');
+  assert.equal(j.points, 0);
+  assert.equal(j.moves.tag.plays.length, 0, '中身も出さない');
+});
+
+test('judgeFlowTags: 動かなければ0点。押しただけでは増えない', () => {
+  const logs = [
+    { id: 'tag', kind: 'flow', inning: 1, isTop: true, payload: { dir: 'up' } },
+    paLog(1, { kind: 'atbat', r: [0, 0, 0], outs: 0, runs: 0 }),
+    paLog(2, { kind: 'atbat', r: [0, 0, 0], outs: 1, runs: 0 }),
+  ];
+  const g = { id: 'g', playLogs: logs };
+  const j = judgeFlowTags(g, flowSeries(g, null));
+  assert.equal(j.verdict.tag, 'miss');
+  assert.equal(j.points, 0, '空振りは0点');
+  assert.equal(j.perTag, 0, '押した回数は分母に残るので、1回あたりが下がる');
+});
+
+test('judgeFlowTags: 勝率の線なら、押した時点と山の勝率が実際の値で返る', () => {
+  // 勝率そのものを持つ線を渡す(画面はこちらで呼んでいる)
+  const g = {
+    id: 'g',
+    playLogs: [
+      { id: 'tag', kind: 'flow', inning: 1, isTop: true, payload: { dir: 'up' } },
+      { id: 'a', kind: 'atbat', inning: 1, isTop: true, payload: {} },
+      { id: 'b', kind: 'atbat', inning: 1, isTop: true, payload: {} },
+      { id: 'c', kind: 'atbat', inning: 1, isTop: true, payload: {} },
+    ],
+  };
+  const series = [
+    { id: 'a', log: g.playLogs[1], mine: true, delta: 0.20, we: 0.70 },
+    { id: 'b', log: g.playLogs[2], mine: true, delta: 0.10, we: 0.80 },
+    { id: 'c', log: g.playLogs[3], mine: true, delta: -0.30, we: 0.50 },
+  ];
+  series.start = 0.50;
+  const j = judgeFlowTags(g, series, { minSwing: 0.12, reactSwing: 0.07 });
+  const mv = j.moves.tag;
+  assert.equal(mv.weAt, 0.50, '押した時点は線の出発点');
+  assert.ok(Math.abs(mv.wePeak - 0.80) < 1e-9, `山は実際にあった値: ${mv.wePeak}`);
+  // 窓の端まで足すと 0.20+0.10-0.30 = 0 になってしまう。山で測る
+  assert.ok(Math.abs(mv.gain - 0.30) < 1e-9, `動いたのは30ポイント: ${mv.gain}`);
+  assert.equal(mv.plays.length, 2, '山までの打席だけを中身にする');
+});
+
+test('movePlays: 攻撃中に押したか守備中に押したかで中身を分ける', () => {
+  const pa = (kind, result, runs = 0) => ({
+    mine: kind === 'atbat',
+    log: { kind, payload: { result, runs } },
+  });
+  // 自軍の攻撃で動いた
+  const off = movePlays([pa('atbat', 'single'), pa('atbat', 'bb'), pa('atbat', 'double', 2)]);
+  assert.equal(off.hits, 2, '安打2');
+  assert.equal(off.onBase, 3, '四球も出塁に入る');
+  assert.equal(off.runs, 2);
+  assert.equal(off.allowedHits, 0, '守備側の数字は動かない');
+
+  // 相手を抑えて動いた。同じ「勝率が上がった」でも中身は違う
+  const def = movePlays([pa('defense', 'so'), pa('defense', 'out'), pa('defense', 'single')]);
+  assert.equal(def.outs, 2, '2人抑えた');
+  assert.equal(def.allowedHits, 1);
+  assert.equal(def.hits, 0, '自軍の安打にはしない');
 });
 
 test('formatRate: 打率と同じ書き方', () => {
@@ -3545,7 +3644,7 @@ test('結果を変えたときのアウト数の増減', () => {
 // 流れタグ: 直前にも動き、あとにも動いた場合はどちらが大きいかで決める
 //
 // 実際に起きた不具合。5回表が終わった時点で「流れ切れた」を押し、
-// 5回裏に2失点した。読めていたのに「反応」と判定され、読みの広さが0のままだった。
+// 5回裏に2失点した。読めていたのに「反応」と判定され、押せていた動きが0のままだった。
 // 回の終わりに押すと「攻撃が終わった」動きが必ず直前にあるので、
 // 直前だけを見て決めると、これから起きることを言い当てても評価されない。
 // ============================================================
@@ -3566,11 +3665,11 @@ test('流れタグ: 回の終わりに押して、そのあと大きく動いた
   const j = judgeFlowTags(g, flowSeries(g, null));
   assert.equal(j.verdict.tag, 'pre', 'あとの動きのほうが大きいので予兆');
   assert.equal(j.hitRate, 1);
-  // 読みの広さの分母は「その試合で起きた大きな動き」全部。向きは問わない。
+  // 押していない動きの母数は「その試合で起きた大きな動き」全部。向きは問わない。
   // この並びは表の攻撃(+0.41)と裏の失点(−2.41)で2区間ある。押したのは down だけなので
-  // 言い当てたのは1つ、分母は2つ。押さなかった区間が分母に残るのが読みの広さの役目。
+  // 言い当てたのは1つ、母数は2つ。押さなかった区間も母数に残る(成績には響かない)。
   assert.equal(j.swings.length, 2, '向きの違う大きな動きが2つある');
-  assert.equal(j.caught, 1, '言い当てた区間として読みの広さの分子に入る');
+  assert.equal(j.caught, 1, '言い当てた区間として押せていた動きに入る');
   assert.equal(j.catchRate, 0.5);
 });
 
@@ -3824,7 +3923,7 @@ test('記録員: タグに焼き込まれた記録員が試合の記録員より
   const map = aggregateScorers([g], scRe([g]));
   assert.equal(map.s2.tags, 1, '押した人に付く');
   assert.equal(map.s1?.tags || 0, 0, '試合の記録員には付かない');
-  assert.equal(map.s1.games, 1, '読みの広さの母数は試合の記録員に付く');
+  assert.equal(map.s1.games, 1, '試合単位の数は試合の記録員に付く');
 });
 
 test('記録員: 未設定の試合はタグがあっても実績にならない', () => {
@@ -4350,7 +4449,7 @@ test('監査: 記録員の通算は、どの試合を開いていても同じ数
 
 test('監査: 力の差を入れた試合は、流れタグのしきい値も一緒に縮む', () => {
   // 「胸を借りる」の試合は勝率が動ける幅そのものが狭い。互角前提の12%のままだと、
-  // 記録員がどれだけ正しく読んでも「大きく動いた」が成立せず、読みの精度が0に沈む
+  // 記録員がどれだけ正しく読んでも「大きく動いた」が成立せず、勝率ポイントが0に沈む
   const even = swingScale({ teamGap: 'even' });
   assert.equal(even.minSwing, OPEN_MIN_SWING, '互角は今までどおり');
   assert.equal(even.reactSwing, OPEN_REACT_SWING);

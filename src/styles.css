@@ -2277,9 +2277,20 @@ button.manage-open {
 .fv-rate .n { font-size: 10.5px; color: var(--text-dim); line-height: 1.5; }
 .fv-tags { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; }
 .fv-tag {
-  display: flex; align-items: center; gap: 8px; padding: 7px 9px; font-size: 12.5px;
+  padding: 7px 9px; font-size: 12.5px;
   background: var(--bg-3); border: 1px solid var(--border); border-radius: 9px;
 }
+/* 1行目は今までどおりの横並び。2行目に「押したあとどうなったか」を足す */
+.fv-tag-head { display: flex; align-items: center; gap: 8px; }
+.fv-tag-move {
+  display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap;
+  margin: 4px 0 0 26px; font-size: 11px; color: var(--text-dim);
+}
+/* 色が付くのは実際に動いたときだけ。0ptに色を付けると当たったように見える */
+.fv-tag-move .mv { font-weight: 700; font-variant-numeric: tabular-nums; }
+.fv-tag.up .fv-tag-move .mv.pre { color: var(--green); }
+.fv-tag.down .fv-tag-move .mv.pre { color: var(--amber); }
+.fv-tag-move .wt { min-width: 0; }
 .fv-tag .tg { flex: none; font-weight: 800; }
 .fv-tag.up .tg { color: var(--green); }
 .fv-tag.down .tg { color: var(--amber); }
@@ -2567,6 +2578,6 @@ button.manage-open {
 .sig-table .num { text-align: right; font-variant-numeric: tabular-nums; }
 .sig-table tr.sig-sum td { border-top: 1px solid var(--fg); background: var(--bg-2); }
 
-/* 読みの精度・広さ。分母を主表示にする(.273 だけだと分母の違いが見えない) */
-.fv-rate .v .of { font-size: 15px; font-weight: 700; opacity: .55; margin-left: 1px; }
-.fv-rate .v .rate { display: block; font-size: 12px; font-weight: 700; opacity: .6; margin-top: -2px; }
+/* 流れタグの成績。単位は勝率ポイントひとつ(合計と1回あたり) */
+.fv-rate .v .unit { font-size: 14px; font-weight: 700; opacity: .6; margin-left: 2px; }
+.fv-rate .v { font-variant-numeric: tabular-nums; }

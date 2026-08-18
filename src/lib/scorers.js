@@ -21,8 +21,10 @@ export const scorersOf = (settings) => (settings?.scorers || []);
 export const tagScorerId = (game, tag) => tag?.payload?.scorerId || game?.scorerId || null;
 
 // 記録員ごとの実績。
-//  読みの精度 = 押したタグのうち「予兆」だったもの / 押したタグ(タグ単位で数える)
-//  読みの広さ = 実際に大きく動いた区間のうち、押せていたもの / 動いた区間
+//  points = 押したあとに勝率がその向きへ動いたぶんの合計(タグ単位で押した人に付く)
+//  perTag = それを押した回数で割った値
+// 「押していない大きな動き」も数えておく(swings / caught)。ただし成績にはしない。
+// 率にすると「感じたときだけでOK」と書いてあるタグを、押さなかったことで罰する形になる。
 //             (区間は試合のもので、タグ1つに割り当てられない。試合の記録員に付ける)
 export function aggregateScorers(games, winExp, opts = {}) {
   const map = {};
@@ -30,7 +32,7 @@ export function aggregateScorers(games, winExp, opts = {}) {
     if (!map[id]) {
       map[id] = {
         scorerId: id, games: 0, tags: 0, pre: 0, post: 0, miss: 0,
-        swings: 0, caught: 0,
+        swings: 0, caught: 0, points: 0,
       };
     }
     return map[id];
@@ -53,8 +55,10 @@ export function aggregateScorers(games, winExp, opts = {}) {
       if (v === 'pre') s.pre += 1;
       else if (v === 'post') s.post += 1;
       else s.miss += 1;
+      // 成績の軸は勝率。押したあとにその向きへ動いたぶんを、押した人に付ける
+      s.points += j.moves?.[tag.id]?.gain || 0;
     }
-    // 読みの広さは「試合の中で起きた大きな動き」が母数なので、試合の記録員に付ける
+    // 押していない動きの数は試合単位のものなので、試合の記録員に付ける
     if (g.scorerId) {
       const s = get(g.scorerId);
       s.games += 1;
@@ -66,6 +70,7 @@ export function aggregateScorers(games, winExp, opts = {}) {
   for (const s of Object.values(map)) {
     s.hitRate = s.tags ? s.pre / s.tags : null;
     s.catchRate = s.swings ? s.caught / s.swings : null;
+    s.perTag = s.tags ? s.points / s.tags : null;
   }
   return map;
 }
@@ -76,7 +81,7 @@ export function aggregateScorers(games, winExp, opts = {}) {
 // 実際に起きた問題: 相手を「胸を借りる」(勝率5%)に設定した試合では、
 // 1回無死満塁でも勝率が4.4ポイントしか動かない(互角なら18.2ポイント)。
 // 互角前提の12ポイントのままだと、記録員がどれだけ正しく読んでも
-// 「大きく動いた」が一度も成立せず、読みの精度が0のまま沈む。
+// 「大きく動いた」が一度も成立せず、勝率ポイントが0のまま沈む。
 //
 // 幅の目安には 4p(1-p) を使う。勝率pのときに勝敗がどれだけ揺れうるかで、
 // p=0.5 で1、p=0.05 で0.19。実測の圧縮率(4.4/18.2=0.24)とほぼ一致する。
@@ -104,7 +109,7 @@ function openingOf(game) {
 // 違うので、同じ記録員の通算成績が「どの試合を開いているか」で変わっていた。
 // modelFor(game) を受け取って、試合ごとに正しいモデルで数える。
 // ------------------------------------------------------------
-const SUM_KEYS = ['games', 'tags', 'pre', 'post', 'miss', 'swings', 'caught'];
+const SUM_KEYS = ['games', 'tags', 'pre', 'post', 'miss', 'swings', 'caught', 'points'];
 
 export function aggregateScorersOver(games, modelFor, opts = {}) {
   const merged = {};
@@ -118,11 +123,13 @@ export function aggregateScorersOver(games, modelFor, opts = {}) {
   for (const s of Object.values(merged)) {
     s.hitRate = s.tags ? s.pre / s.tags : null;
     s.catchRate = s.swings ? s.caught / s.swings : null;
+    s.perTag = s.tags ? s.points / s.tags : null;
   }
   return merged;
 }
 
-// 並べ替え: 押した数がある人を先に、読みの精度の高い順。
+// 並べ替え: 押した数がある人を先に、1回あたりの勝率が高い順。
+// 合計で並べると、たくさん押しただけの人が上に来る(押せば分母は増えないので)。
 // 1試合だけの人が満点で先頭に来ると実績として読めないので、
 // 最低タグ数(minTags)に届かない人は後ろへ回す。
 export function rankScorers(map, minTags = 5) {
@@ -130,8 +137,8 @@ export function rankScorers(map, minTags = 5) {
     const qa = a.tags >= minTags ? 1 : 0;
     const qb = b.tags >= minTags ? 1 : 0;
     if (qa !== qb) return qb - qa;
-    const ra = a.hitRate ?? -1;
-    const rb = b.hitRate ?? -1;
+    const ra = a.perTag ?? -1;
+    const rb = b.perTag ?? -1;
     if (ra !== rb) return rb - ra;
     return b.tags - a.tags;
   });
