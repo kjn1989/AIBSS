@@ -2967,10 +2967,10 @@ test('judgeFlowTags: 一致ではなく順番で測る', () => {
   const after = mk('after');
   const ja = judgeFlowTags(after, flowSeries(after, null));
   assert.equal(ja.verdict.tag, 'post', '動いた後に押したら反応(なぞっただけ)');
-  assert.equal(ja.hitRate, 0, '読み当て率は上がらない');
+  assert.equal(ja.hitRate, 0, '読みの精度は上がらない');
 });
 
-test('judgeFlowTags: 何も起きなければ空振り、押さなければ察知率が下がる', () => {
+test('judgeFlowTags: 何も起きなければ空振り、押さなければ読みの広さが下がる', () => {
   const logs = [
     { id: 'tag', kind: 'flow', inning: 1, isTop: true, payload: { dir: 'up' } },
     paLog(1, { kind: 'atbat', r: [0,0,0], outs: 0, runs: 0 }),
@@ -2981,14 +2981,14 @@ test('judgeFlowTags: 何も起きなければ空振り、押さなければ察�
   assert.equal(j.verdict.tag, 'miss', '動かなければ空振り');
   assert.equal(j.hitRate, 0);
 
-  // 押さずに大きく動いた試合 = 察知率0
+  // 押さずに大きく動いた試合 = 読みの広さ0
   const g2 = { id: 'g', playLogs: [
     paLog(1, { kind: 'atbat', r: [0,1,0], outs: 0, runs: 3 }),
     paLog(2, { kind: 'atbat', r: [0,0,0], outs: 0, runs: 0 }),
   ] };
   const j2 = judgeFlowTags(g2, flowSeries(g2, null));
-  assert.equal(j2.hitRate, null, '押していなければ読み当て率は出さない');
-  assert.equal(j2.catchRate, 0, '動いたのに押していないので察知率は0');
+  assert.equal(j2.hitRate, null, '押していなければ読みの精度は出さない');
+  assert.equal(j2.catchRate, 0, '動いたのに押していないので読みの広さは0');
 });
 
 test('formatRate: 打率と同じ書き方', () => {
@@ -3545,7 +3545,7 @@ test('結果を変えたときのアウト数の増減', () => {
 // 流れタグ: 直前にも動き、あとにも動いた場合はどちらが大きいかで決める
 //
 // 実際に起きた不具合。5回表が終わった時点で「流れ切れた」を押し、
-// 5回裏に2失点した。読めていたのに「反応」と判定され、察知率が0のままだった。
+// 5回裏に2失点した。読めていたのに「反応」と判定され、読みの広さが0のままだった。
 // 回の終わりに押すと「攻撃が終わった」動きが必ず直前にあるので、
 // 直前だけを見て決めると、これから起きることを言い当てても評価されない。
 // ============================================================
@@ -3566,11 +3566,11 @@ test('流れタグ: 回の終わりに押して、そのあと大きく動いた
   const j = judgeFlowTags(g, flowSeries(g, null));
   assert.equal(j.verdict.tag, 'pre', 'あとの動きのほうが大きいので予兆');
   assert.equal(j.hitRate, 1);
-  // 察知率の分母は「その試合で起きた大きな動き」全部。向きは問わない。
+  // 読みの広さの分母は「その試合で起きた大きな動き」全部。向きは問わない。
   // この並びは表の攻撃(+0.41)と裏の失点(−2.41)で2区間ある。押したのは down だけなので
-  // 言い当てたのは1つ、分母は2つ。押さなかった区間が分母に残るのが察知率の役目。
+  // 言い当てたのは1つ、分母は2つ。押さなかった区間が分母に残るのが読みの広さの役目。
   assert.equal(j.swings.length, 2, '向きの違う大きな動きが2つある');
-  assert.equal(j.caught, 1, '言い当てた区間として察知率の分子に入る');
+  assert.equal(j.caught, 1, '言い当てた区間として読みの広さの分子に入る');
   assert.equal(j.catchRate, 0.5);
 });
 
@@ -3824,7 +3824,7 @@ test('記録員: タグに焼き込まれた記録員が試合の記録員より
   const map = aggregateScorers([g], scRe([g]));
   assert.equal(map.s2.tags, 1, '押した人に付く');
   assert.equal(map.s1?.tags || 0, 0, '試合の記録員には付かない');
-  assert.equal(map.s1.games, 1, '察知率の母数は試合の記録員に付く');
+  assert.equal(map.s1.games, 1, '読みの広さの母数は試合の記録員に付く');
 });
 
 test('記録員: 未設定の試合はタグがあっても実績にならない', () => {
@@ -4350,7 +4350,7 @@ test('監査: 記録員の通算は、どの試合を開いていても同じ数
 
 test('監査: 力の差を入れた試合は、流れタグのしきい値も一緒に縮む', () => {
   // 「胸を借りる」の試合は勝率が動ける幅そのものが狭い。互角前提の12%のままだと、
-  // 記録員がどれだけ正しく読んでも「大きく動いた」が成立せず、読み当て率が0に沈む
+  // 記録員がどれだけ正しく読んでも「大きく動いた」が成立せず、読みの精度が0に沈む
   const even = swingScale({ teamGap: 'even' });
   assert.equal(even.minSwing, OPEN_MIN_SWING, '互角は今までどおり');
   assert.equal(even.reactSwing, OPEN_REACT_SWING);

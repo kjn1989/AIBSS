@@ -83,6 +83,12 @@ try {
   for (const l of ['ヒット', 'ヒット', '凡打', '凡打', '凡打']) await play(l);
   await change();
 
+  // 読みの精度・広さのタイルは流れタグが1つも無いと出ない。開く前に押しておく
+  await page.click('.flow-tap .ft-up');
+  await page.waitForTimeout(400);
+  await page.click('.flow-tap .ft-down');
+  await page.waitForTimeout(400);
+
   await page.click('button:has-text("試合の流れを見る")');
   await page.waitForTimeout(900);
   const sheet = page.locator('.sheet').last();
@@ -222,6 +228,29 @@ try {
   check('下書きに戻せる', back === draft, `${back} / ${draft}`);
   check('札も下書きに戻る',
     (await story.locator('.fv-story-tag').innerText()).includes('下書き'));
+
+  // --- 読みの精度と広さ。分母が違うことが分かる形で出ているか ---
+  const rates = await page.evaluate(() =>
+    [...document.querySelectorAll('.sheet .fv-rate')].map((el) => ({
+      name: el.querySelector('b')?.textContent,
+      v: el.querySelector('.v')?.textContent,
+      note: el.querySelector('.n')?.textContent,
+    })));
+  // ここを if で囲うと、タイルが出ていないときに黙って素通りしてしまう
+  check('読みの2指標が出ている', rates.length === 2, JSON.stringify(rates));
+  {
+    check('2つの名前が別の軸に見える',
+      rates[0]?.name === '読みの精度' && rates[1]?.name === '読みの広さ', JSON.stringify(rates));
+    // .273 だけ並べると分母の違いが見えない。分数を主表示にしてある
+    check('分母が数字として出ている',
+      rates.length === 2 && rates.every((r) => /\d+\/\d+/.test(r.v)), JSON.stringify(rates));
+    check('分母が2つで違う',
+      (rates[0]?.v.match(/\/(\d+)/) || [])[1] !== (rates[1]?.v.match(/\/(\d+)/) || [])[1]
+        || rates[0]?.note !== rates[1]?.note,
+      JSON.stringify(rates));
+    const axis = await page.locator('.sheet').last().innerText();
+    check('分母が違うと最初に書いてある', axis.includes('2つは分母が違います'), axis.slice(0, 200));
+  }
 
   // --- 相手との力の差 ---
   // 設定の確かめ方は「30%と入れたらチャートが30%から始まる」の一点。

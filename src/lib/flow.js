@@ -437,8 +437,8 @@ export function flowRuns(series = [], minSwing = 0.6) {
 //   予兆 … 押した後、windowAfter打席以内に、その向きへ minSwing 以上動いた
 //   反応 … 押す直前 windowBefore打席以内に、もうその向きへ動いていた
 //   空振り… どちらでもない
-// 成績は必ず2つセットで出す。読み当て率だけだと「確信があるときしか押さない」で
-// 高くできてしまうので、押さなければ下がる察知率と並べる。
+// 成績は必ず2つセットで出す。読みの精度だけだと「確信があるときしか押さない」で
+// 高くできてしまうので、押さなければ下がる読みの広さと並べる。
 // ------------------------------------------------------------
 export function judgeFlowTags(game, series = [], opts = {}) {
   const windowAfter = opts.windowAfter ?? 5;
@@ -486,7 +486,7 @@ export function judgeFlowTags(game, series = [], opts = {}) {
     else if (beforeBest >= reactSwing) { verdict[tag.id] = 'post'; continue; }
     if (afterBest >= minSwing) {
       verdict[tag.id] = 'pre';
-      // どの区間を先に読めたか(察知率の分子)
+      // どの区間を先に読めたか(読みの広さの分子)
       for (const sw of swings) {
         if (sw.dir !== want) continue;
         const from = order.get(sw.from.id) ?? 0;
@@ -502,8 +502,8 @@ export function judgeFlowTags(game, series = [], opts = {}) {
   for (const tg of tags) c[verdict[tg.id]] = (c[verdict[tg.id]] || 0) + 1;
   return {
     tags, verdict, counts: c, swings,
-    hitRate: tags.length ? c.pre / tags.length : null,   // 読み当て率
-    catchRate: swings.length ? caught.size / swings.length : null, // 察知率
+    hitRate: tags.length ? c.pre / tags.length : null,   // 読みの精度
+    catchRate: swings.length ? caught.size / swings.length : null, // 読みの広さ
     caught: caught.size,
   };
 }

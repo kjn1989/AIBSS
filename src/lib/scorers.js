@@ -21,9 +21,9 @@ export const scorersOf = (settings) => (settings?.scorers || []);
 export const tagScorerId = (game, tag) => tag?.payload?.scorerId || game?.scorerId || null;
 
 // 記録員ごとの実績。
-//  読み当て率 = 押したタグのうち「予兆」だったもの / 押したタグ(タグ単位で数える)
-//  察知率     = 実際に大きく動いた区間のうち、押せていたもの / 動いた区間
-//               (区間は試合のもので、タグ1つに割り当てられない。試合の記録員に付ける)
+//  読みの精度 = 押したタグのうち「予兆」だったもの / 押したタグ(タグ単位で数える)
+//  読みの広さ = 実際に大きく動いた区間のうち、押せていたもの / 動いた区間
+//             (区間は試合のもので、タグ1つに割り当てられない。試合の記録員に付ける)
 export function aggregateScorers(games, winExp, opts = {}) {
   const map = {};
   const get = (id) => {
@@ -54,7 +54,7 @@ export function aggregateScorers(games, winExp, opts = {}) {
       else if (v === 'post') s.post += 1;
       else s.miss += 1;
     }
-    // 察知率は「試合の中で起きた大きな動き」が母数なので、試合の記録員に付ける
+    // 読みの広さは「試合の中で起きた大きな動き」が母数なので、試合の記録員に付ける
     if (g.scorerId) {
       const s = get(g.scorerId);
       s.games += 1;
@@ -76,7 +76,7 @@ export function aggregateScorers(games, winExp, opts = {}) {
 // 実際に起きた問題: 相手を「胸を借りる」(勝率5%)に設定した試合では、
 // 1回無死満塁でも勝率が4.4ポイントしか動かない(互角なら18.2ポイント)。
 // 互角前提の12ポイントのままだと、記録員がどれだけ正しく読んでも
-// 「大きく動いた」が一度も成立せず、読み当て率が0のまま沈む。
+// 「大きく動いた」が一度も成立せず、読みの精度が0のまま沈む。
 //
 // 幅の目安には 4p(1-p) を使う。勝率pのときに勝敗がどれだけ揺れうるかで、
 // p=0.5 で1、p=0.05 で0.19。実測の圧縮率(4.4/18.2=0.24)とほぼ一致する。
@@ -122,7 +122,7 @@ export function aggregateScorersOver(games, modelFor, opts = {}) {
   return merged;
 }
 
-// 並べ替え: 押した数がある人を先に、読み当て率の高い順。
+// 並べ替え: 押した数がある人を先に、読みの精度の高い順。
 // 1試合だけの人が満点で先頭に来ると実績として読めないので、
 // 最低タグ数(minTags)に届かない人は後ろへ回す。
 export function rankScorers(map, minTags = 5) {

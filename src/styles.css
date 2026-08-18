@@ -2566,3 +2566,7 @@ button.manage-open {
 .sig-table td { padding: 5px 5px; border-top: 1px solid var(--border); }
 .sig-table .num { text-align: right; font-variant-numeric: tabular-nums; }
 .sig-table tr.sig-sum td { border-top: 1px solid var(--fg); background: var(--bg-2); }
+
+/* 読みの精度・広さ。分母を主表示にする(.273 だけだと分母の違いが見えない) */
+.fv-rate .v .of { font-size: 15px; font-weight: 700; opacity: .55; margin-left: 1px; }
+.fv-rate .v .rate { display: block; font-size: 12px; font-weight: 700; opacity: .6; margin-top: -2px; }

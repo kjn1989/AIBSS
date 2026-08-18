@@ -593,18 +593,28 @@ export default function FlowView({ game, onClose }) {
           ) : (
             <>
               <div className="fv-rates">
+                {/* 分母を主表示にする。.273 と .375 だけ並べると、分母が違うことが
+                    見えないので「どちらも同じような正答率」に読めてしまう */}
                 <div className="fv-rate">
                   <b>{t('fv.hitRate')}</b>
-                  <div className="v num">{formatRate(judged.hitRate)}</div>
+                  <div className="v num">
+                    {judged.counts.pre}<span className="of">/{judged.tags.length}</span>
+                    <span className="rate">{formatRate(judged.hitRate)}</span>
+                  </div>
                   <div className="n">{t('fv.hitRateNote', { a: judged.counts.pre, b: judged.tags.length })}</div>
                 </div>
                 <div className="fv-rate">
                   <b>{t('fv.catchRate')}</b>
-                  <div className="v num">{formatRate(judged.catchRate)}</div>
+                  <div className="v num">
+                    {judged.caught}<span className="of">/{judged.swings.length}</span>
+                    <span className="rate">{formatRate(judged.catchRate)}</span>
+                  </div>
                   <div className="n">{t('fv.catchRateNote', { a: judged.caught, b: judged.swings.length })}</div>
                 </div>
               </div>
-              <p className="small dim mt8">{t('fv.verdictNote')}</p>
+              {/* 2つの違いは分母。ここを最初に言わないと、名前だけでは伝わらない */}
+              <p className="small dim mt8"><b>{t('fv.axisNote')}</b></p>
+              <p className="small dim">{t('fv.verdictNote')}</p>
               <p className="small dim">{t('fv.pairNote')}</p>
               <div className="fv-tags">
                 {judged.tags.map((tg) => (
