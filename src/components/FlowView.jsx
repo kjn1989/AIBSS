@@ -5,6 +5,7 @@ import { buildRunDists, buildWinModel } from '../lib/winExp.js';
 import { buildGapModel } from '../lib/teamGap.js';
 import { currentRules } from '../lib/rules.js';
 import { halfStartKeyOf } from '../lib/tiebreak.js';
+import { isTiebreakInning } from '../lib/rules.js';
 import { aggregateScorersOver, scorerName, swingScale } from '../lib/scorers.js';
 import ScorerPicker from './ScorerPicker.jsx';
 import TeamGapPicker from './TeamGapPicker.jsx';
@@ -410,6 +411,21 @@ export default function FlowView({ game, onClose }) {
     }
     return (item) => m.get(item?.id) || null;
   }, [series]);
+  // 区間の外まで見て塁状況を出すために、同じ半回の次の打席を引けるようにする
+  const nextInHalf = useMemo(() => {
+    const m = new Map();
+    for (let i = 0; i < series.length - 1; i += 1) {
+      const a = series[i];
+      const b = series[i + 1];
+      if (a.inning === b.inning && a.isTop === b.isTop) m.set(a.id, b);
+    }
+    return (item) => m.get(item?.id) || null;
+  }, [series]);
+  // タイブレークの回は走者を置いて始まる。文章にもそう書かないと読み違える
+  const tiebreakAt = useMemo(
+    () => (inn) => (isTiebreakInning(game, inn) ? halfStartKeyOf(game, inn) : null),
+    [game],
+  );
 
   const order = useMemo(() => {
     const m = new Map();
@@ -539,6 +555,7 @@ export default function FlowView({ game, onClose }) {
                           nameOf, oppNameOf, edition, lang, t, innOf, scoreBefore,
                           teamName: state.settings.teamName || t('app.teamFallback'),
                           oppName: game.opponent || t('nr.side.oppFallback'),
+                          nextInHalf, tiebreakAt,
                         })}
                         onSave={(key, text) => dispatch({ type: 'SET_FLOW_NOTE', gameId: game.id, key, text })}
                         t={t}
