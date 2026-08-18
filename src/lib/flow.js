@@ -438,12 +438,13 @@ export function flowRuns(series = [], minSwing = 0.6) {
 //   予兆 … 押した後、windowAfter打席以内に、その向きへ minSwing 以上動いた
 //   反応 … 押す直前 windowBefore打席以内に、もうその向きへ動いていた
 //   空振り… どちらでもない
-// 成績の軸は勝率にする。「押したあと、勝率がその向きへどれだけ動いたか」。
+// 出す数字は1つだけ。押したうち、動く前に読めていたのが何回か。
 // 率を2つ並べていた頃は、分母が「押した数」と「試合で起きた動き全部」で
 // 食い違っていて、何と何を比べているのか読み取れなかった。しかも後者は
 // 「感じたときだけでOK」と書いてあるタグを、押さないと下がる形で罰していた。
-// 勝率ポイントなら分母が要らない。合計は「たくさん押して当てる」ほど伸び、
-// 1回あたりは「外さない」ほど高い。単位はどちらも同じ勝率ポイント。
+// 勝率ポイントを積み上げる形も試したが、合計にも1回あたりの平均にも比べる先が
+// 無く、そもそも「流れが読めたか」に答えていない。
+// 勝率は「何を読めたか」を1行ずつ示す材料として使い、成績にはしない。
 // ------------------------------------------------------------
 export function judgeFlowTags(game, series = [], opts = {}) {
   const windowAfter = opts.windowAfter ?? 5;
@@ -527,13 +528,9 @@ export function judgeFlowTags(game, series = [], opts = {}) {
 
   const c = { pre: 0, post: 0, miss: 0 };
   for (const tg of tags) c[verdict[tg.id]] = (c[verdict[tg.id]] || 0) + 1;
-  // 押したあとに動いた勝率の合計(0〜1の単位)。空振りは0なので、押しただけでは伸びない
-  let points = 0;
-  for (const tg of tags) points += moves[tg.id]?.gain || 0;
   return {
     tags, verdict, counts: c, swings, moves,
-    points,
-    perTag: tags.length ? points / tags.length : null,
+    // 出す数字はこれ1つ。押したうち、動く前に読めていた割合
     hitRate: tags.length ? c.pre / tags.length : null,
     catchRate: swings.length ? caught.size / swings.length : null,
     caught: caught.size,

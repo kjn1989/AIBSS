@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useStore, useT } from '../state/store.jsx';
-import { buildRunExpectancy } from '../lib/flow.js';
+import { buildRunExpectancy, formatRate } from '../lib/flow.js';
 import { buildRunDists, buildWinModel } from '../lib/winExp.js';
 import { currentRules } from '../lib/rules.js';
 import { halfStartKeyOf } from '../lib/tiebreak.js';
@@ -10,18 +10,10 @@ import { aggregateScorersOver, rankScorers, scorerName } from '../lib/scorers.js
 // 打った・投げたは選手の成績になるが、「いま流れが来た」を押した判断は
 // 記録員のもの。当たり外れが残らないと、その人が試合に居た意味が記録に出ない。
 //
-// 軸は勝率ポイント。押したあと、勝率がその向きへどれだけ動いたか。
-//   合計    = たくさん押して当てるほど伸びる
-//   1回あたり = 外さないほど高い
-// 単位が同じなので、2つ並んでいても何と何を比べているのか迷わない。
-// 押した数が少ないうちは1回あたりが跳ねるので、回数を必ず併記する。
+// 測るのは1つだけ: 押したタグのうち、動く前に読めていたものの割合。
+// 分母は押した回数だけなので、何と何を比べているのか迷わない。
+// 押した数が少ないうちは率が跳ねるので、回数を必ず併記する。
 const MIN_TAGS = 5;
-
-// 勝率は0〜1で持っているが、読むのはポイント
-const pt = (x) => {
-  const v = Math.round((x || 0) * 100);
-  return v > 0 ? `+${v}` : String(v);
-};
 
 export default function ScorerCard({ games }) {
   const { state } = useStore();
@@ -54,8 +46,7 @@ export default function ScorerCard({ games }) {
         <thead>
           <tr>
             <th>{t('sc.name')}</th>
-            <th className="num">{t('sc.ptTotal')}</th>
-            <th className="num">{t('sc.ptEach')}</th>
+            <th className="num">{t('sc.readRate')}</th>
             <th className="num">{t('sc.tags')}</th>
           </tr>
         </thead>
@@ -63,8 +54,7 @@ export default function ScorerCard({ games }) {
           {shown.map((s) => (
             <tr key={s.scorerId} className={s.tags < MIN_TAGS ? 'thin' : ''}>
               <td className="sc-name">{scorerName(state.settings, s.scorerId) || t('sc.unknown')}</td>
-              <td className="num"><b>{pt(s.points)}</b></td>
-              <td className="num">{pt(s.perTag)}</td>
+              <td className="num"><b>{formatRate(s.hitRate)}</b></td>
               <td className="num">{t('sc.tagsN', { n: s.tags, g: s.games })}</td>
             </tr>
           ))}

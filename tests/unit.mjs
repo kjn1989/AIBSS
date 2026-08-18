@@ -2991,7 +2991,7 @@ test('judgeFlowTags: 何も起きなければ空振り。押していない動�
   assert.equal(j2.catchRate, 0, '動いたのに押していないので押せていた割合は0');
 });
 
-test('judgeFlowTags: 軸は勝率。押したあとに動いたぶんだけ積む', () => {
+test('judgeFlowTags: 測るのは「動く前に読めていたか」', () => {
   // 打席1で大きく動く試合。動く前に押す = そのぶんが点になる
   const mk = (tagAt) => {
     const logs = [];
@@ -3003,15 +3003,15 @@ test('judgeFlowTags: 軸は勝率。押したあとに動いたぶんだけ積�
   };
   const before = mk('before');
   const jb = judgeFlowTags(before, flowSeries(before, null));
-  assert.ok(jb.points > 0, `動く前に押していれば点が入る: ${jb.points}`);
-  assert.equal(jb.points, jb.moves.tag.gain, '合計はタグごとの動きの和');
-  assert.equal(jb.perTag, jb.points, '1回押しただけなら合計と1回あたりは同じ');
+  assert.equal(jb.verdict.tag, 'pre', '動く前に押していれば読めた');
+  assert.equal(jb.hitRate, 1, '押した1回のうち1回読めた');
+  assert.ok(jb.moves.tag.gain > 0, `どれだけ動いたかも残す: ${jb.moves.tag.gain}`);
 
 });
 
-test('judgeFlowTags: 反応は0点。押したあとに動いていても点にしない', () => {
+test('judgeFlowTags: 後追いは読めたに入らない。押したあとに動いていても', () => {
   // 大きく動いた「後」に押し、そのあとにも少し動く形。
-  // ここを0点にしないと、走者一掃の直後に押すのがいちばん得になってしまう。
+  // ここを読めた扱いにすると、走者一掃の直後に押すのがいちばん得になってしまう。
   const g = {
     id: 'g',
     playLogs: [
@@ -3026,13 +3026,13 @@ test('judgeFlowTags: 反応は0点。押したあとに動いていても点に�
   ];
   series.start = 0.50;
   const j = judgeFlowTags(g, series, { minSwing: 0.12, reactSwing: 0.07 });
-  assert.equal(j.verdict.tag, 'post', '押す前にもう動いていたので反応');
-  assert.equal(j.moves.tag.gain, 0, '押したあとに10ポイント動いていても点にしない');
-  assert.equal(j.points, 0);
+  assert.equal(j.verdict.tag, 'post', '押す前にもう動いていたので後追い');
+  assert.equal(j.hitRate, 0, '読めたには入らない');
+  assert.equal(j.moves.tag.gain, 0, '押したあとに10ポイント動いていても読めたことにしない');
   assert.equal(j.moves.tag.plays.length, 0, '中身も出さない');
 });
 
-test('judgeFlowTags: 動かなければ0点。押しただけでは増えない', () => {
+test('judgeFlowTags: 動かなければ読めたに入らない', () => {
   const logs = [
     { id: 'tag', kind: 'flow', inning: 1, isTop: true, payload: { dir: 'up' } },
     paLog(1, { kind: 'atbat', r: [0, 0, 0], outs: 0, runs: 0 }),
@@ -3041,8 +3041,8 @@ test('judgeFlowTags: 動かなければ0点。押しただけでは増えない'
   const g = { id: 'g', playLogs: logs };
   const j = judgeFlowTags(g, flowSeries(g, null));
   assert.equal(j.verdict.tag, 'miss');
-  assert.equal(j.points, 0, '空振りは0点');
-  assert.equal(j.perTag, 0, '押した回数は分母に残るので、1回あたりが下がる');
+  assert.equal(j.hitRate, 0, '押した回数は分母に残るので、読めた割合が下がる');
+  assert.equal(j.moves.tag.gain, 0);
 });
 
 test('judgeFlowTags: 勝率の線なら、押した時点と山の勝率が実際の値で返る', () => {
@@ -3069,6 +3069,26 @@ test('judgeFlowTags: 勝率の線なら、押した時点と山の勝率が実�
   // 窓の端まで足すと 0.20+0.10-0.30 = 0 になってしまう。山で測る
   assert.ok(Math.abs(mv.gain - 0.30) < 1e-9, `動いたのは30ポイント: ${mv.gain}`);
   assert.equal(mv.plays.length, 2, '山までの打席だけを中身にする');
+});
+
+test('judgeFlowTags: 「流れ切れた」が読めたときは勝率が下がって出る', () => {
+  // 符号を付けて足し上げていた頃、下がったのが正解でも「+25pt」と出ていた。
+  // 起点と山をそのまま出せば、下がったことが数字のまま読める。
+  const g = {
+    id: 'g',
+    playLogs: [
+      { id: 'tag', kind: 'flow', inning: 5, isTop: false, payload: { dir: 'down' } },
+      { id: 'a', kind: 'defense', inning: 5, isTop: false, payload: { result: 'single', runs: 2 } },
+    ],
+  };
+  const series = [{ id: 'a', log: g.playLogs[1], mine: false, delta: -0.25, we: 0.35 }];
+  series.start = 0.60;
+  const j = judgeFlowTags(g, series, { minSwing: 0.12, reactSwing: 0.07 });
+  assert.equal(j.verdict.tag, 'pre', '相手へ傾くのを先に読めた');
+  const m = j.moves.tag;
+  assert.equal(m.weAt, 0.60);
+  assert.ok(Math.abs(m.wePeak - 0.35) < 1e-9, `山は下がった側: ${m.wePeak}`);
+  assert.ok(m.wePeak < m.weAt, '読めた「流れ切れた」は勝率が下がって出る');
 });
 
 test('movePlays: 攻撃中に押したか守備中に押したかで中身を分ける', () => {

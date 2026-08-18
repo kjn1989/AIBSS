@@ -75,8 +75,8 @@ try {
   };
   const change = async () => { await page.click('button:has-text("手動チェンジ")'); await page.waitForTimeout(600); };
 
-  // 流れタグの成績は「押したあと勝率がどれだけ動いたか」なので、
-  // 動く前に押しておかないと全部「動かず」になり、当たったときの見え方を確かめられない
+  // 流れタグの成績は「動く前に読めていたか」なので、動く前に押しておかないと
+  // 全部「動かず」になり、読めたときの見え方を確かめられない
   await page.click('.flow-tap .ft-up');
   await page.waitForTimeout(400);
 
@@ -232,22 +232,20 @@ try {
   check('札も下書きに戻る',
     (await story.locator('.fv-story-tag').innerText()).includes('下書き'));
 
-  // --- 軸は勝率ポイント。単位が同じ2つが並んでいるか ---
+  // --- 出す数字は1つだけ。押したうち、動く前に読めていたのが何回か ---
   const rates = await page.evaluate(() =>
     [...document.querySelectorAll('.sheet .fv-rate')].map((el) => ({
       name: el.querySelector('b')?.textContent,
       v: el.querySelector('.v')?.textContent,
       note: el.querySelector('.n')?.textContent,
     })));
-  // ここを if で囲うと、タイルが出ていないときに黙って素通りしてしまう
-  check('流れタグの成績が2つ出ている', rates.length === 2, JSON.stringify(rates));
-  check('どちらも同じ単位(勝率ポイント)',
-    rates.length === 2 && rates.every((r) => /pt$/.test((r.v || '').trim())), JSON.stringify(rates));
-  check('合計と1回あたりが並んでいる',
-    rates[0]?.name?.includes('合計') && rates[1]?.name?.includes('1回'), JSON.stringify(rates));
+  check('流れタグの成績は1つだけ', rates.length === 1, JSON.stringify(rates));
+  check('読めたかどうかだと書いてある', rates[0]?.name?.includes('読めた'), JSON.stringify(rates));
+  // 分母が見えないと「.500」が何のうちの半分なのか分からない
+  check('分数で出ている', /\d+\/\d+/.test(rates[0]?.v || ''), JSON.stringify(rates));
   const sheetTxt = await page.locator('.sheet').last().innerText();
-  check('押しただけでは増えないと書いてある',
-    sheetTxt.includes('押しただけでは増えません'), sheetTxt.slice(0, 300));
+  check('測っているものを1つに言い切っている',
+    sheetTxt.includes('「動く前に読めていたか」だけ'), sheetTxt.slice(0, 300));
   // 押していない動きを率にすると「感じたときだけでOK」と矛盾する。事実として置く
   check('押していない動きで下がらないと書いてある',
     sheetTxt.includes('成績は下がりません'), sheetTxt.slice(0, 300));
@@ -257,24 +255,31 @@ try {
     [...document.querySelectorAll('.sheet .fv-tag')].map((el) => ({
       vd: el.querySelector('.vd')?.textContent,
       mv: el.querySelector('.fv-tag-move .mv')?.textContent,
+      am: el.querySelector('.fv-tag-move .am')?.textContent || '',
       wt: el.querySelector('.fv-tag-move .wt')?.textContent || '',
     })));
   check('押したタグが並んでいる', tagRows.length >= 2, JSON.stringify(tagRows));
   check('どのタグにも押した後の勝率が出ている',
     tagRows.length > 0 && tagRows.every((r) => /\d+% → \d+%/.test(r.mv || '')), JSON.stringify(tagRows));
-  check('動いた量がポイントで添えてある',
-    tagRows.every((r) => /[(（][-+]?\d+pt[)）]/.test(r.mv || '')), JSON.stringify(tagRows));
-  // 動かなかったタグは 0pt。ここが「+0」だと当たったように見える
-  const preRows = tagRows.filter((r) => r.vd === '予兆');
-  check('当たったタグがある(見え方を確かめるため)', preRows.length > 0, JSON.stringify(tagRows));
-  check('当たったタグは勝率が上がっている',
-    preRows.every((r) => /[(（]\+\d+pt[)）]/.test(r.mv || '')), JSON.stringify(preRows));
+
+  const preRows = tagRows.filter((r) => r.vd === '読めた');
+  check('読めたタグがある(見え方を確かめるため)', preRows.length > 0, JSON.stringify(tagRows));
+  // 符号ではなく言葉で書く。「+25pt」だと、下がったのが正解のときに上がって見える
+  check('動いた向きが言葉で書いてある',
+    preRows.every((r) => /ポイント(上げ|下げ)/.test(r.am || '')), JSON.stringify(preRows));
+  check('上げ下げが勝率の実数と食い違わない',
+    preRows.every((r) => {
+      const m = (r.mv || '').match(/(\d+)% → (\d+)%/);
+      if (!m) return false;
+      return r.am.includes('上げ') ? Number(m[2]) > Number(m[1]) : Number(m[2]) < Number(m[1]);
+    }), JSON.stringify(preRows));
   // 勝率が動いた中身を実際の記録で言う。数字だけだと何が起きたのか読めない
   check('何が起きて動いたかが書いてある',
     preRows.every((r) => /安打|得点|四死球|抑えた/.test(r.wt || '')), JSON.stringify(preRows));
+  // 動かなかったタグに上げ下げを書くと、当たったように見える
   const missRows = tagRows.filter((r) => r.vd === '動かず');
-  check('動かなかったタグは0pt',
-    missRows.length > 0 && missRows.every((r) => /[(（]0pt[)）]/.test(r.mv || '')), JSON.stringify(missRows));
+  check('動かなかったタグには上げ下げを書かない',
+    missRows.length > 0 && missRows.every((r) => !r.am), JSON.stringify(missRows));
 
   // --- 相手との力の差 ---
   // 設定の確かめ方は「30%と入れたらチャートが30%から始まる」の一点。
