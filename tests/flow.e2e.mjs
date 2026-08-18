@@ -407,6 +407,23 @@ try {
   check('設計上の選択だと明言している', weTxt.includes('設計上の選択'), weTxt.slice(0, 1200));
   check('土台の出どころを名指ししている', weTxt.includes('baseball.piupapp.com'), weTxt.slice(0, 1600));
   check('土台の対象と期間を書いてある', weTxt.includes('NPB') && weTxt.includes('2023'), weTxt.slice(0, 1600));
+  // Σ を式のまま置いても伝わらない。実際の確率で1行ずつ足して見せ、
+  // 最後にモデルの答えと突き合わせる
+  check('Σを1行ずつ追える表がある', weTxt.includes('起こりうる場合を全部足す'), weTxt.slice(0, 400));
+  const sigRows = await page.evaluate(() =>
+    [...document.querySelectorAll('.sheet .sig-table')].map((t) => t.querySelectorAll('tbody tr').length));
+  check('2つの例が出ている', sigRows.length === 2, JSON.stringify(sigRows));
+  check('どちらも合計行まである', sigRows.every((n) => n >= 5), JSON.stringify(sigRows));
+  // 手で足した合計と、モデルの答えが一致していること
+  const sums = await page.evaluate(() =>
+    [...document.querySelectorAll('.sheet .sig-sum td.num b')].map((b) => b.textContent));
+  const checks = [...weTxt.matchAll(/モデルが出す値も ([\d.]+)%/g)].map((m) => m[1] + '%');
+  check('手計算とモデルが一致している',
+    sums.length === 2 && checks.length === 2 && sums[0] === checks[0] && sums[1] === checks[1],
+    JSON.stringify({ sums, checks }));
+  check('±の意味を書いてある', weTxt.includes('± は何か'), weTxt.slice(0, 2500));
+  check('平均だけでは足りない理由を書いてある', weTxt.includes('平均ではなく確率の表が要る'), weTxt.slice(0, 3000));
+
   check('していないことを並べている', weTxt.includes('この計算がしていないこと'), weTxt.slice(-800));
   check('チーム力を持っていないと書いてある', weTxt.includes('チームの強さも投手の質も持っていない'), weTxt.slice(-800));
   // 出どころの札が実際に付いていること

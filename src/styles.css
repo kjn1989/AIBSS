@@ -2555,3 +2555,14 @@ button.manage-open {
   font-size: 10.5px; line-height: 1.45; white-space: pre-wrap; word-break: break-all;
   max-height: 220px; overflow: auto;
 }
+
+/* Σ を1行ずつ追う表。24通りの表(.ret-table)とは列の意味が違うので、
+   見た目は似せつつクラスは分ける(数を数える検査が混ざらないように) */
+.sig-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+.sig-table th {
+  text-align: left; font-weight: 600; color: var(--text-dim);
+  font-size: 10px; padding: 4px 5px;
+}
+.sig-table td { padding: 5px 5px; border-top: 1px solid var(--border); }
+.sig-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.sig-table tr.sig-sum td { border-top: 1px solid var(--fg); background: var(--bg-2); }
