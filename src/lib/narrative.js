@@ -205,15 +205,24 @@ export function draftNarrative(run, ctx) {
 
   // 回が変わるところで文を切る。人が話すときも、そこで一度切っている
   const sep = ctx.lang === 'en' ? ', ' : '、';
+  // ---- どちらのチームの打者かを必ず言う ----
+  // 「打ち取った」なら相手、「倒れ」なら自チーム、と動詞で暗示はできるが、
+  // 回をまたぐと2つの打線が続けて出てくるので、暗示だけでは読み手が追えない。
+  // 側が変わるところで、そのイニングを攻めているチームの名前を置く。
+  const sideLabel = (ev) => ctx.t(ev.mine ? 'nr.side.own' : 'nr.side.opp', {
+    team: ev.mine ? ctx.teamName : ctx.oppName,
+  });
   let out = '';
   for (let i = 0; i < picked.length; i += 1) {
     const ev = picked[i];
     const prev = picked[i - 1];
     const newHalf = i > 0 && !sameHalf(ev.at, prev.at);
+    const newSide = i === 0 || ev.mine !== prev.mine || newHalf;
     const isLast = i === picked.length - 1;
     // 回をまたぐ手前は言い切って、次の回を頭に置く
-    const phrase = phraseOf(ev, ctx, items, isLast || (i + 1 < picked.length && !sameHalf(picked[i + 1].at, ev.at)));
-    if (!phrase) continue;
+    const body = phraseOf(ev, ctx, items, isLast || (i + 1 < picked.length && !sameHalf(picked[i + 1].at, ev.at)));
+    if (!body) continue;
+    const phrase = newSide ? `${sideLabel(ev)}${body}` : body;
     if (i === 0) out = phrase;
     else if (newHalf) out += `${ctx.t('nr.period')}${ctx.t('nr.next', { inn: ctx.innOf(ev.at) })}${phrase}`;
     else out += `${sep}${phrase}`;
