@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { proposeMoves, judgeAdvance, batterDestOptions } from '../src/lib/plays.js';
 import { gameEndCheck, initialPresetIdFor, describeRules, rulesAtInning, currentRules, fieldCountAt, isTiebreakInning, diffLiveRules, describeRulePatch, runnersPlaced, placedRunsScored, halfKeyOf, DEFAULT_TIEBREAK, ALL_BAT_MAX, TIEBREAK_RUNNERS, allBatSize, lineupSlotsFor } from '../src/lib/rules.js';
-import { aggregateBatting, aggregatePitching, battingMetrics, pitchingMetrics, titleLeaders, DETAIL_METRICS, detailRanking, defaultInningBasis } from '../src/lib/stats.js';
+import { aggregateFielding, rankFielding, aggregateBatting, aggregatePitching, battingMetrics, pitchingMetrics, titleLeaders, DETAIL_METRICS, detailRanking, defaultInningBasis } from '../src/lib/stats.js';
 import { translate } from '../src/lib/i18n.js';
 import { swapOrderPlan, canSwapOrder } from '../src/lib/lineupOrder.js';
 import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, needsComplexConfirm, parseDirectionOnly, parseContact, playLabel } from '../src/lib/voiceParser.js';
@@ -22,7 +22,7 @@ import { aggregateScorersOver, swingScale, OPEN_MIN_SWING, OPEN_REACT_SWING } fr
 import { aggregateContrib, rankContrib, formatContrib } from '../src/lib/contrib.js';
 import { LEVEL_K, LEVEL_MIN, LEVEL_MAX, stateKey, buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, movePlays, formatRate, weShape, weSeries, stateOfKey, BASE_RE, reOf, KOSHIEN_RE, KOSHIEN_WEIGHTS, KOSHIEN_LEVEL, isKoshienMeasured, baseReFor } from '../src/lib/flow.js';
 import { teamPower, mostOff, formatPower } from '../src/lib/teamPower.js';
-import { RESULTS as RESULTS_FOR_OUT, OUT_TYPES, outTypeLabel, infieldFlyPossible, newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions, attendeesOf, lastAttendees, autoLineupFrom, lineupFromPast, playErrorOf, subRank, resultLabelOf, isIntentionalBB } from '../src/lib/model.js';
+import { RESULTS as RESULTS_FOR_OUT, OUT_TYPES, outTypeLabel, infieldFlyPossible, newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions, attendeesOf, lastAttendees, autoLineupFrom, lineupFromPast, playErrorOf, finePlayOf, subRank, resultLabelOf, isIntentionalBB } from '../src/lib/model.js';
 import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf, oppLettersInGame, oppBaserunning } from '../src/lib/oppBox.js';
 import { remapPlayerInGame, fillPlayerGaps } from '../src/lib/mergePlayers.js';
 import { computeBoxScore, halfPlayed } from '../src/lib/boxscore.js';
@@ -1092,13 +1092,71 @@ test('canSwapOrder: 隣どうしだけ。離れた枠へは動かさない', () 
   assert.equal(swapOrderPlan(g, 1, 3), null, '断ったときは計画も返さない');
 });
 
+test('finePlayOf: 失策と同じ形で読み出せる', () => {
+  assert.equal(finePlayOf({}), null);
+  assert.equal(finePlayOf({ finePlay: {} }), null, '位置が無ければ数えない');
+  assert.equal(finePlayOf({ finePlay: { pos: 'DH' } }), null, '守備位置でなければ数えない');
+  assert.deepEqual(finePlayOf({ finePlay: { pos: '遊' } }), { pos: '遊', playerId: null });
+  assert.deepEqual(finePlayOf({ finePlay: { pos: '遊', playerId: 'p1' } }), { pos: '遊', playerId: 'p1' });
+});
+
+test('aggregateFielding: 自チームが守っていたときだけ、選手ごとに数える', () => {
+  const games = [{
+    id: 'g1',
+    playLogs: [
+      // 自チームの守備。誰の記録かは記録時点の playerId で決める
+      { kind: 'defense', payload: { finePlay: { pos: '遊', playerId: 'p1' } } },
+      { kind: 'defense', payload: { finePlay: { pos: '中', playerId: 'p2' } } },
+      { kind: 'defense', payload: { playError: { pos: '遊', kind: 'throw', playerId: 'p1' } } },
+      // 自チームの攻撃で相手の野手が見せた好守。相手の名前は持っていないので個人には付かない
+      { kind: 'atbat', payload: { finePlay: { pos: '遊' } } },
+      { kind: 'defense', payload: {} },
+    ],
+  }];
+  const rows = aggregateFielding(games);
+  const p1 = rows.find((r) => r.playerId === 'p1');
+  const p2 = rows.find((r) => r.playerId === 'p2');
+  assert.equal(p1.fine, 1);
+  assert.equal(p1.errors, 1, '同じ選手の好守と失策は別に数える');
+  assert.equal(p2.fine, 1);
+  assert.equal(p2.errors, 0);
+  assert.equal(rows.length, 2, '相手の野手は個人の記録にしない');
+  assert.equal(p1.games, 1);
+});
+
+test('aggregateFielding: 同じ試合で複数回押しても試合数は1', () => {
+  const games = [{
+    id: 'g1',
+    playLogs: [
+      { kind: 'defense', payload: { finePlay: { pos: '遊', playerId: 'p1' } } },
+      { kind: 'defense', payload: { finePlay: { pos: '遊', playerId: 'p1' } } },
+    ],
+  }];
+  const [row] = aggregateFielding(games);
+  assert.equal(row.fine, 2);
+  assert.equal(row.games, 1);
+});
+
+test('rankFielding: 好守の多い順、同数なら失策の少ない順', () => {
+  const rows = [
+    { playerId: 'a', fine: 2, errors: 3 },
+    { playerId: 'b', fine: 5, errors: 1 },
+    { playerId: 'c', fine: 2, errors: 0 },
+  ];
+  assert.deepEqual(rankFielding(rows).map((r) => r.playerId), ['b', 'c', 'a']);
+});
+
 test('playErrorOf: 位置が無いもの・知らない位置は失策として数えない', () => {
   assert.equal(playErrorOf({}), null, '何も無ければ null');
   assert.equal(playErrorOf({ playError: { kind: 'throw' } }), null, '位置が無ければ数えない');
   assert.equal(playErrorOf({ playError: { pos: 'DH', kind: 'throw' } }), null, '守備位置でなければ数えない');
-  assert.deepEqual(playErrorOf({ playError: { pos: '右', kind: 'throw' } }), { pos: '右', kind: 'throw' });
+  assert.deepEqual(playErrorOf({ playError: { pos: '右', kind: 'throw' } }),
+    { pos: '右', kind: 'throw', playerId: null });
   // 種類が抜けていても失策そのものは残す(捕球として扱う)
-  assert.deepEqual(playErrorOf({ playError: { pos: '遊' } }), { pos: '遊', kind: 'field' });
+  assert.deepEqual(playErrorOf({ playError: { pos: '遊' } }), { pos: '遊', kind: 'field', playerId: null });
+  // 自チームが守っていたときは誰の記録かまで残す
+  assert.deepEqual(playErrorOf({ playError: { pos: '遊', kind: 'throw', playerId: 'p1' } }),
+    { pos: '遊', kind: 'throw', playerId: 'p1' });
 });
 
 test('computeBoxScore: 開始直後でも最低1回分は返す', () => {
