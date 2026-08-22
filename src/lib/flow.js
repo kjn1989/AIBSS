@@ -373,17 +373,38 @@ export function weSeries(game, winExp) {
     const mine = l.kind === 'atbat';
     diff += mine ? runs : -runs;
 
-    // 打席後の状況 = 同じ半回の次の打席の「打席前」。無ければその半回は終わり
+    // 打席後の状況 = 同じ半回の次の打席の「打席前」。無ければその半回は終わり…
+    // ではない。いま記録したばかりの打席には、まだ次の打席が無いだけで、
+    // 半回は続いていることがある。
+    // ここを「半回が終わった」と決めつけていたので、9回表・1死・1点リードの
+    // 場面で「後攻がリードして規定回の表が終わった=試合終了」と判断され、
+    // 勝率が100%になっていた。まだ2つアウトを取らないと終わらない。
     const list = halves.get(halfKey(l)) || [];
     const nxt = list[idxInHalf.get(l.id) + 1];
     const np = nxt?.payload;
+    const inn = Number(l.inning) || 1;
+    // 「まだ続いている半回の最後の打席」かどうかは、記録ではなく試合の現在地で見る。
+    // 打席の payload だけで数えると、古い記録に outsOnPlay が無い場合に外す。
+    // 試合が終わっていれば(サヨナラ・規定回終了)ここには入らない。
+    const halfGoing = l === pas[pas.length - 1]
+      && game.status !== 'finished'
+      && Number(game.inning) === inn
+      && !!game.isTop === !!l.isTop
+      && (Number(game.outs) || 0) < 3;
     let we;
     if (np?.beforeRunners && np.outsBefore != null && np.outsBefore <= 2) {
       we = winExp({
-        inning: Number(l.inning) || 1, isTop: !!l.isTop,
+        inning: inn, isTop: !!l.isTop,
         runners: np.beforeRunners, outs: np.outsBefore, diff,
       });
-    } else if (gameDecided(winExp, Number(l.inning) || 1, !!l.isTop, diff)) {
+    } else if (halfGoing) {
+      // まだこの半回は続いている。次の打席がまだ無いだけなので、いまの塁と
+      // アウトから見る(game が持っている現在の状態がそれにあたる)
+      we = winExp({
+        inning: inn, isTop: !!l.isTop,
+        runners: game.runners || {}, outs: Math.min(2, Number(game.outs) || 0), diff,
+      });
+    } else if (gameDecided(winExp, inn, !!l.isTop, diff)) {
       // 半回が終わって試合も終わった。延長に入るのは同点のときだけ
       we = diff > 0 ? 1 : 0;
     } else {
