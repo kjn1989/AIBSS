@@ -21,7 +21,7 @@ import { aggregateScorersOver, swingScale, OPEN_MIN_SWING, OPEN_REACT_SWING } fr
 import { aggregateContrib, rankContrib, formatContrib } from '../src/lib/contrib.js';
 import { LEVEL_K, LEVEL_MIN, LEVEL_MAX, stateKey, buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, movePlays, formatRate, weShape, weSeries, stateOfKey, BASE_RE, reOf, KOSHIEN_RE, KOSHIEN_WEIGHTS, KOSHIEN_LEVEL, isKoshienMeasured, baseReFor } from '../src/lib/flow.js';
 import { teamPower, mostOff, formatPower } from '../src/lib/teamPower.js';
-import { RESULTS as RESULTS_FOR_OUT, OUT_TYPES, outTypeLabel, infieldFlyPossible, newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions, attendeesOf, lastAttendees, autoLineupFrom, lineupFromPast, subRank, resultLabelOf, isIntentionalBB } from '../src/lib/model.js';
+import { RESULTS as RESULTS_FOR_OUT, OUT_TYPES, outTypeLabel, infieldFlyPossible, newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions, attendeesOf, lastAttendees, autoLineupFrom, lineupFromPast, playErrorOf, subRank, resultLabelOf, isIntentionalBB } from '../src/lib/model.js';
 import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf, oppLettersInGame, oppBaserunning } from '../src/lib/oppBox.js';
 import { remapPlayerInGame, fillPlayerGaps } from '../src/lib/mergePlayers.js';
 import { computeBoxScore, halfPlayed } from '../src/lib/boxscore.js';
@@ -985,6 +985,59 @@ test('computeBoxScore: 延長は行われた回まで伸ばす', () => {
   for (let i = 1; i <= 11; i++) linescore[String(i)] = { my: 0, opp: 0 };
   const game = { inning: 11, linescore, atBats: [], playLogs: [], myScore: 0, oppScore: 0 };
   assert.equal(computeBoxScore(game).innings.length, 11);
+});
+
+test('computeBoxScore: 安打と失策は同じプレイに同時に付く', () => {
+  // 実際に起きた場面: 右翼へのツーベース。右翼手の送球が逸れて打者走者が三塁へ。
+  // 記録規則では二塁打1と送球失策1が同時に付く。result は1つしか持てないので
+  // 「安打か失策か」の二択になっていて、片方しか残せなかった。
+  const game = {
+    inning: 1, linescore: {}, myScore: 1, oppScore: 0,
+    atBats: [
+      { result: 'double', playError: { pos: '右', kind: 'throw' } },
+      { result: 'single' },
+    ],
+    playLogs: [],
+  };
+  const box = computeBoxScore(game);
+  assert.equal(box.my.h, 2, '二塁打は安打のまま数える');
+  assert.equal(box.opp.e, 1, '相手の失策として1つ数える');
+});
+
+test('computeBoxScore: 出塁そのものが失策の回を二重に数えない', () => {
+  const game = {
+    inning: 1, linescore: {}, myScore: 0, oppScore: 0,
+    // 出塁が失策(result='error')。playError は付けない
+    atBats: [{ result: 'error' }],
+    playLogs: [],
+  };
+  assert.equal(computeBoxScore(game).opp.e, 1, '失策は1つ');
+  assert.equal(computeBoxScore(game).my.h, 0, '失策出塁は安打にしない');
+});
+
+test('computeBoxScore: 守備側の失策は自チームのEに入る', () => {
+  const game = {
+    inning: 1, linescore: {}, myScore: 0, oppScore: 2,
+    atBats: [],
+    playLogs: [
+      // 相手の二塁打に、自軍の中堅手の送球失策が重なった
+      { kind: 'defense', payload: { result: 'double', playError: { pos: '中', kind: 'throw' } } },
+      { kind: 'defense', payload: { result: 'out' } },
+    ],
+  };
+  const box = computeBoxScore(game);
+  assert.equal(box.my.e, 1, '自チームの失策');
+  assert.equal(box.opp.h, 1, '相手の安打はそのまま');
+  assert.equal(box.opp.e, 0, '相手の失策にはしない');
+});
+
+test('playErrorOf: 位置が無いもの・知らない位置は失策として数えない', () => {
+  assert.equal(playErrorOf({}), null, '何も無ければ null');
+  assert.equal(playErrorOf({ playError: { kind: 'throw' } }), null, '位置が無ければ数えない');
+  assert.equal(playErrorOf({ playError: { pos: 'DH', kind: 'throw' } }), null, '守備位置でなければ数えない');
+  assert.deepEqual(playErrorOf({ playError: { pos: '右', kind: 'throw' } }), { pos: '右', kind: 'throw' });
+  // 種類が抜けていても失策そのものは残す(捕球として扱う)
+  assert.deepEqual(playErrorOf({ playError: { pos: '遊' } }), { pos: '遊', kind: 'field' });
 });
 
 test('computeBoxScore: 開始直後でも最低1回分は返す', () => {

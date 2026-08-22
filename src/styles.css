@@ -2584,3 +2584,11 @@ button.manage-open {
    分数は「何回中何回か」の裏取りとして小さく添える */
 .fv-rate .v .of { font-size: 14px; font-weight: 700; opacity: .5; margin-left: 6px; }
 .fv-rate .v .unit { font-size: 15px; font-weight: 700; opacity: .55; margin-left: 1px; }
+
+/* このプレイに付いた失策。安打の記録は変えず、失策だけを別に取る */
+.play-error {
+  padding: 10px 11px; border-radius: 12px;
+  background: var(--bg-3); border: 1px solid var(--border);
+}
+.pe-pos { display: grid; grid-template-columns: repeat(9, 1fr); gap: 4px; }
+.pe-pos button { padding: 8px 0; font-size: 14px; font-weight: 700; min-width: 0; }

@@ -102,6 +102,30 @@ export const DIRECTIONS = {
   SS: '遊撃', LF: '左翼', CF: '中堅', RF: '右翼',
 };
 
+// ---- 打球方向 → その打球を処理した守備位置 ----
+// 失策を記録するとき、既定の野手をここから決める。打った方向の野手が
+// 捕って投げるのが普通なので、そこを初期値にして押す回数を減らす。
+export const DIR_TO_POSITION = {
+  P: '投', C: '捕', '1B': '一', '2B': '二', '3B': '三',
+  SS: '遊', LF: '左', CF: '中', RF: '右',
+};
+
+// ---- 1つのプレイに付く失策 ----
+// 記録規則では、安打かどうかは打球そのもので決まり、そのあと守備が乱れて
+// 余分に進んだぶんは失策になる。つまり1つのプレイに安打と失策が同時に付く。
+//   例) 右翼へのツーベース。右翼手の送球が逸れて打者走者が三塁へ。
+//       → 打者は二塁打、右翼手に送球失策1
+// result は1つしか持てないので、失策は別枠(payload.playError)で持つ。
+export const ERROR_KINDS = ['field', 'throw'];
+
+// 保存された失策を読み出す。位置も種類も無いものは失策として数えない
+export function playErrorOf(payload) {
+  const e = payload?.playError;
+  if (!e || !e.pos) return null;
+  if (!FIELD_POSITIONS.includes(e.pos)) return null;
+  return { pos: e.pos, kind: ERROR_KINDS.includes(e.kind) ? e.kind : 'field' };
+}
+
 // ---- 守備位置 ----
 // '打' = 全員打ちの打撃のみ(守備につかない打者)、'控' = ベンチ
 export const POSITIONS = ['投', '捕', '一', '二', '三', '遊', '左', '中', '右', 'DH', '打', '控'];

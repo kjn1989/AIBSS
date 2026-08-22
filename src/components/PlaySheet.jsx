@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import Sheet from './Sheet.jsx';
 import { useStore, useT, usePlayerName, isMyTeamBatting } from '../state/store.jsx';
-import { RESULTS, DIRECTIONS, SO_TYPES, outTypeLabel, allowsFoul , infieldFlyPossible } from '../lib/model.js';
+import { RESULTS, DIRECTIONS, SO_TYPES, outTypeLabel, allowsFoul , infieldFlyPossible, FIELD_POSITIONS, DIR_TO_POSITION, ERROR_KINDS, playErrorOf } from '../lib/model.js';
 import { proposeMoves, batterDestOptions, runnerDestOptions, judgeAdvance } from '../lib/plays.js';
 import FieldPad from './FieldPad.jsx';
 import BattedBallPad from './BattedBallPad.jsx';
@@ -79,6 +79,11 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
   // 数え始めるとハードヒット率がすぐ嘘になるので、既定値は入れない
   const [contact, setContact] = useState(initial.contact || null);
   const [soType, setSoType] = useState(initial.soType || 'swinging');
+  // このプレイに付いた失策。安打かどうかは打球で決まるので result は触らない。
+  // 「右翼へのツーベース → 右翼手の送球が逸れて打者走者が三塁へ」は、
+  // 記録規則では二塁打1と送球失策1が同時に付く。result は1つしか持てないので別枠。
+  const [errKind, setErrKind] = useState(playErrorOf(initial)?.kind || null);
+  const [errPos, setErrPos] = useState(playErrorOf(initial)?.pos || null);
   // 敬遠(故意四球)。四球の内訳なので結果は 'bb' のまま
   const [intentional, setIntentional] = useState(!!initial.intentional);
   const [dests, setDests] = useState(() => {
@@ -240,10 +245,14 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
       : asSacFly ? (lang === 'ja' ? RESULTS.sacFly.label : t('result.sacFly'))
         : result === 'out' ? '' : (result === 'bb' && intentional) ? t('result.ibb') : resultLabel;
     const runsSuffix = runs ? t('playsheet.runsSuffix', { n: runs }) : '';
+    // 失策も確認文に出す。押したのに文に出ないと、入ったのか分からない
+    const errSuffix = errKind
+      ? t('playsheet.errSuffix', { pos: errPos || DIR_TO_POSITION[direction] || '', kind: t(`errKind.${errKind}`) })
+      : '';
     // 日本語は語のあいだに空白を入れない(「投手 フライ でよろしいですか?」になっていた)
-    if (lang === 'ja') return `${[dir, ot, label].filter(Boolean).join('')}${runsSuffix}`;
+    if (lang === 'ja') return `${[dir, ot, label].filter(Boolean).join('')}${errSuffix}${runsSuffix}`;
     // 英語は語順が異なるため、空でない要素を半角スペースで連結
-    return `${[dir, ot, label].filter(Boolean).join(' ')}${runsSuffix}`;
+    return `${[dir, ot, label].filter(Boolean).join(' ')}${errSuffix}${runsSuffix}`;
   };
 
   // 守備時: 生還する走者のうち継投を跨いだ走者(前投手の責任走者)
@@ -268,6 +277,7 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
         hitAngle: needsDir && point ? point.angle : null,
         hitDepth: needsDir && point ? point.depth : null,
         soType: result === 'so' ? soType : undefined,
+        playError: errKind ? { pos: errPos || DIR_TO_POSITION[direction] || null, kind: errKind } : null,
         intentional: result === 'bb' ? intentional : undefined,
         direction: needsDir ? direction : null,
         moves,
@@ -400,6 +410,52 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
               </button>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* このプレイに付いた失策。
+          安打かどうかは打球で決まり、そのあと守備が乱れて余分に進んだぶんは失策になる。
+          result は1つしか持てないので「安打か失策か」の二択になっていた。
+          出塁そのものが失策のとき(result='error')は、そちらで記録済みなので出さない */}
+      {needsDir && result !== 'error' && (
+        <div className="play-error mt12">
+          <div className="flex">
+            <span className="small dim grow">{t('playsheet.playError')}</span>
+            <div className="toggle-row" style={{ width: 190, marginBottom: 0 }}>
+              <button className={!errKind ? 'active' : ''} onClick={() => setErrKind(null)}>
+                {t('playsheet.errNone')}
+              </button>
+              {ERROR_KINDS.map((k) => (
+                <button
+                  key={k}
+                  className={errKind === k ? 'active' : ''}
+                  onClick={() => {
+                    setErrKind(k);
+                    // 打った方向の野手が捕って投げるのが普通。そこを初期値にする
+                    if (!errPos) setErrPos(DIR_TO_POSITION[direction] || null);
+                  }}
+                >
+                  {t(`errKind.${k}`)}
+                </button>
+              ))}
+            </div>
+          </div>
+          {errKind && (
+            <>
+              <div className="pe-pos mt8">
+                {FIELD_POSITIONS.map((p) => (
+                  <button
+                    key={p}
+                    className={errPos === p ? 'primary' : ''}
+                    onClick={() => setErrPos(p)}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+              <p className="small dim mt8">{t('playsheet.playErrorNote')}</p>
+            </>
+          )}
         </div>
       )}
 

@@ -1,7 +1,7 @@
 // ============================================================
 // 線分(イニングごとの得点)ボックススコア: R(得点)・H(安打)・E(失策)
 // ============================================================
-import { RESULTS } from './model.js';
+import { RESULTS, playErrorOf } from './model.js';
 
 export function computeBoxScore(game) {
   const linescore = game.linescore || {};
@@ -22,9 +22,16 @@ export function computeBoxScore(game) {
 
   const myH = game.atBats.filter((ab) => RESULTS[ab.result]?.hit).length;
   const oppH = game.playLogs.filter((l) => l.kind === 'defense' && RESULTS[l.payload?.result]?.hit).length;
-  // E: バッテリー側の失策で相手を出塁させた回数(自チームが守備の時にresult='error'を記録した数)
-  const myE = game.playLogs.filter((l) => l.kind === 'defense' && l.payload?.result === 'error').length;
-  const oppE = game.atBats.filter((ab) => ab.result === 'error').length;
+  // E: 失策の数。出塁させた失策(result='error')だけでなく、
+  // 安打やアウトのあとに付いた失策(payload.playError)も数える。
+  // 記録規則では安打かどうかは打球で決まり、そのあと守備が乱れて余分に
+  // 進んだぶんは失策になるので、1つのプレイに安打と失策が同時に付く。
+  // 守備側(kind='defense')の失策は自チーム、打席側(atBats)の失策は相手。
+  const errOn = (p) => (p?.result === 'error' ? 1 : 0) + (playErrorOf(p) ? 1 : 0);
+  const myE = game.playLogs
+    .filter((l) => l.kind === 'defense')
+    .reduce((n, l) => n + errOn(l.payload), 0);
+  const oppE = game.atBats.reduce((n, ab) => n + errOn(ab), 0);
 
   return {
     innings,
