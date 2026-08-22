@@ -1092,6 +1092,53 @@ test('canSwapOrder: 隣どうしだけ。離れた枠へは動かさない', () 
   assert.equal(swapOrderPlan(g, 1, 3), null, '断ったときは計画も返さない');
 });
 
+test('weSeries: 規定回の表が続いている間は勝ち確にしない', () => {
+  // 報告のあった場面: 9回表・1死・後攻が1点リード。勝率が100%と出ていた。
+  // まだ2つアウトを取らないと試合は終わらない。
+  // 原因は「次の打席が記録されていない=半回が終わった」と決めつけていたこと。
+  const model = buildWinModel({
+    dists: null, isHome: true, regulation: 9, halfStartKey: () => '000|0',
+  });
+  const mk = (outsBefore, outsOnPlay) => ({
+    id: 'p1', gameId: 'g', inning: 9, isTop: true, kind: 'defense', text: '',
+    payload: { beforeRunners: { 1: false, 2: false, 3: false }, outsBefore, outsOnPlay, runs: 0 },
+  });
+  // 自チーム(後攻)が1点リードしている状態を作る
+  const lead = {
+    id: 'p0', gameId: 'g', inning: 1, isTop: false, kind: 'atbat', text: '',
+    payload: { beforeRunners: { 1: false, 2: false, 3: false }, outsBefore: 0, outsOnPlay: 0, runs: 1 },
+  };
+
+  // 「いま9回表の1死」であることは、試合の現在地(inning/isTop/outs)で表す
+  const going = { id: 'g', inning: 9, isTop: true, outs: 1, runners: {}, playLogs: [lead, mk(0, 1)] };
+  const wGoing = weSeries(going, model);
+  const last = wGoing[wGoing.length - 1];
+  assert.ok(last.we < 1, `1死ではまだ勝ち確にしない: ${last.we}`);
+  assert.ok(last.we > 0.5, `1点リードなので優勢ではある: ${last.we}`);
+
+  // 3つ目のアウトを取れば、規定回の表が終わって試合も終わる
+  // 3アウトで半回が終わり、次の半回へ進んでいる
+  const done = { id: 'g', inning: 9, isTop: false, outs: 0, runners: {}, playLogs: [lead, mk(2, 1)] };
+  const wDone = weSeries(done, model);
+  assert.equal(wDone[wDone.length - 1].we, 1, '2死からのアウトで試合終了');
+});
+
+test('weSeries: サヨナラは3アウトを待たずに終わる', () => {
+  const model = buildWinModel({
+    dists: null, isHome: true, regulation: 9, halfStartKey: () => '000|0',
+  });
+  // 9回裏、無死で1点入って後攻がリード = サヨナラ
+  const walkOff = {
+    id: 'g', inning: 9, isTop: false, outs: 0, status: 'finished', runners: {},
+    playLogs: [{
+      id: 'p1', gameId: 'g', inning: 9, isTop: false, kind: 'atbat', text: '',
+      payload: { beforeRunners: { 1: false, 2: false, 3: true }, outsBefore: 0, outsOnPlay: 0, runs: 1 },
+    }],
+  };
+  const w = weSeries(walkOff, model);
+  assert.equal(w[w.length - 1].we, 1, 'アウトを待たずに勝ち');
+});
+
 test('logTextOf: 相手打者は、あとから入れた名前で読み替える', () => {
   // 名前は試合中に後から入る。記録した時点では記号しか無いので、文には
   // 「相手打者A(1番)」と焼き付いている。オーダーに名前が出ているのに
