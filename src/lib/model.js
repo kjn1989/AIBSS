@@ -228,6 +228,26 @@ export function lastAttendees(games = []) {
 // 戻り値: { lineup: [{ playerId, position }], unfilled: [位置] }
 // max: 打順の枠数(全員打ちでは9より多い)
 // benchPosition: 守備に付かなかった人の位置。全員打ちでは打つので '打'、ふつうは '控'
+// 過去の試合からオーダーを引き継ぐ。
+// DH制かどうかも一緒に持ってこないといけない。ここを揃えずに打順だけ写すと、
+// DHのオーダーを読み込んだのに useDH は false のままになり、
+// 「投」の候補が打者一覧(＝投手が一人も居ない)になって先発を選べなくなる。
+// 戻り値: { selected, useDH, pitcherId }
+export function lineupFromPast(game, availableIds = []) {
+  const existing = new Set(availableIds);
+  const selected = (game?.lineup || [])
+    .filter((l) => existing.has(l.playerId))
+    .sort((a, b) => a.order - b.order)
+    .map((l) => ({ playerId: l.playerId, position: l.position || '' }));
+  const useDH = selected.some((l) => l.position === 'DH');
+  if (!useDH) return { selected, useDH, pitcherId: '' };
+  // DH制の投手は打順の外に居る。打順に入ってしまった人を投手にはできない
+  const inOrder = new Set(selected.map((l) => l.playerId));
+  const past = game?.pitcherId || (game?.lineup || []).find((l) => l.position === '投')?.playerId || '';
+  const ok = past && existing.has(past) && !inOrder.has(past);
+  return { selected, useDH, pitcherId: ok ? past : '' };
+}
+
 export function autoLineupFrom(players = [], { max = 9, benchPosition = '控' } = {}) {
   const taken = new Set();
   const assigned = {}; // 位置 -> playerId
