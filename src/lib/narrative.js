@@ -55,8 +55,13 @@ function basesAfter(items, i, ctx) {
 }
 
 const payloadOf = (item) => item?.log?.payload || null;
+// 犠打・犠飛は、アウトにはなるが打ち取られたのではない。狙って走者を進めた
+// 成功したプレイなので、「倒れ」「打ち取り」の側に入れてはいけない。
+// (8回の送りバントが「バントに倒れ」と書かれていた。実際は試合を決めた1つ)
+const isSacPlay = (p) => p?.result === 'sacBunt' || p?.result === 'sacFly';
 const isOutPlay = (p) => {
   const def = RESULTS[p?.result];
+  if (isSacPlay(p)) return false;
   return !!def && !def.onBase && !(Number(p.runs) || 0);
 };
 
@@ -110,7 +115,10 @@ function toEvents(items, ctx) {
   for (let i = 0; i < items.length; i += 1) {
     const p = payloadOf(items[i]);
     if (!p || !p.result || !RESULTS[p.result]) continue;
-    if (isOutPlay(p)) {
+    if (isSacPlay(p)) {
+      // 打ち取られた側にも出塁した側にもまとめない。どちらの言い方も合わない
+      events.push({ kind: 'sac', items: [items[i]], at: items[i], mine: items[i].mine, index: i });
+    } else if (isOutPlay(p)) {
       const group = [items[i]];
       while (i + 1 < items.length) {
         const np = payloadOf(items[i + 1]);
@@ -180,8 +188,22 @@ function phraseOf(ev, ctx, items, end) {
   if (!who) return null;
   const what = whatOf(p, ctx);
   const runs = Number(p.runs) || 0;
+  if (ev.kind === 'sac') {
+    // 呼び名は打球方向を外して「送りバント」「犠牲フライ」にする。
+    // 「投手バント」だと、狙って転がしたことより打球方向のほうが前に出る
+    const sacWhat = ctx.t(p.result === 'sacFly' ? 'nr.sacFly' : 'nr.sacBunt');
+    if (runs > 0) {
+      return ctx.t(`nr.${side}.sacRuns.${tail}`, {
+        who, what: sacWhat, score: scoreWord(ev.at, ctx.scoreBefore?.(ev.at), ctx, end),
+      });
+    }
+    return ctx.t(`nr.${side}.sac.${tail}`, { who, what: sacWhat });
+  }
   if (runs > 0) {
-    return ctx.t(`nr.${side}.runs.${tail}`, {
+    // 打者が出ていないのに点が入ったなら、その打席が点を取ったわけではない。
+    // 暴投・捕逸・失策で還っている。「三振で勝ち越し」は起きていないことを書く形。
+    const key = RESULTS[p.result]?.onBase ? 'runs' : 'outRuns';
+    return ctx.t(`nr.${side}.${key}.${tail}`, {
       who, what, score: scoreWord(ev.at, ctx.scoreBefore?.(ev.at), ctx, end),
     });
   }
