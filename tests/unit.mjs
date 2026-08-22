@@ -4341,11 +4341,15 @@ test('流れ: RE24の積み上げは回の切れ目で点差と一致する(勝�
 });
 
 test('流れ: 線の形をひとことで言う', () => {
-  const mk = (rows) => rows.map(([we, diff], i) => ({ we, diff, inning: i + 1, isTop: true }));
+  const mk = (rows) => rows.map(([we, diff], i, arr) => ({
+    we, diff, inning: i + 1, isTop: true, delta: we - (arr[i - 1]?.[0] ?? 0.5),
+  }));
   const sh = weShape(mk([[0.5, 0], [0.3, -1], [0.18, -2], [0.6, 1], [0.94, 3]]));
   assert.equal(sh.n, 5, '母数は打席数(経過時間は記録していない)');
   assert.equal(sh.lowest.we, 0.18, 'いちばん苦しかった打席');
-  assert.equal(sh.highest.we, 0.94, 'いちばん良かった打席');
+  // 1打席で動いた最大幅は上下とも出す(「いちばん良かった打席」は出さない)
+  assert.ok(Math.abs(sh.bestUp.delta - 0.42) < 1e-9, `上へいちばん動いた: ${sh.bestUp.delta}`);
+  assert.ok(Math.abs(sh.bestDown.delta + 0.2) < 1e-9, `下へいちばん動いた: ${sh.bestDown.delta}`);
   // 割合は点差だけで決まる(勝率は後攻が最後に打つぶん偏るので割合には使わない)
   assert.equal(sh.aheadPct, 40);
   assert.equal(sh.tiedPct, 20);
@@ -4410,6 +4414,34 @@ test('WE: 勝負がついた場面を正しく振り切る', () => {
   const clean = we({ inning: 9, isTop: false, runners: EMPTY, outs: 2, diff: 1 });
   const jam = we({ inning: 9, isTop: false, runners: { 1: true, 2: true, 3: true }, outs: 2, diff: 1 });
   assert.ok(jam < clean, '満塁のほうが苦しい');
+});
+
+test('weShape: 勝った試合の「いちばん良かった」は出さない', () => {
+  // 試合が決まった打席は勝率がちょうど100%になる。それを最大として出すと、
+  // 勝った試合では必ず最後の打席になり、当たり前のことしか言わない。
+  const mk = (id, we, delta) => ({ id, we, delta, diff: 1, inning: 1, isTop: true });
+  const shape = weShape([mk('a', 0.5, 0), mk('b', 0.22, -0.28), mk('c', 0.88, 0.66), mk('d', 1, 0.12)]);
+  assert.equal(shape.highest, undefined, '「いちばん良かった」は返さない');
+  // 苦しかったほうは、決着した打席を除いて探す
+  assert.equal(shape.lowest.id, 'b', '底は実際に苦しかった打席');
+  // 1打席で動いた最大幅は上下とも出す
+  assert.equal(shape.bestUp.id, 'c');
+  assert.equal(shape.bestDown.id, 'b');
+});
+
+test('weShape: 負けた試合でも、底は0%の打席にならない', () => {
+  const mk = (id, we, delta) => ({ id, we, delta, diff: -1, inning: 1, isTop: true });
+  const shape = weShape([mk('a', 0.5, 0), mk('b', 0.18, -0.32), mk('c', 0.3, 0.12), mk('d', 0, -0.3)]);
+  assert.equal(shape.lowest.id, 'b', '決着した0%の打席は底にしない');
+  // サヨナラ負けのように、決着した打席がいちばん大きく動くことはある
+  assert.equal(shape.bestDown.id, 'b');
+});
+
+test('weShape: 決着していない試合は全打席から探す', () => {
+  const mk = (id, we, delta) => ({ id, we, delta, diff: 0, inning: 1, isTop: true });
+  const shape = weShape([mk('a', 0.5, 0), mk('b', 0.3, -0.2), mk('c', 0.7, 0.4)]);
+  assert.equal(shape.lowest.id, 'b');
+  assert.equal(shape.bestUp.id, 'c');
 });
 
 test('WE: 線は0〜100%に収まり、打席ごとの動きが線の差になる', () => {

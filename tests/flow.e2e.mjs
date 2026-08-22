@@ -168,6 +168,18 @@ try {
   check('三者凡退の回は安打欄が空', hits[1]?.hit === '', JSON.stringify(hits[1]));
   check('得点と安打が別の数字として出ている', hits[0]?.run === '4' && hits[0]?.hit === '4', JSON.stringify(hits[0]));
 
+  // --- 線の形は「大きく動いたところ」と「底」で言う ---
+  // 「いちばん良かった」は勝った試合だと必ず最後の打席(勝率100%)になり、
+  // 当たり前のことしか言わない
+  const peaks = await page.locator('.fv-peaks').innerText();
+  check('いちばん良かったは出さない', !peaks.includes('いちばん良かった'), peaks);
+  check('1打席で動いた最大幅を上下とも出す',
+    /1打席で動いた最大幅 ↑ \+\d+%（.+?） ↓ −\d+%（.+?）/.test(peaks.replace(/\n/g, ' ')), peaks);
+  check('いちばん苦しかったところは残す', peaks.includes('いちばん苦しかった'), peaks);
+  // 決着した打席(勝率ちょうど100%/0%)を底にしない
+  const lowV = peaks.match(/いちばん苦しかったのは .+?（勝率 (\d+)%）/);
+  check('底が0%になっていない', !!lowV && Number(lowV[1]) > 0, peaks);
+
   // --- 点差の内訳が勝率と読み違えられない ---
   // すぐ上に「勝率 7%」が並ぶので、この%が何の割合かを見出しと実数で示す
   const leadTxt = await page.locator('.fv-now').innerText();
