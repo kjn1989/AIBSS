@@ -123,7 +123,28 @@ export function playErrorOf(payload) {
   const e = payload?.playError;
   if (!e || !e.pos) return null;
   if (!FIELD_POSITIONS.includes(e.pos)) return null;
-  return { pos: e.pos, kind: ERROR_KINDS.includes(e.kind) ? e.kind : 'field' };
+  return {
+    pos: e.pos,
+    kind: ERROR_KINDS.includes(e.kind) ? e.kind : 'field',
+    playerId: e.playerId || null,
+  };
+}
+
+// ---- ファインプレー ----
+// 失策の裏返し。どちらも「守備がふつうではなかった」の記録で、向きが逆なだけ。
+// だから入力も同じ場所に置き、同じ形で持つ。
+//
+// これが無いと、守備の価値が片側しか残らない。守備側の勝利貢献・得点貢献は
+// その打席を投げていた投手に全部付くので(contrib.js)、遊撃手が飛びついて
+// 捕っても野手には何も残らなかった。失策だけ残って好守は残らない。
+//
+// アウトに限らない。打球を止めて進塁を防いだのも好守なので、
+// 打球のあるプレイなら押せる。
+export function finePlayOf(payload) {
+  const f = payload?.finePlay;
+  if (!f || !f.pos) return null;
+  if (!FIELD_POSITIONS.includes(f.pos)) return null;
+  return { pos: f.pos, playerId: f.playerId || null };
 }
 
 // ---- 守備位置 ----

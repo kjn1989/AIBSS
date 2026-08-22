@@ -2593,7 +2593,14 @@ button.manage-open {
   background: var(--bg-3); border: 1px solid var(--border);
 }
 .pe-pos { display: grid; grid-template-columns: repeat(9, 1fr); gap: 4px; }
-.pe-pos button { padding: 8px 0; font-size: 14px; font-weight: 700; min-width: 0; }
+/* ファインプレーは失策と同じ場所に置くので、色で向きの違いを出す */
+.play-error .toggle-row button.active.fine { background: var(--green); border-color: var(--green); }
+.pe-pos button { padding: 8px 0 6px; font-size: 14px; font-weight: 700; min-width: 0; }
+/* 誰が守っているか。名前が出ていなければ、その位置が空だと一目で分かる */
+.pe-pos button i {
+  display: block; font-style: normal; font-size: 9px; font-weight: 600; opacity: .65;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px;
+}
 
 /* 打順を直すモードの▲▼ */
 .ord-move { display: flex; gap: 4px; flex: none; }

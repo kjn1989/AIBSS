@@ -3,7 +3,7 @@
 // games(対象試合の配列) から選手別に集計する。
 // 「試合単位/シーズン通算」の切替は呼び出し側が games を絞って渡す。
 // ============================================================
-import { RESULTS, formatIP } from './model.js';
+import { RESULTS, formatIP, playErrorOf, finePlayOf } from './model.js';
 
 // ---- 打者: 足し算カウントスタッツ(タイトル系) ----
 // バットに当たって前に飛んだ打席か。ハードヒット率の分母はここから作る
@@ -124,6 +124,43 @@ export function aggregateBatting(games) {
 }
 
 // ---- 投手: カウントスタッツ ----
+// ------------------------------------------------------------
+// 守備の記録
+//
+// 打った・投げたは残るのに、守った記録は失策すら選手に付いていなかった。
+// 守備側の勝利貢献・得点貢献はその打席を投げていた投手に全部付く(contrib.js)ので、
+// 遊撃手が飛びついて捕っても野手には何も残らない。
+//
+// ここで数えるのは自チームが守っていたとき(kind='defense')だけ。
+// 自チームの攻撃で相手の野手が見せた好守は、相手の選手名を持っていないので
+// 位置しか残せず、個人の記録にはできない。
+//
+// 誰の記録かは、そのプレイを記録した時点でその位置を守っていた選手(playerId)で
+// 決める。位置だけで後から引き当てると、途中で守備を代わったときに
+// 交代後の選手の記録になってしまう。
+// ------------------------------------------------------------
+export function aggregateFielding(games = []) {
+  const map = {};
+  const get = (pid) => {
+    if (!map[pid]) map[pid] = { playerId: pid, fine: 0, errors: 0, games: new Set() };
+    return map[pid];
+  };
+  for (const g of games || []) {
+    for (const log of g.playLogs || []) {
+      if (log.kind !== 'defense') continue;
+      const fine = finePlayOf(log.payload);
+      const err = playErrorOf(log.payload);
+      if (fine?.playerId) { const s = get(fine.playerId); s.fine += 1; s.games.add(g.id); }
+      if (err?.playerId) { const s = get(err.playerId); s.errors += 1; s.games.add(g.id); }
+    }
+  }
+  return Object.values(map).map((s) => ({ ...s, games: s.games.size }));
+}
+
+// 並べ替え: ファインプレーの多い順。同数なら失策の少ない順
+export const rankFielding = (rows = []) =>
+  [...rows].sort((a, b) => (b.fine - a.fine) || (a.errors - b.errors));
+
 export function aggregatePitching(games) {
   const map = {}; // playerId -> stats
   const get = (pid) => {

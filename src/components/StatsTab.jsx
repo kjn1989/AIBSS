@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useStore, usePlayerName, useT } from '../state/store.jsx';
-import { aggregateBatting, aggregatePitching, pitchingMetrics, DETAIL_METRICS, detailRanking, battingMetrics, fmtAvg, mLabel, defaultInningBasis } from '../lib/stats.js';
+import { aggregateBatting, aggregatePitching, aggregateFielding, rankFielding, pitchingMetrics, DETAIL_METRICS, detailRanking, battingMetrics, fmtAvg, mLabel, defaultInningBasis } from '../lib/stats.js';
 import { formatIP } from '../lib/model.js';
 import GameScopeToggle, { scopedGames } from './GameScopeToggle.jsx';
 import TeamPowerCard from './TeamPowerCard.jsx';
@@ -46,6 +46,7 @@ export default function StatsTab() {
     : null;
   const batting = useMemo(() => aggregateBatting(games), [games]);
   const pitching = useMemo(() => aggregatePitching(games), [games]);
+  const fielding = useMemo(() => rankFielding(aggregateFielding(games)), [games]);
 
   const metric = DETAIL_METRICS.find((m) => m.key === metricKey);
   const rows = useMemo(() => detailRanking(metric, batting, pitching, statTr, inningBasis), [metric, batting, pitching, lang, inningBasis]);
@@ -130,6 +131,7 @@ export default function StatsTab() {
 
       <BattingSummaryTable batting={batting} nameOf={nameOf} onOpenPlayer={setPlayerId} tenureOf={tenureOf} />
       <PitchingSummaryTable pitching={pitching} nameOf={nameOf} onOpenPlayer={setPlayerId} tenureOf={tenureOf} />
+      <FieldingSummaryTable rows={fielding} nameOf={nameOf} onOpenPlayer={setPlayerId} tenureOf={tenureOf} />
       <MatchupCard games={games} onOpenPlayer={setPlayerId} />
       <BatteryCard games={games} />
       <OffenseCard games={games} />
@@ -188,6 +190,44 @@ function BattingSummaryTable({ batting, nameOf, onOpenPlayer, tenureOf }) {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+// 守備の記録。打った・投げたは残るのに、守った記録が選手に付いていなかった。
+// ファインプレーと失策は「守備がふつうではなかった」の裏表なので並べて出す。
+// 押した回数そのものなので、率にはしない(分母になる「守備機会」を持っていない)。
+function FieldingSummaryTable({ rows, nameOf, onOpenPlayer, tenureOf }) {
+  const t = useT();
+  // 誰も押していない = この機能をまだ使っていない。空の表は出さない
+  if (!rows?.length) return null;
+  return (
+    <div className="card">
+      <h2>{t('stats.fieldingTable')}</h2>
+      <p className="small dim" style={{ marginTop: -4 }}>{t('stats.fieldingNote')}</p>
+      <table className="rank-table">
+        <thead>
+          <tr>
+            <th>{t('stats.col.fielder')}</th>
+            <th className="num">{t('stats.col.fine')}</th>
+            <th className="num">{t('stats.col.e')}</th>
+            <th className="num">{t('stats.col.g')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((s) => (
+            <tr key={s.playerId} onClick={() => onOpenPlayer?.(s.playerId)} role="button">
+              <td style={{ color: 'var(--accent)', fontWeight: 700 }}>
+                {nameOf(s.playerId)}
+                {tenureOf?.(s.playerId) && <span className="tenure">{tenureOf(s.playerId)}</span>}
+              </td>
+              <td className="num"><b>{s.fine ? `✦${s.fine}` : '—'}</b></td>
+              <td className="num">{s.errors || '—'}</td>
+              <td className="num">{s.games}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import Sheet from './Sheet.jsx';
 import { useStore, useT, usePlayerName, isMyTeamBatting } from '../state/store.jsx';
-import { RESULTS, DIRECTIONS, SO_TYPES, outTypeLabel, allowsFoul , infieldFlyPossible, FIELD_POSITIONS, DIR_TO_POSITION, ERROR_KINDS, playErrorOf } from '../lib/model.js';
+import { RESULTS, DIRECTIONS, SO_TYPES, outTypeLabel, allowsFoul , infieldFlyPossible, FIELD_POSITIONS, DIR_TO_POSITION, ERROR_KINDS, playErrorOf, finePlayOf } from '../lib/model.js';
 import { proposeMoves, batterDestOptions, runnerDestOptions, judgeAdvance } from '../lib/plays.js';
 import FieldPad from './FieldPad.jsx';
 import BattedBallPad from './BattedBallPad.jsx';
@@ -79,11 +79,24 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
   // 数え始めるとハードヒット率がすぐ嘘になるので、既定値は入れない
   const [contact, setContact] = useState(initial.contact || null);
   const [soType, setSoType] = useState(initial.soType || 'swinging');
-  // このプレイに付いた失策。安打かどうかは打球で決まるので result は触らない。
+  // この打球の守備。ふつう / ファインプレー / 失策 の3つ。
+  // どちらも「守備がふつうではなかった」の記録で、向きが逆なだけなので同じ場所に置く。
+  // 失策: 安打かどうかは打球で決まるので result は触らない。
   // 「右翼へのツーベース → 右翼手の送球が逸れて打者走者が三塁へ」は、
   // 記録規則では二塁打1と送球失策1が同時に付く。result は1つしか持てないので別枠。
-  const [errKind, setErrKind] = useState(playErrorOf(initial)?.kind || null);
-  const [errPos, setErrPos] = useState(playErrorOf(initial)?.pos || null);
+  const [defKind, setDefKind] = useState(
+    finePlayOf(initial) ? 'fine' : (playErrorOf(initial) ? playErrorOf(initial).kind : null),
+  );
+  const [defPos, setDefPos] = useState(
+    finePlayOf(initial)?.pos || playErrorOf(initial)?.pos || null,
+  );
+  // その位置を守っている選手。自チームの守備のときだけ意味がある
+  const nameAtPos = (pos) => {
+    const pid = (game.lineup || []).find((l) => l.position === pos)?.playerId;
+    return pid ? nameOf(pid) : '';
+  };
+  const isFine = defKind === 'fine';
+  const isErr = defKind === 'field' || defKind === 'throw';
   // 敬遠(故意四球)。四球の内訳なので結果は 'bb' のまま
   const [intentional, setIntentional] = useState(!!initial.intentional);
   const [dests, setDests] = useState(() => {
@@ -252,10 +265,11 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
     const destSuffix = batterTo !== proposal.batterTo && batterTo !== 'out' && batterTo !== 4
       ? t('playsheet.batterDest', { base: t(`base.${batterTo}`) })
       : '';
-    // 失策も確認文に出す。押したのに文に出ないと、入ったのか分からない
-    const errSuffix = errKind
-      ? t('playsheet.errSuffix', { pos: errPos || DIR_TO_POSITION[direction] || '', kind: t(`errKind.${errKind}`) })
-      : '';
+    // 守備も確認文に出す。押したのに文に出ないと、入ったのか分からない
+    const dPos = defPos || DIR_TO_POSITION[direction] || '';
+    const errSuffix = isErr
+      ? t('playsheet.errSuffix', { pos: dPos, kind: t(`errKind.${defKind}`) })
+      : isFine ? t('playsheet.fineSuffix', { pos: dPos }) : '';
     // 日本語は語のあいだに空白を入れない(「投手 フライ でよろしいですか?」になっていた)
     if (lang === 'ja') return `${[dir, ot, label].filter(Boolean).join('')}${destSuffix}${errSuffix}${runsSuffix}`;
     // 英語は語順が異なるため、空でない要素を半角スペースで連結
@@ -284,7 +298,8 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
         hitAngle: needsDir && point ? point.angle : null,
         hitDepth: needsDir && point ? point.depth : null,
         soType: result === 'so' ? soType : undefined,
-        playError: errKind ? { pos: errPos || DIR_TO_POSITION[direction] || null, kind: errKind } : null,
+        playError: isErr ? { pos: defPos || DIR_TO_POSITION[direction] || null, kind: defKind } : null,
+        finePlay: isFine ? { pos: defPos || DIR_TO_POSITION[direction] || null } : null,
         intentional: result === 'bb' ? intentional : undefined,
         direction: needsDir ? direction : null,
         moves,
@@ -420,47 +435,75 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
         </div>
       )}
 
-      {/* このプレイに付いた失策。
-          安打かどうかは打球で決まり、そのあと守備が乱れて余分に進んだぶんは失策になる。
-          result は1つしか持てないので「安打か失策か」の二択になっていた。
-          出塁そのものが失策のとき(result='error')は、そちらで記録済みなので出さない */}
-      {needsDir && result !== 'error' && (
+      {/* この打球の守備。ファインプレーと失策は「守備がふつうではなかった」の
+          裏表なので、同じ場所に3択で置く。
+          失策側: 安打かどうかは打球で決まり、そのあと守備が乱れて余分に進んだ
+          ぶんは失策になる。result は1つしか持てないので「安打か失策か」の
+          二択になっていた。
+          好守側: 守備の勝利貢献はその打席の投手に全部付くので、野手には何も
+          残らなかった。失策だけ残って好守は残らないのは片側だけの記録。
+          出塁そのものが失策のとき(result='error')は失策側だけ隠す */}
+      {needsDir && (
         <div className="play-error mt12">
           <div className="flex">
-            <span className="small dim grow">{t('playsheet.playError')}</span>
-            <div className="toggle-row" style={{ width: 190, marginBottom: 0 }}>
-              <button className={!errKind ? 'active' : ''} onClick={() => setErrKind(null)}>
-                {t('playsheet.errNone')}
+            <span className="small dim grow">{t('playsheet.playDefense')}</span>
+            <div className="toggle-row" style={{ width: 210, marginBottom: 0 }}>
+              <button className={!defKind ? 'active' : ''} onClick={() => setDefKind(null)}>
+                {t('playsheet.defNone')}
               </button>
-              {ERROR_KINDS.map((k) => (
+              <button
+                className={isFine ? 'active fine' : ''}
+                onClick={() => {
+                  setDefKind('fine');
+                  if (!defPos) setDefPos(DIR_TO_POSITION[direction] || null);
+                }}
+              >
+                {t('playsheet.finePlay')}
+              </button>
+              {result !== 'error' && (
                 <button
-                  key={k}
-                  className={errKind === k ? 'active' : ''}
+                  className={isErr ? 'active' : ''}
                   onClick={() => {
-                    setErrKind(k);
-                    // 打った方向の野手が捕って投げるのが普通。そこを初期値にする
-                    if (!errPos) setErrPos(DIR_TO_POSITION[direction] || null);
+                    setDefKind(isErr ? defKind : 'field');
+                    if (!defPos) setDefPos(DIR_TO_POSITION[direction] || null);
                   }}
                 >
+                  {t('playsheet.errShort')}
+                </button>
+              )}
+            </div>
+          </div>
+          {/* 失策は捕球か送球かで意味が違う。好守は分けない(分ける言葉が定まっていない) */}
+          {isErr && (
+            <div className="toggle-row mt8" style={{ marginBottom: 0 }}>
+              {ERROR_KINDS.map((k) => (
+                <button key={k} className={defKind === k ? 'active' : ''} onClick={() => setDefKind(k)}>
                   {t(`errKind.${k}`)}
                 </button>
               ))}
             </div>
-          </div>
-          {errKind && (
+          )}
+          {defKind && (
             <>
+              {/* 自チームが守っているときは、その位置を誰が守っているかも出す。
+                  守備位置を決めていない試合だと選手に紐づかず、成績に積み上がらない。
+                  名前が出ていなければそれが一目で分かる */}
               <div className="pe-pos mt8">
                 {FIELD_POSITIONS.map((p) => (
                   <button
                     key={p}
-                    className={errPos === p ? 'primary' : ''}
-                    onClick={() => setErrPos(p)}
+                    className={defPos === p ? 'primary' : ''}
+                    onClick={() => setDefPos(p)}
                   >
                     {p}
+                    {!myBatting && <i>{nameAtPos(p) || '—'}</i>}
                   </button>
                 ))}
               </div>
-              <p className="small dim mt8">{t('playsheet.playErrorNote')}</p>
+              {!myBatting && defPos && !nameAtPos(defPos) && (
+                <div className="warn-box mt8">{t('playsheet.noFielderAt', { pos: defPos })}</div>
+              )}
+              <p className="small dim mt8">{isFine ? t('playsheet.finePlayNote') : t('playsheet.playErrorNote')}</p>
             </>
           )}
         </div>
