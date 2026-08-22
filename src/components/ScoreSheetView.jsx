@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useStore, usePlayerName, useT } from '../state/store.jsx';
-import { RESULTS, DIRECTIONS, formatIP, resultCategory, multiOutLabel } from '../lib/model.js';
+import { RESULTS, formatIP, resultCategory, multiOutLabel } from '../lib/model.js';
+import { shortLabel } from '../lib/notation.js';
 import { computeBoxScore } from '../lib/boxscore.js';
 import { buildLineupRows, assignAtBatsByPlayer } from '../lib/lineupBox.js';
 import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf } from '../lib/oppBox.js';
@@ -14,48 +15,6 @@ import LiveRulesSheet from './LiveRulesSheet.jsx';
 
 // 打席結果の超短縮表記(スコアシートのセル用): 例「中安」「遊ゴ」「左本」「四球」/ 英語は "LF1B" 等。
 // editionが少年野球のときは 併殺→ゲ, エラー→エ の親しみ表記。
-function shortLabel(ab, edition, lang, t) {
-  if (lang === 'en') {
-    const d = ab.direction ? t(`dir.${ab.direction}`) : '';
-    switch (ab.result) {
-      case 'single': return `${d}1B`;
-      case 'double': return `${d}2B`;
-      case 'triple': return `${d}3B`;
-      case 'hr': return `${d}HR`;
-      case 'out': return `${d}${{ ground: 'GO', fly: 'FO', liner: 'LO', dp: 'DP' }[ab.outType] || 'GO'}`;
-      case 'so': return ab.soType === 'looking' ? 'ꓘ' : 'K';
-      case 'bb': return ab.intentional ? 'IBB' : 'BB';
-      case 'hbp': return 'HBP';
-      case 'error': return `${d}E`;
-      case 'sacBunt': return 'SAC';
-      case 'sacFly': return `${d}SF`;
-      case 'interference': return 'INT';
-      case 'obstruction': return 'OBS';
-      case 'fieldInterference': return 'FINT';
-      default: return RESULTS[ab.result]?.short || '';
-    }
-  }
-  const dir = ab.direction ? DIRECTIONS[ab.direction][0] : '';
-  const dpShort = edition === '少年野球' ? 'ゲ' : '併';
-  switch (ab.result) {
-    case 'single': return `${dir}安`;
-    case 'double': return `${dir}2`;
-    case 'triple': return `${dir}3`;
-    case 'hr': return `${dir}本`;
-    case 'out': return `${dir}${{ ground: 'ゴ', fly: '飛', liner: '直', dp: dpShort }[ab.outType] || 'ゴ'}`;
-    case 'so': return ab.soType === 'looking' ? '見三振' : '三振';
-    case 'bb': return ab.intentional ? '敬遠' : '四球';
-    case 'hbp': return '死球';
-    case 'error': return `${dir}エ`;
-    case 'sacBunt': return '犠打';
-    case 'sacFly': return `${dir}犠飛`;
-    case 'interference': return '打妨';
-    case 'obstruction': return '走妨';
-    case 'fieldInterference': return '守妨';
-    default: return RESULTS[ab.result]?.short || '';
-  }
-}
-
 // 印刷用スコアシート: 打順×イニングのマトリクス + 線分スコア + 投手成績
 export default function ScoreSheetView({ game, onClose }) {
   const { state } = useStore();

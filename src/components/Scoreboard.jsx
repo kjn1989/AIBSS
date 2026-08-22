@@ -1,6 +1,9 @@
 import React from 'react';
 import { useStore, useT, usePlayerName, isMyTeamBatting } from '../state/store.jsx';
 import { computeBoxScore, halfPlayed, hitsByInning } from '../lib/boxscore.js';
+import { resultCategory } from '../lib/model.js';
+import { shortLabel } from '../lib/notation.js';
+import { oppNameOf } from '../lib/oppBox.js';
 
 // チーム名の頭文字(先頭グラフェム)。空なら控えの記号を返す。
 function initialOf(name, fallback) {
@@ -60,6 +63,7 @@ export default function Scoreboard({ game }) {
   const { state } = useStore();
   const t = useT();
   const nameOf = usePlayerName();
+  const lang = state.settings.lang || 'ja';
 
   const myName = state.settings.teamName || t('scoreboard.you');
   const oppName = game.opponent || t('scoreboard.opponent');
@@ -94,6 +98,19 @@ export default function Scoreboard({ game }) {
   const awayTotals = game.isHome ? box.opp : box.my;
   const homeTotals = game.isHome ? box.my : box.opp;
 
+  // 直前に記録した打席。ベンチや観戦している人が、いま何が起きたかを
+  // スコアボードだけで追えるようにする。表記と色はスコアシートと同じものを使う
+  // (同じプレイが画面ごとに違う書き方になると、別のことに見える)
+  const lastPa = [...(game.playLogs || [])]
+    .reverse()
+    .find((l) => l.kind === 'atbat' || l.kind === 'defense');
+  const lastPaText = lastPa
+    ? shortLabel(lastPa.payload || {}, state.settings.edition, lang, t)
+    : '';
+  const lastPaWho = lastPa
+    ? (lastPa.kind === 'defense' ? oppNameOf(game, lastPa.payload?.letter) : nameOf(lastPa.payload?.playerId))
+    : '';
+
   // B/S/O: 進行中打席の投球バッファと現在アウト数から点灯状態を作る
   const pitches = game.pending?.pitches || [];
   const balls = Math.min(pitches.filter((p) => p.type === 'ball').length, 3);
@@ -126,8 +143,19 @@ export default function Scoreboard({ game }) {
   return (
     <div className="led-scoreboard">
       <div className="led-inn">
-        {game.rules && game.inning > game.rules.innings && t('scoreboard.extra')}
-        {t(game.isTop ? 'scoreboard.top' : 'scoreboard.bottom', { n: game.inning })}
+        <span className="li-inn">
+          {game.rules && game.inning > game.rules.innings && t('scoreboard.extra')}
+          {t(game.isTop ? 'scoreboard.top' : 'scoreboard.bottom', { n: game.inning })}
+        </span>
+        <span className="li-live">
+          <span className="li-pc">{t('pitch.count.thisAtBat', { n: pitches.length })}</span>
+          {lastPaText && (
+            <span className={`li-last ss-cell ${resultCategory(lastPa.payload?.result)}`}>
+              {lastPaWho && <i>{lastPaWho}</i>}
+              {lastPaText}
+            </span>
+          )}
+        </span>
       </div>
 
       <div className="led-board">
