@@ -43,7 +43,7 @@ export default function HeadCoachView({ game, canApply, onClose }) {
   const run = async () => {
     setError('');
     setLoading(true);
-    const r = await generateLineup({ apiKey, players, dh });
+    const r = await generateLineup({ apiKey, players, dh, edition: state.settings.edition });
     setLoading(false);
     if (!r) {
       setError('Gemini APIキーが未設定か、オフラインです。設定タブでキーを追加してください。');

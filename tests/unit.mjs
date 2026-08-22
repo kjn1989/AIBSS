@@ -6,6 +6,7 @@ import { proposeMoves, judgeAdvance, batterDestOptions } from '../src/lib/plays.
 import { gameEndCheck, initialPresetIdFor, describeRules, rulesAtInning, currentRules, fieldCountAt, isTiebreakInning, diffLiveRules, describeRulePatch, runnersPlaced, placedRunsScored, halfKeyOf, DEFAULT_TIEBREAK, ALL_BAT_MAX, TIEBREAK_RUNNERS, allBatSize, lineupSlotsFor } from '../src/lib/rules.js';
 import { aggregateFielding, rankFielding, aggregateBatting, aggregatePitching, battingMetrics, pitchingMetrics, titleLeaders, DETAIL_METRICS, detailRanking, defaultInningBasis } from '../src/lib/stats.js';
 import { translate } from '../src/lib/i18n.js';
+import { newspaperPrompt, editionForPrompt } from '../src/lib/gemini.js';
 import { swapOrderPlan, canSwapOrder } from '../src/lib/lineupOrder.js';
 import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, needsComplexConfirm, parseDirectionOnly, parseContact, playLabel } from '../src/lib/voiceParser.js';
 import { swapTargetIndex, timingAnchor } from '../src/lib/logOrder.js';
@@ -5154,6 +5155,38 @@ test('物語: 回と勝率は繰り返さない(左の欄に出ている)', () =
   assert.ok(!s.includes('打席'), `打席数を繰り返さない: ${s}`);
   assert.ok(!s.includes('勝率'), `勝率を繰り返さない: ${s}`);
   assert.ok(!/^\d+回/.test(s), `回から始めない: ${s}`);
+});
+
+// ---- AIスポーツ新聞のプロンプト ----
+// 報告のあった不具合: ブカツで大会を甲子園にしてあるのに、記事が
+// 「手に汗握る草野球頂上決戦」「草野球の神も苦笑い」になっていた。
+// プロンプトに「草野球の試合ですが」と直書きしてあり、エディションも
+// 大会名も渡していなかった。
+test('新聞: 種別を勝手に草野球にしない', () => {
+  const p = newspaperPrompt('スコア: 4-3', { edition: 'ブカツ(中高大)', season: '甲子園' });
+  assert.ok(!p.includes('草野球の試合'), `草野球と決めつけない: ${p.slice(0, 200)}`);
+  assert.ok(p.includes('中学・高校・大学の部活動の野球'), '実際の種別を渡す');
+  assert.ok(p.includes('甲子園'), '大会名を渡す');
+});
+
+test('新聞: 少年野球・草野球もそれぞれの言い方で渡る', () => {
+  assert.equal(editionForPrompt('少年野球'), '少年野球(小学生)');
+  assert.equal(editionForPrompt('草野球'), '草野球(社会人の趣味の野球)');
+  assert.equal(editionForPrompt(undefined), '草野球(社会人の趣味の野球)', '未設定は既定のまま');
+  assert.ok(newspaperPrompt('x', { edition: '少年野球' }).includes('少年野球(小学生)'));
+});
+
+test('新聞: 大会名が無いときは大会に触れさせない', () => {
+  const p = newspaperPrompt('スコア: 4-3', { edition: '草野球', season: '' });
+  assert.ok(p.includes('大会には触れないこと'), p.slice(0, 300));
+});
+
+test('新聞: 記録に無いことを書かせない歯止めを入れる', () => {
+  // 記事に「捕逸を誘い」と書かれていたが、その別は渡していない
+  const p = newspaperPrompt('スコア: 4-3', { edition: '草野球' });
+  assert.ok(p.includes('勝手に決めない'), '種別・大会名を勝手に決めさせない');
+  assert.ok(p.includes('段階'), '回戦・決勝を勝手に付けさせない');
+  assert.ok(p.includes('事実として書かない'), '記録に無いことを書かせない');
 });
 
 test('物語: 犠打は「倒れ」ではない', () => {

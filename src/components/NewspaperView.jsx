@@ -9,6 +9,7 @@ import FullscreenView from './FullscreenView.jsx';
 function buildSummary(game, h, teamName) {
   const lines = [
     `日付: ${game.date}`,
+    ...(game.season ? [`大会: ${game.season}`] : []),
     `対戦: ${teamName} vs ${game.opponent || '対戦相手'}`,
     `最終スコア: ${game.myScore} - ${game.oppScore}（${h.resultLabel}）`,
   ];
@@ -82,7 +83,12 @@ export default function NewspaperView({ game, onClose }) {
       return;
     }
     setLoading(true);
-    const r = await generateNewspaper({ apiKey, summary: buildSummary(game, h, teamName) });
+    const r = await generateNewspaper({
+      apiKey,
+      summary: buildSummary(game, h, teamName),
+      edition: state.settings.edition,
+      season: game.season || '',
+    });
     setLoading(false);
     if (r && !r.error) {
       setArticle(r);
