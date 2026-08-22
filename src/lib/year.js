@@ -218,6 +218,14 @@ export function usesGrade(edition) {
   return edition === '少年野球' || edition === 'ブカツ(中高大)';
 }
 
+// そのエディションで選べる学校区分。ブカツは中学・高校・大学から選ぶ。
+// 学年の管理だけでなく、ルールの既定とAI記事の言い方もここから決まる。
+export function schoolTypesFor(edition) {
+  if (edition === 'ブカツ(中高大)') return SCHOOL_TYPES.filter((s) => s.id !== 'elementary');
+  if (edition === '少年野球') return SCHOOL_TYPES.filter((s) => s.id === 'elementary');
+  return [];
+}
+
 // エディションから学校区分の既定。ブカツは中高大が混ざるので設定で選ばせる。
 export function defaultSchoolType(edition) {
   if (edition === '少年野球') return 'elementary';

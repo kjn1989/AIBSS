@@ -360,8 +360,15 @@ export const EDITIONS = ['草野球', 'ブカツ(中高大)', '少年野球'];
 export const DEFAULT_EDITION = '草野球';
 
 // エディションのUI表示ラベル。保存値は変えず表示のみ差し替える。
-export function editionLabel(edition) {
-  return edition === '草野球' ? '草野球・社会人' : (edition || '草野球');
+export const SCHOOL_TYPE_LABEL = { junior: '中学', high: '高校', university: '大学', elementary: '小学' };
+
+export function editionLabel(edition, schoolType) {
+  if (edition === '草野球') return '草野球・社会人';
+  // ブカツは中高大が混ざる。どれで記録しているかはヘッダーに出しておく
+  if (edition === 'ブカツ(中高大)' && SCHOOL_TYPE_LABEL[schoolType]) {
+    return `ブカツ(${SCHOOL_TYPE_LABEL[schoolType]})`;
+  }
+  return edition || '草野球';
 }
 
 // 旧表記(初期リリースの「ブカツ(中-大)」)を現行表記へ正規化する。

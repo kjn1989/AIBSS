@@ -63,6 +63,49 @@ try {
   await page.waitForTimeout(400);
   const demo = page.locator('button:has-text("デモデータを投入")');
   if (await demo.count()) { await demo.click(); await page.waitForTimeout(400); }
+
+  // ---- ブカツの学校区分が、試合開始時のルールの既定に効く ----
+  // 中学・高校・大学は回数もコールドも球数制限も違う。毎回選び直さずに済むよう、
+  // 学校区分から既定を決める
+  await page.click('button[aria-label="設定"]');
+  await page.waitForTimeout(600);
+  await page.click('.toggle-row.editions button:has-text("ブカツ")');
+  await page.waitForTimeout(700);
+  const teamCard = page.locator('.card').filter({ hasText: 'エディション' }).first();
+  const cardTxt = await teamCard.innerText();
+  check('ブカツで学校区分を選べる', cardTxt.includes('学校区分'), cardTxt.slice(0, 400));
+  check('選べるのは中学・高校・大学の3つ',
+    cardTxt.includes('中学校') && cardTxt.includes('高校') && cardTxt.includes('大学')
+      && !cardTxt.includes('小学校'), cardTxt.slice(0, 400));
+  // 同じ設定を書き換える選択が2か所にあると、どちらが効くのか分からなくなる
+  const levelLabels = (cardTxt.match(/学校区分/g) || []).length;
+  check('学校区分の選択は1か所だけ', levelLabels === 1, `${levelLabels}か所`);
+
+  const defaultPreset = async () => {
+    await page.click('nav button:has-text("スコア入力")');
+    await page.waitForTimeout(700);
+    const v = await page.locator('select').filter({ hasText: '回制' }).first().inputValue();
+    await page.click('button[aria-label="設定"]');
+    await page.waitForTimeout(600);
+    return v;
+  };
+  check('ヘッダーに学校区分が出る',
+    (await page.locator('.brand-for').innerText()).includes('高校'),
+    await page.locator('.brand-for').innerText());
+  check('高校なら9回制コールドありが既定', (await defaultPreset()) === 'koko9');
+
+  await page.click('.toggle-row button:has-text("中学校")');
+  await page.waitForTimeout(600);
+  check('中学に変えるとヘッダーも変わる',
+    (await page.locator('.brand-for').innerText()).includes('中学'),
+    await page.locator('.brand-for').innerText());
+  check('中学なら7回制100球が既定', (await defaultPreset()) === 'chu7');
+
+  await page.click('.toggle-row button:has-text("大学")');
+  await page.waitForTimeout(600);
+  check('大学なら9回制が既定', (await defaultPreset()) === 'daigaku9');
+
+
   await page.click('nav button:has-text("スコア入力")');
   await page.waitForTimeout(400);
 

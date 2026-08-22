@@ -179,7 +179,7 @@ export default function App() {
             <span className="sr-only">AI-BASE DIAMOND</span>
           </h1>
           <div className="header-team">
-            <div className="brand-for"><EditionText edition={state.settings.edition || '草野球'} withFor /></div>
+            <div className="brand-for"><EditionText edition={state.settings.edition || '草野球'} withFor withLevel /></div>
             <div className="brand-team">{state.settings.teamName || t('app.teamFallback')}</div>
           </div>
         </div>
