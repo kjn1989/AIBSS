@@ -271,7 +271,7 @@ export async function generateScoutReport({ apiKey, name, number, tags, statsSum
 // players: [{ name, statsLine }] 候補選手。statsLineは「打率.320 出塁率.400 OPS.850 打点5」等。
 // dh=true: DH制(打順9人=守備8+DH1、別に打順外の投手1人、合計10人)
 // dh=false: DHなし(打順9人=投手含む全員守備)
-function lineupPrompt(players, dh, edition, schoolType) {
+function lineupPrompt(players, dh, edition, kind) {
   // 守備位置を渡さないと、AIは誰がどこを守れるか知らないまま9枠を埋めることになる。
   // 主(いつもの位置)と可(任せられる位置)を分けて渡し、主を優先させる。
   const list = players.map((p) => {
@@ -290,7 +290,7 @@ function lineupPrompt(players, dh, edition, schoolType) {
 - 誰も守れない位置が残る場合は、その位置を無理に埋めず、unfilled にその位置を入れてください。
 - 「守備位置の登録なし」の選手は、守備につけず DH か控えに回してください。`;
   if (dh) {
-    return `あなたは${editionForPrompt(edition, schoolType)}のチームの名将ヘッドコーチです。以下の候補選手の今季成績をもとに、最も得点が期待できるスタメンを提案してください。DH制です。
+    return `あなたは${editionForPrompt(edition, kind)}のチームの名将ヘッドコーチです。以下の候補選手の今季成績をもとに、最も得点が期待できるスタメンを提案してください。DH制です。
 
 候補選手（今季成績）:
 ${list}
@@ -309,7 +309,7 @@ ${posRule}
 - 出力は次のJSON形式のみ。前置き・説明は一切禁止:
 {"lineup":[{"name":"...","position":"...","fit":"main|sub|dh","reason":"..."}],"pitcher":{"name":"...","reason":"..."},"unfilled":["..."],"strategy":"..."}`;
   }
-  return `あなたは${editionForPrompt(edition, schoolType)}のチームの名将ヘッドコーチです。以下の候補選手の今季成績をもとに、最も得点が期待できるスタメン9人を選び、打順と守備位置を提案してください。DHなしです。
+  return `あなたは${editionForPrompt(edition, kind)}のチームの名将ヘッドコーチです。以下の候補選手の今季成績をもとに、最も得点が期待できるスタメン9人を選び、打順と守備位置を提案してください。DHなしです。
 
 候補選手（今季成績）:
 ${list}
@@ -329,8 +329,8 @@ ${posRule}
 }
 
 // 戻り値: 成功 { lineup:[{name,position,reason}], pitcher(DH時のみ){name,reason}, strategy } / 失敗 { error } / 未設定・オフライン null
-export async function generateLineup({ apiKey, players, dh = false, edition, schoolType }) {
-  const r = await callGeminiJSON(apiKey, lineupPrompt(players, dh, edition, schoolType), { maxOutputTokens: 2048, temperature: 0.7 });
+export async function generateLineup({ apiKey, players, dh = false, edition, kind }) {
+  const r = await callGeminiJSON(apiKey, lineupPrompt(players, dh, edition, kind), { maxOutputTokens: 2048, temperature: 0.7 });
   if (!r || r.error) return r;
   if (!Array.isArray(r.data.lineup) || r.data.lineup.length === 0) {
     return { error: 'AIの応答にlineupが含まれていません' };
@@ -348,24 +348,25 @@ export async function generateLineup({ apiKey, players, dh = false, edition, sch
 // この試合が何の野球なのかを、必ず渡して書かせる。
 // 以前は「草野球の試合ですが」と直書きしていたので、ブカツで大会を甲子園に
 // してあっても「草野球頂上決戦」「草野球の神も苦笑い」と書かれていた。
-export function editionForPrompt(edition, schoolType) {
+export function editionForPrompt(edition, kind) {
   if (edition === 'ブカツ(中高大)') {
     return {
       junior: '中学の部活動の野球(中学野球)',
       high: '高校野球',
       university: '大学野球',
-    }[schoolType] || '中学・高校・大学の部活動の野球';
+    }[kind] || '中学・高校・大学の部活動の野球';
   }
   if (edition === '少年野球') return '少年野球(小学生)';
+  if (kind === 'shakaijin') return '社会人野球(企業チーム・クラブチーム)';
   return '草野球(社会人の趣味の野球)';
 }
 
 // summary: 試合結果を人間可読テキストにまとめたもの(スコア・MVP・好投・見どころ等)
-export function newspaperPrompt(summary, { edition, season, schoolType } = {}) {
+export function newspaperPrompt(summary, { edition, season, kind } = {}) {
   return `あなたはスポーツ新聞のベテラン記者です。以下の試合結果から、臨場感あふれるスポーツ新聞の記事を書いてください。プロ野球の一面記事のように熱く、少しユーモアも交えて。
 
 この試合の位置づけ（ここに書いてあることだけを使うこと）:
-- 種別: ${editionForPrompt(edition, schoolType)}
+- 種別: ${editionForPrompt(edition, kind)}
 - 大会: ${season || '（大会名の指定なし。大会には触れないこと）'}
 
 ${summary}
@@ -383,8 +384,8 @@ ${summary}
 }
 
 // 戻り値: 成功 { headline, subhead, body, comment } / 失敗 { error } / 未設定・オフライン null
-export async function generateNewspaper({ apiKey, summary, edition, season, schoolType }) {
-  const r = await callGeminiJSON(apiKey, newspaperPrompt(summary, { edition, season, schoolType }), { maxOutputTokens: 2048, temperature: 0.95 });
+export async function generateNewspaper({ apiKey, summary, edition, season, kind }) {
+  const r = await callGeminiJSON(apiKey, newspaperPrompt(summary, { edition, season, kind }), { maxOutputTokens: 2048, temperature: 0.95 });
   if (!r || r.error) return r;
   if (!r.data.headline || !r.data.body) return { error: 'AIの応答に記事本文が含まれていません' };
   return {

@@ -12,9 +12,8 @@ import { aggregateScorersOver, rankScorers, scorerName } from '../lib/scorers.js
 //
 // 確度 = 押したタグのうち、動く前に読めていたものの割合(分母は押した回数)
 // 大きさ = 読めたときに勝率が動いた幅の平均      (分母は読めた回数)
-//          表示は五分(50%)からの行き先に揃える。「31ポイント」だけでは
-//          大きいのか小さいのか分からないので、物差しを固定して言い直す
-//          (防御率を「9回投げたら何点」に揃えるのと同じ)
+//          単位は勝率ポイント。五分起点に言い直す形も試したが、
+//          平均64ポイントが「五分 → 114%」になり、あり得ない数字が出た
 // 順番に読む2つで、競合する物差しではない。
 // 押した数が少ないうちは跳ねるので、回数を必ず併記する。
 const MIN_TAGS = 5;
@@ -60,7 +59,7 @@ export default function ScorerCard({ games }) {
             <tr key={s.scorerId} className={s.tags < MIN_TAGS ? 'thin' : ''}>
               <td className="sc-name">{scorerName(state.settings, s.scorerId) || t('sc.unknown')}</td>
               <td className="num"><b>{formatRate(s.hitRate)}</b></td>
-              <td className="num">{s.avgMove == null ? '—' : `${50 + Math.round(s.avgMove * 100)}%`}</td>
+              <td className="num">{s.avgMove == null ? '—' : `${Math.round(s.avgMove * 100)}pt`}</td>
               <td className="num">{t('sc.tagsN', { n: s.tags, g: s.games })}</td>
             </tr>
           ))}

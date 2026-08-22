@@ -64,6 +64,30 @@ try {
   const demo = page.locator('button:has-text("デモデータを投入")');
   if (await demo.count()) { await demo.click(); await page.waitForTimeout(400); }
 
+  // ---- 草野球も、草野球と社会人・クラブで既定が変わる ----
+  await page.click('button[aria-label="設定"]');
+  await page.waitForTimeout(600);
+  const teamCard0 = page.locator('.card').filter({ hasText: 'エディション' }).first();
+  const adultTxt = await teamCard0.innerText();
+  check('草野球でチーム区分を選べる', adultTxt.includes('チーム区分'), adultTxt.slice(0, 400));
+  check('草野球と社会人・クラブの2つ',
+    adultTxt.includes('社会人・クラブ'), adultTxt.slice(0, 400));
+  const preset0 = async () => {
+    await page.click('nav button:has-text("スコア入力")');
+    await page.waitForTimeout(700);
+    const v = await page.locator('select').filter({ hasText: '回制' }).first().inputValue();
+    await page.click('button[aria-label="設定"]');
+    await page.waitForTimeout(600);
+    return v;
+  };
+  check('草野球なら7回制90分が既定', (await preset0()) === 'kusa7');
+  await page.click('.toggle-row button:has-text("社会人・クラブ")');
+  await page.waitForTimeout(700);
+  check('社会人にするとヘッダーも変わる',
+    (await page.locator('.brand-for').innerText()).includes('社会人'),
+    await page.locator('.brand-for').innerText());
+  check('社会人なら9回制が既定', (await preset0()) === 'shakaijin9');
+
   // ---- ブカツの学校区分が、試合開始時のルールの既定に効く ----
   // 中学・高校・大学は回数もコールドも球数制限も違う。毎回選び直さずに済むよう、
   // 学校区分から既定を決める

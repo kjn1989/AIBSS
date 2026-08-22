@@ -210,22 +210,24 @@ export function presetLabel(p, lang) {
 
 // ブカツは中学・高校・大学で回数もコールドも球数制限も違う。
 // 学校区分を決めてあるなら、そこから既定を選ぶ(毎回選び直さずに済む)。
-export function defaultPresetIdForEdition(edition, schoolType) {
+export function defaultPresetIdForEdition(edition, kind) {
   if (edition === 'ブカツ(中高大)') {
-    return { junior: 'chu7', high: 'koko9', university: 'daigaku9' }[schoolType] || 'koko9';
+    return { junior: 'chu7', high: 'koko9', university: 'daigaku9' }[kind] || 'koko9';
   }
-  return { 草野球: 'kusa7', 少年野球: 'gakudo6' }[edition] || 'kusa7';
+  // 草野球は7回制・時間制限つきが主流。社会人(企業・クラブ)の公式戦は9回制
+  if (edition === '草野球') return kind === 'shakaijin' ? 'shakaijin9' : 'kusa7';
+  return { 少年野球: 'gakudo6' }[edition] || 'kusa7';
 }
 
 // 記憶したプリセットは「同じエディションのプリセット」か「明示指定(custom/none)」の場合のみ
 // 引き継ぎ、それ以外はエディションの既定に戻す。
 // (例: 草野球の試合に、以前使った学童の球数制限が漏れて付くのを防ぐ)
-export function initialPresetIdFor(lastId, edition, schoolType) {
-  if (!lastId) return defaultPresetIdForEdition(edition, schoolType);
+export function initialPresetIdFor(lastId, edition, kind) {
+  if (!lastId) return defaultPresetIdForEdition(edition, kind);
   if (lastId === 'custom' || lastId === 'none') return lastId;
   const p = presetById(lastId);
   if (p && p.edition === edition) return lastId;
-  return defaultPresetIdForEdition(edition, schoolType);
+  return defaultPresetIdForEdition(edition, kind);
 }
 
 // ルール内容の1行説明(選択UI・確認表示用)。lang='en'で英語表記。

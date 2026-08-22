@@ -617,7 +617,7 @@ export default function FlowView({ game, onClose }) {
                   name: scorerName(state.settings, game.scorerId),
                   n: career.tags,
                   hit: formatRate(career.hitRate),
-                  d: career.avgMove == null ? '—' : 50 + Math.round(career.avgMove * 100),
+                  d: career.avgMove == null ? '—' : Math.round(career.avgMove * 100),
                 })}
               </p>
             )}
@@ -639,17 +639,25 @@ export default function FlowView({ game, onClose }) {
                 </div>
                 <div className="fv-rate">
                   <b>{t('fv.sizeTitle')}</b>
-                  {/* 「31ポイント」だけでは大きいのか小さいのか分からない。
-                      物差しを五分に固定して言い直す(防御率を「9回投げたら何点」に
-                      揃えるのと同じ)。こうすると試合をまたいで比べられる */}
+                  {/* 実際にあった場面をそのまま出す。
+                      五分に揃えて言い直していた頃は、平均64ポイントの読みが
+                      「五分 → 114%」になっていた。勝率が114%になることはない。
+                      揃え直す利点(試合をまたいで比べられる)より、
+                      あり得ない数字が出ることのほうが重い */}
                   <div className="v num even">
-                    {judged.avgMove == null ? '—'
-                      : t('fv.sizeEven', { b: 50 + Math.round(judged.avgMove * 100) })}
+                    {topRead
+                      ? t('fv.tagMove', {
+                        a: Math.round(topRead.mv.weAt * 100),
+                        b: Math.round(topRead.mv.wePeak * 100),
+                      })
+                      : '—'}
                   </div>
                   <div className="n">
-                    {judged.avgMove == null
-                      ? t('fv.sizeNone')
-                      : t('fv.sizeNote', { d: Math.round(judged.avgMove * 100) })}
+                    {topRead
+                      ? t('fv.sizeTop', {
+                        inn: t(topRead.tg.isTop ? 'scoreboard.top' : 'scoreboard.bottom', { n: topRead.tg.inning }),
+                      })
+                      : t('fv.sizeNone')}
                   </div>
                 </div>
               </div>
@@ -665,15 +673,13 @@ export default function FlowView({ game, onClose }) {
               </b></p>
               {topRead && (
                 <p className="small dim">
-                  {t('fv.topRead', {
-                    inn: t(topRead.tg.isTop ? 'scoreboard.top' : 'scoreboard.bottom', { n: topRead.tg.inning }),
-                    a: Math.round(topRead.mv.weAt * 100),
-                    b: Math.round(topRead.mv.wePeak * 100),
-                  })}
                   {movedBy(topRead.mv) && t('fv.topReadWhat', { what: movedBy(topRead.mv) })}
+                  {t('fv.sizeAvg', {
+                    n: judged.counts.pre,
+                    d: Math.round((judged.avgMove || 0) * 100),
+                  })}
                 </p>
               )}
-              <p className="small dim">{t('fv.sizeWhy')}</p>
               <p className="small dim">{t('fv.verdictNote')}</p>
               {/* 押していない大きな動きは、率にせず事実として置く。
                   率にすると「感じたときだけでOK」と書いてあるタグを、

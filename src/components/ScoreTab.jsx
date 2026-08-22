@@ -21,7 +21,7 @@ import { playLabel } from '../lib/voiceParser.js';
 import { batterDrift } from '../lib/battersRebuild.js';
 import { convertMemoToPlay, guessPlayFromMemo, maskNames } from '../lib/gemini.js';
 import { canWriteCloud } from '../lib/officialCloud.js';
-import { defaultSchoolType } from '../lib/year.js';
+import { kindOf } from '../lib/editionKind.js';
 import { RULE_PRESETS, presetById, presetLabel, describeRules, initialPresetIdFor, gameEndCheck, pitchLimitCheck, timeLimitCheck, lineupSlotsFor } from '../lib/rules.js';
 import LiveRulesSheet from './LiveRulesSheet.jsx';
 import FlowView from './FlowView.jsx';
@@ -195,8 +195,7 @@ function GameSetup() {
   const edition = state.settings.edition || '草野球';
   // ルール選択: 前回の選択を記憶(ただしエディションが一致する場合のみ)。初回はエディションの既定プリセット
   const [presetId, setPresetId] = useState(initialPresetIdFor(
-    state.settings.lastRulePresetId, edition,
-    state.settings.schoolType || defaultSchoolType(edition),
+    state.settings.lastRulePresetId, edition, kindOf(state.settings),
   ));
   const [custom, setCustom] = useState(EMPTY_CUSTOM);
   // リエントリー(再出場)を認める試合か。前回の選択を初期値にする
