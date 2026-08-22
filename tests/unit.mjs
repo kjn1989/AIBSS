@@ -23,7 +23,7 @@ import { aggregateContrib, rankContrib, formatContrib } from '../src/lib/contrib
 import { LEVEL_K, LEVEL_MIN, LEVEL_MAX, stateKey, buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, movePlays, formatRate, weShape, weSeries, stateOfKey, BASE_RE, reOf, KOSHIEN_RE, KOSHIEN_WEIGHTS, KOSHIEN_LEVEL, isKoshienMeasured, baseReFor } from '../src/lib/flow.js';
 import { teamPower, mostOff, formatPower } from '../src/lib/teamPower.js';
 import { RESULTS as RESULTS_FOR_OUT, OUT_TYPES, outTypeLabel, infieldFlyPossible, newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions, attendeesOf, lastAttendees, autoLineupFrom, lineupFromPast, playErrorOf, finePlayOf, subRank, resultLabelOf, isIntentionalBB } from '../src/lib/model.js';
-import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf, oppLettersInGame, oppBaserunning } from '../src/lib/oppBox.js';
+import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf, logTextOf, oppLettersInGame, oppBaserunning } from '../src/lib/oppBox.js';
 import { remapPlayerInGame, fillPlayerGaps } from '../src/lib/mergePlayers.js';
 import { computeBoxScore, halfPlayed } from '../src/lib/boxscore.js';
 import { buildMatchups, opponentSummaries, oppPitcherByAtBat, oppPlayerKey, normalizeName, opponentTeams, lastOppRoster, oppPlayerAtBats, oppBatteryStats, oppOffenseStats } from '../src/lib/matchup.js';
@@ -1090,6 +1090,40 @@ test('canSwapOrder: 隣どうしだけ。離れた枠へは動かさない', () 
   assert.equal(canSwapOrder(g, 2, 2), false);
   assert.equal(canSwapOrder(g, 4, 5), false, '無い枠とは入れ替えない');
   assert.equal(swapOrderPlan(g, 1, 3), null, '断ったときは計画も返さない');
+});
+
+test('logTextOf: 相手打者は、あとから入れた名前で読み替える', () => {
+  // 名前は試合中に後から入る。記録した時点では記号しか無いので、文には
+  // 「相手打者A(1番)」と焼き付いている。オーダーに名前が出ているのに
+  // 試合経過だけ記号、という食い違いになっていた。
+  const log = {
+    kind: 'defense',
+    text: '相手打者A(1番): 二塁凡打(アウト)',
+    payload: { letter: 'A', order: 1 },
+  };
+  assert.equal(logTextOf({ oppNames: { A: '石田' } }, log), '石田(1番): 二塁凡打(アウト)');
+  // 名前が入っていなければ記号のまま
+  assert.equal(logTextOf({}, log), '相手打者A(1番): 二塁凡打(アウト)');
+  assert.equal(logTextOf({ oppNames: { B: '田中' } }, log), '相手打者A(1番): 二塁凡打(アウト)',
+    '別の記号の名前では読み替えない');
+});
+
+test('logTextOf: 自チームの打席や交代の行はそのまま', () => {
+  const mine = { kind: 'atbat', text: '佐藤 右翼ヒット', payload: {} };
+  assert.equal(logTextOf({ oppNames: { A: '石田' } }, mine), '佐藤 右翼ヒット');
+  const sub = { kind: 'sub', text: '代打 鈴木', payload: {} };
+  assert.equal(logTextOf({ oppNames: { A: '石田' } }, sub), '代打 鈴木');
+  assert.equal(logTextOf({}, null), '', '行が無くても落ちない');
+});
+
+test('logTextOf: 文の途中に同じ形があっても、先頭だけを読み替える', () => {
+  const log = {
+    kind: 'defense',
+    text: '相手打者A(1番): 二塁凡打(アウト) 相手打者A(1番)がアウト',
+    payload: { letter: 'A' },
+  };
+  assert.equal(logTextOf({ oppNames: { A: '石田' } }, log),
+    '石田(1番): 二塁凡打(アウト) 相手打者A(1番)がアウト');
 });
 
 test('finePlayOf: 失策と同じ形で読み出せる', () => {

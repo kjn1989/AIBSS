@@ -3,6 +3,7 @@ import { useStore, useT } from '../state/store.jsx';
 import { connectCloud } from '../lib/cloud.js';
 import Scoreboard from './Scoreboard.jsx';
 import Diamond from './Diamond.jsx';
+import { logTextOf } from '../lib/oppBox.js';
 
 // URLの ?watch=1&team=<チームコード>&cfg=<base64のfirebaseConfig> を読み取って
 // 読み取り専用でFirestoreを購読し、試合速報だけを表示する観戦者向けページ。
@@ -103,7 +104,7 @@ export default function WatchView() {
         <h2>{t('watch.playLog')}</h2>
         {[...game.playLogs].slice(-15).reverse().map((l) => (
           <div className="log-line" key={l.id}>
-            <b>{t('score.logInning', { inning: l.inning, half: t(l.isTop ? 'half.top' : 'half.bottom') })}</b> {l.text}
+            <b>{t('score.logInning', { inning: l.inning, half: t(l.isTop ? 'half.top' : 'half.bottom') })}</b> {logTextOf(game, l)}
           </div>
         ))}
         {game.playLogs.length === 0 && <div className="dim small">{t('score.noPlays')}</div>}

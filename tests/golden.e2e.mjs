@@ -42,6 +42,18 @@ const check = (name, cond, detail = '') => {
   if (!cond) failures++;
 };
 
+// 画面が落ちていないか。エラー境界が例外を握るので pageerror では拾えず、
+// 「要素が見つからない」という別の顔で出てくる。原因が読めるように名指しする。
+let pageRef = null;
+const crashGuard = async (where) => {
+  if (!pageRef) return false;
+  if (await pageRef.locator('.crash').count()) {
+    check(`画面が落ちていない (${where})`, false, await pageRef.locator('.crash').innerText());
+    return true;
+  }
+  return false;
+};
+
 const browser = await (async () => {
   await waitUp();
   return chromium.launch({ executablePath: resolveChromium() });
@@ -49,6 +61,8 @@ const browser = await (async () => {
 
 try {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  pageRef = page;
+  pageRef = page;
   page.on('pageerror', (err) => { console.log('PAGE EXCEPTION:', err.message); failures++; });
 
   await page.goto(URL_, { waitUntil: 'load' });
@@ -167,6 +181,13 @@ try {
   check('成績: 盗塁記録者は2人', sbPlayers === 2, `actual=${sbPlayers}`);
 
   console.log(failures === 0 ? '\n✓ golden path PASS' : `\n✗ golden path FAIL (${failures})`);
+
+} catch (e) {
+  // 要素が見つからない失敗は、たいてい画面が落ちている。
+  // エラー境界が例外を握るので pageerror では拾えず、原因が読めなくなる
+  await crashGuard('例外時').catch(() => {});
+  console.log('EXCEPTION:', e && e.message);
+  failures++;
 } finally {
   await browser.close();
   server.kill();

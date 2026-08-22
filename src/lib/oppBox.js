@@ -16,6 +16,26 @@ export function oppNameOf(game, letter) {
   return (game?.oppNames && game.oppNames[letter]) || letter;
 }
 
+// ---- 記録した文の中の相手打者を、いまの名前で読み替える ----
+//
+// 相手の名前は試合中に後から入る(打席が回ってきて名前が分かる)。記録した時点では
+// 記号しか無いので、ログの文には「相手打者A(1番)」と焼き付いている。
+// あとから名前を入れても文は記号のままで、オーダーには名前が出ているのに
+// 試合経過だけ記号、という食い違いになっていた。
+//
+// 文を書き換えて保存するのではなく、出すときに読み替える。書き換えて保存すると、
+// 名前を直したときに古い文が残る(記録は記号で持っているのが正しい)。
+const OPP_PREFIX = /^相手打者([A-Z])\((\d+)番\)/;
+
+export function logTextOf(game, log) {
+  const text = log?.text || '';
+  if (log?.kind !== 'defense') return text;
+  return text.replace(OPP_PREFIX, (m, letter, order) => {
+    const name = game?.oppNames?.[letter];
+    return name ? `${name}(${order}番)` : m;
+  });
+}
+
 // 記号→守備位置(未指定なら null)。相手の守備位置は任意入力。
 export function oppPositionOf(game, letter) {
   if (!letter) return null;
