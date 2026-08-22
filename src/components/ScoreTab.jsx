@@ -14,7 +14,7 @@ import { SubstituteSheet } from './OrderTab.jsx';
 import HighlightSheet from './HighlightSheet.jsx';
 import DefenseCheckView from './DefenseCheckView.jsx';
 import { OppSubstituteSheet } from './OppOrderCard.jsx';
-import { oppNameOf, oppPositionOf, oppHasName } from '../lib/oppBox.js';
+import { oppNameOf, oppPositionOf, oppHasName, logTextOf } from '../lib/oppBox.js';
 import GameProgressView from './GameProgressView.jsx';
 import { POSITIONS, OPP_LETTERS, resultCategory, multiOutLabel, positionLabel, attendeesOf, autoLineupFrom } from '../lib/model.js';
 import { playLabel } from '../lib/voiceParser.js';
@@ -709,7 +709,7 @@ export default function ScoreTab() {
             <h2>{t('restab.progress')}</h2>
             {[...game.playLogs].filter((l) => l.kind !== 'run').slice(-10).reverse().map((l) => (
               <div className="log-line" key={l.id}>
-                <b>{logInning(l)}</b> {l.text}
+                <b>{logInning(l)}</b> {logTextOf(game, l)}
               </div>
             ))}
             {game.playLogs.length === 0 && <div className="dim small">{t('score.noPlays')}</div>}
@@ -1004,7 +1004,7 @@ export default function ScoreTab() {
         </div>
         {[...game.playLogs].filter((l) => l.kind !== 'run').slice(-3).reverse().map((l) => (
           <div className="log-line" key={l.id}>
-            <b>{logInning(l)}</b> {l.text}
+            <b>{logInning(l)}</b> {logTextOf(game, l)}
           </div>
         ))}
         {game.playLogs.length === 0 && <div className="dim small">{t('score.noPlays')}</div>}

@@ -43,9 +43,22 @@ const check = (name, cond, detail = '') => {
   if (!cond) failures++;
 };
 
+// 画面が落ちていないか。エラー境界が例外を握るので pageerror では拾えず、
+// 「要素が見つからない」という別の顔で出てくる。原因が読めるように名指しする。
+let pageRef = null;
+const crashGuard = async (where) => {
+  if (!pageRef) return false;
+  if (await pageRef.locator('.crash').count()) {
+    check(`画面が落ちていない (${where})`, false, await pageRef.locator('.crash').innerText());
+    return true;
+  }
+  return false;
+};
+
 const browser = await chromium.launch({ executablePath: resolveChromium() });
 try {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  pageRef = page;
   page.on('pageerror', (err) => { console.log('PAGE EXCEPTION:', err.message); failures++; });
   page.on('dialog', (d) => d.accept());
 
@@ -194,6 +207,38 @@ try {
   check('記録の文に✦が付く', dlog.includes('✦'), dlog.slice(0, 600));
   check('ゲッツーの印と混ざっていない', !/✦[^\n]*⚡|⚡[^\n]*✦/.test(dlog), dlog.slice(0, 600));
 
+  // ---- 相手の名前は、記録したあとに入れても文に反映される ----
+  // 名前は試合中に後から入る(打席が回ってきて分かる)。記録した時点では記号しか
+  // 無いので、文には「相手打者A(1番)」と焼き付いている。オーダーには名前が
+  // 出ているのに試合経過だけ記号、という食い違いになっていた
+  const beforeName = await page.locator('.scoretab').innerText();
+  check('名前を入れる前は記号のまま', /相手打者[A-Z]\(\d+番\)/.test(beforeName), beforeName.slice(0, 500));
+
+  await page.click('nav button:has-text("オーダー")');
+  await page.waitForTimeout(700);
+  // 相手チームのタブへ(上部のチーム切り替え)
+  await page.locator('.seg-control button[role="tab"]').nth(1).click();
+  await page.waitForTimeout(700);
+  const oppRow = page.locator('.opp-row, .card .row').first();
+  check('相手のオーダーが出ている', await oppRow.count() > 0,
+    (await page.locator('#root').innerText()).slice(0, 400));
+  await oppRow.click();
+  await page.waitForTimeout(600);
+  const nameSheet = page.locator('.sheet').last();
+  check('名前を入れるシートが開く', (await nameSheet.innerText()).length > 0,
+    (await nameSheet.innerText()).slice(0, 200));
+  const nameInput = nameSheet.locator('input').first();
+  await nameInput.fill('石田');
+  await nameSheet.locator('.sheet-actions button.primary').click();
+  await page.waitForTimeout(700);
+
+  await page.click('nav button:has-text("スコア入力")');
+  await page.waitForTimeout(800);
+  const afterName = await page.locator('.scoretab').innerText();
+  check('入れた名前が試合経過に出る', afterName.includes('石田'), afterName.slice(0, 600));
+  check('記号の表記は消えている',
+    !/相手打者A\(\d+番\)/.test(afterName), afterName.slice(0, 600));
+
   // ---- 成績タブに守備の記録が出る ----
   await page.click('nav button:has-text("成績")');
   await page.waitForTimeout(900);
@@ -208,7 +253,11 @@ try {
   check('ファインプレーが1つ数えられている',
     !!fieldRow && fieldRow.some((r) => r[1] === '✦1'), JSON.stringify(fieldRow));
 
+
 } catch (e) {
+  // 要素が見つからない失敗は、たいてい画面が落ちている。
+  // エラー境界が例外を握るので pageerror では拾えず、原因が読めなくなる
+  await crashGuard('例外時').catch(() => {});
   console.log('EXCEPTION:', e && e.message);
   failures++;
 } finally {

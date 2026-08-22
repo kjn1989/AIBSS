@@ -13,7 +13,7 @@ import { parseBatterCorrection, findTargetAtBat, parseSubstitutions, parseBatter
 import { posFull, buildLineupRows, findPositionIssues, alignmentByInning } from '../lib/lineupBox.js';
 import LiveRulesSheet from './LiveRulesSheet.jsx';
 import { findDuplicateAtBats, canRebuildOrders, findOrderBreaks } from '../lib/battersRebuild.js';
-import { oppNameOf } from '../lib/oppBox.js';
+import { oppNameOf, logTextOf } from '../lib/oppBox.js';
 import { interpretCorrection } from '../lib/gemini.js';
 import Sheet from './Sheet.jsx';
 import EditPlaySheet from './EditPlaySheet.jsx';
@@ -45,7 +45,7 @@ function CountDots({ balls, strikes, outsBefore }) {
 }
 
 // 打席系プレイ(kind: atbat/defense)の1件カード
-function PlayCard({ log, nameOf, numberOf, onEdit, edition, lang, t, oppName }) {
+function PlayCard({ log, nameOf, numberOf, onEdit, edition, lang, t, oppName, game }) {
   const p = log.payload || {};
   const isDefense = log.kind === 'defense';
   // 相手打者は記号(A〜)で記録されるが、名前を入れてあればそちらを見せる
@@ -75,7 +75,7 @@ function PlayCard({ log, nameOf, numberOf, onEdit, edition, lang, t, oppName }) 
         <MiniDiamond runners={p.beforeRunners} />
         <CountDots balls={p.balls} strikes={p.strikes} outsBefore={p.outsBefore} />
         <div className="pc-text">
-          <div>{log.text}</div>
+          <div>{logTextOf(game, log)}</div>
           {(p.moveLines || []).map((t, i) => <div key={i} className="dim">{t}</div>)}
         </div>
       </div>
@@ -86,10 +86,10 @@ function PlayCard({ log, nameOf, numberOf, onEdit, edition, lang, t, oppName }) 
 
 // その他イベント(交代・投手交代・走者イベント等)の簡易行。
 // count>1 のときは「牽制 ×3」のように回数バッジ付きで1行にまとめて表示する
-function SimpleLogLine({ log, count = 1 }) {
+function SimpleLogLine({ log, count = 1, game }) {
   return (
     <div className="log-line">
-      {log.text}
+      {logTextOf(game, log)}
       {count > 1 && <span className="log-count">×{count}</span>}
     </div>
   );
@@ -963,13 +963,14 @@ export function GameProgressContent({ game, editable = false, showLinescore = tr
                     nameOf={nameOf}
                     numberOf={numberOf}
                     oppName={(letter) => oppNameOf(game, letter)}
+                    game={game}
                     edition={state.settings.edition}
                     lang={lang}
                     t={t}
                     onEdit={editable ? setEditLog : null}
                   />
                 )
-                : <SimpleLogLine key={row.log.id} log={row.log} count={row.count} />
+                : <SimpleLogLine key={row.log.id} log={row.log} count={row.count} game={game} />
             )}
           </div>
         );
