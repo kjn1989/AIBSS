@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useStore, usePlayerName } from '../state/store.jsx';
 import { computeHighlights } from '../lib/highlights.js';
+import { defaultSchoolType } from '../lib/year.js';
 import { generateNewspaper } from '../lib/gemini.js';
 import { generateNewspaperImage, shareNewspaperImage } from '../lib/newspaperImage.js';
 import FullscreenView from './FullscreenView.jsx';
@@ -87,6 +88,7 @@ export default function NewspaperView({ game, onClose }) {
       apiKey,
       summary: buildSummary(game, h, teamName),
       edition: state.settings.edition,
+      schoolType: state.settings.schoolType || defaultSchoolType(state.settings.edition),
       season: game.season || '',
     });
     setLoading(false);

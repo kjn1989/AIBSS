@@ -10,7 +10,7 @@ import { EDITIONS, HAND_LABEL, editionLabel, FIELD_POSITIONS, uncoveredPositions
 import {
   isArchived, tenureByPlayer, currentYear, currentSchoolYear, DEFAULT_YEAR_START_MONTH,
   usesGrade, defaultSchoolType, defaultYearStartMonth, maxGradeOf, gradeOf, entryYearFromGrade,
-  sortByGrade, SCHOOL_TYPES, SEASON_START_MONTHS, labelOfYear, yearLabel, yearsInGames,
+  sortByGrade, schoolTypesFor, SEASON_START_MONTHS, labelOfYear, yearLabel, yearsInGames,
 } from '../lib/year.js';
 import EditionText from './EditionText.jsx';
 import { listProfiles, getActiveProfileId, addProfile, switchActiveProfile, deleteProfile, listOrphanedProfiles, restoreProfile } from '../lib/profiles.js';
@@ -376,6 +376,9 @@ export default function SettingsTab() {
   const [posPlayer, setPosPlayer] = useState(null); // 守備位置シートを開いている選手ID
   // 学年はブカツ・少年野球でのみ使う。草野球では欄ごと出さない
   const gradeOn = usesGrade(state.settings.edition);
+  // ブカツで選べる学校区分。学年設定と同じ settings.schoolType を書き換える
+  const schoolChoices = schoolTypesFor(state.settings.edition);
+  const curSchool = state.settings.schoolType || defaultSchoolType(state.settings.edition);
   const startMonth = state.settings.yearStartMonth || DEFAULT_YEAR_START_MONTH;
   // 学年は学校の年度(4月始まり)で数える。チームの代(中学・高校は9月始まり)とは別軸
   const thisYear = currentSchoolYear();
@@ -461,22 +464,6 @@ export default function SettingsTab() {
         <label className="small dim mt8" style={{ display: 'block' }}>{t('set.edition')}</label>
         {gradeOn && (
           <div className="mt12">
-            <label className="small dim" style={{ display: 'block', marginBottom: 4 }}>{t('grade.school')}</label>
-            <select
-              value={schoolType || ''}
-              onChange={(e) => dispatch({
-                type: 'UPDATE_SETTINGS',
-                patch: {
-                  schoolType: e.target.value,
-                  // 中学・高校は夏の大会で代が替わるので、代の開始月も合わせる
-                  yearStartMonth: defaultYearStartMonth(state.settings.edition, e.target.value),
-                },
-              })}
-            >
-              {SCHOOL_TYPES.map((st) => <option key={st.id} value={st.id}>{t(`school.${st.id}`)}</option>)}
-            </select>
-            <p className="small dim" style={{ marginTop: 4 }}>{t('grade.schoolHint')}</p>
-
             {/* 代の切り替わり月。夏の大会の時期は地域やチームで前後するので選べるようにする */}
             <label className="small dim" style={{ display: 'block', margin: '12px 0 4px' }}>{t('season.start')}</label>
             <select
@@ -510,6 +497,35 @@ export default function SettingsTab() {
             </button>
           ))}
         </div>
+        {/* ブカツは中学・高校・大学で回数もコールドも球数制限も違う。
+            ここで決めると、試合開始時のルールの既定とAI記事の言い方に効く。
+            学年設定にある同じ選択と同じ値(settings.schoolType)を書き換えるので、
+            二重に持たない */}
+        {schoolChoices.length > 1 && (
+          <>
+            <label className="small dim mt12" style={{ display: 'block' }}>{t('set.schoolLevel')}</label>
+            <div className="toggle-row">
+              {schoolChoices.map((st) => (
+                <button
+                  key={st.id}
+                  className={curSchool === st.id ? 'active' : ''}
+                  onClick={() => dispatch({
+                    type: 'UPDATE_SETTINGS',
+                    patch: {
+                      schoolType: st.id,
+                      // 中学・高校は夏の大会で代が替わる。代の開始月も合わせる
+                      yearStartMonth: defaultYearStartMonth(state.settings.edition, st.id),
+                    },
+                  })}
+                >
+                  {t(`school.${st.id}`)}
+                </button>
+              ))}
+            </div>
+            <p className="small dim mt8">{t('set.schoolLevelNote')}</p>
+            <p className="small dim">{t('grade.schoolHint')}</p>
+          </>
+        )}
         <p className="small dim mt8">
           {t('set.editionNote')}
         </p>

@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useStore, usePlayerName, useT } from '../state/store.jsx';
 import { aggregateBatting, battingMetrics, fmtAvg } from '../lib/stats.js';
 import { generateLineup } from '../lib/gemini.js';
+import { defaultSchoolType } from '../lib/year.js';
 import { POSITIONS, uncoveredPositions, attendeesOf } from '../lib/model.js';
 import FullscreenView from './FullscreenView.jsx';
 
@@ -43,7 +44,11 @@ export default function HeadCoachView({ game, canApply, onClose }) {
   const run = async () => {
     setError('');
     setLoading(true);
-    const r = await generateLineup({ apiKey, players, dh, edition: state.settings.edition });
+    const r = await generateLineup({
+      apiKey, players, dh,
+      edition: state.settings.edition,
+      schoolType: state.settings.schoolType || defaultSchoolType(state.settings.edition),
+    });
     setLoading(false);
     if (!r) {
       setError('Gemini APIキーが未設定か、オフラインです。設定タブでキーを追加してください。');

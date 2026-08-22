@@ -208,19 +208,24 @@ export function presetLabel(p, lang) {
   return lang === 'en' && p.en ? p.en : p.label;
 }
 
-export function defaultPresetIdForEdition(edition) {
-  return { 草野球: 'kusa7', 少年野球: 'gakudo6', 'ブカツ(中高大)': 'chu7' }[edition] || 'kusa7';
+// ブカツは中学・高校・大学で回数もコールドも球数制限も違う。
+// 学校区分を決めてあるなら、そこから既定を選ぶ(毎回選び直さずに済む)。
+export function defaultPresetIdForEdition(edition, schoolType) {
+  if (edition === 'ブカツ(中高大)') {
+    return { junior: 'chu7', high: 'koko9', university: 'daigaku9' }[schoolType] || 'koko9';
+  }
+  return { 草野球: 'kusa7', 少年野球: 'gakudo6' }[edition] || 'kusa7';
 }
 
 // 記憶したプリセットは「同じエディションのプリセット」か「明示指定(custom/none)」の場合のみ
 // 引き継ぎ、それ以外はエディションの既定に戻す。
 // (例: 草野球の試合に、以前使った学童の球数制限が漏れて付くのを防ぐ)
-export function initialPresetIdFor(lastId, edition) {
-  if (!lastId) return defaultPresetIdForEdition(edition);
+export function initialPresetIdFor(lastId, edition, schoolType) {
+  if (!lastId) return defaultPresetIdForEdition(edition, schoolType);
   if (lastId === 'custom' || lastId === 'none') return lastId;
   const p = presetById(lastId);
   if (p && p.edition === edition) return lastId;
-  return defaultPresetIdForEdition(edition);
+  return defaultPresetIdForEdition(edition, schoolType);
 }
 
 // ルール内容の1行説明(選択UI・確認表示用)。lang='en'で英語表記。

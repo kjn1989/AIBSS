@@ -3,10 +3,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { proposeMoves, judgeAdvance, batterDestOptions } from '../src/lib/plays.js';
-import { gameEndCheck, initialPresetIdFor, describeRules, rulesAtInning, currentRules, fieldCountAt, isTiebreakInning, diffLiveRules, describeRulePatch, runnersPlaced, placedRunsScored, halfKeyOf, DEFAULT_TIEBREAK, ALL_BAT_MAX, TIEBREAK_RUNNERS, allBatSize, lineupSlotsFor } from '../src/lib/rules.js';
+import { gameEndCheck, initialPresetIdFor, defaultPresetIdForEdition, presetById, describeRules, rulesAtInning, currentRules, fieldCountAt, isTiebreakInning, diffLiveRules, describeRulePatch, runnersPlaced, placedRunsScored, halfKeyOf, DEFAULT_TIEBREAK, ALL_BAT_MAX, TIEBREAK_RUNNERS, allBatSize, lineupSlotsFor } from '../src/lib/rules.js';
 import { aggregateFielding, rankFielding, aggregateBatting, aggregatePitching, battingMetrics, pitchingMetrics, titleLeaders, DETAIL_METRICS, detailRanking, defaultInningBasis } from '../src/lib/stats.js';
 import { translate } from '../src/lib/i18n.js';
 import { newspaperPrompt, editionForPrompt } from '../src/lib/gemini.js';
+import { schoolTypesFor } from '../src/lib/year.js';
 import { swapOrderPlan, canSwapOrder } from '../src/lib/lineupOrder.js';
 import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, needsComplexConfirm, parseDirectionOnly, parseContact, playLabel } from '../src/lib/voiceParser.js';
 import { swapTargetIndex, timingAnchor } from '../src/lib/logOrder.js';
@@ -23,7 +24,7 @@ import { aggregateScorersOver, swingScale, OPEN_MIN_SWING, OPEN_REACT_SWING } fr
 import { aggregateContrib, rankContrib, formatContrib } from '../src/lib/contrib.js';
 import { LEVEL_K, LEVEL_MIN, LEVEL_MAX, stateKey, buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, movePlays, formatRate, weShape, weSeries, stateOfKey, BASE_RE, reOf, KOSHIEN_RE, KOSHIEN_WEIGHTS, KOSHIEN_LEVEL, isKoshienMeasured, baseReFor } from '../src/lib/flow.js';
 import { teamPower, mostOff, formatPower } from '../src/lib/teamPower.js';
-import { RESULTS as RESULTS_FOR_OUT, OUT_TYPES, outTypeLabel, infieldFlyPossible, newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions, attendeesOf, lastAttendees, autoLineupFrom, lineupFromPast, playErrorOf, finePlayOf, subRank, resultLabelOf, isIntentionalBB } from '../src/lib/model.js';
+import { RESULTS as RESULTS_FOR_OUT, OUT_TYPES, outTypeLabel, infieldFlyPossible, newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions, attendeesOf, lastAttendees, autoLineupFrom, lineupFromPast, playErrorOf, finePlayOf, editionLabel, subRank, resultLabelOf, isIntentionalBB } from '../src/lib/model.js';
 import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf, logTextOf, oppLettersInGame, oppBaserunning } from '../src/lib/oppBox.js';
 import { remapPlayerInGame, fillPlayerGaps } from '../src/lib/mergePlayers.js';
 import { computeBoxScore, halfPlayed } from '../src/lib/boxscore.js';
@@ -5155,6 +5156,54 @@ test('物語: 回と勝率は繰り返さない(左の欄に出ている)', () =
   assert.ok(!s.includes('打席'), `打席数を繰り返さない: ${s}`);
   assert.ok(!s.includes('勝率'), `勝率を繰り返さない: ${s}`);
   assert.ok(!/^\d+回/.test(s), `回から始めない: ${s}`);
+});
+
+// ---- ブカツの学校区分 ----
+// 中学・高校・大学は回数もコールドも球数制限も違う。選んだ区分が
+// 試合開始時のルールの既定とAI記事の言い方の両方に効く。
+test('学校区分: ブカツの既定ルールが中学・高校・大学で変わる', () => {
+  assert.equal(defaultPresetIdForEdition('ブカツ(中高大)', 'junior'), 'chu7');
+  assert.equal(defaultPresetIdForEdition('ブカツ(中高大)', 'high'), 'koko9');
+  assert.equal(defaultPresetIdForEdition('ブカツ(中高大)', 'university'), 'daigaku9');
+  // 中学は7回制で球数制限あり、高校は9回制でコールドあり
+  assert.equal(presetById('chu7').rules.innings, 7);
+  assert.equal(presetById('chu7').rules.pitchLimit.perGame, 100);
+  assert.equal(presetById('koko9').rules.innings, 9);
+  assert.ok(presetById('koko9').rules.mercy.length > 0);
+  // 他のエディションは今までどおり
+  assert.equal(defaultPresetIdForEdition('草野球'), 'kusa7');
+  assert.equal(defaultPresetIdForEdition('少年野球'), 'gakudo6');
+});
+
+test('学校区分: 前の試合のプリセットは同じエディションのときだけ引き継ぐ', () => {
+  // 高校の設定で、前回が中学のプリセットでも引き継ぐ(同じエディションなので
+  // 記録員が意図して選んだとみなす)
+  assert.equal(initialPresetIdFor('chu7', 'ブカツ(中高大)', 'high'), 'chu7');
+  // 別のエディションのものは持ち込まない。区分の既定に戻る
+  assert.equal(initialPresetIdFor('gakudo6', 'ブカツ(中高大)', 'university'), 'daigaku9');
+  assert.equal(initialPresetIdFor(null, 'ブカツ(中高大)', 'junior'), 'chu7');
+});
+
+test('学校区分: 選べるのはブカツが中高大、少年野球は小学だけ', () => {
+  assert.deepEqual(schoolTypesFor('ブカツ(中高大)').map((x) => x.id), ['junior', 'high', 'university']);
+  assert.deepEqual(schoolTypesFor('少年野球').map((x) => x.id), ['elementary']);
+  assert.deepEqual(schoolTypesFor('草野球'), [], '草野球には学校区分が無い');
+});
+
+test('学校区分: AI記事の言い方も区分ごとに変わる', () => {
+  assert.equal(editionForPrompt('ブカツ(中高大)', 'high'), '高校野球');
+  assert.equal(editionForPrompt('ブカツ(中高大)', 'university'), '大学野球');
+  assert.ok(editionForPrompt('ブカツ(中高大)', 'junior').includes('中学'));
+  // 区分が決まっていなければ、これまでどおり中高大とだけ伝える
+  assert.equal(editionForPrompt('ブカツ(中高大)'), '中学・高校・大学の部活動の野球');
+  assert.ok(newspaperPrompt('x', { edition: 'ブカツ(中高大)', schoolType: 'high' }).includes('高校野球'));
+});
+
+test('学校区分: ヘッダーの表示にも出る', () => {
+  assert.equal(editionLabel('ブカツ(中高大)', 'high'), 'ブカツ(高校)');
+  assert.equal(editionLabel('ブカツ(中高大)', 'junior'), 'ブカツ(中学)');
+  assert.equal(editionLabel('ブカツ(中高大)'), 'ブカツ(中高大)', '未設定なら今までどおり');
+  assert.equal(editionLabel('草野球', 'high'), '草野球・社会人', '草野球には付けない');
 });
 
 // ---- AIスポーツ新聞のプロンプト ----
