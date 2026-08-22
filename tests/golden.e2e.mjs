@@ -116,6 +116,39 @@ try {
   await confirmSheet();
   check('単打後: 一塁に走者', (await baseOn(1)) === 1);
 
+  // --- スコアボードに、いま何が起きたかが出る ---
+  // ベンチや観戦している人が、スコアボードだけで打席結果を追えるようにする。
+  // 表記と色はスコアシートと同じものを使う(同じプレイが画面ごとに違う書き方に
+  // なると、見比べたときに別のことに見える)
+  const live = await page.evaluate(() => {
+    const el = document.querySelector('.led-inn');
+    const last = el?.querySelector('.li-last');
+    return {
+      pc: el?.querySelector('.li-pc')?.textContent || '',
+      last: last?.textContent || '',
+      cls: last?.className || '',
+      color: last ? getComputedStyle(last).color : '',
+    };
+  });
+  check('回の行に投球数が出ている', /この打席\d+球/.test(live.pc), JSON.stringify(live));
+  check('直前の打席結果が出ている', live.last.includes('安'), JSON.stringify(live));
+  check('スコアシートと同じ書き方(方向+安)', /[右左中投捕一二三遊]安/.test(live.last), JSON.stringify(live));
+  // 色はスコアシートの指定(.ss-cell.hit)をそのまま使う
+  check('スコアシートと同じ色の指定が付いている',
+    live.cls.includes('ss-cell') && live.cls.includes('hit'), JSON.stringify(live));
+  const hitColor = await page.evaluate(() => {
+    const p = document.createElement('span');
+    p.className = 'ss-cell hit';
+    document.body.appendChild(p);
+    const c = getComputedStyle(p).color;
+    p.remove();
+    return c;
+  });
+  check('安打の色がスコアシートと一致する', live.color === hitColor, `${live.color} / ${hitColor}`);
+  // 同じ数字を2か所に出すと、片方だけ古いのではと疑う材料になる
+  check('球数はスコアボードだけに出る',
+    (await page.locator('.pc-card .pc-cap').count()) === 0);
+
   // --- 2. 併殺打 → 2アウト(3アウト二重計上の再発防止)・回は継続 ---
   await playResult('凡打');
   await page.click('.sheet button:has-text("ダブルプレー")');

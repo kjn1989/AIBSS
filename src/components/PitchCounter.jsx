@@ -28,15 +28,15 @@ export default function PitchCounter({ game, onAutoEvent }) {
 
   return (
     <div className="card pc-card">
-      {/* B/S/Oはトップのスコアボードに集約。投球数だけを極小で表示(初球・次球ヒントは省略)。 */}
-      <div className="pc-caprow">
-        <span className="pc-cap">{t('pitch.count.thisAtBat', { n: pitches.length })}</span>
-        {pitches.length > 0 && (
+      {/* B/S/Oも投球数もトップのスコアボードに集約。ここには取り消しだけ残す
+          (同じ数字を2か所に出すと、片方だけ古いのではと疑う材料になる) */}
+      {pitches.length > 0 && (
+        <div className="pc-caprow">
           <button className="pc-undo" onClick={() => dispatch({ type: 'REMOVE_LAST_PITCH', gameId: game.id })}>
             {t('pitch.undo')}
           </button>
-        )}
-      </div>
+        </div>
+      )}
       {/* 球種4種を1行に圧縮(ボール/空振り/見逃し/ファウル) */}
       <div className="count-btns pitch-row4">
         <button className="ball" onClick={() => add('ball')}>{t('pitch.ball')}</button>

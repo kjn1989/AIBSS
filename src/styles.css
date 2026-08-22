@@ -261,7 +261,23 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
   content: ""; position: absolute; top: 0; left: 16px; right: 16px; height: 2px; border-radius: 2px;
   background: linear-gradient(90deg, transparent, var(--accent), var(--gold), transparent); opacity: .7;
 }
-.led-inn { font-size: 11px; font-weight: 800; color: var(--gold); letter-spacing: .02em; margin: 2px 2px 6px; }
+/* 回の行に、いま進んでいる打席と直前の結果を載せる。
+   ベンチや観戦している人が、スコアボードだけで何が起きたかを追えるように */
+.led-inn {
+  display: flex; align-items: baseline; gap: 8px;
+  font-size: 11px; font-weight: 800; color: var(--gold); letter-spacing: .02em; margin: 2px 2px 6px;
+}
+.led-inn .li-inn { flex: none; }
+.led-inn .li-live {
+  flex: 1; min-width: 0; display: flex; align-items: baseline; justify-content: flex-end; gap: 8px;
+}
+.led-inn .li-pc { font-size: 10px; font-weight: 700; color: var(--text-dim); flex: none; }
+/* 表記も色もスコアシートと同じ(.ss-cell の色指定をそのまま使う) */
+.led-inn .li-last {
+  font-size: 13px; font-weight: 800; letter-spacing: 0;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.led-inn .li-last i { font-style: normal; font-weight: 700; opacity: .7; margin-right: 4px; }
 .led-inn .dim { color: var(--text-dim); font-weight: 700; }
 
 /* 物理LEDボード: ラインスコア + B/S/O を1枚に */
