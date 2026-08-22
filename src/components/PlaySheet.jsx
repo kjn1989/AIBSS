@@ -245,14 +245,21 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
       : asSacFly ? (lang === 'ja' ? RESULTS.sacFly.label : t('result.sacFly'))
         : result === 'out' ? '' : (result === 'bb' && intentional) ? t('result.ibb') : resultLabel;
     const runsSuffix = runs ? t('playsheet.runsSuffix', { n: runs }) : '';
+    // 打者の行き先が既定と違うときは確認文に出す。
+    // 悪送球がスタンドに入って打者走者に二個の塁が与えられた場合、
+    // 記録は「遊撃エラー」のままなので、二塁まで行ったことが文に出ない。
+    // 最後の確かめのつもりの一行が、いちばん間違えやすいところを飛ばしていた。
+    const destSuffix = batterTo !== proposal.batterTo && batterTo !== 'out' && batterTo !== 4
+      ? t('playsheet.batterDest', { base: t(`base.${batterTo}`) })
+      : '';
     // 失策も確認文に出す。押したのに文に出ないと、入ったのか分からない
     const errSuffix = errKind
       ? t('playsheet.errSuffix', { pos: errPos || DIR_TO_POSITION[direction] || '', kind: t(`errKind.${errKind}`) })
       : '';
     // 日本語は語のあいだに空白を入れない(「投手 フライ でよろしいですか?」になっていた)
-    if (lang === 'ja') return `${[dir, ot, label].filter(Boolean).join('')}${errSuffix}${runsSuffix}`;
+    if (lang === 'ja') return `${[dir, ot, label].filter(Boolean).join('')}${destSuffix}${errSuffix}${runsSuffix}`;
     // 英語は語順が異なるため、空でない要素を半角スペースで連結
-    return `${[dir, ot, label].filter(Boolean).join(' ')}${errSuffix}${runsSuffix}`;
+    return `${[dir, ot, label].filter(Boolean).join(' ')}${destSuffix}${errSuffix}${runsSuffix}`;
   };
 
   // 守備時: 生還する走者のうち継投を跨いだ走者(前投手の責任走者)

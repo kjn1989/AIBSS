@@ -112,6 +112,26 @@ try {
 
   const log = await page.locator('.scoretab').innerText();
   check('記録の文にも失策が残る', log.includes('失'), log.slice(0, 600));
+  // ---- 悪送球がスタンドに入って打者に二個の塁が与えられた場合 ----
+  // 記録は「遊撃エラー」のままなので、二塁まで行ったことが確認文に出ないと
+  // 最後の確かめで拾えない
+  await page.click('.result-pad button:has-text("エラー")');
+  await page.waitForTimeout(400);
+  const coach2 = page.locator('.pad-coach button');
+  if (await coach2.count()) { await coach2.click(); await page.waitForTimeout(200); }
+  const ss = page.locator('.field-pad button.field-pos:has-text("遊")').first();
+  if (await ss.count()) { await ss.click(); } else { await page.locator('.field-pad button.field-pos').first().click(); }
+  await page.waitForTimeout(600);
+  const q1 = await page.locator('.confirm-card').innerText();
+  check('既定の一塁のときは行き先を書き足さない', !q1.includes('打者'), q1);
+  await page.locator('.runner-move button:has-text("二塁へ")').last().click();
+  await page.waitForTimeout(300);
+  const q2 = await page.locator('.confirm-card').innerText();
+  check('二塁まで行ったことが確認文に出る', q2.includes('打者二塁へ'), q2);
+  check('記録はエラーのまま', q2.includes('エラー'), q2);
+  // 「二塁塁へ」のように塁が重ならないこと
+  check('塁の字が重なっていない', !q2.includes('塁塁'), q2);
+
 } catch (e) {
   console.log('EXCEPTION:', e && e.message);
   failures++;
