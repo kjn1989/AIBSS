@@ -2602,6 +2602,8 @@ button.manage-open {
 .fv-rate .v .unit { font-size: 15px; font-weight: 700; opacity: .55; margin-left: 1px; }
 /* 「五分 → 81%」は数字だけより長いので、枠に収まる大きさに落とす */
 .fv-rate .v.even { font-size: 20px; letter-spacing: -.02em; white-space: nowrap; }
+/* 符号つきの動いた幅。25% → 88% の下に小さく添える */
+.fv-rate .v .delta { display: block; font-size: 13px; font-weight: 800; opacity: .75; margin-top: -1px; }
 
 /* このプレイに付いた失策。安打の記録は変えず、失策だけを別に取る */
 .play-error {

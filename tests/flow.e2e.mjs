@@ -252,17 +252,18 @@ try {
       v: el.querySelector('.v')?.textContent,
       note: el.querySelector('.n')?.textContent,
     })));
-  check('確度と大きさが並んでいる', rates.length === 2, JSON.stringify(rates));
+  check('確度と幅が並んでいる', rates.length === 2, JSON.stringify(rates));
   check('片方は確度', rates[0]?.name?.includes('確度'), JSON.stringify(rates));
-  check('もう片方は大きさ', rates[1]?.name?.includes('大きさ'), JSON.stringify(rates));
+  check('もう片方は動いた幅', rates[1]?.name?.includes('動いた最大幅'), JSON.stringify(rates));
   // 分母が見えないと「.500」が何のうちの半分なのか分からない
   // 打率と同じ .500 を主にし、分数は裏取りとして後ろに小さく添える
   check('確度は率が先、分数が後ろ',
     /^(1\.000|\.\d{3})\s*\d+\/\d+$/.test((rates[0]?.v || '').trim()), JSON.stringify(rates));
   // 実際にあった場面をそのまま出す。五分に揃えて言い直していた頃は、
-  // 平均64ポイントの読みが「五分 → 114%」になっていた
-  check('大きさは実際の場面の勝率で出ている',
-    /^\s*\d+%\s*→\s*\d+%\s*$/.test(rates[1]?.v || ''), JSON.stringify(rates));
+  // 平均64%の読みが「五分 → 114%」になっていた
+  // 実際にあった場面の勝率と、その符号つきの幅
+  check('幅は実際の場面の勝率で出ている',
+    /^\s*\d+%\s*→\s*\d+%\s*[+−]\d+%\s*$/.test(rates[1]?.v || ''), JSON.stringify(rates));
   check('勝率が100%を超えない',
     ((rates[1]?.v || '').match(/(\d+)%/g) || []).every((x) => Number(x.replace('%', '')) <= 100),
     JSON.stringify(rates));
@@ -275,34 +276,35 @@ try {
     })));
   // 2つの関係を鎖で言い切る。並べただけだと、どちらを見ればいいのか分からない
   check('押した→読めた→動いた の順で繋いである',
-    /押した\d+回 → 読めた\d+回（\.\d+）→ そのとき勝率は平均\d+ポイント動いた/.test(sheetTxt),
+    /押した\d+回 → 読めた\d+回（\.\d+）→ そのとき勝つ確率は平均\d+%動いた/.test(sheetTxt),
     sheetTxt.slice(0, 400));
-  check('大きさの分母を書いてある',
-    sheetTxt.includes('大きさの分母は「読めた回数」'), sheetTxt.slice(0, 400));
+  check('幅の分母を書いてある',
+    sheetTxt.includes('幅の分母は「読めた回数」'), sheetTxt.slice(0, 400));
   // 言い直しをやめたので、五分起点の説明はもう出ない
   check('五分に揃える説明は無くなっている', !sheetTxt.includes('五分の勝負に揃えて'), sheetTxt.slice(0, 600));
   check('どの場面かがタイルに書いてある',
     /回(表|裏)。読めた中でいちばん大きかった場面/.test(rates[1]?.note || ''), JSON.stringify(rates));
-  check('平均は下に小さく残す', /読めた\d+回の平均は\d+ポイントでした/.test(sheetTxt), sheetTxt.slice(0, 600));
+  check('平均は下に小さく残す', /読めた\d+回の平均は\d+%でした/.test(sheetTxt), sheetTxt.slice(0, 600));
   // タイルの数字が、その打席の行にある勝率とそのまま一致すること
   const readRows = tagRowsForSize.filter((r) => r.vd === '読めた');
   check('タイルの数字が打席の行と一致する',
-    readRows.length === 1 && (rates[1]?.v || '').replace(/\s/g, '') === (readRows[0].mv || '').replace(/\s/g, ''),
+    readRows.length === 1
+      && (rates[1]?.v || '').replace(/\s/g, '').startsWith((readRows[0].mv || '').replace(/\s/g, '')),
     JSON.stringify({ tile: rates[1]?.v, row: readRows[0]?.mv }));
   // 押していない動きを率にすると「感じたときだけでOK」と矛盾する。事実として置く
   check('押していない動きで下がらないと書いてある',
     sheetTxt.includes('成績は下がりません'), sheetTxt.slice(0, 400));
 
   // 大きさは読めた回数で割る。押した回数で割ると読めなかった回に薄められる
-  const chain = sheetTxt.match(/押した(\d+)回 → 読めた(\d+)回（\.(\d+)）→ そのとき勝率は平均(\d+)ポイント/);
+  const chain = sheetTxt.match(/押した(\d+)回 → 読めた(\d+)回（\.(\d+)）→ そのとき勝つ確率は平均(\d+)%/);
   const rowMoves = await page.evaluate(() =>
     [...document.querySelectorAll('.sheet .fv-tag')]
       .filter((el) => el.querySelector('.vd')?.textContent === '読めた')
       .map((el) => Number((el.querySelector('.fv-tag-move .am')?.textContent || '').match(/(\d+)/)?.[1] || 0)));
-  check('大きさが読めた回の平均と一致する', !!chain && rowMoves.length > 0
+  check('平均が読めた回の平均と一致する', !!chain && rowMoves.length > 0
     && Math.abs(Number(chain[4]) - rowMoves.reduce((a, b) => a + b, 0) / rowMoves.length) <= 1,
     JSON.stringify({ chain: chain && chain[0], rowMoves }));
-  check('大きさは押した回数では割っていない', !!chain
+  check('幅は押した回数では割っていない', !!chain
     && Number(chain[1]) !== Number(chain[2])
     && Math.abs(Number(chain[4]) - rowMoves.reduce((a, b) => a + b, 0) / Number(chain[1])) > 1,
     JSON.stringify({ chain: chain && chain[0], rowMoves }));
@@ -322,13 +324,14 @@ try {
   const preRows = tagRows.filter((r) => r.vd === '読めた');
   check('読めたタグがある(見え方を確かめるため)', preRows.length > 0, JSON.stringify(tagRows));
   // 符号ではなく言葉で書く。「+25pt」だと、下がったのが正解のときに上がって見える
-  check('動いた向きが言葉で書いてある',
-    preRows.every((r) => /ポイント(上げ|下げ)/.test(r.am || '')), JSON.stringify(preRows));
-  check('上げ下げが勝率の実数と食い違わない',
+  // 「流れ切れた」が読めたときは勝つ確率が下がる。符号もそれに合わせる
+  check('動いた幅が符号つきで出ている',
+    preRows.every((r) => /^[+−]\d+%$/.test((r.am || '').trim())), JSON.stringify(preRows));
+  check('符号が勝率の実数と食い違わない',
     preRows.every((r) => {
       const m = (r.mv || '').match(/(\d+)% → (\d+)%/);
       if (!m) return false;
-      return r.am.includes('上げ') ? Number(m[2]) > Number(m[1]) : Number(m[2]) < Number(m[1]);
+      return r.am.trim().startsWith('+') ? Number(m[2]) > Number(m[1]) : Number(m[2]) < Number(m[1]);
     }), JSON.stringify(preRows));
   // 勝率が動いた中身を実際の記録で言う。数字だけだと何が起きたのか読めない
   check('何が起きて動いたかが書いてある',

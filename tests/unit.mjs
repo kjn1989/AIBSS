@@ -3283,7 +3283,7 @@ test('judgeFlowTags: 後追いは読めたに入らない。押したあとに�
   const j = judgeFlowTags(g, series, { minSwing: 0.12, reactSwing: 0.07 });
   assert.equal(j.verdict.tag, 'post', '押す前にもう動いていたので後追い');
   assert.equal(j.hitRate, 0, '読めたには入らない');
-  assert.equal(j.moves.tag.gain, 0, '押したあとに10ポイント動いていても読めたことにしない');
+  assert.equal(j.moves.tag.gain, 0, '押したあとに10%動いていても読めたことにしない');
   assert.equal(j.moves.tag.plays.length, 0, '中身も出さない');
 });
 
@@ -3322,7 +3322,7 @@ test('judgeFlowTags: 勝率の線なら、押した時点と山の勝率が実�
   assert.equal(mv.weAt, 0.50, '押した時点は線の出発点');
   assert.ok(Math.abs(mv.wePeak - 0.80) < 1e-9, `山は実際にあった値: ${mv.wePeak}`);
   // 窓の端まで足すと 0.20+0.10-0.30 = 0 になってしまう。山で測る
-  assert.ok(Math.abs(mv.gain - 0.30) < 1e-9, `動いたのは30ポイント: ${mv.gain}`);
+  assert.ok(Math.abs(mv.gain - 0.30) < 1e-9, `動いたのは30%: ${mv.gain}`);
   assert.equal(mv.plays.length, 2, '山までの打席だけを中身にする');
 });
 
@@ -3347,7 +3347,7 @@ test('judgeFlowTags: 「流れ切れた」が読めたときは勝率が下が�
 });
 
 test('judgeFlowTags: 大きさは「読めた回数」で割る', () => {
-  // 3回押して、読めたのは1回。その1回で勝率が30ポイント動いた。
+  // 3回押して、読めたのは1回。その1回で勝つ確率が30%動いた。
   // 押した回数(3)で割ると10ptになり、「どれくらい当たるか」でも
   // 「当たるとどれくらい大きいか」でもない数になる。
   const logs = [];
@@ -3377,7 +3377,7 @@ test('judgeFlowTags: 大きさは「読めた回数」で割る', () => {
 });
 
 test('judgeFlowTags: 一度も読めていなければ大きさは出さない', () => {
-  // 0で埋めると「平均0ポイント」になり、実績が無いのに数字が立つ
+  // 0で埋めると「平均0%」になり、実績が無いのに数字が立つ
   const logs = [
     { id: 'tag', kind: 'flow', inning: 1, isTop: true, payload: { dir: 'up' } },
     paLog(1, { kind: 'atbat', r: [0, 0, 0], outs: 0, runs: 0 }),
@@ -4814,7 +4814,7 @@ test('監査: 記録員の通算は、どの試合を開いていても同じ数
 
 test('監査: 力の差を入れた試合は、流れタグのしきい値も一緒に縮む', () => {
   // 「胸を借りる」の試合は勝率が動ける幅そのものが狭い。互角前提の12%のままだと、
-  // 記録員がどれだけ正しく読んでも「大きく動いた」が成立せず、勝率ポイントが0に沈む
+  // 記録員がどれだけ正しく読んでも「大きく動いた」が成立せず、動いた幅が0に沈む
   const even = swingScale({ teamGap: 'even' });
   assert.equal(even.minSwing, OPEN_MIN_SWING, '互角は今までどおり');
   assert.equal(even.reactSwing, OPEN_REACT_SWING);
