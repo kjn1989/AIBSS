@@ -7,7 +7,7 @@ import { gameEndCheck, initialPresetIdFor, defaultPresetIdForEdition, presetById
 import { aggregateFielding, rankFielding, aggregateBatting, aggregatePitching, battingMetrics, pitchingMetrics, titleLeaders, DETAIL_METRICS, detailRanking, defaultInningBasis } from '../src/lib/stats.js';
 import { translate } from '../src/lib/i18n.js';
 import { newspaperPrompt, editionForPrompt } from '../src/lib/gemini.js';
-import { schoolTypesFor } from '../src/lib/year.js';
+import { kindsFor, kindOf, kindPatch, defaultKindFor } from '../src/lib/editionKind.js';
 import { swapOrderPlan, canSwapOrder } from '../src/lib/lineupOrder.js';
 import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, needsComplexConfirm, parseDirectionOnly, parseContact, playLabel } from '../src/lib/voiceParser.js';
 import { swapTargetIndex, timingAnchor } from '../src/lib/logOrder.js';
@@ -5184,10 +5184,41 @@ test('学校区分: 前の試合のプリセットは同じエディションの
   assert.equal(initialPresetIdFor(null, 'ブカツ(中高大)', 'junior'), 'chu7');
 });
 
-test('学校区分: 選べるのはブカツが中高大、少年野球は小学だけ', () => {
-  assert.deepEqual(schoolTypesFor('ブカツ(中高大)').map((x) => x.id), ['junior', 'high', 'university']);
-  assert.deepEqual(schoolTypesFor('少年野球').map((x) => x.id), ['elementary']);
-  assert.deepEqual(schoolTypesFor('草野球'), [], '草野球には学校区分が無い');
+test('区分: エディションごとに選べるものが違う', () => {
+  assert.deepEqual(kindsFor('ブカツ(中高大)'), ['junior', 'high', 'university']);
+  assert.deepEqual(kindsFor('草野球'), ['kusa', 'shakaijin']);
+  assert.deepEqual(kindsFor('少年野球'), ['elementary'], '少年野球は1つなので選ばせない');
+});
+
+test('区分: 保存先はエディションで分かれるが、読み書きは1か所', () => {
+  // schoolType は学年と卒業の判定にも使う既存の設定。社会人の区分は混ぜられない
+  assert.deepEqual(kindPatch('草野球', 'shakaijin'), { adultType: 'shakaijin' });
+  assert.deepEqual(kindPatch('ブカツ(中高大)', 'high'), { schoolType: 'high' });
+  // 読むときは1つの関数で済む
+  assert.equal(kindOf({ edition: '草野球', adultType: 'shakaijin', schoolType: 'high' }), 'shakaijin',
+    '草野球のときは schoolType を見ない');
+  assert.equal(kindOf({ edition: 'ブカツ(中高大)', adultType: 'shakaijin', schoolType: 'junior' }), 'junior',
+    'ブカツのときは adultType を見ない');
+  assert.equal(kindOf({ edition: '草野球' }), 'kusa', '未設定は草野球');
+  assert.equal(kindOf({ edition: 'ブカツ(中高大)' }), 'high', '未設定は高校');
+  assert.equal(defaultKindFor('少年野球'), 'elementary');
+});
+
+test('区分: 草野球と社会人で既定ルールが変わる', () => {
+  assert.equal(defaultPresetIdForEdition('草野球', 'kusa'), 'kusa7');
+  assert.equal(defaultPresetIdForEdition('草野球', 'shakaijin'), 'shakaijin9');
+  assert.equal(presetById('kusa7').rules.innings, 7);
+  assert.equal(presetById('kusa7').rules.timeLimitMin, 90);
+  assert.equal(presetById('shakaijin9').rules.innings, 9);
+  assert.equal(presetById('shakaijin9').rules.timeLimitMin, null, '社会人の公式戦は時間制限なし');
+});
+
+test('区分: AI記事と表示名も草野球・社会人で分かれる', () => {
+  assert.ok(editionForPrompt('草野球', 'shakaijin').includes('社会人野球'));
+  assert.ok(editionForPrompt('草野球', 'kusa').includes('草野球'));
+  assert.equal(editionLabel('草野球', 'shakaijin'), '社会人・クラブ');
+  assert.equal(editionLabel('草野球', 'kusa'), '草野球');
+  assert.equal(editionLabel('草野球'), '草野球・社会人', '未設定なら今までどおり両方を並べる');
 });
 
 test('学校区分: AI記事の言い方も区分ごとに変わる', () => {

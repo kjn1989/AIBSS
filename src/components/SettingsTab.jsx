@@ -10,8 +10,9 @@ import { EDITIONS, HAND_LABEL, editionLabel, FIELD_POSITIONS, uncoveredPositions
 import {
   isArchived, tenureByPlayer, currentYear, currentSchoolYear, DEFAULT_YEAR_START_MONTH,
   usesGrade, defaultSchoolType, defaultYearStartMonth, maxGradeOf, gradeOf, entryYearFromGrade,
-  sortByGrade, schoolTypesFor, SEASON_START_MONTHS, labelOfYear, yearLabel, yearsInGames,
+  sortByGrade, SEASON_START_MONTHS, labelOfYear, yearLabel, yearsInGames,
 } from '../lib/year.js';
+import { kindsFor, kindOf, kindPatch, kindLabelKey } from '../lib/editionKind.js';
 import EditionText from './EditionText.jsx';
 import { listProfiles, getActiveProfileId, addProfile, switchActiveProfile, deleteProfile, listOrphanedProfiles, restoreProfile } from '../lib/profiles.js';
 import OfficialCloudCard from './OfficialCloudCard.jsx';
@@ -376,9 +377,9 @@ export default function SettingsTab() {
   const [posPlayer, setPosPlayer] = useState(null); // 守備位置シートを開いている選手ID
   // 学年はブカツ・少年野球でのみ使う。草野球では欄ごと出さない
   const gradeOn = usesGrade(state.settings.edition);
-  // ブカツで選べる学校区分。学年設定と同じ settings.schoolType を書き換える
-  const schoolChoices = schoolTypesFor(state.settings.edition);
-  const curSchool = state.settings.schoolType || defaultSchoolType(state.settings.edition);
+  // エディションの中の区分(ブカツ=中高大 / 草野球=草野球・社会人)
+  const kindChoices = kindsFor(state.settings.edition);
+  const curKind = kindOf(state.settings);
   const startMonth = state.settings.yearStartMonth || DEFAULT_YEAR_START_MONTH;
   // 学年は学校の年度(4月始まり)で数える。チームの代(中学・高校は9月始まり)とは別軸
   const thisYear = currentSchoolYear();
@@ -501,29 +502,31 @@ export default function SettingsTab() {
             ここで決めると、試合開始時のルールの既定とAI記事の言い方に効く。
             学年設定にある同じ選択と同じ値(settings.schoolType)を書き換えるので、
             二重に持たない */}
-        {schoolChoices.length > 1 && (
+        {kindChoices.length > 1 && (
           <>
-            <label className="small dim mt12" style={{ display: 'block' }}>{t('set.schoolLevel')}</label>
+            <label className="small dim mt12" style={{ display: 'block' }}>
+              {t(gradeOn ? 'set.schoolLevel' : 'set.adultKind')}
+            </label>
             <div className="toggle-row">
-              {schoolChoices.map((st) => (
+              {kindChoices.map((k) => (
                 <button
-                  key={st.id}
-                  className={curSchool === st.id ? 'active' : ''}
+                  key={k}
+                  className={curKind === k ? 'active' : ''}
                   onClick={() => dispatch({
                     type: 'UPDATE_SETTINGS',
                     patch: {
-                      schoolType: st.id,
+                      ...kindPatch(state.settings.edition, k),
                       // 中学・高校は夏の大会で代が替わる。代の開始月も合わせる
-                      yearStartMonth: defaultYearStartMonth(state.settings.edition, st.id),
+                      ...(gradeOn ? { yearStartMonth: defaultYearStartMonth(state.settings.edition, k) } : {}),
                     },
                   })}
                 >
-                  {t(`school.${st.id}`)}
+                  {t(kindLabelKey(k))}
                 </button>
               ))}
             </div>
-            <p className="small dim mt8">{t('set.schoolLevelNote')}</p>
-            <p className="small dim">{t('grade.schoolHint')}</p>
+            <p className="small dim mt8">{t(gradeOn ? 'set.schoolLevelNote' : 'set.adultKindNote')}</p>
+            {gradeOn && <p className="small dim">{t('grade.schoolHint')}</p>}
           </>
         )}
         <p className="small dim mt8">

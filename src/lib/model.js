@@ -360,14 +360,19 @@ export const EDITIONS = ['草野球', 'ブカツ(中高大)', '少年野球'];
 export const DEFAULT_EDITION = '草野球';
 
 // エディションのUI表示ラベル。保存値は変えず表示のみ差し替える。
-export const SCHOOL_TYPE_LABEL = { junior: '中学', high: '高校', university: '大学', elementary: '小学' };
+// エディションの中の区分の表示名(lib/editionKind.js の区分IDに対応)
+export const KIND_LABEL = {
+  junior: '中学', high: '高校', university: '大学', elementary: '小学',
+  kusa: '草野球', shakaijin: '社会人・クラブ',
+};
 
-export function editionLabel(edition, schoolType) {
-  if (edition === '草野球') return '草野球・社会人';
-  // ブカツは中高大が混ざる。どれで記録しているかはヘッダーに出しておく
-  if (edition === 'ブカツ(中高大)' && SCHOOL_TYPE_LABEL[schoolType]) {
-    return `ブカツ(${SCHOOL_TYPE_LABEL[schoolType]})`;
+// 同じエディションでも中身が違う。どれで記録しているかはヘッダーに出しておく
+export function editionLabel(edition, kind) {
+  if (edition === '草野球') {
+    // 未設定のときだけ、これまでどおり両方を並べた呼び方にする
+    return kind === 'shakaijin' ? '社会人・クラブ' : (kind === 'kusa' ? '草野球' : '草野球・社会人');
   }
+  if (edition === 'ブカツ(中高大)' && KIND_LABEL[kind]) return `ブカツ(${KIND_LABEL[kind]})`;
   return edition || '草野球';
 }
 

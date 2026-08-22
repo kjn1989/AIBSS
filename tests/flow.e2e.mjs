@@ -259,14 +259,19 @@ try {
   // 打率と同じ .500 を主にし、分数は裏取りとして後ろに小さく添える
   check('確度は率が先、分数が後ろ',
     /^(1\.000|\.\d{3})\s*\d+\/\d+$/.test((rates[0]?.v || '').trim()), JSON.stringify(rates));
-  // 「31pt」だけでは大きいのか小さいのか分からない。物差しを五分に固定して言い直す
-  check('大きさは五分からの行き先で出ている',
-    /五分\s*→\s*\d+%/.test(rates[1]?.v || ''), JSON.stringify(rates));
+  // 実際にあった場面をそのまま出す。五分に揃えて言い直していた頃は、
+  // 平均64ポイントの読みが「五分 → 114%」になっていた
+  check('大きさは実際の場面の勝率で出ている',
+    /^\s*\d+%\s*→\s*\d+%\s*$/.test(rates[1]?.v || ''), JSON.stringify(rates));
+  check('勝率が100%を超えない',
+    ((rates[1]?.v || '').match(/(\d+)%/g) || []).every((x) => Number(x.replace('%', '')) <= 100),
+    JSON.stringify(rates));
 
   const sheetTxt = await page.locator('.sheet').last().innerText();
   const tagRowsForSize = await page.evaluate(() =>
     [...document.querySelectorAll('.sheet .fv-tag')].map((el) => ({
       vd: el.querySelector('.vd')?.textContent,
+      mv: el.querySelector('.fv-tag-move .mv')?.textContent,
     })));
   // 2つの関係を鎖で言い切る。並べただけだと、どちらを見ればいいのか分からない
   check('押した→読めた→動いた の順で繋いである',
@@ -274,20 +279,16 @@ try {
     sheetTxt.slice(0, 400));
   check('大きさの分母を書いてある',
     sheetTxt.includes('大きさの分母は「読めた回数」'), sheetTxt.slice(0, 400));
-  // 五分に揃えたものだと言わないと、その場面が五分から始まったように読める
-  check('五分に揃えたものだと書いてある',
-    sheetTxt.includes('五分の勝負に揃えて言い直した')
-      && sheetTxt.includes('五分から始まったとは限りません'), sheetTxt.slice(0, 600));
-  // 平均だけだと何を指しているのか分からない。実物を1つ添える
-  const top = sheetTxt.match(/読めた中でいちばん大きかったのは(.+?)の (\d+)% → (\d+)%/);
-  check('いちばん大きかった場面が実測で出ている', !!top, sheetTxt.slice(0, 600));
-  // 五分に揃えた値が、実測の動き幅と合っているか。
-  // 読めたタグが1つの試合なので、五分 + その1つの動き幅 になるはず
-  const evenTo = Number((rates[1]?.v || '').match(/(\d+)%/)?.[1]);
+  // 言い直しをやめたので、五分起点の説明はもう出ない
+  check('五分に揃える説明は無くなっている', !sheetTxt.includes('五分の勝負に揃えて'), sheetTxt.slice(0, 600));
+  check('どの場面かがタイルに書いてある',
+    /回(表|裏)。読めた中でいちばん大きかった場面/.test(rates[1]?.note || ''), JSON.stringify(rates));
+  check('平均は下に小さく残す', /読めた\d+回の平均は\d+ポイントでした/.test(sheetTxt), sheetTxt.slice(0, 600));
+  // タイルの数字が、その打席の行にある勝率とそのまま一致すること
   const readRows = tagRowsForSize.filter((r) => r.vd === '読めた');
-  check('揃えた値が実測の動き幅と合っている',
-    readRows.length === 1 && !!top && evenTo === 50 + (Number(top[3]) - Number(top[2])),
-    JSON.stringify({ evenTo, top: top && top[0], reads: readRows.length }));
+  check('タイルの数字が打席の行と一致する',
+    readRows.length === 1 && (rates[1]?.v || '').replace(/\s/g, '') === (readRows[0].mv || '').replace(/\s/g, ''),
+    JSON.stringify({ tile: rates[1]?.v, row: readRows[0]?.mv }));
   // 押していない動きを率にすると「感じたときだけでOK」と矛盾する。事実として置く
   check('押していない動きで下がらないと書いてある',
     sheetTxt.includes('成績は下がりません'), sheetTxt.slice(0, 400));
