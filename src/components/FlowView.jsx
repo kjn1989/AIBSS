@@ -545,8 +545,16 @@ export default function FlowView({ game, onClose }) {
           {shape && (
             <div className="fv-now">
               <div className="fv-peaks">
+                {/* 上へも下へも、1打席でいちばん動いたところ。
+                    「いちばん良かった」は勝った試合だと必ず最後の打席(100%)になり、
+                    当たり前のことしか言わないのでやめた */}
+                <span>{t('fv.swingPoint', {
+                  up: Math.round(shape.bestUp.delta * 100),
+                  upInn: innOf(shape.bestUp),
+                  down: Math.round(Math.abs(shape.bestDown.delta) * 100),
+                  downInn: innOf(shape.bestDown),
+                })}</span>
                 <span>{t('fv.lowPoint', { inn: innOf(shape.lowest), v: Math.round(shape.lowest.we * 100) })}</span>
-                <span>{t('fv.highPoint', { inn: innOf(shape.highest), v: Math.round(shape.highest.we * 100) })}</span>
               </div>
               {/* 割合は点差だけで決まるので、どちらが先攻でも偏らない。
                   勝率のほうは後攻が最後に打つぶん同点でも50%を割るので、割合には使わない。

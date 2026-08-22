@@ -595,8 +595,11 @@ export function movePlays(plays = []) {
 // ------------------------------------------------------------
 // 線の形をひとことで言う
 //
-// 出すのは2つだけ。
-//  ・いちばん苦しかった打席と、いちばん良かった打席(勝率そのもの)
+// 出すのは2つ。
+//  ・1打席でいちばん大きく動いたところ(上へも下へも)
+//    「いちばん良かった打席」は出さない。勝った試合ではそれが必ず最後の打席
+//    (勝率100%)になり、当たり前のことしか言わないため。
+//  ・いちばん苦しかった打席(勝率そのもの)
 //    勝率は0〜100%で基準が動かないので、そのまま読める。
 //  ・リードして進んだ打席・同点だった打席・リードされていた打席の割合
 //    こちらは点差だけで決まるので、どちらが先攻でも偏らない。
@@ -607,14 +610,26 @@ export function movePlays(plays = []) {
 // ------------------------------------------------------------
 export function weShape(series = []) {
   if (!series.length) return null;
-  let lowest = series[0];
-  let highest = series[0];
+  // 試合が決まった打席は勝率がちょうど 100% か 0% になる。そこを最大・最小に
+  // 入れると、勝った試合の「いちばん良かった」は必ず最後の打席になり、
+  // 負けた試合の「いちばん苦しかった」も必ず最後の打席になる。中身が無い。
+  const live = series.filter((s) => s.we > 0 && s.we < 1);
+  const pool = live.length ? live : series;
+  let lowest = pool[0];
+  let bestUp = series[0];
+  let bestDown = series[0];
   let ahead = 0;
   let tied = 0;
   let behind = 0;
-  for (const s of series) {
+  for (const s of pool) {
     if (s.we < lowest.we) lowest = s;
-    if (s.we > highest.we) highest = s;
+  }
+  // 1打席でどれだけ動いたか。こちらは決着した打席も含めてよい
+  // (サヨナラの一打はその試合でいちばん大きく動いた打席そのもの)。
+  // 点差の内訳は全打席が母数なので、同じところで数える
+  for (const s of series) {
+    if (s.delta > bestUp.delta) bestUp = s;
+    if (s.delta < bestDown.delta) bestDown = s;
     if (s.diff > 0) ahead += 1;
     else if (s.diff < 0) behind += 1;
     else tied += 1;
@@ -622,7 +637,7 @@ export function weShape(series = []) {
   const n = series.length;
   const pct = (x) => Math.round((x / n) * 100);
   return {
-    lowest, highest, n,
+    lowest, bestUp, bestDown, n,
     // 母数は両チームの全打席。経過時間は記録していないので「時間」では言えない。
     // 割合だけを勝率の近くに置くと勝率と読み違えられるので、実数も一緒に返す
     ahead, tied, behind,
