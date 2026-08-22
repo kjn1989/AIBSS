@@ -474,6 +474,12 @@ export default function FlowView({ game, onClose }) {
     if (!d) return '';
     return t(mv.wePeak < mv.weAt ? 'fv.tagDown' : 'fv.tagUp', { d });
   };
+  // タイルに出す符号つきの幅。「上げ/下げ」と同じ判断を数字の形でも出す
+  const signedMove = (mv) => {
+    const d = Math.round((mv?.gain || 0) * 100);
+    if (!d) return '';
+    return mv.wePeak < mv.weAt ? `−${d}%` : `+${d}%`;
+  };
   // その勝率を動かしたのは何だったのか。攻撃中に押したのか守備中に押したのかで
   // 中身が変わる(自軍が打った / 相手を抑えた)ので、両方を数える
   const movedBy = (mv) => {
@@ -651,6 +657,7 @@ export default function FlowView({ game, onClose }) {
                         b: Math.round(topRead.mv.wePeak * 100),
                       })
                       : '—'}
+                    {topRead && <span className="delta">{signedMove(topRead.mv)}</span>}
                   </div>
                   <div className="n">
                     {topRead
