@@ -5156,6 +5156,58 @@ test('物語: 回と勝率は繰り返さない(左の欄に出ている)', () =
   assert.ok(!/^\d+回/.test(s), `回から始めない: ${s}`);
 });
 
+test('物語: 犠打は「倒れ」ではない', () => {
+  // 報告のあった場面: 8回の送りバントが「6番・松本がバントに倒れ」と書かれていた。
+  // 実際は狙って走者を進めた成功したプレイで、試合を決めた1つだった。
+  const items = [nrPa('a', 'p1', 'sacBunt', 'P', 0, true, 0.05, 8, false, 6)];
+  const s = draftNarrative(nrRun(items), nrCtx());
+  assert.ok(!s.includes('倒れ'), `打ち取られた言い方にしない: ${s}`);
+  assert.ok(s.includes('送りバント'), `送りバントだと分かる: ${s}`);
+  assert.ok(s.includes('6番・平山'), `打順と名前が出る: ${s}`);
+});
+
+test('物語: 犠打は「出塁」にもしない', () => {
+  // 打ち取られた側から外すだけだと、今度は出塁した側にまとめられてしまう
+  const items = [
+    nrPa('a', 'p1', 'single', 'LF', 0, true, 0.05),
+    nrPa('b', 'p2', 'sacBunt', 'P', 0, true, 0.03),
+  ];
+  const s = draftNarrative(nrRun(items), nrCtx());
+  assert.ok(!/連打|続けて出塁/.test(s), `犠打を出塁にまとめない: ${s}`);
+  assert.ok(s.includes('送りバント'), s);
+});
+
+test('物語: 点が入った犠打・犠飛は点の入り方で言う', () => {
+  const items = [nrPa('a', 'p3', 'sacFly', 'CF', 1, true, 0.12)];
+  const s = draftNarrative(nrRun(items), nrCtx({ a: { my: 0, opp: 0 } }));
+  assert.ok(s.includes('犠牲フライ'), s);
+  assert.ok(s.includes('先制'), `点の入り方はそのまま: ${s}`);
+  assert.ok(!s.includes('倒れ'), s);
+});
+
+test('物語: 出塁していない打席で入った点は「その打席で取った」と書かない', () => {
+  // 同じ文に「8番・山下の空振り三振で勝ち越し」と出ていた。三振が点を取ることはない。
+  // 暴投・捕逸・失策で還っているので、その打席の「間に」入ったと書く。
+  const items = [nrPa('a', 'p4', 'so', null, 1, true, 0.2)];
+  const s = draftNarrative(nrRun(items), nrCtx({ a: { my: 0, opp: 0 } }));
+  assert.ok(s.includes('の間に'), `打席の間に入ったと書く: ${s}`);
+  assert.ok(!/三振で先制|三振で\d点/.test(s), `三振が点を取ったようには書かない: ${s}`);
+});
+
+test('物語: 出塁した打席の点は今までどおり「その打席で」', () => {
+  const items = [nrPa('a', 'p1', 'single', 'LF', 1)];
+  const s = draftNarrative(nrRun(items), nrCtx({ a: { my: 0, opp: 0 } }));
+  assert.ok(!s.includes('の間に'), `安打は打った本人の点: ${s}`);
+  assert.ok(s.includes('先制'), s);
+});
+
+test('物語: 相手の犠打は「打ち取った」にしない', () => {
+  const items = [nrPa('a', 'C', 'sacBunt', 'P', 0, false, -0.04)];
+  const s = draftNarrative(nrRun(items), nrCtx());
+  assert.ok(!s.includes('打ち取'), `決められた側の言い方にする: ${s}`);
+  assert.ok(s.includes('送りバント'), s);
+});
+
 test('物語: 続けて打ち取った打者はまとめる', () => {
   const items = [
     nrPa('1', 'C', 'out', 'SS', 0, false, -0.05),
