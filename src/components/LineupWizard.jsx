@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { useStore, usePlayerName, useT } from '../state/store.jsx';
 import { isArchived } from '../lib/year.js';
-import { positionLabel, attendeesOf } from '../lib/model.js';
+import { positionLabel, attendeesOf, lineupFromPast } from '../lib/model.js';
 import { FIELD_SPOTS } from '../lib/fieldSpots.js';
 import { lineupSlotsFor } from '../lib/rules.js';
 import Sheet from './Sheet.jsx';
@@ -55,13 +55,10 @@ export default function LineupWizard({ game }) {
   const loadFromPast = (gameId) => {
     const g = state.games[gameId];
     if (!g) return;
-    // 存在する選手のみ引き継ぐ
-    const existing = new Set(players.map((p) => p.id));
-    const next = g.lineup
-      .filter((l) => existing.has(l.playerId))
-      .sort((a, b) => a.order - b.order)
-      .map((l) => ({ playerId: l.playerId, position: l.position || '' }));
+    const { selected: next, useDH: dh, pitcherId: pid } = lineupFromPast(g, players.map((p) => p.id));
     setSelected(next);
+    setUseDH(dh);
+    setPitcherId(pid);
   };
 
   const reorder = (from, to) => setSelected((prev) => moveItem(prev, from, to));
@@ -154,6 +151,8 @@ export default function LineupWizard({ game }) {
           onConfirm={confirm}
           useDH={useDH}
           pitcherId={pitcherId}
+          benchPlayers={players.filter((p) => !selectedIds.has(p.id))}
+          onPitcher={setPitcherId}
         />
       )}
     </div>
@@ -335,14 +334,18 @@ function ReorderStep({ selected, nameOf, numberOf, onReorder, onBack, onNext }) 
 }
 
 // ---- ステップ3: フィールドの各ポジションをタップ → メンバーリストで割り当て/入れ替え ----
-function PositionStep({ selected, nameOf, numberOf, onAssignPlayer, onClearPosition, onBack, onConfirm, useDH, pitcherId }) {
+function PositionStep({ selected, nameOf, numberOf, onAssignPlayer, onClearPosition, onBack, onConfirm, useDH, pitcherId, benchPlayers, onPitcher }) {
   const { state } = useStore();
   const t = useT();
   const lang = state.settings.lang || 'ja';
   const [pickerPos, setPickerPos] = useState(null); // 割り当て中のポジション値
   const holderOf = (value) => selected.findIndex((s) => s.position === value);
-  // DH制なら「投」は打順外の投手が守るので打者からは選べない。DHなしなら「指(DH)」は使わない。
-  const spots = FIELD_SPOTS.filter((s) => (useDH ? s.value !== '投' : s.value !== 'DH'));
+  // DHなしなら「指(DH)」は使わない。DH制のときは「投」も残す。
+  // 以前はDH制で「投」をフィールドから外し、読み取り専用の名札を置いていた。
+  // 投手だけ手前の画面まで戻らないと決められず、他のポジションと操作がちぐはぐだった。
+  const spots = FIELD_SPOTS.filter((s) => useDH || s.value !== 'DH');
+  // DH制の「投」は打順外から選ぶ。打順の中には投手が居ないので、打者一覧を出しても選べない
+  const pitcherPick = useDH && pickerPos === '投';
   // 選手の現在守備位置の表示(チップ)
   const posLabel = (v) => (!v ? t('lw.posNone') : v === 'DH' ? t('lw.posDh') : (lang === 'ja' ? v : positionLabel(v, 'en')));
   // フィールド上/ピッカー見出しの位置表記
@@ -386,8 +389,10 @@ function PositionStep({ selected, nameOf, numberOf, onAssignPlayer, onClearPosit
               </button>
             );
           }
-          const holder = holderOf(spot.value);
-          const taken = holder >= 0;
+          // DH制の「投」だけは打順の外に居るので、holderOf では見つからない
+          const dhPitcher = useDH && spot.value === '投';
+          const holder = dhPitcher ? -1 : holderOf(spot.value);
+          const taken = dhPitcher ? !!pitcherId : holder >= 0;
           return (
             <button
               key={spot.value}
@@ -395,16 +400,12 @@ function PositionStep({ selected, nameOf, numberOf, onAssignPlayer, onClearPosit
               style={{ left: spot.left, top: spot.top }}
               onClick={() => setPickerPos(spot.value)}
             >
-              {taken ? nameOf(selected[holder].playerId) : spotDisplay(spot.value)}
+              {dhPitcher
+                ? (pitcherId ? nameOf(pitcherId) : spotDisplay(spot.value))
+                : (taken ? nameOf(selected[holder].playerId) : spotDisplay(spot.value))}
             </button>
           );
         })}
-        {/* DH制: 投手は打順外。フィールド上に読み取り専用で表示 */}
-        {useDH && (
-          <div className="pos-spot pitcher-fixed" style={{ left: '50%', top: '66%' }}>
-            {pitcherId ? nameOf(pitcherId) : t('lw.pitcherTbd')}
-          </div>
-        )}
       </div>
       {useDH && (
         <p className="small dim mt8">{pitcherId ? t('lw.dhStarter', { name: nameOf(pitcherId) }) : t('lw.dhStarterLater')}</p>
@@ -414,7 +415,25 @@ function PositionStep({ selected, nameOf, numberOf, onAssignPlayer, onClearPosit
       {pickerPos && (
         <Sheet title={t('lw.pickerTitle', { pos: spotDisplay(pickerPos) })} onClose={() => setPickerPos(null)}>
           <div className="picker-list">
-            {selected.map((s, i) => {
+            {pitcherPick && benchPlayers.length === 0 && (
+              <p className="small dim">{t('lw.noBench')}</p>
+            )}
+            {pitcherPick && benchPlayers.map((p) => {
+              const here = p.id === pitcherId;
+              return (
+                <button
+                  key={p.id}
+                  className={`picker-row${here ? ' current' : ''}`}
+                  onClick={() => { onPitcher(p.id); setPickerPos(null); }}
+                >
+                  <span className="grow" style={{ textAlign: 'left' }}>
+                    {nameOf(p.id)}{p.number && <span className="dim small"> #{p.number}</span>}
+                  </span>
+                  <span className={`pos-chip${here ? ' on' : ''}`}>{here ? t('lw.onDefense') : t('lw.outOfOrder')}</span>
+                </button>
+              );
+            })}
+            {!pitcherPick && selected.map((s, i) => {
               const here = s.position === pickerPos;
               return (
                 <button
@@ -431,7 +450,16 @@ function PositionStep({ selected, nameOf, numberOf, onAssignPlayer, onClearPosit
               );
             })}
           </div>
-          {pickerPos !== '打' && holderOf(pickerPos) >= 0 && (
+          {pitcherPick && pitcherId && (
+            <button
+              className="ghost danger mt8"
+              style={{ width: '100%' }}
+              onClick={() => { onPitcher(''); setPickerPos(null); }}
+            >
+              {t('lw.clearPosition', { name: nameOf(pitcherId) })}
+            </button>
+          )}
+          {!pitcherPick && pickerPos !== '打' && holderOf(pickerPos) >= 0 && (
             <button
               className="ghost danger mt8"
               style={{ width: '100%' }}

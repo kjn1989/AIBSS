@@ -21,7 +21,7 @@ import { aggregateScorersOver, swingScale, OPEN_MIN_SWING, OPEN_REACT_SWING } fr
 import { aggregateContrib, rankContrib, formatContrib } from '../src/lib/contrib.js';
 import { LEVEL_K, LEVEL_MIN, LEVEL_MAX, stateKey, buildRunExpectancy, flowSeries, flowRuns, judgeFlowTags, movePlays, formatRate, weShape, weSeries, stateOfKey, BASE_RE, reOf, KOSHIEN_RE, KOSHIEN_WEIGHTS, KOSHIEN_LEVEL, isKoshienMeasured, baseReFor } from '../src/lib/flow.js';
 import { teamPower, mostOff, formatPower } from '../src/lib/teamPower.js';
-import { RESULTS as RESULTS_FOR_OUT, OUT_TYPES, outTypeLabel, infieldFlyPossible, newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions, attendeesOf, lastAttendees, autoLineupFrom, subRank, resultLabelOf, isIntentionalBB } from '../src/lib/model.js';
+import { RESULTS as RESULTS_FOR_OUT, OUT_TYPES, outTypeLabel, infieldFlyPossible, newGame, allowsFoul, newPlayer, FIELD_POSITIONS, playablePosition, positionCoverage, uncoveredPositions, attendeesOf, lastAttendees, autoLineupFrom, lineupFromPast, subRank, resultLabelOf, isIntentionalBB } from '../src/lib/model.js';
 import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf, oppLettersInGame, oppBaserunning } from '../src/lib/oppBox.js';
 import { remapPlayerInGame, fillPlayerGaps } from '../src/lib/mergePlayers.js';
 import { computeBoxScore, halfPlayed } from '../src/lib/boxscore.js';
@@ -3131,6 +3131,54 @@ test('judgeFlowTags: 一度も読めていなければ大きさは出さない',
   const j = judgeFlowTags(g, flowSeries(g, null));
   assert.equal(j.hitRate, 0, '確度は0');
   assert.equal(j.avgMove, null, '大きさは「—」にできるよう null');
+});
+
+test('lineupFromPast: DHのオーダーを読み込んだらDH制も一緒に引き継ぐ', () => {
+  // これが抜けていたのが不具合の本体。打順だけ写して useDH を false のままにすると、
+  // 「投」の候補が打者一覧になり、打順の外に居る投手を選ぶ手段が無くなる。
+  const past = {
+    pitcherId: 'p10',
+    lineup: [
+      { order: 1, playerId: 'p1', position: '捕' },
+      { order: 2, playerId: 'p2', position: '一' },
+      { order: 3, playerId: 'p3', position: 'DH' },
+    ],
+  };
+  const ids = ['p1', 'p2', 'p3', 'p10'];
+  const r = lineupFromPast(past, ids);
+  assert.equal(r.useDH, true, 'DHが居ればDH制として読み込む');
+  assert.equal(r.pitcherId, 'p10', '打順外の投手も引き継ぐ');
+  assert.equal(r.selected.length, 3);
+
+  // DHが居なければ今までどおり
+  const noDh = { lineup: [{ order: 1, playerId: 'p1', position: '投' }] };
+  const r2 = lineupFromPast(noDh, ids);
+  assert.equal(r2.useDH, false);
+  assert.equal(r2.pitcherId, '', 'DHなしのときは打順内の「投」を使うので、ここは空');
+});
+
+test('lineupFromPast: 打順に居る人や今日居ない人を投手にはしない', () => {
+  const ids = ['p1', 'p2', 'p3'];
+  // 過去の投手が今日は来ていない
+  const gone = {
+    pitcherId: 'p99',
+    lineup: [
+      { order: 1, playerId: 'p1', position: '捕' },
+      { order: 2, playerId: 'p2', position: 'DH' },
+    ],
+  };
+  assert.equal(lineupFromPast(gone, ids).pitcherId, '', '今日居ない人は投手にしない');
+
+  // 過去の投手が今日は打順に入っている(DH制では投手は打順外でなければならない)
+  const inOrder = {
+    pitcherId: 'p1',
+    lineup: [
+      { order: 1, playerId: 'p1', position: '捕' },
+      { order: 2, playerId: 'p2', position: 'DH' },
+    ],
+  };
+  assert.equal(lineupFromPast(inOrder, ids).pitcherId, '', '打順に入っている人は投手にしない');
+  assert.equal(lineupFromPast(inOrder, ids).useDH, true, 'DH制であることは保つ');
 });
 
 test('movePlays: 攻撃中に押したか守備中に押したかで中身を分ける', () => {

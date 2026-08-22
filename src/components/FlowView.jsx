@@ -620,8 +620,8 @@ export default function FlowView({ game, onClose }) {
                 <div className="fv-rate">
                   <b>{t('fv.readTitle')}</b>
                   <div className="v num">
-                    {judged.counts.pre}<span className="of">/{judged.tags.length}</span>
-                    <span className="rate">{formatRate(judged.hitRate)}</span>
+                    {formatRate(judged.hitRate)}
+                    <span className="of">{judged.counts.pre}/{judged.tags.length}</span>
                   </div>
                   <div className="n">{t('fv.readNote', { a: judged.counts.pre, b: judged.tags.length })}</div>
                 </div>

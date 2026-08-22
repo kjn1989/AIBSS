@@ -243,7 +243,9 @@ try {
   check('片方は確度', rates[0]?.name?.includes('確度'), JSON.stringify(rates));
   check('もう片方は大きさ', rates[1]?.name?.includes('大きさ'), JSON.stringify(rates));
   // 分母が見えないと「.500」が何のうちの半分なのか分からない
-  check('確度は分数で出ている', /\d+\/\d+/.test(rates[0]?.v || ''), JSON.stringify(rates));
+  // 打率と同じ .500 を主にし、分数は裏取りとして後ろに小さく添える
+  check('確度は率が先、分数が後ろ',
+    /^(1\.000|\.\d{3})\s*\d+\/\d+$/.test((rates[0]?.v || '').trim()), JSON.stringify(rates));
   check('大きさは勝率ポイントで出ている', /\d+pt/.test(rates[1]?.v || ''), JSON.stringify(rates));
 
   const sheetTxt = await page.locator('.sheet').last().innerText();
