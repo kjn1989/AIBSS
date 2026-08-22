@@ -6,6 +6,7 @@ import { proposeMoves, judgeAdvance, batterDestOptions } from '../src/lib/plays.
 import { gameEndCheck, initialPresetIdFor, describeRules, rulesAtInning, currentRules, fieldCountAt, isTiebreakInning, diffLiveRules, describeRulePatch, runnersPlaced, placedRunsScored, halfKeyOf, DEFAULT_TIEBREAK, ALL_BAT_MAX, TIEBREAK_RUNNERS, allBatSize, lineupSlotsFor } from '../src/lib/rules.js';
 import { aggregateBatting, aggregatePitching, battingMetrics, pitchingMetrics, titleLeaders, DETAIL_METRICS, detailRanking, defaultInningBasis } from '../src/lib/stats.js';
 import { translate } from '../src/lib/i18n.js';
+import { swapOrderPlan, canSwapOrder } from '../src/lib/lineupOrder.js';
 import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, needsComplexConfirm, parseDirectionOnly, parseContact, playLabel } from '../src/lib/voiceParser.js';
 import { swapTargetIndex, timingAnchor } from '../src/lib/logOrder.js';
 import { parseBatterCorrection, findTargetAtBat, parseSubstitution, parseSubstitutions, parseBatterReassignments, parseResultCorrections, assignResultTargets, mergeResultCorrections, parsePositionCorrections, parseDefensiveAlignment, parsePositionSwaps, keepsBattingOrder, explicitOrderChange, stripInningFractions, parseInningRange, parseSlotBatters, parseAtBatDeletions, parseShortResult, isExplicitSubText, inGamePlayerIds, preferInGamePlayers } from '../src/lib/correctionParser.js';
@@ -1029,6 +1030,66 @@ test('computeBoxScore: 守備側の失策は自チームのEに入る', () => {
   assert.equal(box.my.e, 1, '自チームの失策');
   assert.equal(box.opp.h, 1, '相手の安打はそのまま');
   assert.equal(box.opp.e, 0, '相手の失策にはしない');
+});
+
+// ---- lineupOrder.js ----
+// 実際に起きたこと: 7番と8番を逆に組んだまま3回まで記録してしまった。
+// 打席は画面に出ていた名前で残っているので、並びを直すだけでは記録が合わない。
+const swapGame = () => ({
+  lineup: [
+    { order: 7, playerId: 'yamashita', position: '左' },
+    { order: 8, playerId: 'kawahara', position: '遊' },
+  ],
+  startingLineup: [
+    { order: 7, playerId: 'yamashita', position: '左' },
+    { order: 8, playerId: 'kawahara', position: '遊' },
+  ],
+  atBats: [],
+  playLogs: [
+    { id: 'l1', kind: 'atbat', payload: { order: 7, playerId: 'yamashita' } },
+    { id: 'l2', kind: 'atbat', payload: { order: 8, playerId: 'kawahara' } },
+    { id: 'l3', kind: 'atbat', payload: { order: 7, playerId: 'yamashita' } },
+  ],
+});
+
+test('swapOrderPlan: 打順と守備位置が選手について回る', () => {
+  const p = swapOrderPlan(swapGame(), 7, 8);
+  const s7 = p.lineup.find((l) => l.order === 7);
+  const s8 = p.lineup.find((l) => l.order === 8);
+  assert.equal(s7.playerId, 'kawahara', '7番が川原になる');
+  assert.equal(s8.playerId, 'yamashita', '8番が山下になる');
+  // 打順だけが入れ替わり、守る場所は変わらない
+  assert.equal(s7.position, '遊', '川原は遊撃のまま');
+  assert.equal(s8.position, '左', '山下は左翼のまま');
+  assert.equal(p.startingLineup.find((l) => l.order === 7).playerId, 'kawahara',
+    'スタメンの記録も直す(伝統表記がここから作られるため)');
+});
+
+test('swapOrderPlan: 記録済みの打席も本来の選手へ付け替える', () => {
+  const p = swapOrderPlan(swapGame(), 7, 8);
+  assert.equal(p.reassign.length, 3, '3打席とも動く');
+  assert.deepEqual(p.reassign.find((r) => r.logId === 'l1'), { logId: 'l1', newPlayerId: 'kawahara' });
+  assert.deepEqual(p.reassign.find((r) => r.logId === 'l2'), { logId: 'l2', newPlayerId: 'yamashita' });
+  assert.deepEqual(p.reassign.find((r) => r.logId === 'l3'), { logId: 'l3', newPlayerId: 'kawahara' });
+});
+
+test('swapOrderPlan: 途中で入った代打の打席は動かさない', () => {
+  // 枠だけを見て一律に付け替えると、代打の打席まで持っていってしまう
+  const g = swapGame();
+  g.playLogs.push({ id: 'l4', kind: 'atbat', payload: { order: 7, playerId: 'daida' } });
+  const p = swapOrderPlan(g, 7, 8);
+  assert.ok(!p.reassign.some((r) => r.logId === 'l4'), '代打の打席は残す');
+  assert.equal(p.reassign.length, 3);
+});
+
+test('canSwapOrder: 隣どうしだけ。離れた枠へは動かさない', () => {
+  const g = { lineup: [1, 2, 3, 4].map((n) => ({ order: n, playerId: `p${n}`, position: '' })) };
+  assert.equal(canSwapOrder(g, 2, 3), true);
+  assert.equal(canSwapOrder(g, 3, 2), true, '向きは問わない');
+  assert.equal(canSwapOrder(g, 1, 3), false, '離れた枠は間が全部ずれるので断る');
+  assert.equal(canSwapOrder(g, 2, 2), false);
+  assert.equal(canSwapOrder(g, 4, 5), false, '無い枠とは入れ替えない');
+  assert.equal(swapOrderPlan(g, 1, 3), null, '断ったときは計画も返さない');
 });
 
 test('playErrorOf: 位置が無いもの・知らない位置は失策として数えない', () => {
