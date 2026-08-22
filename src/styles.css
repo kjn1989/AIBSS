@@ -2592,3 +2592,7 @@ button.manage-open {
 }
 .pe-pos { display: grid; grid-template-columns: repeat(9, 1fr); gap: 4px; }
 .pe-pos button { padding: 8px 0; font-size: 14px; font-weight: 700; min-width: 0; }
+
+/* 打順を直すモードの▲▼ */
+.ord-move { display: flex; gap: 4px; flex: none; }
+.ord-move button { width: 40px; padding: 8px 0; font-weight: 800; }

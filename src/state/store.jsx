@@ -12,6 +12,7 @@ import {
 import { generateDemoData } from '../lib/demo.js';
 import { rebuildPitchingStats } from '../lib/pitchingRebuild.js';
 import { swapTargetIndex } from '../lib/logOrder.js';
+import { swapOrderPlan } from '../lib/lineupOrder.js';
 import { describeRulePatch, halfKeyOf, allBatSize, isTiebreakInning } from '../lib/rules.js';
 import { tiebreakPlacement } from '../lib/tiebreak.js';
 import { resolveStarters, alignmentByInning, findPositionIssues } from '../lib/lineupBox.js';
@@ -1655,6 +1656,39 @@ export function reducer(state, action) {
       const nxt = g.playLogs[idx + 1];
       if (nxt && nxt.kind === 'run' && nxt.payload?.playerId === oldId) {
         nxt.payload = { ...nxt.payload, playerId: newId };
+      }
+      g.updatedAt = Date.now();
+      return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
+    }
+
+    // ===== 打順そのものを直す(最初から並びが違っていた) =====
+    // 交代とは別物。交代は「途中でその枠の人が代わった」ことで、代わる前の打席は
+    // 前の選手のもの。こちらは最初から違っていたので、すでに記録した打席も
+    // 本来の選手へ付け替える。交代では直せない(同じ選手が2枠を占める途中の状態を
+    // SUBSTITUTE が止めるため)。
+    case 'SWAP_ORDER': {
+      const g = deep(state.games[action.gameId]);
+      const plan = swapOrderPlan(g, action.a, action.b);
+      if (!plan) return state;
+      g.lineup = plan.lineup;
+      if (plan.startingLineup) g.startingLineup = plan.startingLineup;
+      // 記録済みの打席を付け替える。AtBat・打席ログ・打者自身の得点ログの3つ。
+      for (const r of plan.reassign) {
+        const idx = g.playLogs.findIndex((l) => l.id === r.logId);
+        if (idx < 0) continue;
+        const log = g.playLogs[idx];
+        const oldId = log.payload.playerId;
+        const ab = g.atBats.find((a) => a.id === log.payload.atBatId);
+        if (ab) ab.playerId = r.newPlayerId;
+        log.payload = { ...log.payload, playerId: r.newPlayerId };
+        const name = playerNameOf(state, r.newPlayerId);
+        const label = resultLabelOf(log.payload);
+        const dir = DIRECTIONS[log.payload.direction] || '';
+        log.text = `${name} ${dir}${label}` + (log.payload.runs ? ` (${log.payload.runs}点)` : '');
+        const nxt = g.playLogs[idx + 1];
+        if (nxt && nxt.kind === 'run' && nxt.payload?.playerId === oldId) {
+          nxt.payload = { ...nxt.payload, playerId: r.newPlayerId };
+        }
       }
       g.updatedAt = Date.now();
       return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
