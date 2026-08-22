@@ -7,7 +7,7 @@
 import React, { createContext, useContext, useReducer, useEffect, useRef } from 'react';
 import {
   newPlayer, newMember, newGame, newAtBat, newPitch, newPlayLog, newPitchingRecord, RESULTS, DIRECTIONS, OUT_TYPES,
-  OPP_LETTERS, DEFAULT_EDITION, normalizeEdition, multiOutLabel, uid, attendeesOf, resultLabelOf,
+  OPP_LETTERS, DEFAULT_EDITION, normalizeEdition, multiOutLabel, uid, attendeesOf, resultLabelOf, playErrorOf,
 } from '../lib/model.js';
 import { generateDemoData } from '../lib/demo.js';
 import { rebuildPitchingStats } from '../lib/pitchingRebuild.js';
@@ -1390,6 +1390,9 @@ export function reducer(state, action) {
         ab.contact = p.contact || null;
         ab.hitAngle = p.hitAngle ?? null;
         ab.hitDepth = p.hitDepth ?? null;
+        // 安打と同時に付いた相手の失策。安打かどうかは打球で決まるので result は
+        // 触らず、失策だけ別枠で持つ(1つのプレイに両方付くのが記録規則どおり)
+        ab.playError = playErrorOf(p);
         ab.pitches = pitches;
         ab.pitchCount = pitches.length;
         ab.firstPitch = pitches[0]?.type || null;
@@ -1415,6 +1418,7 @@ export function reducer(state, action) {
         g.playLogs.push(newPlayLog({
           gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'atbat',
           text: `${action.batterName || ''} ${DIRECTIONS[p.direction] || ''}${resultLabel}` +
+            (ab.playError ? ` +${ab.playError.pos}失` : '') +
             (multiOut ? ` ⚡${multiOut}` : '') +
             (totalRuns ? ` (${totalRuns}点)` : '') +
             (p.result === 'so' && p.batterTo === 1 ? ' 振り逃げ' : ''),
@@ -1424,6 +1428,7 @@ export function reducer(state, action) {
             intentional: p.result === 'bb' ? !!p.intentional : false,
             direction: p.direction, contact: p.contact || null,
             hitAngle: p.hitAngle ?? null, hitDepth: p.hitDepth ?? null,
+            playError: ab.playError,
             rbi, runs: totalRuns, outsOnPlay,
             beforeRunners: pending.snapshot.runners, outsBefore, balls, strikes, fouls, pitchCount: pitches.length,
             moveLines, scoreAfter: { my: g.myScore, opp: g.oppScore },
@@ -1458,13 +1463,18 @@ export function reducer(state, action) {
       if (!myBatting && oppBatter) {
         const oppResultLabel = resultLabelOf(p);
         const oppMultiOut = multiOutLabel(outsOnPlay);
+        // 相手の安打に自軍の失策が重なった場合。安打は打球で決まるので
+        // result はそのまま、失策だけ別枠で持つ
+        const oppPlayError = playErrorOf(p);
         g.playLogs.push(newPlayLog({
           gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'defense',
           text: `相手打者${oppBatter.letter}(${oppBatter.order}番): ${DIRECTIONS[p.direction] || ''}${oppResultLabel}` +
+            (oppPlayError ? ` +${oppPlayError.pos}失` : '') +
             (oppMultiOut ? ` ⚡${oppMultiOut}` : '') + (totalRuns ? ` (${totalRuns}失点)` : ''),
           payload: {
             result: p.result, direction: p.direction, outType: p.outType || null,
             contact: p.contact || null, hitAngle: p.hitAngle ?? null, hitDepth: p.hitDepth ?? null,
+            playError: oppPlayError,
             soType: p.result === 'so' ? p.soType || null : null,
             intentional: p.result === 'bb' ? !!p.intentional : false,
             runs: totalRuns, outsOnPlay,

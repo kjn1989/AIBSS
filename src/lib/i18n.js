@@ -196,6 +196,11 @@ export const MESSAGES = {
 
     // プレイ確定シート(追加分)
     'playsheet.runnerMovement': '走者の動き',
+    'playsheet.playError': 'このプレイで失策',
+    'playsheet.playErrorNote': '安打は打球そのもので決まるので、打った記録は変わりません。守備が乱れて余分に進んだぶんを失策として別に記録します（チームのEに1つ入ります）。',
+    'playsheet.errSuffix': '＋{pos}{kind}失策',
+    'errKind.field': '捕球', 'errKind.throw': '送球',
+    'playsheet.errNone': 'なし',
     'playsheet.batter': '打者',
     'playsheet.soToFirst': '振り逃げで一塁',
     'playsheet.dropThird': '(振り逃げ)',
@@ -1790,6 +1795,11 @@ export const MESSAGES = {
     'diamond.home': 'Home',
 
     'playsheet.runnerMovement': 'Runner Movement',
+    'playsheet.playError': 'Error on this play',
+    'playsheet.playErrorNote': 'A hit is scored on the batted ball, so the batting record does not change. The extra base taken on the fielding lapse is recorded separately as an error (it adds 1 to the team E).',
+    'playsheet.errSuffix': ' + E ({kind}, {pos})',
+    'errKind.field': 'Fielding', 'errKind.throw': 'Throwing',
+    'playsheet.errNone': 'None',
     'playsheet.batter': 'Batter',
     'playsheet.soToFirst': 'Reach 1st on dropped 3rd strike',
     'playsheet.dropThird': ' (dropped 3rd)',
