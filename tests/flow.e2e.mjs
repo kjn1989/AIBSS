@@ -246,15 +246,35 @@ try {
   // 打率と同じ .500 を主にし、分数は裏取りとして後ろに小さく添える
   check('確度は率が先、分数が後ろ',
     /^(1\.000|\.\d{3})\s*\d+\/\d+$/.test((rates[0]?.v || '').trim()), JSON.stringify(rates));
-  check('大きさは勝率ポイントで出ている', /\d+pt/.test(rates[1]?.v || ''), JSON.stringify(rates));
+  // 「31pt」だけでは大きいのか小さいのか分からない。物差しを五分に固定して言い直す
+  check('大きさは五分からの行き先で出ている',
+    /五分\s*→\s*\d+%/.test(rates[1]?.v || ''), JSON.stringify(rates));
 
   const sheetTxt = await page.locator('.sheet').last().innerText();
+  const tagRowsForSize = await page.evaluate(() =>
+    [...document.querySelectorAll('.sheet .fv-tag')].map((el) => ({
+      vd: el.querySelector('.vd')?.textContent,
+    })));
   // 2つの関係を鎖で言い切る。並べただけだと、どちらを見ればいいのか分からない
   check('押した→読めた→動いた の順で繋いである',
     /押した\d+回 → 読めた\d+回（\.\d+）→ そのとき勝率は平均\d+ポイント動いた/.test(sheetTxt),
     sheetTxt.slice(0, 400));
   check('大きさの分母を書いてある',
     sheetTxt.includes('大きさの分母は「読めた回数」'), sheetTxt.slice(0, 400));
+  // 五分に揃えたものだと言わないと、その場面が五分から始まったように読める
+  check('五分に揃えたものだと書いてある',
+    sheetTxt.includes('五分の勝負に揃えて言い直した')
+      && sheetTxt.includes('五分から始まったとは限りません'), sheetTxt.slice(0, 600));
+  // 平均だけだと何を指しているのか分からない。実物を1つ添える
+  const top = sheetTxt.match(/読めた中でいちばん大きかったのは(.+?)の (\d+)% → (\d+)%/);
+  check('いちばん大きかった場面が実測で出ている', !!top, sheetTxt.slice(0, 600));
+  // 五分に揃えた値が、実測の動き幅と合っているか。
+  // 読めたタグが1つの試合なので、五分 + その1つの動き幅 になるはず
+  const evenTo = Number((rates[1]?.v || '').match(/(\d+)%/)?.[1]);
+  const readRows = tagRowsForSize.filter((r) => r.vd === '読めた');
+  check('揃えた値が実測の動き幅と合っている',
+    readRows.length === 1 && !!top && evenTo === 50 + (Number(top[3]) - Number(top[2])),
+    JSON.stringify({ evenTo, top: top && top[0], reads: readRows.length }));
   // 押していない動きを率にすると「感じたときだけでOK」と矛盾する。事実として置く
   check('押していない動きで下がらないと書いてある',
     sheetTxt.includes('成績は下がりません'), sheetTxt.slice(0, 400));
