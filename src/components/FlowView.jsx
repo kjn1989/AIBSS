@@ -397,6 +397,18 @@ export default function FlowView({ game, onClose }) {
   // 狭いので、互角前提の12%のままだと何を読んでも「大きく動いた」にならない
   const sw = useMemo(() => swingScale(game, opening), [game.teamGap, opening]);
   const judged = useMemo(() => judgeFlowTags(game, series, sw), [game, series, sw]);
+  // 読めた中でいちばん大きかった1つ。平均だけだと何を指しているのか分からないので、
+  // 実物を1つ添える(こちらは実測そのもので、五分に揃え直していない)
+  const topRead = useMemo(() => {
+    let best = null;
+    for (const tg of judged.tags) {
+      if (judged.verdict[tg.id] !== 'pre') continue;
+      const mv = judged.moves?.[tg.id];
+      if (!mv || mv.weAt == null) continue;
+      if (!best || mv.gain > best.mv.gain) best = { tg, mv };
+    }
+    return best;
+  }, [judged]);
   const swings = useMemo(() => flowRuns(series, sw.minSwing).slice(0, 3), [series, sw]);
   // 「2点」と「逆転」では、同じ2点でも意味がまるで違う。文章で言い分けるために
   // 各打席の「前」の得点を先に作っておく
@@ -605,7 +617,7 @@ export default function FlowView({ game, onClose }) {
                   name: scorerName(state.settings, game.scorerId),
                   n: career.tags,
                   hit: formatRate(career.hitRate),
-                  d: career.avgMove == null ? '—' : Math.round(career.avgMove * 100),
+                  d: career.avgMove == null ? '—' : 50 + Math.round(career.avgMove * 100),
                 })}
               </p>
             )}
@@ -627,11 +639,18 @@ export default function FlowView({ game, onClose }) {
                 </div>
                 <div className="fv-rate">
                   <b>{t('fv.sizeTitle')}</b>
-                  <div className="v num">
-                    {judged.avgMove == null ? '—' : Math.round(judged.avgMove * 100)}
-                    {judged.avgMove != null && <span className="unit">pt</span>}
+                  {/* 「31ポイント」だけでは大きいのか小さいのか分からない。
+                      物差しを五分に固定して言い直す(防御率を「9回投げたら何点」に
+                      揃えるのと同じ)。こうすると試合をまたいで比べられる */}
+                  <div className="v num even">
+                    {judged.avgMove == null ? '—'
+                      : t('fv.sizeEven', { b: 50 + Math.round(judged.avgMove * 100) })}
                   </div>
-                  <div className="n">{t('fv.sizeNote', { a: judged.counts.pre })}</div>
+                  <div className="n">
+                    {judged.avgMove == null
+                      ? t('fv.sizeNone')
+                      : t('fv.sizeNote', { d: Math.round(judged.avgMove * 100) })}
+                  </div>
                 </div>
               </div>
               <p className="small dim mt8"><b>
@@ -644,6 +663,17 @@ export default function FlowView({ game, onClose }) {
                   })
                   : t('fv.chainNone', { n: judged.tags.length })}
               </b></p>
+              {topRead && (
+                <p className="small dim">
+                  {t('fv.topRead', {
+                    inn: t(topRead.tg.isTop ? 'scoreboard.top' : 'scoreboard.bottom', { n: topRead.tg.inning }),
+                    a: Math.round(topRead.mv.weAt * 100),
+                    b: Math.round(topRead.mv.wePeak * 100),
+                  })}
+                  {movedBy(topRead.mv) && t('fv.topReadWhat', { what: movedBy(topRead.mv) })}
+                </p>
+              )}
+              <p className="small dim">{t('fv.sizeWhy')}</p>
               <p className="small dim">{t('fv.verdictNote')}</p>
               {/* 押していない大きな動きは、率にせず事実として置く。
                   率にすると「感じたときだけでOK」と書いてあるタグを、
