@@ -99,6 +99,7 @@ export const MESSAGES = {
     'pitch.nextStrikeSo': '次のストライクで三振',
     'pitch.nextBallBb': '次のボールで四球',
     'pitch.undo': '↩ 1球取り消し',
+    'voice.wakeMissed': '「{text}」と聞こえましたが、頭に「ログ」が付いていないので記録していません。常時モードでは、周りの声に反応しないよう「ログ、はい」のように頭を付けてください。',
 
     // 打者/走者シート共通
     'sheet.nextBatter': '次の打者を選択',
@@ -1730,6 +1731,7 @@ export const MESSAGES = {
     'pitch.nextStrikeSo': 'Next strike = K',
     'pitch.nextBallBb': 'Next ball = BB',
     'pitch.undo': '↩ Undo last pitch',
+    'voice.wakeMissed': 'Heard “{text}”, but it did not start with the wake word, so nothing was recorded. In always-on mode, start with it — e.g. “log, yes” — so the app does not react to voices around you.',
 
     'sheet.nextBatter': 'Select Next Batter',
     'sheet.batterTitle': 'Change or align the batter',

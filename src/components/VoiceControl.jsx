@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import Sheet from './Sheet.jsx';
 import PlaySheet from './PlaySheet.jsx';
-import { useStore, usePlayerName, isMyTeamBatting, currentBatter } from '../state/store.jsx';
+import { useStore, useT, usePlayerName, isMyTeamBatting, currentBatter } from '../state/store.jsx';
 import { parseUtterance, playLabel, normalize, stripWakeWord, parseCommand, needsComplexConfirm, needsRunnerConfirm, needsDirection, parseRunnerAdjust, parseDirectionOnly, parseOperation, matchPlayer, prettifyTranscript } from '../lib/voiceParser.js';
 import { interpretUtterance, maskNames } from '../lib/gemini.js';
 import { speechAvailable, createRecognizer } from '../lib/speech.js';
@@ -16,6 +16,7 @@ const PENDING_MS = 2500; // 常時リスニングモード: オプトアウト�
 // 音声実況入力: FAB → 認識 → 解釈 → 大きな確認カード(1タップ確定/修正)
 // + 常時リスニングモード(ウェイクワード「ログ」+ 3階層の確定方式)
 export default function VoiceControl({ game }) {
+  const t = useT();
   const { state, dispatch } = useStore();
   const nameOf = usePlayerName();
   const [mode, setMode] = useState('idle'); // idle | listening | confirming | editing
@@ -35,6 +36,8 @@ export default function VoiceControl({ game }) {
   // 走者進塁の確認(タップ入力と同等): 走者ありの安打・凡打等で各走者の到達塁を
   // 確認/音声修正してから確定する。confirmDests = { [base]: 到達塁(1|2|3|4|'out') }。
   const [confirmDests, setConfirmDests] = useState(null);
+  // 確認カードに答えたのにウェイクワードが無かった発話。理由を出すために持つ
+  const [wakeMissed, setWakeMissed] = useState('');
   const baseLabel = { 1: '一塁', 2: '二塁', 3: '三塁' };
   const runnersOnNow = () => ({ 1: !!game.runners[1], 2: !!game.runners[2], 3: !!game.runners[3] });
 
@@ -248,26 +251,37 @@ export default function VoiceControl({ game }) {
 
   const handleAnswer = (raw) => {
     setAnswerListening(false);
-    const t = normalize(raw);
+    const said = normalize(raw);
     const top = candidates[0];
     if (!top) return;
+    // 「はい」で始まる発話は同意。そのあとに内容が続いていても、いま出ている
+    // 中身と同じことを言っているだけなら念押しなので、確定として扱う。
+    // ここを見ずに方向の修正として処理すると、「はい、センター」は
+    // すでにセンターなので何も変わらないまま確定もされず、
+    // 何度言い直しても進まなくなる。
+    const affirm = /^(はい|うん|おっけ|ok|かくてい|確定|よし|それ)/.test(said);
     const soPending = top.kind === 'play' && top.result === 'so' && !top.soExplicit;
-    if (soPending && (t.includes('からぶ') || t.includes('空振'))) return apply({ ...top, soType: 'swinging' });
-    if (soPending && (t.includes('みのが') || t.includes('見逃'))) return apply({ ...top, soType: 'looking' });
+    if (soPending && (said.includes('からぶ') || said.includes('空振'))) return apply({ ...top, soType: 'swinging' });
+    if (soPending && (said.includes('みのが') || said.includes('見逃'))) return apply({ ...top, soType: 'looking' });
     // 走者の進塁を音声で修正(「二塁ランナーは三塁」「一塁走者はそのまま」等)
     if (confirmDests) {
       const adj = parseRunnerAdjust(raw);
       if (adj && runnersOnNow()[adj.base]) {
-        const next = { ...confirmDests, [adj.base]: adj.to === 'stay' ? adj.base : adj.to };
-        setConfirmDests(next);
-        speak(describeDests(next));
-        return;
+        const to = adj.to === 'stay' ? adj.base : adj.to;
+        // 同意 + 今と同じ行き先 = 念押し。修正として扱うと何も進まない
+        if (!(affirm && confirmDests[adj.base] === to)) {
+          const next = { ...confirmDests, [adj.base]: to };
+          setConfirmDests(next);
+          speak(describeDests(next));
+          return;
+        }
       }
     }
     // 打球方向を音声で修正(「ライト」「方向はセンター」等)。結果はそのままに方向だけ差し替え
     if (top.kind === 'play' && needsDirection(top.result)) {
       const dir = parseDirectionOnly(raw);
-      if (dir) {
+      // 同意 + 今と同じ方向 = 念押し。修正として扱うと何も進まない
+      if (dir && !(affirm && dir === top.direction)) {
         const updated = { ...top, direction: dir, label: playLabel(top.result, dir, top.outType, top.soType) };
         setCandidates([updated, ...candidates.slice(1)]);
         speak(updated.label);
@@ -275,27 +289,27 @@ export default function VoiceControl({ game }) {
       }
     }
     // 明示的な「やり直し/キャンセル/取り消し」→ 再入力待ちに戻す(内容の言い直しではない)
-    if (/やりなお|きゃんせる|だめ|とりけ/.test(t)) {
+    if (/やりなお|きゃんせる|だめ|とりけ/.test(said)) {
       if (contMode) { setMode('idle'); return; }
       return startListening();
     }
     // 「いいえ、〇〇」= 認識ミスの言い直し。否定語の後に内容があれば、その内容を
     // そのまま新しい実況として再解釈する(後ろの発話を捨てない)。
-    if (/^(いいえ|いえ|いや|ちがう|ちがくて|違う|違くて|ちゃう|のー|no)/.test(t)) {
+    if (/^(いいえ|いえ|いや|ちがう|ちがくて|違う|違くて|ちゃう|のー|no)/.test(said)) {
       const rest = stripNegation(raw);
       if (rest) { setTranscript(rest); interpret(rest); return; }
       // 純粋な否定(内容なし)→ 再入力待ち
       if (contMode) { setMode('idle'); return; }
       return startListening();
     }
-    if (/^(はい|うん|おっけ|ok|かくてい|確定|よし|それ)/.test(t)) {
+    if (affirm) {
       if (soPending) return; // 三振は種別(空振り/見逃し)の発話が必要
       return apply(top, confirmDests ? destsToMoves(confirmDests) : undefined);
     }
     // 他候補のラベルとの一致を確認
     for (const c of candidates) {
       const cl = normalize(c.label);
-      if (cl && (t.includes(cl) || cl.includes(t))) return apply(c);
+      if (cl && (said.includes(cl) || cl.includes(said))) return apply(c);
     }
     // 新しい実況として解釈し直す
     setTranscript(raw);
@@ -329,7 +343,7 @@ export default function VoiceControl({ game }) {
 
   // 確認カードを抜けたら走者確認の一時状態を破棄(stale適用を防ぐ)
   useEffect(() => {
-    if (mode !== 'confirming') setConfirmDests(null);
+    if (mode !== 'confirming') { setConfirmDests(null); setWakeMissed(''); }
   }, [mode]);
 
   // ============================================================
@@ -467,7 +481,14 @@ export default function VoiceControl({ game }) {
 
   const handleContinuousFinal = async (rawText) => {
     const rest = stripWakeWord(rawText);
-    if (rest === null) return; // ウェイクワードなしの発話は誤反応防止のため無視
+    if (rest === null) {
+      // ウェイクワードなしの発話は誤反応防止のため無視する。
+      // ただし確認カードを出している間は、記録員はこちらの問いに答えているので、
+      // 黙って捨てると「はいと言っても進まない」に見える。なぜ進まないかを出す。
+      if (mode === 'confirming' && normalize(rawText)) setWakeMissed(prettifyTranscript(rawText));
+      return;
+    }
+    setWakeMissed('');
 
     const cmd = parseCommand(rest);
 
@@ -745,6 +766,10 @@ export default function VoiceControl({ game }) {
               );
             })()}
             <div className="small dim">「{prettifyTranscript(transcript)}」{llmUsed && <span className="pill blue" style={{ marginLeft: 6 }}>AI解釈</span>}</div>
+            {/* 聞こえてはいるが頭に「ログ」が無い。黙って捨てると原因が分からない */}
+            {contMode && wakeMissed && (
+              <div className="warn-box mt8">{t('voice.wakeMissed', { text: wakeMissed })}</div>
+            )}
             {candidates.length === 0 ? (
               <>
                 <div className="q mt8">解釈できませんでした 🙏</div>
