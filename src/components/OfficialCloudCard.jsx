@@ -3,6 +3,7 @@ import { useStore, useT, persist } from '../state/store.jsx';
 import {
   officialAvailable, watchAuth, loginWithPassword, logout,
   createCloudTeam, createInvite, inviteUrl, listMyTeams, listMembers, setMemberRole, removeMember, deleteCloudTeam,
+  deleteMyAccount,
 } from '../lib/officialCloud.js';
 import { getActiveProfileId, findProfileByOfficialTeamId, addProfile, switchActiveProfile } from '../lib/profiles.js';
 import QRCode from './QRCode.jsx';
@@ -25,6 +26,7 @@ export default function OfficialCloudCard() {
   const [members, setMembers] = useState(null);
   const [myRole, setMyRole] = useState('');
   const [myTeams, setMyTeams] = useState(null); // このアカウントが参加済みのクラウドのチーム
+  const [delText, setDelText] = useState(''); // アカウント削除の確認入力(メールアドレスの一致を求める)
   const teamId = state.settings.officialTeamId;
   const available = officialAvailable();
 
@@ -107,6 +109,19 @@ export default function OfficialCloudCard() {
       setBusy(false);
     }
   };
+
+  // アカウントを完全に削除する。クラウド側だけが消え、端末のローカルデータは残るので、
+  // 削除後もオフラインのスコアラーとしてそのまま使える。
+  const deleteAccount = run(async () => {
+    if (!window.confirm(t('occ.delAccountConfirm', { email: user?.email || '' }))) return;
+    await deleteMyAccount();
+    // クラウドのチームはもう存在しないので、ローカル運用へ戻す
+    dispatch({ type: 'UPDATE_SETTINGS', patch: { officialTeamId: null, officialRole: null } });
+    setDelText('');
+    setMyTeams(null);
+    setMembers(null);
+    setMyRole('');
+  });
 
   const registerTeam = run(async () => {
     const id = await createCloudTeam({ name: state.settings.teamName || t('app.teamFallback'), edition: state.settings.edition || '草野球' });
@@ -330,6 +345,34 @@ export default function OfficialCloudCard() {
             )}
           </div>
         </>
+      )}
+
+      {/* アカウント削除。接続の有無にかかわらず、ログイン中は常に出す
+          (ストアの要件は「アプリ内から辿り着けること」なので、チーム未接続の
+          状態で埋もれてはいけない) */}
+      {user && (
+        <details className="mt12" onToggle={(e) => { if (!e.currentTarget.open) setDelText(''); }}>
+          <summary className="small" style={{ color: 'var(--red)' }}>{t('occ.delAccountTitle')}</summary>
+          <p className="small dim" style={{ whiteSpace: 'pre-line', margin: '6px 0 8px' }}>
+            {t('occ.delAccountDesc')}
+          </p>
+          <input
+            className="mt8"
+            style={{ width: '100%' }}
+            value={delText}
+            onChange={(e) => setDelText(e.target.value)}
+            placeholder={user.email}
+            aria-label={t('occ.delAccountConfirmLabel')}
+          />
+          <button
+            className="small mt8"
+            style={{ width: '100%', color: 'var(--red)', borderColor: 'var(--red)' }}
+            disabled={busy || delText.trim().toLowerCase() !== (user.email || '').toLowerCase()}
+            onClick={deleteAccount}
+          >
+            {t('occ.delAccountBtn')}
+          </button>
+        </details>
       )}
 
       {err && <div className="warn-box mt8">⚠️ {err}</div>}

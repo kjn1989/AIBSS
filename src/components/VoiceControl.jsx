@@ -609,10 +609,6 @@ export default function VoiceControl({ game }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showingConfirm]);
 
-  if (!speechAvailable() && mode === 'idle') {
-    // 音声非対応ブラウザでもテキスト実況入力は使えるようにFABは出す
-  }
-
   const canUndo = state.history.length > 0 && state.history[state.history.length - 1].gameId === game.id;
 
   // マイク/常時ボタンは投手行の右側スロット(#scoretab-voice-slot)へポータルで描画。

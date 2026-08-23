@@ -18,6 +18,7 @@ import { backupPayload, backupFileName } from '../src/lib/backup.js';
 import { draftNarrative, noteOf, noteKeyOf } from '../src/lib/narrative.js';
 import { tiebreakPlacement, backInOrder, halfHasPlays, halfStartKeyOf } from '../src/lib/tiebreak.js';
 import { aggregateScorers, rankScorers, scorerName, tagScorerId } from '../src/lib/scorers.js';
+import { speechSupported } from '../src/lib/speech.js';
 import { buildRunDists, buildWinModel, priorDist, remainingHalves, SCORE_PROB, MAX_RUNS } from '../src/lib/winExp.js';
 import { TEAM_GAPS, buildGapModel, gapTables, gapOf, scaleDist, scaleDists, S_EXP } from '../src/lib/teamGap.js';
 import { aggregateScorersOver, swingScale, OPEN_MIN_SWING, OPEN_REACT_SWING } from '../src/lib/scorers.js';
@@ -5694,4 +5695,29 @@ test('土台の水準: 草野球のふつうのチームでは土台を大きく
   const games = [lvGame(1, 0), lvGame(2, 1), lvGame(3, 0), lvGame(4, 1)];
   const r = buildRunExpectancy(games, '草野球');
   assert.ok(r.level > 0.9 && r.level < 1.5, `1の近くに収まる: ${r.level}`);
+});
+
+// ---------------- 音声認識が使えるかの判定 ----------------
+// iOSのWKWebViewは webkitSpeechRecognition を露出したまま認識が動かない
+// (WebKit bug 239816)。存在チェックだけだと、ネイティブアプリ版で音声UIが
+// 出てくるのに押しても無反応、という壊れ方をする
+const capWindow = (native) => ({ webkitSpeechRecognition: function SR() {}, Capacitor: { isNativePlatform: () => native } });
+
+test('音声: フルブラウザ(Safari/Chrome)では使える', () => {
+  assert.equal(speechSupported({ webkitSpeechRecognition: function SR() {} }), true);
+  assert.equal(speechSupported({ SpeechRecognition: function SR() {} }), true);
+});
+
+test('音声: ネイティブWebViewの中では、APIが露出していても使えない扱いにする', () => {
+  assert.equal(speechSupported(capWindow(true)), false, 'WKWebViewでは動かないので弾く');
+});
+
+test('音声: Capacitorを読み込んだWeb版(PWA)では使える', () => {
+  // 同じコードがブラウザでも動く。isNativePlatform()がfalseなら従来どおり
+  assert.equal(speechSupported(capWindow(false)), true);
+});
+
+test('音声: APIが無いブラウザ・windowが無い環境では使えない', () => {
+  assert.equal(speechSupported({}), false);
+  assert.equal(speechSupported(null), false);
 });
