@@ -98,8 +98,18 @@ Android Studioが開くので、Gradle同期後に実機/エミュレータで�
   「アカウントを削除する」を設置済み(メールアドレスの一致入力+確認ダイアログの二段階)。
   実削除はサーバ側RPC `delete_my_account()`(`supabase/schema.sql`)で、
   **このRPCを本番のSupabaseに適用しないと動きません**。適用忘れに注意
-- **プライバシーポリシーURL**: 両ストアで必須。Supabase(email等)・Geminiキー(ユーザー自身が入力)の扱いを明記
-- **App Privacy申告(iOS)**: Supabaseに保存するデータ項目(email、チームデータ)を正確に申告
+- **プライバシーポリシー(下書き済み)**: `public/privacy.html`。アプリと一緒に配信されるので、
+  Web版のデプロイ先で `https://<デプロイ先>/privacy.html` がそのままストア申請用のURLになる。
+  設定タブ(ビルド情報の下)からもリンク済み。
+  **公開前に、オレンジ色の箇所(制定日・運営者名・問い合わせ先メールアドレス)を埋めること。**
+  内容はコードを実際に読んで書いてある(送信先は Supabase / Gemini / ブラウザの音声認識の3つだけ、
+  解析・広告SDKなし)。機能を足したら、ここも合わせて直す
+- **App Privacy申告(iOS)・`PrivacyInfo.xcprivacy`(作成済み)**: `ios/App/App/PrivacyInfo.xcprivacy`。
+  Xcodeプロジェクトのリソースにも登録済み(置くだけでは同梱されないため)。
+  申告している項目は メールアドレス / 氏名(選手名) / 写真(顔写真) / その他ユーザーコンテンツ(試合記録) の4つで、
+  いずれも Linked=true・Tracking=false。App Store Connect の Nutrition Label もこれと同じ内容で答える。
+  ⚠️ `NSPrivacyAccessedAPITypes` は UserDefaults(CA92.1) のみ申告している。ネイティブのプラグインを
+  追加したら、そのプラグインが使うAPIの申告が要らないか確認すること
 - **少年野球エディションを「子供向け」カテゴリに登録しない**: 登録すると審査基準が大幅に厳しくなる
 - **iOS 4.2(Minimum Functionality)対策**: 「ただのWebラッパー」と判定されると却下されるリスクがある。
   ネイティブの戻るボタン制御(実装済み)に加え、ネイティブ音声認識(§3)やカメラ統合など、Web版に無い
