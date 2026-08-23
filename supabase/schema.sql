@@ -173,6 +173,42 @@ create policy crew_update on public.team_crew for update
 create policy crew_delete on public.team_crew for delete
   using (public.member_role(team_id) in ('owner','scorer'));
 
+-- ---- アカウント削除(App Store 5.1.1(v) / Google Play のデータ削除要件) ----
+--
+-- アカウントを作れるアプリは、アプリの中からアカウントそのものを消せなければ
+-- 審査を通らない。「無効化」や「問い合わせフォーム」では要件を満たさない。
+--
+-- auth.users はクライアントのキー(anon)からは触れないので、SECURITY DEFINER の
+-- RPC を1本立てて、その中だけで消す。消す順番が重要:
+--   1. 自分がownerのチーム … teams を消せば team_members / invites / team_games /
+--      team_players / team_crew は on delete cascade で全部消える
+--   2. 他人のチームへの参加 … 自分のmembers行だけ抜ける(チーム本体は残す)
+--   3. auth.users の自分の行
+-- teams.owner_uid と team_members.uid は auth.users を cascade なしで参照している
+-- ため、1と2を先に済ませないと3が外部キー違反で失敗する。
+--
+-- 呼べるのはログイン中の本人だけ(auth.uid()で自分の行しか触らない)。引数を取らない
+-- ので、他人のIDを渡して消すことはできない。
+create or replace function public.delete_my_account()
+returns void language plpgsql security definer
+set search_path = public
+as $$
+declare
+  me uuid := auth.uid();
+begin
+  if me is null then
+    raise exception 'not authenticated';
+  end if;
+
+  delete from public.teams where owner_uid = me;
+  delete from public.team_members where uid = me;
+  delete from auth.users where id = me;
+end;
+$$;
+
+revoke all on function public.delete_my_account() from public, anon;
+grant execute on function public.delete_my_account() to authenticated;
+
 -- ---- リアルタイム配信(RLS適用のうえで変更をpush) ----
 alter table public.team_games replica identity full;
 alter table public.team_players replica identity full;

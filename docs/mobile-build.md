@@ -47,8 +47,15 @@ npx capacitor-assets generate --iconBackgroundColor '#0d1117' --splashBackground
 - 現在の音声入力は `window.SpeechRecognition` / `window.webkitSpeechRecognition`(Web Speech API)に依存しています。
 - これは **iOS の WKWebView / Android の System WebView(＝Capacitorアプリの中身)では利用できません**。
   Web Speech APIはSafari/Chromeという「フルブラウザ」だけが公開している機能で、埋め込みWebViewには公開されないためです。
-- **アプリは壊れません**。`src/lib/speech.js` の `speechAvailable()` が `false` を返すため、既存のフォールバック
-  (`src/components/VoiceControl.jsx` の「またはテキストで実況を入力」)に自動で切り替わります。
+- **以前この文書には「`speechAvailable()` が `false` を返すので自動でフォールバックする」と書いてありましたが、
+  それは誤りでした。** WebKitの既知の不具合([bug 239816](https://bugs.webkit.org/show_bug.cgi?id=239816))のとおり、
+  WKWebViewは `webkitSpeechRecognition` を**露出したまま**動作しません。存在チェックだけの旧実装では
+  `true` が返り、音声UIが出てくるのに押しても無反応、という一番たちの悪い壊れ方をしていました。
+- **対処済み**: `speechAvailable()` は `window.Capacitor.isNativePlatform()` を見て、ネイティブラッパーの中では
+  一律 `false` を返します(`createRecognizer()` も同条件で `null`)。これで既存のフォールバック
+  (`src/components/VoiceControl.jsx` の「またはテキストで実況を入力」+ 警告表示)に確実に切り替わり、
+  「常時」ボタンは無効化されます。判定は純関数 `speechSupported(window)` に切り出してあり、
+  `tests/unit.mjs` が4ケースで固定しています。
 - ただし「手放しで音声入力」という目玉機能が、ネイティブアプリ版では**事実上使えなくなります**。
 
 **対応するには**(Phase 3として別途着手を推奨):
@@ -86,6 +93,11 @@ Android Studioが開くので、Gradle同期後に実機/エミュレータで�
 
 ## ストア申請前に確認すべきこと(前回レビューの再掲)
 
+- **アカウント削除(対処済み)**: 公式クラウドのログイン(`officialCloud.js` の `signUp`)がある以上、
+  App Store 5.1.1(v) でアプリ内からのアカウント削除が必須。設定タブの公式クラウドカードに
+  「アカウントを削除する」を設置済み(メールアドレスの一致入力+確認ダイアログの二段階)。
+  実削除はサーバ側RPC `delete_my_account()`(`supabase/schema.sql`)で、
+  **このRPCを本番のSupabaseに適用しないと動きません**。適用忘れに注意
 - **プライバシーポリシーURL**: 両ストアで必須。Supabase(email等)・Geminiキー(ユーザー自身が入力)の扱いを明記
 - **App Privacy申告(iOS)**: Supabaseに保存するデータ項目(email、チームデータ)を正確に申告
 - **少年野球エディションを「子供向け」カテゴリに登録しない**: 登録すると審査基準が大幅に厳しくなる

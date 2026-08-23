@@ -136,6 +136,28 @@ export async function logout() {
   if (sb) await sb.auth.signOut();
 }
 
+// アカウントを完全に削除する。App Store 5.1.1(v)・Google Playのデータ削除要件で、
+// アカウントを作れるアプリはアプリ内から削除できることが必須。
+//
+// 消えるのはクラウド側だけ: 自分がownerのチーム(その試合・選手・参加メンバーごと)、
+// 他チームへの自分の参加、ログイン情報。端末のローカルデータ(localStorage)には
+// 手を付けないので、削除後もオフラインのスコアラーとしてそのまま使い続けられる。
+// 実際の削除はサーバのRPC(delete_my_account)が行う。クライアントのキーでは
+// auth.usersを触れないため。
+export async function deleteMyAccount() {
+  const sb = ensureClient();
+  if (!sb) throw new Error('公式クラウドは未設定です');
+  const { error } = await sb.rpc('delete_my_account');
+  if (error) throw new Error(jpAuthError(error));
+  // 消えたユーザーのトークンを持ったままだと以降のリクエストが401で滑る。
+  // サインアウト自体の失敗は握りつぶす(削除はもう済んでいる)
+  try {
+    await sb.auth.signOut();
+  } catch {
+    /* ignore */
+  }
+}
+
 // ---------------- チーム管理 ----------------
 async function requireUser() {
   const u = await currentUserAsync();
