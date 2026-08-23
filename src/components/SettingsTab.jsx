@@ -802,6 +802,13 @@ function BuildInfoCard() {
         <button className="small" onClick={reload}>{t('set.buildReload')}</button>
       </div>
       <p className="small dim" style={{ marginBottom: 0 }}>{t('set.buildHint')}</p>
+      {/* プライバシーポリシー。ストアの要件でアプリ内から辿れる必要がある。
+          同じタブで開く: ネイティブのWKWebViewは target=_blank を新規タブで
+          開けないため。privacy.html 側に「戻る」を用意してある。
+          public/ に置いてあるので、Web版・アプリ版のどちらでも同梱される。 */}
+      <p className="small" style={{ margin: '10px 0 0' }}>
+        <a href="./privacy.html">{t('set.privacyPolicy')}</a>
+      </p>
     </div>
   );
 }

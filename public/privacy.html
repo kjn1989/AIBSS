@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>プライバシーポリシー — AI-BASE DIAMOND</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0; padding: 24px 18px 64px;
+    background: #0d1117; color: #e6edf3;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    line-height: 1.8; font-size: 15px;
+  }
+  main { max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 17px; margin: 32px 0 8px; padding-top: 12px; border-top: 1px solid #21262d; }
+  h3 { font-size: 15px; margin: 20px 0 6px; color: #9fb3c8; }
+  p, li { color: #c9d1d9; }
+  ul { padding-left: 20px; }
+  li { margin: 4px 0; }
+  .dim { color: #8b949e; font-size: 13px; }
+  .box { background: #161b22; border: 1px solid #21262d; border-radius: 10px; padding: 12px 14px; margin: 12px 0; }
+  .warn { border-color: #7d3c00; background: #1c1408; }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 14px; display: block; overflow-x: auto; }
+  th, td { border: 1px solid #21262d; padding: 7px 9px; text-align: left; vertical-align: top; }
+  th { background: #161b22; color: #9fb3c8; font-weight: 600; white-space: nowrap; }
+  code { background: #161b22; padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+  a { color: #58a6ff; }
+  .todo { color: #f0a848; font-weight: 600; }
+  hr { border: 0; border-top: 1px solid #21262d; margin: 40px 0; }
+</style>
+</head>
+<body>
+<main>
+
+<!-- アプリから同じWebViewで開かれた場合に戻れるようにする。
+     ネイティブ版のWKWebViewは target=_blank を新規タブで開けないため、
+     アプリ内から遷移してきたときはこのリンクだけが戻る手段になる。
+     直接URLで開いた場合(履歴が無い)は出さない。 -->
+<p id="back" style="display:none"><a href="#" onclick="history.back();return false;">← 戻る / Back</a></p>
+<script>if (history.length > 1) document.getElementById('back').style.display = '';</script>
+
+<h1>プライバシーポリシー</h1>
+<p class="dim">AI-BASE DIAMOND（以下「本アプリ」）<br>
+制定日: <span class="todo">〔YYYY年M月D日〕</span> ／ 最終更新: <span class="todo">〔YYYY年M月D日〕</span></p>
+
+<div class="box warn">
+<p class="todo" style="margin:0 0 6px">⚠️ 公開前に埋めてください</p>
+<p class="dim" style="margin:0">オレンジの箇所（制定日・運営者名・連絡先）を実際の値に置き換えてから公開してください。連絡先はストア審査で必須です。</p>
+</div>
+
+<p>本アプリは、野球の試合記録・成績集計を行うアプリです。運営者は <span class="todo">〔運営者名／個人名〕</span>（以下「当方」）です。本ポリシーは、本アプリが扱う情報の内容と取り扱いを説明するものです。</p>
+
+<h2>1. 基本方針</h2>
+<ul>
+  <li>本アプリは<b>広告を配信しません</b>。</li>
+  <li>本アプリは<b>アクセス解析・行動追跡（トラッキング）を一切行いません</b>。解析SDK・広告SDKを組み込んでいません。</li>
+  <li>本アプリは、収集した情報を<b>第三者に販売・提供しません</b>（本ポリシー第4項に記載する、機能の実現に必要な委託先を除きます）。</li>
+  <li>記録したデータは、<b>既定では利用者の端末内のみ</b>に保存されます。外部へ送信されるのは、利用者が下記の機能を自分で有効にした場合に限られます。</li>
+</ul>
+
+<h2>2. 端末内に保存される情報</h2>
+<p>本アプリは以下を利用者の端末内（ブラウザのローカルストレージ、またはアプリ内領域）に保存します。当方はこれらを取得できません。</p>
+<ul>
+  <li>チーム設定、選手名簿、試合記録、プレイログ、成績</li>
+  <li>アプリの表示設定・言語設定</li>
+  <li>利用者がAI機能のために入力した Google Gemini APIキー</li>
+</ul>
+<p class="dim">アプリの削除、またはブラウザのデータ消去により、これらは失われます。バックアップは設定画面のJSON書き出し機能をご利用ください。</p>
+
+<h2>3. 外部へ送信される情報</h2>
+<p>以下は<b>いずれも任意機能</b>です。利用者が有効にしない限り送信は発生せず、本アプリは全機能をオフラインで利用できます。</p>
+
+<h3>3-1. 公式クラウド同期（任意）</h3>
+<p>チームでの共有・複数端末での同期を行う機能です。利用者がアカウントを作成し、チームに接続した場合にのみ、以下がクラウド（Supabase）へ送信・保存されます。</p>
+<table>
+  <tr><th>項目</th><th>内容</th><th>目的</th></tr>
+  <tr><td>メールアドレス・パスワード</td><td>認証情報（パスワードはハッシュ化して保管されます）</td><td>ログイン、チームメンバーの識別</td></tr>
+  <tr><td>チーム情報</td><td>チーム名、エディション（草野球／ブカツ 等）、招待情報</td><td>チームの共有</td></tr>
+  <tr><td>選手情報</td><td>選手名、背番号、打投の左右、守備位置、入学年度（学年の算出に使用）、チーム内の役割</td><td>名簿とスコアの共有</td></tr>
+  <tr><td><b>選手の顔写真</b></td><td>利用者が「AI選手名鑑」に登録した顔写真（縮小した画像データ）</td><td>名鑑の表示</td></tr>
+  <tr><td>AI選手名鑑の文章</td><td>寸評・キャッチフレーズ等</td><td>名鑑の表示</td></tr>
+  <tr><td>試合記録</td><td>スコア、打席結果、プレイログ、相手チーム名・相手選手名</td><td>記録の共有</td></tr>
+</table>
+<p>保存先は Supabase Inc. の提供するクラウドサービスです。データは行レベルセキュリティにより、<b>所属するチームのメンバーだけが参照できる</b>よう制御しています。</p>
+
+<h3>3-2. AI機能（任意・利用者自身のAPIキー）</h3>
+<p>AIスポーツ新聞、AI選手名鑑、AIヘッドコーチ、音声発話のAI解釈などの機能です。利用者が自分で取得した Google Gemini のAPIキーを入力した場合にのみ動作します。</p>
+<ul>
+  <li>送信先は Google LLC の Gemini API です。送信は<b>利用者自身のAPIキー</b>で行われ、当方のサーバーを経由しません。当方は送信内容を取得しません。</li>
+  <li>送信内容の取り扱いは、利用者と Google との間の利用規約に従います。</li>
+  <li><b>音声発話のAI解釈では、送信前に登録選手名を「選手」に置き換えます。</b>一方、AI選手名鑑・AIスポーツ新聞・スタメン提案は、機能の性質上、選手名を含んだまま送信されます。</li>
+</ul>
+
+<h3>3-3. 音声入力（任意）</h3>
+<p>ブラウザ版で音声入力を使用した場合、ブラウザの標準機能（Web Speech API）を通じて、<b>音声データがブラウザ提供元（Apple または Google）のサーバーへ送信され、文字に変換されます</b>。これはブラウザの機能であり、当方はこの音声データを取得しません。取り扱いは各社のプライバシーポリシーに従います。</p>
+<p class="dim">iOS／Androidのアプリ版では、この機能はOSの制約により無効化されており、音声データの送信は発生しません（テキスト入力をご利用ください）。</p>
+
+<h3>3-4. 旧方式のクラウド同期（任意・上級者向け）</h3>
+<p>利用者が自ら用意した Firebase プロジェクトの設定を入力した場合、記録は<b>利用者自身が管理するFirebaseプロジェクト</b>へ送信されます。当方はその保存先にアクセスできません。</p>
+
+<h2>4. 委託先・第三者提供</h2>
+<p>機能の実現のため、以下の事業者のサービスを利用します。利用者が該当機能を有効にした場合にのみ、情報が送信されます。</p>
+<ul>
+  <li><b>Supabase Inc.</b>（公式クラウド同期の保存先）</li>
+  <li><b>Google LLC</b>（Gemini API。利用者自身のAPIキーによる利用）</li>
+  <li><b>Apple Inc. / Google LLC</b>（ブラウザの音声認識機能）</li>
+</ul>
+<p>これら以外へ個人情報を提供することはありません。ただし、法令に基づく開示請求があった場合はこの限りではありません。</p>
+
+<h2>5. 選手情報の取り扱いについて（重要）</h2>
+<div class="box warn">
+<p style="margin:0 0 8px"><b>本アプリに登録される選手情報は、多くの場合「アプリの利用者本人」ではなく「チームの他のメンバー」の情報です。</b></p>
+<p style="margin:0">利用者は、選手名・顔写真などを本アプリに登録し、クラウド同期を有効にするにあたり、<b>あらかじめ当該選手本人（選手が未成年の場合はその保護者）の同意を得てください。</b>とくに少年野球・中学生のチームでは、選手は未成年者です。当方は、利用者がこの同意を得ていることを前提としてサービスを提供します。</p>
+</div>
+<p>顔写真の登録は任意です。登録しない場合は選手名の頭文字が表示されます。同意が得られない選手については、顔写真を登録せず、必要に応じて表示名を工夫するなどの配慮をお願いします。</p>
+
+<h2>6. 保有期間と削除</h2>
+<ul>
+  <li><b>端末内のデータ</b>: 利用者がアプリを削除するか、アプリ内で削除するまで保持されます。</li>
+  <li><b>クラウド上のデータ</b>: アカウントまたはチームが削除されるまで保持されます。</li>
+</ul>
+<h3>アカウントの削除方法</h3>
+<p>アプリ内の <b>設定 → 公式クラウド → 「アカウントを削除する」</b> から、いつでもご自身でアカウントを完全に削除できます。削除すると以下がクラウドから消え、元に戻すことはできません。</p>
+<ul>
+  <li>あなたがオーナーであるチームと、そのチームの選手・試合・顔写真・メンバー情報</li>
+  <li>他チームへのあなたの参加情報</li>
+  <li>あなたのログイン情報（メールアドレス・パスワード）</li>
+</ul>
+<p class="dim">端末内に保存された記録は削除されません。削除後もオフラインのスコアラーとして引き続きご利用いただけます。</p>
+
+<h2>7. 開示・訂正・利用停止の請求</h2>
+<p>ご自身の情報の開示・訂正・削除・利用停止をご希望の場合は、第9項の連絡先までご連絡ください。ご本人であることを確認のうえ、合理的な期間内に対応します。なお、アカウント削除は前項のとおりアプリ内で即時に実行できます。</p>
+
+<h2>8. ポリシーの変更</h2>
+<p>本ポリシーは、法令の改正やアプリの機能追加に応じて変更することがあります。重要な変更を行う場合は、アプリ内またはこのページで告知します。</p>
+
+<h2>9. お問い合わせ</h2>
+<p>本ポリシーおよび個人情報の取り扱いに関するお問い合わせ先:</p>
+<div class="box">
+<p style="margin:0">運営者: <span class="todo">〔運営者名／個人名〕</span><br>
+連絡先: <span class="todo">〔問い合わせ用メールアドレス〕</span></p>
+</div>
+
+<hr>
+
+<h1 id="en">Privacy Policy</h1>
+<p class="dim">AI-BASE DIAMOND ("the App")<br>
+Effective: <span class="todo">[YYYY-MM-DD]</span> / Last updated: <span class="todo">[YYYY-MM-DD]</span><br>
+This is a reference translation. The Japanese text above prevails in case of any discrepancy.</p>
+
+<h2>1. Principles</h2>
+<ul>
+  <li>The App shows <b>no advertising</b>.</li>
+  <li>The App performs <b>no analytics and no tracking</b>. No analytics or advertising SDKs are included.</li>
+  <li>We do <b>not sell or share</b> collected information with third parties, other than the processors listed in section 4 that are necessary to provide the features you enable.</li>
+  <li>By default, your records are stored <b>only on your device</b>. Data leaves your device only for the optional features you turn on yourself.</li>
+</ul>
+
+<h2>2. Stored on your device</h2>
+<p>Team settings, player roster, game records, play logs, statistics, display preferences, and any Google Gemini API key you enter. We cannot access any of this.</p>
+
+<h2>3. Data sent off the device</h2>
+<p>All of the following are <b>optional</b>. The App is fully usable offline.</p>
+
+<h3>3-1. Official cloud sync (optional)</h3>
+<p>If you create an account and connect a team, the following is stored in the cloud (Supabase): your email address and password (stored hashed); team name and edition; player names, uniform numbers, batting/throwing handedness, positions, year of entry (used to derive school grade), and team roles; <b>player face photos</b> you add to the AI player profiles; AI profile text; and game records including opponent team and player names. Row-level security restricts access to members of your own team.</p>
+
+<h3>3-2. AI features (optional, your own API key)</h3>
+<p>AI features run only if you enter your own Google Gemini API key. Requests go directly from your device to Google LLC using <b>your</b> key; they do not pass through our servers and we do not receive their contents. <b>For voice interpretation, registered player names are replaced with a generic word before sending.</b> AI player profiles, the AI newspaper, and lineup suggestions necessarily include player names.</p>
+
+<h3>3-3. Voice input (optional)</h3>
+<p>In the browser version, voice input uses the browser's Web Speech API, which <b>sends audio to the browser vendor (Apple or Google) for transcription</b>. We do not receive this audio. In the iOS/Android app versions this feature is disabled by platform limitation, so no audio is sent.</p>
+
+<h3>3-4. Legacy cloud sync (optional, advanced)</h3>
+<p>If you supply your own Firebase project configuration, records are sent to <b>your own</b> Firebase project. We have no access to it.</p>
+
+<h2>4. Processors</h2>
+<p>Supabase Inc. (official cloud storage), Google LLC (Gemini API, under your own key), Apple Inc. / Google LLC (browser speech recognition). We disclose information to no one else, except where required by law.</p>
+
+<h2>5. About player information (important)</h2>
+<p><b>Most information entered into the App describes other people — your teammates — rather than the person using the App.</b> Before entering player names or face photos and enabling cloud sync, you must obtain the consent of each player, or of a parent or guardian where the player is a minor. This is particularly important for youth and junior-high teams, where players are minors. Face photos are optional; without one, the player's initial is shown instead.</p>
+
+<h2>6. Retention and deletion</h2>
+<p>On-device data is kept until you delete it or remove the App. Cloud data is kept until the account or team is deleted.</p>
+<p><b>Account deletion:</b> Settings → Official cloud → "Delete your account" removes, permanently and irreversibly: teams you own together with their players, games, photos and member records; your membership in other teams; and your sign-in credentials. Records stored on your device are not deleted, and the App remains usable offline afterwards.</p>
+
+<h2>7. Access, correction, and suspension</h2>
+<p>Contact us at the address in section 9 to request access to, correction of, or deletion of your information. Account deletion can be performed immediately in the App, as described above.</p>
+
+<h2>8. Changes</h2>
+<p>We may update this policy as the law or the App's features change. Material changes will be announced in the App or on this page.</p>
+
+<h2>9. Contact</h2>
+<p>Operator: <span class="todo">[operator name]</span><br>
+Email: <span class="todo">[contact email address]</span></p>
+
+</main>
+</body>
+</html>
