@@ -10,6 +10,7 @@
 //  - 縦・スクエア写真 → 右に配置し、本文を左に回り込ませて余白を埋める
 // ============================================================
 import { computeBoxScore } from './boxscore.js';
+import { translate } from './i18n.js';
 
 const W = 840;
 const M = 48; // 余白
@@ -126,7 +127,8 @@ function fitText(measure, text, maxW, startPx, fontOf, minPx = 11) {
   return { px, text: `${s}…` };
 }
 
-export async function generateNewspaperImage({ article, game, teamName, photo }) {
+export async function generateNewspaperImage({ article, game, teamName, photo, lang = 'ja' }) {
+  const T = (k, pr) => translate(lang, k, pr);
   const measure = document.createElement('canvas').getContext('2d');
 
   // ---- 写真の向き判定 ----
@@ -138,7 +140,7 @@ export async function generateNewspaperImage({ article, game, teamName, photo })
   const logoSize = 54;
   const mastMaxW = CW - 2 * (logoSize + 18);
   // 題字も最小サイズで溢れる場合があるため、必要なら省略して枠内に収める
-  const mast = fitText(measure, `${teamName} 速報！`, mastMaxW, 58, (px) => SANS(px), 28);
+  const mast = fitText(measure, T('npi.mast', { team: teamName }), mastMaxW, 58, (px) => SANS(px), 28);
   const mastText = mast.text;
   const mastFs = mast.px;
   const mastH = mastFs + 12;
@@ -212,7 +214,7 @@ export async function generateNewspaperImage({ article, game, teamName, photo })
   ctx.fillRect(M, y, CW, 3);
   y += 8;
   ctx.font = BODY_FONT(16);
-  ctx.fillText(`${game.date}　|　号外　|　第1号`, W / 2, y + 16);
+  ctx.fillText(T('npi.dateline', { date: game.date }), W / 2, y + 16);
   y += 24;
   ctx.fillRect(M, y, CW, 1);
   y += 20;
@@ -231,13 +233,13 @@ export async function generateNewspaperImage({ article, game, teamName, photo })
   y += 12;
 
   // ---- スコア表 + 結果ラベル ----
-  drawBoxScore(ctx, measure, M, y, CW, rowH, innings, box, game, teamName);
+  drawBoxScore(ctx, measure, M, y, CW, rowH, innings, box, game, teamName, T('np.oppFallback'));
   y += tableH + 8;
-  const rlabel = game.myScore > game.oppScore ? '勝利' : game.myScore < game.oppScore ? '敗北' : '引き分け';
+  const rlabel = T(game.myScore > game.oppScore ? 'hl.win' : game.myScore < game.oppScore ? 'hl.lose' : 'hl.draw');
   ctx.textAlign = 'center';
   ctx.fillStyle = '#141414';
   // 長いチーム名でも紙面の外に出ないよう、幅に合わせて縮小→必要なら省略する
-  const resultFit = fitText(measure, `${teamName} ${game.myScore}-${game.oppScore} ${game.opponent || '対戦相手'}　—　${rlabel}`, CW, 18, HEAD_FONT, 12);
+  const resultFit = fitText(measure, T('npi.resultLine', { my: teamName, myScore: game.myScore, oppScore: game.oppScore, opp: game.opponent || T('np.oppFallback'), result: rlabel }), CW, 18, HEAD_FONT, 12);
   ctx.font = HEAD_FONT(resultFit.px);
   ctx.fillText(resultFit.text, W / 2, y + 18);
   ctx.textAlign = 'left';
@@ -253,7 +255,7 @@ export async function generateNewspaperImage({ article, game, teamName, photo })
     ctx.drawImage(photo, M, y, CW, bannerH);
     let cy = y + bannerH + 6;
     ctx.fillStyle = '#555';
-    const capFit = fitText(measure, `▲ ${teamName} vs ${game.opponent || '対戦相手'}（${game.date}）`, CW, 15, BODY_FONT, 11);
+    const capFit = fitText(measure, T('npi.captionDated', { my: teamName, opp: game.opponent || T('np.oppFallback'), date: game.date }), CW, 15, BODY_FONT, 11);
     ctx.font = BODY_FONT(capFit.px);
     ctx.fillText(capFit.text, M, cy + 14);
     ctx.fillStyle = '#141414';
@@ -264,7 +266,7 @@ export async function generateNewspaperImage({ article, game, teamName, photo })
     const px = M + leftColW + GAP;
     ctx.drawImage(photo, px, y, photoW, photoH);
     ctx.fillStyle = '#555';
-    const capFit = fitText(measure, `▲ ${teamName} vs ${game.opponent || '対戦相手'}`, photoW, 13, BODY_FONT, 10);
+    const capFit = fitText(measure, T('npi.caption', { my: teamName, opp: game.opponent || T('np.oppFallback') }), photoW, 13, BODY_FONT, 10);
     ctx.font = BODY_FONT(capFit.px);
     ctx.fillText(capFit.text, px, y + photoH + 14);
     ctx.fillStyle = '#141414';
@@ -278,7 +280,7 @@ export async function generateNewspaperImage({ article, game, teamName, photo })
   // ---- 記者の目(講評) ----
   if (commentLines.length) {
     ctx.font = HEAD_FONT(18);
-    ctx.fillText('― 記者の目 ―', M, y + 18);
+    ctx.fillText(T('npi.reporterNote'), M, y + 18);
     y += 28;
     ctx.font = BODY_FONT(20);
     for (const line of commentLines) {
@@ -294,14 +296,14 @@ export async function generateNewspaperImage({ article, game, teamName, photo })
   y += 8;
   ctx.fillStyle = '#555';
   ctx.font = BODY_FONT(16);
-  ctx.fillText('AI-BASE DIAMOND — AI野球スコア&成績', M, y + 16);
+  ctx.fillText(T('npi.footer'), M, y + 16);
 
   return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
 }
 
 // イニング別ボックススコア表(先攻=上段。R/H/Eは右端で強調)。innings=表示する回(空白マス無し)
-function drawBoxScore(ctx, measure, x, y, w, rowH, innings, box, game, teamName) {
-  const oppName = game.opponent || '対戦相手';
+function drawBoxScore(ctx, measure, x, y, w, rowH, innings, box, game, teamName, oppFallback = '対戦相手') {
+  const oppName = game.opponent || oppFallback;
   const innN = innings.length;
   const cols = innN + 3; // + R H E
   // チーム名の列幅は名前の長さに合わせて広げる(長い名前でも小さくなりすぎないように)。
@@ -372,12 +374,13 @@ function line(ctx, x1, y1, x2, y2) {
 }
 
 // 画像を共有(Web Share) / 不可ならダウンロード
-export async function shareNewspaperImage(blob, game) {
+export async function shareNewspaperImage(blob, game, lang = 'ja') {
+  const T = (k, pr) => translate(lang, k, pr);
   if (!blob) return;
-  const file = new File([blob], `AIスポーツ新聞_${game.date}.png`, { type: 'image/png' });
+  const file = new File([blob], `${T('npi.fileName')}_${game.date}.png`, { type: 'image/png' });
   if (navigator.canShare?.({ files: [file] })) {
     try {
-      await navigator.share({ files: [file], title: 'AIスポーツ新聞' });
+      await navigator.share({ files: [file], title: T('np.title') });
       return;
     } catch {
       return;
