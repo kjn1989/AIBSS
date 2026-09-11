@@ -125,11 +125,19 @@ export async function interpretUtterance(text, apiKey) {
 // 日本語の記事・寸評が返ってくる。値だけを画面の言語で書かせる。
 // JSONのキー名は解析に使うので、言語を変えても英語のままにさせること。
 // 選手名・チーム名は記録された通りの綴りで残す(勝手に音訳されると名簿と照合できない)。
-function langInstruction(lang) {
+// keepAsIs: 訳してはいけないフィールド名。守備位置のように、こちらが決めた
+// 選択肢の中から選ばせて後で照合するものは「文章」ではなく「コード」で、
+// 英語に直されると照合に失敗して黙って空になる(実際 position がそれだった)。
+function langInstruction(lang, keepAsIs = []) {
   if (lang !== 'en') return '';
-  return '\n\n【出力言語】JSONのキー名は英語のまま変えないこと。値(文章)はすべて英語で書くこと。'
+  const keep = keepAsIs.length
+    ? `\n- 次のフィールドはコードなので訳さないこと(上の選択肢の表記をそのまま使う): ${keepAsIs.join(', ')}.`
+      + ` The following fields are codes, not prose. Copy them verbatim from the choices listed above: ${keepAsIs.join(', ')}.`
+    : '';
+  return '\n\n【出力言語】JSONのキー名は英語のまま変えないこと。値(文章)は英語で書くこと。'
     + ' Write every string value in natural English. Do not use Japanese in the output.'
-    + ' Keep player names and team names exactly as they were given.';
+    + ' Keep player names and team names exactly as they were given.'
+    + keep;
 }
 
 function memoPrompt(memo, situation) {
@@ -344,7 +352,7 @@ ${posRule}
 
 // 戻り値: 成功 { lineup:[{name,position,reason}], pitcher(DH時のみ){name,reason}, strategy } / 失敗 { error } / 未設定・オフライン null
 export async function generateLineup({ apiKey, players, dh = false, edition, kind, lang = 'ja' }) {
-  const r = await callGeminiJSON(apiKey, lineupPrompt(players, dh, edition, kind) + langInstruction(lang), { maxOutputTokens: 2048, temperature: 0.7 });
+  const r = await callGeminiJSON(apiKey, lineupPrompt(players, dh, edition, kind) + langInstruction(lang, ['position', 'unfilled', 'fit']), { maxOutputTokens: 2048, temperature: 0.7 });
   if (!r || r.error) return r;
   if (!Array.isArray(r.data.lineup) || r.data.lineup.length === 0) {
     return { error: 'AIの応答にlineupが含まれていません' };

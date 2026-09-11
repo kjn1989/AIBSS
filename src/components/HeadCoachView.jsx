@@ -3,7 +3,7 @@ import { useStore, usePlayerName, useT } from '../state/store.jsx';
 import { aggregateBatting, battingMetrics, fmtAvg } from '../lib/stats.js';
 import { generateLineup } from '../lib/gemini.js';
 import { kindOf } from '../lib/editionKind.js';
-import { POSITIONS, uncoveredPositions, attendeesOf, positionListLabel } from '../lib/model.js';
+import { POSITIONS, uncoveredPositions, attendeesOf, positionListLabel, positionLabel } from '../lib/model.js';
 import FullscreenView from './FullscreenView.jsx';
 
 // AIヘッドコーチ: 今季の打撃成績をもとにGeminiが打順・守備位置を提案する(参考・おまけ機能)
@@ -28,8 +28,11 @@ export default function HeadCoachView({ game, canApply, onClose }) {
     const s = batting[p.id];
     const m = s && s.pa > 0 ? battingMetrics(s) : null;
     const statsLine = m
-      ? `打率${fmtAvg(m.ba)} 出塁率${fmtAvg(m.obp)} OPS${m.ops === null ? '-' : m.ops.toFixed(3)} 打点${s.rbi} 本${s.hr}`
-      : '成績データ少';
+      ? t('hc.statsLine', {
+        ba: fmtAvg(m.ba), obp: fmtAvg(m.obp),
+        ops: m.ops === null ? '-' : m.ops.toFixed(3), rbi: s.rbi, hr: s.hr,
+      })
+      : t('hc.statsThin');
     return {
       name: p.name,
       statsLine,
@@ -53,7 +56,7 @@ export default function HeadCoachView({ game, canApply, onClose }) {
     });
     setLoading(false);
     if (!r) {
-      setError('Gemini APIキーが未設定か、オフラインです。設定タブでキーを追加してください。');
+      setError(t('hc.errNoKey'));
       return;
     }
     if (r.error) {
@@ -74,7 +77,7 @@ export default function HeadCoachView({ game, canApply, onClose }) {
       lineup.push({ order: order++, playerId: pid, position });
     }
     if (lineup.length === 0) {
-      setError('提案された選手名をロースターと照合できませんでした。');
+      setError(t('hc.errNoMatch'));
       return;
     }
     dispatch({ type: 'SET_LINEUP', gameId: game.id, lineup });
@@ -82,45 +85,42 @@ export default function HeadCoachView({ game, canApply, onClose }) {
     const pid = dh
       ? nameToId[result.pitcher?.name]
       : lineup.find((l) => l.position === '投')?.playerId;
-    if (pid) dispatch({ type: 'SET_PITCHER', gameId: game.id, playerId: pid, label: `先発: ${nameOf(pid)}` });
+    if (pid) dispatch({ type: 'SET_PITCHER', gameId: game.id, playerId: pid, label: t('hc.starterLabel', { name: nameOf(pid) }) });
     onClose();
   };
 
   return (
     <FullscreenView>
       <header className="fullscreen-header">
-        <button className="ghost small" onClick={onClose}>← 戻る</button>
-        <h2>AIヘッドコーチ</h2>
+        <button className="ghost small" onClick={onClose}>{t('common.back')}</button>
+        <h2>{t('hc.title')}</h2>
         <span style={{ width: 60 }} />
       </header>
       <div className="fullscreen-body">
         <div className="card">
-          <p className="small dim" style={{ marginBottom: 10 }}>
-            今季の打撃成績をもとに、AIが打順と守備位置を提案します。あくまで参考の「おまけ」機能です
-            (最終判断は監督であるあなたの目で)。
-          </p>
+          <p className="small dim" style={{ marginBottom: 10 }}>{t('hc.desc')}</p>
           <div className="flex" style={{ marginBottom: 10 }}>
-            <span className="grow small">DH制（指名打者）</span>
+            <span className="grow small">{t('hc.dh')}</span>
             <div className="toggle-row" style={{ margin: 0, width: 150 }}>
-              <button className={dh ? '' : 'active'} onClick={() => { setDh(false); setResult(null); }}>なし(9人)</button>
-              <button className={dh ? 'active' : ''} onClick={() => { setDh(true); setResult(null); }}>あり(10人)</button>
+              <button className={dh ? '' : 'active'} onClick={() => { setDh(false); setResult(null); }}>{t('hc.dhOff')}</button>
+              <button className={dh ? 'active' : ''} onClick={() => { setDh(true); setResult(null); }}>{t('hc.dhOn')}</button>
             </div>
           </div>
           {holes.length > 0 && (
             <div className="warn-box mt8">{t('pos.uncovered', { list: positionListLabel(holes, lang) })}</div>
           )}
           <button className="primary" onClick={run} disabled={loading} style={{ width: '100%' }}>
-            {loading ? '🤔 考え中...' : result ? '🔄 もう一度提案してもらう' : `🤖 スタメン(${dh ? '10' : '9'}人)を提案してもらう`}
+            {loading ? t('hc.thinking') : result ? t('hc.again') : t('hc.ask', { n: dh ? 10 : 9 })}
           </button>
           {error && <div className="warn-box mt8">⚠️ {error}</div>}
-          {!apiKey && <p className="small dim mt8">※ Gemini APIキー未設定です。設定タブから追加すると生成できます。</p>}
+          {!apiKey && <p className="small dim mt8">{t('hc.noKeyHint')}</p>}
         </div>
 
         {result && (
           <>
             {result.strategy && (
               <div className="card">
-                <h2>💡 狙い</h2>
+                <h2>{t('hc.strategy')}</h2>
                 <p style={{ lineHeight: 1.7 }}>{result.strategy}</p>
               </div>
             )}
@@ -128,13 +128,13 @@ export default function HeadCoachView({ game, canApply, onClose }) {
               <div className="warn-box mt8">{t('pos.aiUnfilled', { list: positionListLabel(result.unfilled, lang) })}</div>
             )}
             <div className="card">
-              <h2>提案オーダー</h2>
+              <h2>{t('hc.proposed')}</h2>
               {result.lineup.map((item, i) => (
                 <div className="row" key={`${item.name}-${i}`}>
                   <span className="rank-badge">{i + 1}</span>
                   <div className="grow">
                     <b>{item.name}</b>
-                    {item.position && <span className="pill blue" style={{ marginLeft: 6 }}>{item.position}</span>}
+                    {item.position && <span className="pill blue" style={{ marginLeft: 6 }}>{positionLabel(item.position, lang)}</span>}
                     {/* 主の位置か、可で回ってもらった位置か。理由を読む前に分かる */}
                     {item.fit === 'sub' && <span className="pill amber" style={{ marginLeft: 4 }}>{t('pos.fitSub')}</span>}
                     {item.fit === 'main' && <span className="pill" style={{ marginLeft: 4 }}>{t('pos.fitMain')}</span>}
@@ -144,21 +144,21 @@ export default function HeadCoachView({ game, canApply, onClose }) {
               ))}
               {dh && result.pitcher && (
                 <div className="row">
-                  <span className="rank-badge">投</span>
+                  <span className="rank-badge">{positionLabel('投', lang)}</span>
                   <div className="grow">
                     <b>{result.pitcher.name}</b>
-                    <span className="pill" style={{ marginLeft: 6 }}>投手・打順外</span>
+                    <span className="pill" style={{ marginLeft: 6 }}>{t('hc.pitcherNotBatting')}</span>
                     {result.pitcher.reason && <div className="small dim">{result.pitcher.reason}</div>}
                   </div>
                 </div>
               )}
               {canApply ? (
                 <>
-                  <button className="primary mt8" onClick={apply} style={{ width: '100%' }}>このオーダーを採用</button>
-                  <p className="small dim mt8">採用すると現在の打順・守備位置が置き換わります(試合開始前のみ)。</p>
+                  <button className="primary mt8" onClick={apply} style={{ width: '100%' }}>{t('hc.apply')}</button>
+                  <p className="small dim mt8">{t('hc.applyNote')}</p>
                 </>
               ) : (
-                <p className="small dim mt8">試合が始まっているため、この提案は参考表示のみです。</p>
+                <p className="small dim mt8">{t('hc.readOnly')}</p>
               )}
             </div>
           </>

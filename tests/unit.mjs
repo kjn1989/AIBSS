@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { proposeMoves, judgeAdvance, batterDestOptions } from '../src/lib/plays.js';
 import { gameEndCheck, initialPresetIdFor, defaultPresetIdForEdition, presetById, describeRules, rulesAtInning, currentRules, fieldCountAt, isTiebreakInning, diffLiveRules, describeRulePatch, runnersPlaced, placedRunsScored, halfKeyOf, DEFAULT_TIEBREAK, ALL_BAT_MAX, TIEBREAK_RUNNERS, allBatSize, lineupSlotsFor } from '../src/lib/rules.js';
-import { aggregateFielding, rankFielding, aggregateBatting, aggregatePitching, battingMetrics, pitchingMetrics, titleLeaders, DETAIL_METRICS, detailRanking, defaultInningBasis } from '../src/lib/stats.js';
+import { aggregateFielding, rankFielding, aggregateBatting, aggregatePitching, battingMetrics, pitchingMetrics, titleLeaders, DETAIL_METRICS, detailRanking, defaultInningBasis, teamHighlights } from '../src/lib/stats.js';
 import { translate } from '../src/lib/i18n.js';
 import { newspaperPrompt, editionForPrompt } from '../src/lib/gemini.js';
 import { kindsFor, kindOf, kindPatch, defaultKindFor } from '../src/lib/editionKind.js';
@@ -5777,4 +5777,60 @@ test('ハイライト: 勝敗は訳文ではなくキーで持つ', () => {
   assert.equal(at(5, 2, 'ja').resultLabel, '勝利');
   assert.equal(at(5, 2, 'en').resultLabel, 'Win');
   assert.equal(at(2, 5, 'en').resultLabel, 'Loss');
+});
+
+// 動的に組み立てるキー(t(`tag.${id}`) 等)は check-i18n.mjs の静的走査では拾えない。
+// 一覧が手元にあるものは、ここで両言語そろっているかを確かめる。
+test('動的に引くキーが両言語そろっている', () => {
+  const groups = {
+    'tag.': [
+      'contact', 'power', 'allFields', 'oppoField', 'multiHit', 'grinder', 'clutch', 'fromBehind',
+      'walkOff', 'pinchHit', 'grandSlam', 'firstPitch', 'bunt', 'infieldHit',
+      'lateLife', 'sharpBreak', 'heavyBall', 'strikeouts', 'strongerLate', 'outOfTrouble', 'glove',
+      'cannonArm', 'accurateThrow', 'gameCalling', 'steals', 'baserunning', 'headFirst',
+      'strikesOut', 'wild', 'command', 'errors', 'pullHappy', 'fadesLate', 'predictable', 'bloopers',
+      'dugoutSpark', 'quickReply', 'rainMagnet', 'sunshine', 'socialSecretary', 'gearNerd',
+      'statsNerd', 'booksTheField', 'ironMan',
+    ],
+    'scout.catch.': ['cornerstone', 'allOrNothing', 'heart', 'unsung', 'trumpCard'],
+    'scout.type.': ['plus', 'minus', 'joke'],
+    'hl.': ['win', 'lose', 'draw', 'inningTop', 'inningBot', 'tagWin', 'tagSave', 'tagGood'],
+    'dir.': ['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'],
+    'result.': ['single', 'double', 'triple', 'hr', 'out', 'so', 'bb', 'hbp', 'error', 'sacBunt', 'sacFly'],
+    'outType.': ['ground', 'fly', 'liner', 'dp'],
+    'soType.': ['swinging', 'looking'],
+  };
+  const missing = [];
+  for (const [prefix, ids] of Object.entries(groups)) {
+    for (const id of ids) {
+      for (const lang of ['ja', 'en']) {
+        if (MESSAGES[lang][prefix + id] == null) missing.push(`${lang}:${prefix}${id}`);
+      }
+    }
+  }
+  assert.deepEqual(missing, [], `辞書に無い: ${missing.join(', ')}`);
+});
+
+test('チーム内1位の材料は、訳文ではなくデータで首位タイを見分ける', () => {
+  // 以前は訳文に「タイ」の語が入っているかで見分けていた。英語では成り立たない
+  const bat = {
+    p1: { playerId: 'p1', pa: 10, ab: 10, h: 5, hr: 0, rbi: 3, runs: 2, sb: 0, bb: 0, hbp: 0, so: 1, double: 0, triple: 0, tb: 5, sacFly: 0, sacBunt: 0, error: 0, ibb: 0, totalPitches: 30 },
+    p2: { playerId: 'p2', pa: 10, ab: 10, h: 5, hr: 0, rbi: 1, runs: 1, sb: 0, bb: 0, hbp: 0, so: 1, double: 0, triple: 0, tb: 5, sacFly: 0, sacBunt: 0, error: 0, ibb: 0, totalPitches: 30 },
+  };
+  for (const lang of ['ja', 'en']) {
+    const facts = teamHighlights('p1', bat, {}, lang);
+    assert.ok(facts.length > 0, `${lang}: 材料が出る`);
+    for (const f of facts) {
+      assert.equal(typeof f.text, 'string');
+      assert.equal(typeof f.tied, 'boolean');
+    }
+    // 安打はp1とp2が同数なので首位タイ、打点はp1が単独首位
+    assert.ok(facts.some((f) => f.tied), `${lang}: 首位タイが tied=true で出る`);
+    assert.ok(facts.some((f) => !f.tied), `${lang}: 単独首位が tied=false で出る`);
+  }
+  // 言語で文は変わるが、判定は変わらない
+  const ja = teamHighlights('p1', bat, {}, 'ja');
+  const en = teamHighlights('p1', bat, {}, 'en');
+  assert.deepEqual(ja.map((f) => f.tied), en.map((f) => f.tied));
+  assert.notEqual(ja[0].text, en[0].text);
 });

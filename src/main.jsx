@@ -7,11 +7,14 @@ import { StoreProvider } from './state/store.jsx';
 import { recoverIfNeeded, requestPersistentStorage } from './lib/durableStore.js';
 import { ensureRegistry, getActiveProfileId, profileStorageKey, LEGACY_DATA_KEY } from './lib/profiles.js';
 import { initNativeChrome } from './lib/nativeBridge.js';
+import { applyDocumentLang, langFromStorage } from './lib/documentLang.js';
 import { keepAlivePing } from './lib/officialCloud.js';
 import './styles.css';
 
 // ?watch=1 が付いたリンクは観戦専用ページ(読み取り専用)を表示する
 const isWatchMode = new URLSearchParams(window.location.search).get('watch') === '1';
+
+
 
 function mount() {
   ReactDOM.createRoot(document.getElementById('root')).render(
@@ -37,6 +40,7 @@ recoverIfNeeded(LEGACY_DATA_KEY)
   .then(() => {
     ensureRegistry();
     const activeId = getActiveProfileId();
+    applyDocumentLang(langFromStorage(activeId ? profileStorageKey(activeId) : LEGACY_DATA_KEY));
     return activeId ? recoverIfNeeded(profileStorageKey(activeId)) : null;
   })
   .catch(() => {})

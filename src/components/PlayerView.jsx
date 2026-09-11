@@ -30,8 +30,8 @@ export default function PlayerView({ playerId, games, onClose }) {
   const pitSplit = useMemo(() => pitchingSplits(games)[playerId], [games, playerId]);
   // AI選手名鑑向け: 他の選手と比べて明確に上回っている項目(タイトル・レートスタッツ首位)
   const uniqueFacts = useMemo(
-    () => teamHighlights(playerId, battingMap, pitchingMap),
-    [playerId, battingMap, pitchingMap]
+    () => teamHighlights(playerId, battingMap, pitchingMap, lang),
+    [playerId, battingMap, pitchingMap, lang]
   );
   // AIコーチの「直近の調子」向け: この選手が出場した直近3試合だけの成績
   const recentSummary = useMemo(() => {
@@ -44,9 +44,10 @@ export default function PlayerView({ playerId, games, onClose }) {
     const rp = aggregatePitching(recent)[playerId];
     const rm = rb ? battingMetrics(rb) : null;
     const rpm = rp ? pitchingMetrics(rp, inningBasis, lang) : null;
-    const summary = buildStatsSummary(rb, rp, rm, rpm);
-    return summary ? `直近${recent.length}試合 ${summary}` : '';
-  }, [games, playerId]);
+    const summary = buildStatsSummary(rb, rp, rm, rpm, lang);
+    return summary ? t('sum.recent', { n: recent.length, summary }) : '';
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [games, playerId, lang, inningBasis]);
 
   // この選手の全打席(試合の古い順 → 各試合内は記録順)
   const atBatsByGame = useMemo(() => {

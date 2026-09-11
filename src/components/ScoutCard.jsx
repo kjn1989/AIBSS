@@ -1,82 +1,121 @@
 import React, { useState } from 'react';
-import { useStore } from '../state/store.jsx';
+import { useStore, useT } from '../state/store.jsx';
 import { generateScoutReport } from '../lib/gemini.js';
 import { buildStatsSummary } from '../lib/stats.js';
 import FullscreenView from './FullscreenView.jsx';
 
-// ---- プリセット特殊能力タグ(パワプロ風) ----
-// type: 'plus'(青=長所) / 'minus'(赤=短所) / 'joke'(緑=個性・チーム貢献)
+// ---- プリセット特殊能力タグ ----
+//
+// タグは「保存されるデータ」で、選手に { label, type } で載る。
+// ここを単純に訳すと、日本語で付けたタグを英語表示にしたとき、保存済みの
+// ラベル(日本語)と候補ボタンのラベル(英語)が別物になり、同じタグを二重に
+// 付けられてしまう。そこでプリセットには**言語に依らないid**を持たせ、
+// 表示だけ id から引く。保存する側にも id を載せる。
+//
+// id を持たない古いデータ(と自由入力タグ)は、保存されているラベルをそのまま出す。
+// ただし日本語のプリセット名で保存されたものは JA_LABEL_TO_ID で逆引きできるので、
+// 過去の記録も英語で読める。**データは書き換えない**(書き換えると、同期で
+// 古い端末と新しい端末のあいだで往復して壊れる)。
+// type: 'plus'(長所) / 'minus'(短所) / 'joke'(個性・チーム貢献)
 const TAG_GROUPS = [
   {
-    category: '打撃',
+    categoryKey: 'scout.catBatting',
     type: 'plus',
-    tags: [
-      'アベレージヒッター', 'パワーヒッター', '広角打法', '流し打ち', '固め打ち', '粘り打ち',
-      'チャンス◯', '逆境◯', 'サヨナラ男', '代打◯', '満塁男', '初球◯', 'バント◯', '内野安打◯',
+    ids: [
+      'contact', 'power', 'allFields', 'oppoField', 'multiHit', 'grinder',
+      'clutch', 'fromBehind', 'walkOff', 'pinchHit', 'grandSlam', 'firstPitch', 'bunt', 'infieldHit',
     ],
   },
   {
-    category: '投球・守備・走塁',
+    categoryKey: 'scout.catPitchDefRun',
     type: 'plus',
-    tags: [
-      'ノビ◯', 'キレ◯', '重い球', '奪三振', '尻上がり', 'ピンチ◯', '守備職人', 'レーザービーム',
-      '送球◯', 'キャッチャー◯', '盗塁◯', '走塁◯', 'ヘッスラ',
+    ids: [
+      'lateLife', 'sharpBreak', 'heavyBall', 'strikeouts', 'strongerLate', 'outOfTrouble', 'glove', 'cannonArm',
+      'accurateThrow', 'gameCalling', 'steals', 'baserunning', 'headFirst',
     ],
   },
   {
-    category: '課題・弱点',
+    categoryKey: 'scout.catWeakness',
     type: 'minus',
-    tags: ['三振多め', '荒れ球', '制球に難あり', 'エラー多め', '引っ張りすぎ', 'スタミナ切れ', '単調', 'ポテンヒット製造機'],
+    ids: ['strikesOut', 'wild', 'command', 'errors', 'pullHappy', 'fadesLate', 'predictable', 'bloopers'],
   },
   {
-    category: 'キャラクター・チーム貢献',
+    categoryKey: 'scout.catCharacter',
     type: 'joke',
-    tags: [
-      '盛り上げ隊長', '出欠即答', '雨男/雨女', '晴れ男/晴れ女', '宴会部長', 'ギアマニア',
-      'データマン', 'グラウンド手配師', '鉄人',
+    ids: [
+      'dugoutSpark', 'quickReply', 'rainMagnet', 'sunshine', 'socialSecretary', 'gearNerd',
+      'statsNerd', 'booksTheField', 'ironMan',
     ],
   },
 ];
 
-const TYPE_LABEL = { plus: 'プラス評価', minus: 'マイナス評価', joke: '個性・その他' };
+// 日本語のプリセット名 → id。id を持たずに保存された過去のタグを読むためだけに使う
+const JA_LABEL_TO_ID = {
+  アベレージヒッター: 'contact', パワーヒッター: 'power', 広角打法: 'allFields', 流し打ち: 'oppoField',
+  固め打ち: 'multiHit', 粘り打ち: 'grinder', 'チャンス◯': 'clutch', '逆境◯': 'fromBehind',
+  サヨナラ男: 'walkOff', '代打◯': 'pinchHit', 満塁男: 'grandSlam', '初球◯': 'firstPitch',
+  'バント◯': 'bunt', '内野安打◯': 'infieldHit',
+  'ノビ◯': 'lateLife', 'キレ◯': 'sharpBreak', 重い球: 'heavyBall', 奪三振: 'strikeouts',
+  尻上がり: 'strongerLate', 'ピンチ◯': 'outOfTrouble', 守備職人: 'glove', レーザービーム: 'cannonArm',
+  '送球◯': 'accurateThrow', 'キャッチャー◯': 'gameCalling', '盗塁◯': 'steals', '走塁◯': 'baserunning',
+  ヘッスラ: 'headFirst',
+  三振多め: 'strikesOut', 荒れ球: 'wild', 制球に難あり: 'command', エラー多め: 'errors',
+  引っ張りすぎ: 'pullHappy', スタミナ切れ: 'fadesLate', 単調: 'predictable', ポテンヒット製造機: 'bloopers',
+  盛り上げ隊長: 'dugoutSpark', 出欠即答: 'quickReply', '雨男/雨女': 'rainMagnet', '晴れ男/晴れ女': 'sunshine',
+  宴会部長: 'socialSecretary', ギアマニア: 'gearNerd', データマン: 'statsNerd',
+  グラウンド手配師: 'booksTheField', 鉄人: 'ironMan',
+};
 
-// ダミーのAIコーチコメントテンプレート(実際のAI生成の代わりに文言を組み立てるモック)
-const CATCHPHRASES = [
-  '頼れる4番打者候補', '一振りに賭ける男', 'チームの心臓', '無冠の職人', '最後の切り札',
-];
+// 保存済みタグの id(無ければ日本語ラベルから逆引き)。自由入力タグは null
+const tagIdOf = (tag) => tag?.id || JA_LABEL_TO_ID[tag?.label] || null;
+
+// キャッチフレーズの候補(AI未生成のとき使う)
+const CATCHPHRASE_IDS = ['cornerstone', 'allOrNothing', 'heart', 'unsung', 'trumpCard'];
 
 // 戻り値: { report, nextGameTip, practiceTip }(Gemini生成時と同じ形にして表示側を共通化)
-function buildDummyReport(name, tags, statsSummary, uniqueFacts = [], recentSummary = '') {
-  const plus = tags.filter((t) => t.type === 'plus').map((t) => t.label);
-  const minus = tags.filter((t) => t.type === 'minus').map((t) => t.label);
-  const joke = tags.filter((t) => t.type === 'joke').map((t) => t.label);
+// 文のつなぎ方は言語で違う(日本語は続けて書けるが、英語は文のあいだに空白が要る)
+function buildDummyReport(name, tags, statsSummary, uniqueFacts, recentSummary, t, labelOf) {
+  const pick = (type) => tags.filter((x) => x.type === type).map(labelOf);
+  const plus = pick('plus');
+  const minus = pick('minus');
+  const joke = pick('joke');
+  const who = name || t('scout.unnamed');
 
   if (tags.length === 0 && !statsSummary) {
     return {
-      report: `${name || '無名の選手'}さんは、まだタグも成績データも登録されていません。伸びしろは無限大、これからが楽しみな選手です。`,
-      nextGameTip: 'まずは結果を恐れず、思い切って自分のプレーをすることだけを考えましょう。',
-      practiceTip: '素振り・キャッチボールなど基本を丁寧に。今はフォームづくりの時期です。',
+      report: t('scout.dummyEmpty', { name: who }),
+      nextGameTip: t('scout.dummyEmptyNext'),
+      practiceTip: t('scout.dummyEmptyPractice'),
     };
   }
-  let s = `${name || '無名の選手'}さん、`;
+
+  const parts = [];
   if (uniqueFacts.length) {
     // 同率よりも単独首位の方が際立つので優先して取り上げる
-    const best = uniqueFacts.find((f) => !f.includes('タイ')) || uniqueFacts[0];
-    s += `${best}という結果は、他の誰にも真似できない立派な武器です。`;
-  } else if (statsSummary) s += `今季${statsSummary}という数字を残しています。`;
-  if (plus.length) s += `「${plus[0]}」は紛れもない持ち味で、${plus.length > 1 ? `${plus.slice(1).join('・')}も含めて` : ''}チームにとって頼れる存在です。`;
-  if (minus.length) s += `${minus[0]}を意識して練習を重ねれば、次のステージへ間違いなく伸びるでしょう。`;
-  // キャラクター・チーム貢献は実際のタグがある時だけ触れる(無いのに褒めると嘘くさくなるため)
-  if (joke.length) s += `グラウンド外でも${joke.join('・')}として欠かせない存在です。`;
+    // 同率よりも単独首位の方が際立つので優先して取り上げる。
+    // uniqueFacts は { text, tied } なので、訳文を読まずに見分けられる
+    const best = uniqueFacts.find((f) => !f.tied) || uniqueFacts[0];
+    parts.push(t('scout.dummyUnique', { name: who, fact: best.text }));
+  } else if (statsSummary) {
+    parts.push(t('scout.dummyStats', { name: who, stats: statsSummary }));
+  } else {
+    parts.push(t('scout.dummyOpen', { name: who }));
+  }
+  if (plus.length) {
+    parts.push(t('scout.dummyPlus', {
+      first: plus[0],
+      rest: plus.length > 1 ? t('scout.dummyPlusRest', { list: plus.slice(1).join(t('scout.listJoin')) }) : '',
+    }));
+  }
+  if (minus.length) parts.push(t('scout.dummyMinus', { first: minus[0] }));
+  // 個性は実際のタグがある時だけ触れる(無いのに褒めると嘘くさくなるため)
+  if (joke.length) parts.push(t('scout.dummyJoke', { list: joke.join(t('scout.listJoin')) }));
 
-  const nextGameTip = recentSummary
-    ? `${recentSummary}という今の調子を信じて、次の試合も目の前の一球に集中していきましょう。`
-    : '次の試合は、今持っている持ち味を思い切り出すことだけを考えましょう。';
-  const practiceTip = minus.length
-    ? `普段の練習では${minus[0]}の克服を意識した反復を。焦らず一歩ずつ積み重ねていきましょう。`
-    : '普段の練習では基本の反復を大切に。今の持ち味にさらに磨きをかけていきましょう。';
-
-  return { report: s, nextGameTip, practiceTip };
+  return {
+    report: parts.join(t('scout.sentenceJoin')),
+    nextGameTip: recentSummary ? t('scout.dummyNextWith', { recent: recentSummary }) : t('scout.dummyNext'),
+    practiceTip: minus.length ? t('scout.dummyPracticeWith', { first: minus[0] }) : t('scout.dummyPractice'),
+  };
 }
 
 function TagPill({ label, type, onClick }) {
@@ -110,11 +149,16 @@ function fileToAvatarDataURL(file, size = 256) {
 // Gemini APIキーが設定タブで入力されていれば実際にAI生成し、未設定/失敗時はダミー文言にフォールバックする。
 export default function ScoutCard({ player, batting, pitching, battingM, pitchingM, uniqueFacts = [], recentSummary = '', saveType = 'UPDATE_PLAYER', onClose }) {
   const { state, dispatch } = useStore();
+  const t = useT();
+  const lang = state.settings.lang || 'ja';
   const apiKey = state.settings.geminiApiKey;
-  const statsSummary = buildStatsSummary(batting, pitching, battingM, pitchingM);
-  const [catchphrase, setCatchphrase] = useState(player?.scoutCatchphrase || CATCHPHRASES[0]);
+  const statsSummary = buildStatsSummary(batting, pitching, battingM, pitchingM, lang);
+  // プリセットタグは id から引く。id が無いもの(自由入力・古いデータ)は保存された文字をそのまま
+  const labelOf = (tag) => { const id = tagIdOf(tag); return id ? t(`tag.${id}`) : tag.label; };
+  const catchOf = (id) => t(`scout.catch.${id}`);
+  const [catchphrase, setCatchphrase] = useState(player?.scoutCatchphrase || catchOf(CATCHPHRASE_IDS[0]));
   const [photo, setPhoto] = useState(player?.scoutPhoto || ''); // 顔写真のdataURL
-  const [tags, setTags] = useState(player?.scoutTags || []); // { label, type }
+  const [tags, setTags] = useState(player?.scoutTags || []); // { id?, label, type }
   const [freeText, setFreeText] = useState('');
   const [freeType, setFreeType] = useState('plus');
   const [report, setReport] = useState(player?.scoutReport || '');
@@ -125,25 +169,35 @@ export default function ScoutCard({ player, batting, pitching, battingM, pitchin
   const [errorDetail, setErrorDetail] = useState('');
   const [dirty, setDirty] = useState(false); // 確定(保存)していない変更があるか
 
-  const name = player?.name || '選手';
+  const name = player?.name || t('scout.playerFallback');
 
-  const hasTag = (label) => tags.some((t) => t.label === label);
+  // 同一判定は id を優先する。日本語で付けたタグを英語表示で見ても同じタグとして扱うため
+  const sameTag = (a, b) => {
+    const ia = tagIdOf(a);
+    const ib = tagIdOf(b);
+    return ia && ib ? ia === ib : a.label === b.label;
+  };
+  const hasTagId = (id) => tags.some((x) => tagIdOf(x) === id);
+  const hasLabel = (label) => tags.some((x) => x.label === label);
 
-  const toggleTag = (label, type) => {
-    setTags((prev) => (prev.some((t) => t.label === label) ? prev.filter((t) => t.label !== label) : [...prev, { label, type }]));
+  const togglePreset = (id, type) => {
+    setTags((prev) => (prev.some((x) => tagIdOf(x) === id)
+      ? prev.filter((x) => tagIdOf(x) !== id)
+      // label も入れておく。id を知らない古いバージョンで開いても読めるようにする
+      : [...prev, { id, label: t(`tag.${id}`), type }]));
     setDirty(true);
   };
 
   const addFreeTag = () => {
     const label = freeText.trim();
-    if (!label || hasTag(label)) return;
+    if (!label || hasLabel(label)) return;
     setTags((prev) => [...prev, { label, type: freeType }]);
     setFreeText('');
     setDirty(true);
   };
 
-  const removeTag = (label) => {
-    setTags((prev) => prev.filter((t) => t.label !== label));
+  const removeTag = (tag) => {
+    setTags((prev) => prev.filter((x) => !sameTag(x, tag)));
     setDirty(true);
   };
 
@@ -160,8 +214,8 @@ export default function ScoutCard({ player, batting, pitching, battingM, pitchin
   const initial = name.slice(0, 1);
 
   const applyDummy = () => {
-    setCatchphrase(CATCHPHRASES[Math.floor(Math.random() * CATCHPHRASES.length)]);
-    const d = buildDummyReport(name, tags, statsSummary, uniqueFacts, recentSummary);
+    setCatchphrase(catchOf(CATCHPHRASE_IDS[Math.floor(Math.random() * CATCHPHRASE_IDS.length)]));
+    const d = buildDummyReport(name, tags, statsSummary, uniqueFacts, recentSummary, t, labelOf);
     setReport(d.report);
     setNextGameTip(d.nextGameTip);
     setPracticeTip(d.practiceTip);
@@ -175,7 +229,12 @@ export default function ScoutCard({ player, batting, pitching, battingM, pitchin
       return;
     }
     setLoading(true);
-    const result = await generateScoutReport({ apiKey, name, number: player?.number, tags, statsSummary, uniqueFacts, recentSummary, lang: state.settings.lang || 'ja' });
+    // AIへ渡すタグも表示と同じ言語にする(日本語のタグから英語の寸評を書かせない)
+    const tagsForAi = tags.map((x) => ({ label: labelOf(x), type: x.type }));
+    const result = await generateScoutReport({
+      apiKey, name, number: player?.number, tags: tagsForAi, statsSummary,
+      uniqueFacts: uniqueFacts.map((f) => f.text), recentSummary, lang,
+    });
     setLoading(false);
     if (result && !result.error) {
       if (result.catchphrase) setCatchphrase(result.catchphrase);
@@ -191,7 +250,7 @@ export default function ScoutCard({ player, batting, pitching, battingM, pitchin
   };
 
   const handleClose = () => {
-    if (dirty && !window.confirm('確定せずに戻ると、現在の入力内容は全てキャンセルされます。よろしいですか？')) return;
+    if (dirty && !window.confirm(t('scout.discardConfirm'))) return;
     onClose();
   };
 
@@ -211,17 +270,17 @@ export default function ScoutCard({ player, batting, pitching, battingM, pitchin
   return (
     <FullscreenView>
       <header className="fullscreen-header">
-        <button className="ghost small" onClick={handleClose}>← 戻る</button>
+        <button className="ghost small" onClick={handleClose}>{t('common.back')}</button>
         <h2>
-          AI選手名鑑
-          {dirty && <span className="small" style={{ color: 'var(--amber)', marginLeft: 6, fontWeight: 700 }}>●未確定</span>}
+          {t('scout.title')}
+          {dirty && <span className="small" style={{ color: 'var(--amber)', marginLeft: 6, fontWeight: 700 }}>{t('scout.unsaved')}</span>}
         </h2>
-        <button className="primary small" onClick={handleConfirm}>確定</button>
+        <button className="primary small" onClick={handleConfirm}>{t('scout.confirm')}</button>
       </header>
       <div className="fullscreen-body">
         <div className="scout-card">
           <div className="scout-top">
-            <label className="scout-photo" title="タップで顔写真をアップロード">
+            <label className="scout-photo" title={t('scout.photoHint')}>
               {photo ? <img src={photo} alt={name} /> : initial}
               <span className="scout-photo-cam">📷</span>
               <input
@@ -240,96 +299,94 @@ export default function ScoutCard({ player, batting, pitching, battingM, pitchin
           </div>
 
           <div className="scout-mid">
-            {statsSummary && <p className="small dim mb8">📊 今季成績: {statsSummary}</p>}
-            {recentSummary && <p className="small dim mb8">📈 直近の調子: {recentSummary}</p>}
+            {statsSummary && <p className="small dim mb8">{t('scout.seasonStats', { stats: statsSummary })}</p>}
+            {recentSummary && <p className="small dim mb8">{t('scout.recentForm', { recent: recentSummary })}</p>}
             {uniqueFacts.length > 0 && (
-              <p className="small dim mb8">🏆 チーム内での強み: {uniqueFacts.join('・')}</p>
+              <p className="small dim mb8">{t('scout.teamStrengths', { list: uniqueFacts.map((f) => f.text).join(t('scout.listJoin')) })}</p>
             )}
             <div className="selected-tags-panel">
               <div className="section-title" style={{ margin: 0 }}>
-                特殊能力タグ {tags.length > 0 && <span className="tag-count-badge">{tags.length}</span>}
+                {t('scout.tagsTitle')} {tags.length > 0 && <span className="tag-count-badge">{tags.length}</span>}
               </div>
               {tags.length === 0 ? (
-                <p className="small dim mt8">下のタグ候補から選ぶか、自由入力で追加してください。</p>
+                <p className="small dim mt8">{t('scout.tagsEmpty')}</p>
               ) : (
                 <>
                   <div className="tag-pill-row mt8">
-                    {tags.map((t) => (
-                      <TagPill key={t.label} label={t.label} type={t.type} onClick={() => removeTag(t.label)} />
+                    {tags.map((tag) => (
+                      <TagPill key={tagIdOf(tag) || tag.label} label={labelOf(tag)} type={tag.type} onClick={() => removeTag(tag)} />
                     ))}
                   </div>
-                  <p className="small dim mt8">タップで解除できます。</p>
+                  <p className="small dim mt8">{t('scout.tagsRemoveHint')}</p>
                 </>
               )}
             </div>
 
             {TAG_GROUPS.map((g) => (
-              <div key={g.category}>
-                <div className="section-title small">{g.category} <span className="dim">({TYPE_LABEL[g.type]})</span></div>
+              <div key={g.categoryKey}>
+                <div className="section-title small">{t(g.categoryKey)} <span className="dim">({t(`scout.type.${g.type}`)})</span></div>
                 <div className="tag-suggest-row">
-                  {g.tags.map((label) => (
+                  {g.ids.map((id) => (
                     <button
-                      key={label}
-                      className={`tag-suggest ${g.type} ${hasTag(label) ? 'on' : ''}`}
-                      onClick={() => toggleTag(label, g.type)}
+                      key={id}
+                      className={`tag-suggest ${g.type} ${hasTagId(id) ? 'on' : ''}`}
+                      onClick={() => togglePreset(id, g.type)}
                     >
-                      {label}
+                      {t(`tag.${id}`)}
                     </button>
                   ))}
                 </div>
               </div>
             ))}
 
-            <div className="section-title small">自由入力タグ</div>
+            <div className="section-title small">{t('scout.freeTag')}</div>
             <div className="flex" style={{ gap: 6 }}>
               <input
                 style={{ flex: 1 }}
-                placeholder="タグを入力..."
+                placeholder={t('scout.freeTagPlaceholder')}
                 value={freeText}
                 onChange={(e) => setFreeText(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && addFreeTag()}
               />
               <select style={{ width: 96 }} value={freeType} onChange={(e) => setFreeType(e.target.value)}>
-                <option value="plus">プラス</option>
-                <option value="minus">マイナス</option>
-                <option value="joke">個性</option>
+                <option value="plus">{t('scout.type.plus')}</option>
+                <option value="minus">{t('scout.type.minus')}</option>
+                <option value="joke">{t('scout.type.joke')}</option>
               </select>
-              <button className="small" onClick={addFreeTag}>追加</button>
+              <button className="small" onClick={addFreeTag}>{t('scout.add')}</button>
             </div>
           </div>
 
           <div className="scout-bottom">
             <div className="flex" style={{ marginBottom: 8 }}>
-              <div className="grow section-title" style={{ margin: 0 }}>AIコーチコメント</div>
+              <div className="grow section-title" style={{ margin: 0 }}>{t('scout.coachComment')}</div>
               <button className="small primary" onClick={generate} disabled={loading}>
-                {loading ? '生成中...' : apiKey ? '✨ AIで生成' : '🎲 生成(ダミー)'}
+                {loading ? t('scout.generating') : apiKey ? t('scout.genAi') : t('scout.genDummy')}
               </button>
             </div>
             <div className="scout-report">
-              {report || buildDummyReport(name, tags, statsSummary, uniqueFacts, recentSummary).report}
+              {report || buildDummyReport(name, tags, statsSummary, uniqueFacts, recentSummary, t, labelOf).report}
             </div>
-            {source === 'ai' && <p className="small mt8" style={{ color: 'var(--green)' }}>✨ Gemini AIによる生成です。</p>}
+            {source === 'ai' && <p className="small mt8" style={{ color: 'var(--green)' }}>{t('scout.byAi')}</p>}
             {source === 'dummy-error' && (
               <p className="small mt8" style={{ color: 'var(--amber)' }}>
-                ⚠️ AI生成に失敗したため、ダミー文言を表示しています。{errorDetail && `(${errorDetail})`}
+                {t('scout.aiFailed')}{errorDetail && `(${errorDetail})`}
               </p>
             )}
             {source !== 'ai' && source !== 'dummy-error' && (
-              <p className="small dim mt8">
-                {apiKey ? '※ まだ生成していません。' : '※ Gemini APIキー未設定のため、ダミー文言です。設定タブから追加できます。'}
-              </p>
+              <p className="small dim mt8">{apiKey ? t('scout.notYet') : t('scout.noKey')}</p>
             )}
             {(nextGameTip || practiceTip) && (
               <div className="scout-tips mt12">
                 {nextGameTip && (
                   <div className="scout-tip">
-                    <div className="scout-tip-label">🎯 次の試合のワンポイント</div>
+                    <div className="scout-tip-label">{t('scout.tipNext')}</div>
                     <div className="scout-tip-body">{nextGameTip}</div>
                   </div>
                 )}
                 {practiceTip && (
                   <div className="scout-tip">
-                    <div className="scout-tip-label">🏃 普段の練習で意識したいこと</div>
+                    <div className="scout-tip-label">{t('scout.tipPractice')}</div>
                     <div className="scout-tip-body">{practiceTip}</div>
                   </div>
                 )}
