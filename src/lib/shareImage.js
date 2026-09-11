@@ -71,8 +71,9 @@ export function generateHighlightImage(game, h, teamName) {
   ctx.fillText(`${game.myScore} - ${game.oppScore}`, W / 2, 260);
 
   // 勝敗ピル
+  // 色の判定は訳文ではなく resultKey で行う。訳文で分岐すると英語表示で全部グレーになる
   const resultLabel = h.resultLabel;
-  const pillColor = resultLabel === '勝利' ? '#3fb950' : resultLabel === '敗北' ? '#f85149' : '#8b949e';
+  const pillColor = h.resultKey === 'win' ? '#3fb950' : h.resultKey === 'lose' ? '#f85149' : '#8b949e';
   ctx.fillStyle = pillColor;
   const pw = 150;
   if (ctx.roundRect) {

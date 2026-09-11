@@ -19,6 +19,9 @@ import { draftNarrative, noteOf, noteKeyOf } from '../src/lib/narrative.js';
 import { tiebreakPlacement, backInOrder, halfHasPlays, halfStartKeyOf } from '../src/lib/tiebreak.js';
 import { aggregateScorers, rankScorers, scorerName, tagScorerId } from '../src/lib/scorers.js';
 import { speechSupported } from '../src/lib/speech.js';
+import { MESSAGES } from '../src/lib/i18n.js';
+import { positionListLabel } from '../src/lib/model.js';
+import { computeHighlights } from '../src/lib/highlights.js';
 import { buildRunDists, buildWinModel, priorDist, remainingHalves, SCORE_PROB, MAX_RUNS } from '../src/lib/winExp.js';
 import { TEAM_GAPS, buildGapModel, gapTables, gapOf, scaleDist, scaleDists, S_EXP } from '../src/lib/teamGap.js';
 import { aggregateScorersOver, swingScale, OPEN_MIN_SWING, OPEN_REACT_SWING } from '../src/lib/scorers.js';
@@ -5720,4 +5723,58 @@ test('音声: Capacitorを読み込んだWeb版(PWA)では使える', () => {
 test('音声: APIが無いブラウザ・windowが無い環境では使えない', () => {
   assert.equal(speechSupported({}), false);
   assert.equal(speechSupported(null), false);
+});
+
+// ---------------- 英語表示に日本語が混ざらないこと ----------------
+// 画面は英語なのに単語だけ日本語、という混ざり方が実際に起きていた。
+// 一度直しても、日本語だけ足して英語を忘れると静かに戻るので、機械で見張る。
+test('英語辞書に日本語の文字が残っていない', () => {
+  const JA = /[぀-ヿ一-龯]/;
+  const bad = Object.entries(MESSAGES.en)
+    .filter(([, v]) => typeof v === 'string' && JA.test(v))
+    .map(([k]) => k);
+  assert.deepEqual(bad, [], `英語のまま残すべきでないキー: ${bad.join(', ')}`);
+});
+
+test('守備位置の並びは、言語ごとの区切りで組み立てる', () => {
+  // 日本語の「・」を英文に入れると区切りとして読めない
+  assert.equal(positionListLabel(['投', '捕', '遊'], 'ja'), '投・捕・遊');
+  assert.equal(positionListLabel(['投', '捕', '遊'], 'en'), 'P / C / SS');
+  assert.equal(positionListLabel([], 'en'), '');
+});
+
+test('ボックススコアの位置表記: 英語は詰めずに繋ぐ', () => {
+  // 日本語は1文字なので「中左」と詰められるが、英語で詰めると CFLF になって読めない
+  assert.equal(posChar('中', 'ja'), '中');
+  assert.equal(posChar('中', 'en'), 'CF');
+  assert.equal(posChar('DH', 'en'), 'DH');
+  assert.equal(posChar('打', 'en'), '', '守備につかない擬似位置は空');
+});
+
+test('K/BB: 与四球0の注記も表示言語に従う', () => {
+  const s = { outsRecorded: 9, earnedRuns: 0, hitsAllowed: 2, walks: 0, hitByPitch: 0, strikeouts: 5, abFaced: 10 };
+  assert.equal(pitchingMetrics(s, 7, 'ja').kbbDisplay, '5 (与四球0)');
+  assert.equal(pitchingMetrics(s, 7, 'en').kbbDisplay, '5 (no walks)');
+});
+
+test('防御率は換算する回数で変わる(7回制の既定を9回制の試合に使わない)', () => {
+  const s = { outsRecorded: 27, earnedRuns: 3, hitsAllowed: 5, walks: 1, hitByPitch: 0, strikeouts: 5, abFaced: 30 };
+  assert.equal(pitchingMetrics(s, 9).era.toFixed(2), '3.00');
+  assert.equal(pitchingMetrics(s, 7).era.toFixed(2), '2.33');
+});
+
+test('ハイライト: 勝敗は訳文ではなくキーで持つ', () => {
+  const game = {
+    id: 'g1', date: '2026-09-11', myScore: 5, oppScore: 2, atBats: [], playLogs: [], pitchingRecords: [],
+  };
+  const at = (my, opp, lang) => computeHighlights({ ...game, myScore: my, oppScore: opp }, () => '', lang);
+  // 勝ちだけ見ていると「常にwin」を返す実装でも通ってしまうので、3通り全部見る
+  assert.equal(at(5, 2, 'ja').resultKey, 'win');
+  assert.equal(at(2, 5, 'ja').resultKey, 'lose');
+  assert.equal(at(3, 3, 'ja').resultKey, 'draw');
+  // 色分けの判定は言語で変わらない
+  assert.equal(at(2, 5, 'en').resultKey, 'lose');
+  assert.equal(at(5, 2, 'ja').resultLabel, '勝利');
+  assert.equal(at(5, 2, 'en').resultLabel, 'Win');
+  assert.equal(at(2, 5, 'en').resultLabel, 'Loss');
 });

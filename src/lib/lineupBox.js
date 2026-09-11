@@ -15,6 +15,7 @@
 
 // 守備位置コード→フル表記(カード表示用)。例: 投→投手 / 遊→遊撃 / DH→指名打者。
 import { rulesAtInning } from './rules.js';
+import { positionLabel } from './model.js';
 import { isPitcherChangeLog, resolveStartPitcher } from './pitchingRebuild.js';
 
 // 各回の投手。投手はスタメン表に「投」として載っているとは限らない。
@@ -58,30 +59,36 @@ export function posFull(code, lang = 'ja') {
   return (lang === 'en' ? POS_FULL_EN[code] : POS_FULL_JA[code]) || code;
 }
 
-// 守備位置コード→表示1文字。守備につかない擬似位置(打/控)は空を返す。
-export function posChar(pos) {
+// 守備位置コード→表示。守備につかない擬似位置(打/控)は空を返す。
+// 日本語は1文字なので詰めて書ける(「中左」= 中堅から左翼へ)。英語は2〜3文字に
+// なるため、そのまま詰めると CFLF になって読めない。区切りは composeNotation 側で入れる。
+export function posChar(pos, lang = 'ja') {
   if (!pos) return '';
-  if (pos === 'DH') return '指';
-  return ['投', '捕', '一', '二', '三', '遊', '左', '中', '右'].includes(pos) ? pos : '';
+  if (!['投', '捕', '一', '二', '三', '遊', '左', '中', '右', 'DH'].includes(pos)) return '';
+  if (pos === 'DH') return lang === 'en' ? 'DH' : '指';
+  return positionLabel(pos, lang);
 }
 
 // 1選手ぶんの出場記録(marks)から位置表記を組み立てる。
 // marks: [{ kind:'start'|'ph'|'pr'|'def'|'move', position }]
-function composeNotation(marks) {
+function composeNotation(marks, lang = 'ja') {
+  const en = lang === 'en';
+  const sep = en ? '-' : '';
   const isStart = marks[0]?.kind === 'start';
   let prefix = '';
   const positions = [];
   for (const m of marks) {
-    if (m.kind === 'ph') prefix = '打';
-    else if (m.kind === 'pr') prefix = '走';
-    const c = posChar(m.position);
+    if (m.kind === 'ph') prefix = en ? 'PH' : '打';
+    else if (m.kind === 'pr') prefix = en ? 'PR' : '走';
+    const c = posChar(m.position, lang);
     if (c && positions[positions.length - 1] !== c) positions.push(c);
   }
   if (isStart) {
-    const body = positions.join('') || posChar(marks[0].position);
+    const body = positions.join(sep) || posChar(marks[0].position, lang);
     return body ? `(${body})` : ''; // 守備位置不明の先発(過去データ)は空表示
   }
-  const body = prefix + positions.join('');
+  const tail = positions.join(sep);
+  const body = prefix && tail ? prefix + sep + tail : prefix + tail;
   return body || '—';
 }
 
@@ -120,7 +127,7 @@ export function resolveStarters(game) {
 
 // 打順スロットごとに登場順の選手行を作る。
 // 戻り値: [{ order, players: [{ playerId, notation, isStarter }] }]
-export function buildLineupRows(game) {
+export function buildLineupRows(game, lang = 'ja') {
   const byOrder = new Map(); // order -> [{ playerId, marks:[] }]
   const ensure = (order) => {
     if (!byOrder.has(order)) byOrder.set(order, []);
@@ -167,7 +174,7 @@ export function buildLineupRows(game) {
       const posCode = [...e.marks].reverse().map((m) => m.position).find((p) => posChar(p)) || null;
       return {
         playerId: e.playerId,
-        notation: composeNotation(e.marks), // 伝統表記(スコアシート用)
+        notation: composeNotation(e.marks, lang), // 伝統表記(スコアシート用)
         isStarter,
         role: isStarter ? 'start' : kind,   // start / ph(代打) / pr(代走) / def(守備)
         inning: e.inning ?? null,           // 交代で入った回(先発はnull)

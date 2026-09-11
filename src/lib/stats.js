@@ -4,6 +4,7 @@
 // 「試合単位/シーズン通算」の切替は呼び出し側が games を絞って渡す。
 // ============================================================
 import { RESULTS, formatIP, playErrorOf, finePlayOf } from './model.js';
+import { translate } from './i18n.js';
 
 // ---- 打者: 足し算カウントスタッツ(タイトル系) ----
 // バットに当たって前に飛んだ打席か。ハードヒット率の分母はここから作る
@@ -324,13 +325,14 @@ export function battingMetrics(s) {
 
 // ---- 投手メトリクス ----
 // basis = 防御率・奪三振率を「何回ぶんに換算するか」。7回制/9回制で分母が変わるため引数にする。
-export function pitchingMetrics(s, basis = 7) {
+export function pitchingMetrics(s, basis = 7, lang = 'ja') {
   const ip = s.outsRecorded / 3;
   const era = ip > 0 ? (s.earnedRuns / ip) * basis : null; // 8. 防御率(basis回換算)
   const whip = ip > 0 ? (s.hitsAllowed + s.walks + s.hitByPitch) / ip : null; // 9. WHIP(被安打+与四死球)
   // 10. K/BB: 与四球0のときは奪三振数を表示し注記
   const kbb = s.walks > 0 ? s.strikeouts / s.walks : null;
-  const kbbDisplay = s.walks > 0 ? fmt2(kbb) : s.strikeouts > 0 ? `${s.strikeouts} (与四球0)` : '-';
+  const kbbDisplay = s.walks > 0 ? fmt2(kbb)
+    : s.strikeouts > 0 ? `${s.strikeouts} ${translate(lang, 'pm.noWalks')}` : '-';
   const kbbSort = s.walks > 0 ? kbb : s.strikeouts > 0 ? s.strikeouts : -1;
   const oba = div(s.hitsAllowed, s.abFaced); // 被打率 = 被安打 ÷ 被打数
   const obaVsL = div(s.vsL?.h, s.vsL?.ab); // 対左打者被打率

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useStore, useT } from '../state/store.jsx';
-import { aggregateBatting, aggregatePitching, battingMetrics, pitchingMetrics, fmtAvg, battingSplits, pitchingSplits, avg3, teamHighlights, recentGames, buildStatsSummary } from '../lib/stats.js';
+import { aggregateBatting, aggregatePitching, battingMetrics, pitchingMetrics, fmtAvg, battingSplits, pitchingSplits, avg3, teamHighlights, recentGames, buildStatsSummary, defaultInningBasis } from '../lib/stats.js';
 import { formatIP } from '../lib/model.js';
 import { playLabel } from '../lib/voiceParser.js';
 import SprayChart from './SprayChart.jsx';
@@ -17,6 +17,10 @@ export default function PlayerView({ playerId, games, onClose }) {
   const [showScout, setShowScout] = useState(false);
   // AI選手名鑑は「草野球」エディション限定の機能
   const scoutEnabled = state.settings.edition === '草野球';
+
+  // 防御率の回数換算。成績タブと同じく、実際に多く戦っている試合の回数に合わせる
+  // (既定の7回のままだと、9回制のチームの防御率が7回換算で出てしまう)
+  const inningBasis = useMemo(() => defaultInningBasis(games), [games]);
 
   const battingMap = useMemo(() => aggregateBatting(games), [games]);
   const pitchingMap = useMemo(() => aggregatePitching(games), [games]);
@@ -39,7 +43,7 @@ export default function PlayerView({ playerId, games, onClose }) {
     const rb = aggregateBatting(recent)[playerId];
     const rp = aggregatePitching(recent)[playerId];
     const rm = rb ? battingMetrics(rb) : null;
-    const rpm = rp ? pitchingMetrics(rp) : null;
+    const rpm = rp ? pitchingMetrics(rp, inningBasis, lang) : null;
     const summary = buildStatsSummary(rb, rp, rm, rpm);
     return summary ? `直近${recent.length}試合 ${summary}` : '';
   }, [games, playerId]);
@@ -54,7 +58,7 @@ export default function PlayerView({ playerId, games, onClose }) {
   const allAtBats = atBatsByGame.flatMap((e) => e.atBats);
 
   const m = batting ? battingMetrics(batting) : null;
-  const pm = pitching ? pitchingMetrics(pitching) : null;
+  const pm = pitching ? pitchingMetrics(pitching, inningBasis, lang) : null;
 
   return (
     <FullscreenView>

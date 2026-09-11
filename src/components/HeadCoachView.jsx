@@ -3,7 +3,7 @@ import { useStore, usePlayerName, useT } from '../state/store.jsx';
 import { aggregateBatting, battingMetrics, fmtAvg } from '../lib/stats.js';
 import { generateLineup } from '../lib/gemini.js';
 import { kindOf } from '../lib/editionKind.js';
-import { POSITIONS, uncoveredPositions, attendeesOf } from '../lib/model.js';
+import { POSITIONS, uncoveredPositions, attendeesOf, positionListLabel } from '../lib/model.js';
 import FullscreenView from './FullscreenView.jsx';
 
 // AIヘッドコーチ: 今季の打撃成績をもとにGeminiが打順・守備位置を提案する(参考・おまけ機能)
@@ -11,6 +11,7 @@ export default function HeadCoachView({ game, canApply, onClose }) {
   const { state, dispatch } = useStore();
   const nameOf = usePlayerName();
   const t = useT();
+  const lang = state.settings.lang || 'ja';
   const apiKey = state.settings.geminiApiKey;
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null); // { lineup, pitcher, strategy }
@@ -48,6 +49,7 @@ export default function HeadCoachView({ game, canApply, onClose }) {
       apiKey, players, dh,
       edition: state.settings.edition,
       kind: kindOf(state.settings),
+      lang,
     });
     setLoading(false);
     if (!r) {
@@ -105,7 +107,7 @@ export default function HeadCoachView({ game, canApply, onClose }) {
             </div>
           </div>
           {holes.length > 0 && (
-            <div className="warn-box mt8">{t('pos.uncovered', { list: holes.join('・') })}</div>
+            <div className="warn-box mt8">{t('pos.uncovered', { list: positionListLabel(holes, lang) })}</div>
           )}
           <button className="primary" onClick={run} disabled={loading} style={{ width: '100%' }}>
             {loading ? '🤔 考え中...' : result ? '🔄 もう一度提案してもらう' : `🤖 スタメン(${dh ? '10' : '9'}人)を提案してもらう`}
@@ -123,7 +125,7 @@ export default function HeadCoachView({ game, canApply, onClose }) {
               </div>
             )}
             {result.unfilled && result.unfilled.length > 0 && (
-              <div className="warn-box mt8">{t('pos.aiUnfilled', { list: result.unfilled.join('・') })}</div>
+              <div className="warn-box mt8">{t('pos.aiUnfilled', { list: positionListLabel(result.unfilled, lang) })}</div>
             )}
             <div className="card">
               <h2>提案オーダー</h2>

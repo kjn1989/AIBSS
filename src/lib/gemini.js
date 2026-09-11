@@ -118,6 +118,20 @@ export async function interpretUtterance(text, apiKey) {
 // ---------------- その他メモ → 正式なスコア記録の候補へ変換(#5) ----------------
 // situation: 現在の状況(イニング/アウト/走者/打者)の人間可読テキスト。
 // 戻り値: 成功 { candidates:[{result,outType,direction,batterTo,why,confidence}] } / 失敗 { error } / 未設定null
+// 生成される文章の言語。
+//
+// プロンプト本体は日本語のままでよい(役割や禁止事項の指示であって、出力ではない)。
+// ただし何も言わないとモデルはプロンプトの言語に引きずられるので、英語表示のまま
+// 日本語の記事・寸評が返ってくる。値だけを画面の言語で書かせる。
+// JSONのキー名は解析に使うので、言語を変えても英語のままにさせること。
+// 選手名・チーム名は記録された通りの綴りで残す(勝手に音訳されると名簿と照合できない)。
+function langInstruction(lang) {
+  if (lang !== 'en') return '';
+  return '\n\n【出力言語】JSONのキー名は英語のまま変えないこと。値(文章)はすべて英語で書くこと。'
+    + ' Write every string value in natural English. Do not use Japanese in the output.'
+    + ' Keep player names and team names exactly as they were given.';
+}
+
 function memoPrompt(memo, situation) {
   return `あなたは野球の公式記録員です。記録員が残した自由記述メモを、アプリのスコア記録スキーマ(JSON)に変換します。断定できない場合は候補を複数返し、必ずconfidence(0-1)とwhy(理由)を付けてください。与えられた現在状況の範囲だけで解釈し、存在しない走者を作らないこと。
 
@@ -255,8 +269,8 @@ function scoutPrompt({ name, number, tags, statsSummary, uniqueFacts = [], recen
 }
 
 // 戻り値: 成功 { catchphrase, report, nextGameTip, practiceTip } / 失敗 { error } / 未設定・オフライン null
-export async function generateScoutReport({ apiKey, name, number, tags, statsSummary, uniqueFacts = [], recentSummary = '' }) {
-  const r = await callGeminiJSON(apiKey, scoutPrompt({ name, number, tags, statsSummary, uniqueFacts, recentSummary }));
+export async function generateScoutReport({ apiKey, name, number, tags, statsSummary, uniqueFacts = [], recentSummary = '', lang = 'ja' }) {
+  const r = await callGeminiJSON(apiKey, scoutPrompt({ name, number, tags, statsSummary, uniqueFacts, recentSummary }) + langInstruction(lang));
   if (!r || r.error) return r;
   if (!r.data.report) return { error: 'AIの応答にreportが含まれていません' };
   return {
@@ -329,8 +343,8 @@ ${posRule}
 }
 
 // 戻り値: 成功 { lineup:[{name,position,reason}], pitcher(DH時のみ){name,reason}, strategy } / 失敗 { error } / 未設定・オフライン null
-export async function generateLineup({ apiKey, players, dh = false, edition, kind }) {
-  const r = await callGeminiJSON(apiKey, lineupPrompt(players, dh, edition, kind), { maxOutputTokens: 2048, temperature: 0.7 });
+export async function generateLineup({ apiKey, players, dh = false, edition, kind, lang = 'ja' }) {
+  const r = await callGeminiJSON(apiKey, lineupPrompt(players, dh, edition, kind) + langInstruction(lang), { maxOutputTokens: 2048, temperature: 0.7 });
   if (!r || r.error) return r;
   if (!Array.isArray(r.data.lineup) || r.data.lineup.length === 0) {
     return { error: 'AIの応答にlineupが含まれていません' };
@@ -384,8 +398,8 @@ ${summary}
 }
 
 // 戻り値: 成功 { headline, subhead, body, comment } / 失敗 { error } / 未設定・オフライン null
-export async function generateNewspaper({ apiKey, summary, edition, season, kind }) {
-  const r = await callGeminiJSON(apiKey, newspaperPrompt(summary, { edition, season, kind }), { maxOutputTokens: 2048, temperature: 0.95 });
+export async function generateNewspaper({ apiKey, summary, edition, season, kind, lang = 'ja' }) {
+  const r = await callGeminiJSON(apiKey, newspaperPrompt(summary, { edition, season, kind }) + langInstruction(lang), { maxOutputTokens: 2048, temperature: 0.95 });
   if (!r || r.error) return r;
   if (!r.data.headline || !r.data.body) return { error: 'AIの応答に記事本文が含まれていません' };
   return {

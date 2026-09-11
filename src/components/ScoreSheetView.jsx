@@ -35,7 +35,7 @@ export default function ScoreSheetView({ game, onClose }) {
   // 打順スロットごとに、出場選手を「登場順」で各自1行に分ける(伝統的なスコアブック方式)。
   // 位置=(先発)/打(代打)/走(代走)+守備位置。
   // 打撃結果は「1人=1行」に集約する(打順を移った選手が複数行に分散しないように)。
-  const rows = buildLineupRows(game);
+  const rows = buildLineupRows(game, lang);
   const rowsByOrder = new Map(rows.map((r) => [r.order, r.players]));
   // 出場表に無いが打席がある選手を補完(過去データの取りこぼし防止)
   const blank = { notation: '—', isStarter: false, role: 'def', inning: null, posCode: null, fromOrder: null, toOrder: null };

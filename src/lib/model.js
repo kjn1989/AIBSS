@@ -203,6 +203,14 @@ export function positionLabel(pos, lang) {
   return lang === 'en' ? (POSITION_EN[pos] || pos) : pos;
 }
 
+// 守備位置をいくつか並べて文章に差し込むとき用。
+// POSITIONS は '投' '捕' … の日本語1文字なので、英語の文に素で入れると
+// 「No player can cover 投・捕・一」になる。区切りも言語で変える
+// (日本語の「・」は英文の中では区切りとして読めない)。
+export function positionListLabel(list, lang) {
+  return (list || []).map((p) => positionLabel(p, lang)).join(lang === 'en' ? ' / ' : '・');
+}
+
 // ---- 相手チームの選手記号(実名は入力せず A〜T の20人で管理) ----
 export const OPP_LETTERS = Array.from({ length: 20 }, (_, i) => String.fromCharCode(65 + i));
 

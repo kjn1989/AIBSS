@@ -130,7 +130,7 @@ export default function StatsTab() {
       </div>
 
       <BattingSummaryTable batting={batting} nameOf={nameOf} onOpenPlayer={setPlayerId} tenureOf={tenureOf} />
-      <PitchingSummaryTable pitching={pitching} nameOf={nameOf} onOpenPlayer={setPlayerId} tenureOf={tenureOf} />
+      <PitchingSummaryTable pitching={pitching} nameOf={nameOf} onOpenPlayer={setPlayerId} tenureOf={tenureOf} basis={inningBasis} lang={lang} />
       <FieldingSummaryTable rows={fielding} nameOf={nameOf} onOpenPlayer={setPlayerId} tenureOf={tenureOf} />
       <MatchupCard games={games} onOpenPlayer={setPlayerId} />
       <BatteryCard games={games} />
@@ -233,7 +233,7 @@ function FieldingSummaryTable({ rows, nameOf, onOpenPlayer, tenureOf }) {
 }
 
 // 全員の投手基本成績一覧(参考テーブル。旧「投手」タブのサマリーを移設)
-function PitchingSummaryTable({ pitching, nameOf, onOpenPlayer, tenureOf }) {
+function PitchingSummaryTable({ pitching, nameOf, onOpenPlayer, tenureOf, basis, lang }) {
   const t = useT();
   const rows = Object.values(pitching).filter((s) => s.outsRecorded > 0 || s.games > 0);
   if (rows.length === 0) return null;
@@ -250,7 +250,7 @@ function PitchingSummaryTable({ pitching, nameOf, onOpenPlayer, tenureOf }) {
           </thead>
           <tbody>
             {rows.map((s) => {
-              const m = pitchingMetrics(s);
+              const m = pitchingMetrics(s, basis, lang);
               return (
                 <tr key={s.playerId} onClick={() => onOpenPlayer?.(s.playerId)} role="button">
                   <td style={{ color: 'var(--accent)', fontWeight: 700 }}>

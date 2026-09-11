@@ -6,7 +6,8 @@ import { encodeWatchLink, encodeInviteLink } from './WatchView.jsx';
 import QRCode from './QRCode.jsx';
 import { resetFieldPadHint } from './FieldPad.jsx';
 import { battingCSV, pitchingCSV, playLogCSV, atBatCSV, downloadCSV, shareCSV } from '../lib/csv.js';
-import { EDITIONS, HAND_LABEL, editionLabel, FIELD_POSITIONS, uncoveredPositions } from '../lib/model.js';
+import { defaultInningBasis } from '../lib/stats.js';
+import { EDITIONS, HAND_LABEL, editionLabel, FIELD_POSITIONS, uncoveredPositions, positionListLabel, positionLabel } from '../lib/model.js';
 import {
   isArchived, tenureByPlayer, currentYear, currentSchoolYear, DEFAULT_YEAR_START_MONTH,
   usesGrade, defaultSchoolType, defaultYearStartMonth, maxGradeOf, gradeOf, entryYearFromGrade,
@@ -132,8 +133,10 @@ function TeamRoleRow() {
 // メインは丸(1つだけ)、サブは四角(複数)。ラジオとチェックの違いは説明が要らない。
 // サブは選んだ順が優先順位で、番号を出す。上げ下げもできる。
 function PositionSheet({ player, onClose }) {
-  const { dispatch } = useStore();
+  const { state, dispatch } = useStore();
   const t = useT();
+  // 守備位置は '投' '捕' … の日本語1文字。そのまま出すと英語表示でも日本語が残る
+  const pl = (pos) => positionLabel(pos, state.settings.lang || 'ja');
   const main = player.position || '';
   const subs = player.subPositions || [];
   const patch = (p) => dispatch({ type: 'UPDATE_PLAYER', id: player.id, patch: p });
@@ -171,7 +174,7 @@ function PositionSheet({ player, onClose }) {
             aria-checked={main === pos}
             onClick={() => setMain(pos)}
           >
-            <span className="mk" aria-hidden="true" />{pos}
+            <span className="mk" aria-hidden="true" />{pl(pos)}
           </button>
         ))}
       </div>
@@ -192,7 +195,7 @@ function PositionSheet({ player, onClose }) {
               title={isMain ? t('pos.alreadyMain') : ''}
               onClick={() => toggleSub(pos)}
             >
-              <span className="mk" aria-hidden="true" />{pos}
+              <span className="mk" aria-hidden="true" />{pl(pos)}
               {rank >= 0 && <b className="rank">{rank + 1}</b>}
             </button>
           );
@@ -207,7 +210,7 @@ function PositionSheet({ player, onClose }) {
           <div className="pos-order">
             {subs.map((pos, i) => (
               <span key={pos} className="pos-order-item">
-                <b>{i + 1}</b>{pos}
+                <b>{i + 1}</b>{pl(pos)}
                 <button
                   type="button"
                   className="up"
@@ -389,6 +392,7 @@ export default function SettingsTab() {
   // 名簿の並び。学年順のときは学年ごとの見出しを差し込む(どこで区切れるか分かるように)
   // 誰も守れない位置。現役の名簿だけで見る(アーカイブ済みは出られない)
   const holes = uncoveredPositions(state.players.filter((p) => !isArchived(p)));
+  const posLang = state.settings.lang || 'ja';
 
   const rosterRows = (() => {
     const active = state.players.filter((p) => !isArchived(p));
@@ -695,7 +699,7 @@ export default function SettingsTab() {
           })()}
           {/* 誰も守れない位置があると、そもそもスタメンが組めない。名簿の側で先に言う */}
           {holes.length > 0 && (
-            <div className="warn-box mt8">{t('pos.uncovered', { list: holes.join('・') })}</div>
+            <div className="warn-box mt8">{t('pos.uncovered', { list: positionListLabel(holes, posLang) })}</div>
           )}
         </div>
       </div>
@@ -1188,12 +1192,15 @@ function ExportCard() {
       ? [state.games[state.currentGameId]].filter(Boolean)
       : Object.values(state.games);
   const stamp = new Date().toISOString().slice(0, 10);
+  const csvLang = state.settings.lang || 'ja';
+  // 防御率の回数換算。見出しにも入るので、実際に多く戦っている回数に合わせる
+  const csvBasis = defaultInningBasis(games);
 
   const items = [
-    { label: t('set.csvBatting'), make: () => battingCSV(games, nameOf), file: `打者成績_${stamp}.csv` },
-    { label: t('set.csvPitching'), make: () => pitchingCSV(games, nameOf), file: `投手成績_${stamp}.csv` },
-    { label: t('set.csvPlayLog'), make: () => playLogCSV(games, nameOf, state.settings.teamName), file: `プレイログ_${stamp}.csv` },
-    { label: t('set.csvAtBat'), make: () => atBatCSV(games, nameOf), file: `打席詳細_${stamp}.csv` },
+    { label: t('set.csvBatting'), make: () => battingCSV(games, nameOf, csvLang), file: `${t('csv.fileBatting')}_${stamp}.csv` },
+    { label: t('set.csvPitching'), make: () => pitchingCSV(games, nameOf, csvLang, csvBasis), file: `${t('csv.filePitching')}_${stamp}.csv` },
+    { label: t('set.csvPlayLog'), make: () => playLogCSV(games, nameOf, state.settings.teamName, csvLang), file: `${t('csv.filePlayLog')}_${stamp}.csv` },
+    { label: t('set.csvAtBat'), make: () => atBatCSV(games, nameOf, csvLang), file: `${t('csv.fileAtBat')}_${stamp}.csv` },
   ];
 
   return (

@@ -1,308 +1,678 @@
-# AIBSS_KNOWLEDGE.md — AI-BSS 引き継ぎドキュメント
+# AIBSS_KNOWLEDGE.md — AI-BASE DIAMOND 解説・引き継ぎドキュメント
 
-> 別のAIセッション/開発者がこのプロジェクトを引き継ぐための知識集約。
-> 最終更新: 2026-07-10(Supabase版公式クラウド移植直後)
+> このプロジェクトを引き継ぐ人(別のAIセッション / 開発者)のための知識集約。
+> 「何ができるか」だけでなく「なぜそうしたか」を残すことを優先している。
+> 最終更新: 2026-09-11(英語対応の総合レビュー時点)
+
+---
+
+## 0. いま何が起きているか(最初に読む)
+
+- 本体は**完成して動いている**。https://aibss.vercel.app で稼働中、`main` へのpushでVercelが自動デプロイ。
+- **ストア申請の準備中**。Capacitorでネイティブ化済み(`ios/` `android/`)。プライバシーポリシー・
+  プライバシーマニフェスト・アカウント削除は実装済み。残りは §10 を参照。
+- **フィリピン代表チームでの利用が検討されている**。英語対応の穴を総ざらいした結果が §9。
+  記録の中心部は英語で通るが、AI系4画面と音声が日本語のまま残っている。
 
 ---
 
 ## 1. プロジェクト概要
 
-**AI-BSS(アイブス / AI Baseball Score & Stats)** は、日本のアマチュア野球チーム向けの
-ブラウザベース(PWA)スコア記録・成績管理アプリ。https://aibss.vercel.app で稼働。
-リポジトリは `kjn1989/AIBSS`、`main` へのpushでVercelが自動デプロイする。
+**AI-BASE DIAMOND**(旧称 AI-BSS / アイブス)は、アマチュア野球チーム向けの
+ブラウザベース(PWA)+ネイティブアプリのスコア記録・成績管理アプリ。
+リポジトリは `kjn1989/AIBSS`。
 
-- **想定ユーザー**: 草野球チーム、部活(中学・高校・大学)、少年野球の監督・マネージャー・記録係・保護者
-- **ビジョン**: 全国のアマチュア野球チームのデータ利活用を底上げし、野球を楽しむ人を増やす
-- **エディション制**: 単一コードベースで「草野球 / ブカツ(中高大) / 少年野球」の3エディションを
-  チーム設定で切替。UIテーマ色(青/緑/オレンジ)、ルールプリセット、AI機能の可否が連動する
-- **基本ワークフロー**: 設定タブで選手登録 → スコア入力タブで試合開始(ルールプリセット選択)→
-  打順セット → 1球単位 or 結果だけをタップ/音声で記録 → 試合終了 → 成績タブでランキング・
-  個人ページ閲覧 → ハイライト画像/AI新聞/CSVで共有
-- **オフラインファースト**: データは端末のlocalStorageが主で、クラウド同期は任意のオプション。
+- **想定ユーザー**: 草野球・社会人チーム、部活(中学/高校/大学)、少年野球の
+  監督・マネージャー・記録係・保護者
+- **ビジョン**: アマチュア野球チームのデータ利活用を底上げし、野球を楽しむ人を増やす
+- **オフラインファースト**: データは端末のlocalStorageが主で、クラウド同期は任意。
   グラウンドの電波が悪くても完全動作する、が絶対の設計原則
+- **他アプリとの差**: スコアを付けるだけのアプリは他にもある。このアプリの中心は
+  **「試合の流れを数字にする」**(§4)。入力を増やさず、すでに記録した内容だけから
+  勝つ確率の推移を描き、記録員の「流れを読んだ」判断まで成績にする
+
+### エディションと区分
+
+単一コードベースで3エディション。さらにその中の**区分**を選ぶ(`src/lib/editionKind.js`)。
+
+| エディション | 区分 | 既定ルール |
+|---|---|---|
+| 草野球 | 草野球 / 社会人・クラブ | 7回制90分 / 9回制 |
+| ブカツ(中高大) | 中学 / 高校 / 大学 | 7回100球 / 9回地方大会コールド / 9回 |
+| 少年野球 | (小学校のみ・選ばせない) | 6回制70球 |
+
+エディション+区分が、**UIテーマ色・ルールプリセットの既定・AIスポーツ新聞の書き方・
+AI機能の可否**に波及する。区分の保存先が `settings.schoolType` と `settings.adultType` に
+分かれているのは、schoolTypeが学年と卒業の判定にも使われている既存設定で、そこに社会人の
+区分を混ぜられないため。読み書きは `editionKind.js` に集約してある。
+
+### 基本ワークフロー
+
+設定タブで選手登録 → スコア入力タブで試合開始(ルールプリセット選択)→ 打順セット →
+1球単位 or 結果だけをタップ/音声で記録 → 試合終了 → 成績タブでランキング・個人ページ →
+ハイライト画像/AIスポーツ新聞/CSVで共有。
+
+タブは5つ: 🏆ホーム / ⚾スコア入力 / 📋オーダー / 📊成績 / 🏟️試合結果。
+
+---
 
 ## 2. スコア記録の仕様
 
-### 打撃結果の種別(`src/lib/model.js` の `RESULTS`)
-| キー | 表示 | 安打 | 打数(AB)算入 | 出塁 |
+### 打撃結果(`src/lib/model.js` の `RESULTS`)
+
+| キー | 表示 | 安打 | 打数(AB) | 出塁 |
 |---|---|---|---|---|
 | single/double/triple/hr | 単打/二塁打/三塁打/本塁打 | ○ | ○ | ○ |
-| out | 凡打(内訳: ゴロ/フライ/ライナー/併殺打=OUT_TYPES) | × | ○ | × |
-| so | 三振(内訳: 空振り/見逃し=SO_TYPES) | × | ○ | × |
+| out | 凡打(ゴロ/フライ/ライナー/併殺打) | × | ○ | × |
+| so | 三振(空振り/見逃し) | × | ○ | × |
 | error | 失策出塁 | × | ○ | ○ |
-| bb / hbp | 四球 / 死球 | × | × | ○ |
+| bb / hbp | 四球(敬遠を含む) / 死球 | × | × | ○ |
 | sacBunt / sacFly | 犠打 / 犠飛 | × | × | × |
-| interference | 打撃妨害 | × | × | ○ |
+| interference / obstruction / fieldInterference | 打撃妨害 / 走塁妨害 / 守備妨害 | × | ×/×/○ | ○/○/× |
 
-- **打球方向**(`DIRECTIONS`): P/C/1B/2B/3B/SS/LF/CF/RF(スプレーチャートに使用)
-- **投球**: 1球ずつ `ball / strike / foul / inplay` をタップ記録(任意)。カウントが
-  4ボール/3ストライク相当に達すると四球/三振の確認カードが自動で出る(振り逃げ対応あり:
-  三振でも打者を一塁に置ける)。タップ漏れがあっても確定時に最低球数を自動補完
-  (`ensureMinimumPitches`: 四球は4球、三振は3球。ファウルは2ストライク分まで有効)
-- **走者**: ダイヤモンド上の塁をタップして盗塁/盗塁死/暴投/捕逸/牽制死や進塁を記録。
-  打席確定時は `moves: [{from: 1|2|3, to: 2|3|4|'out'}]` で走者移動をまとめて適用
-  (4=生還)。3塁走者から順に処理する
-- **交代**: 代打・代走・守備交代・投手交代・再出場警告(公式ルールでは再出場不可の注意表示のみで記録は継続可能)
-- **相手チーム**: 実名を入力せず記号 **A〜T**(20人)で打順管理。相手打者の結果も同じ
-  ResultPadで記録し、自チーム投手の成績(被安打・奪三振・失点・自責点)に反映される。
-  継投を跨ぐ失点は「責任投手ダイアログ」で帰属先を選ぶ
-- **音声入力**: 「中堅に単打」「四球」「盗塁成功」等の日本語実況をオフラインのルールエンジン
-  (`src/lib/voiceParser.js`)が解釈し、信頼度付きの確認カードを表示→タップで確定。
-  低信頼時のみ任意でAnthropic APIによるLLM解釈を併用できる(設定でON+APIキー)
-- **事後修正**: 過去プレイの結果種別・方向・打点の編集/削除、回別スコアの手動増減(±)、
-  投手成績の微調整、Undo(直近50操作のスナップショット)
-- **打席スナップショット**: 全打席が開始時状態 `{runners(1/2/3の有無), outs, inning, isTop, scoreDiff}`
-  を保持する。RISP・進塁打・クラッチ判定はこのスナップショットが根拠
+### 打球の記録(`src/lib/battedBall.js`)
+
+打球は「9つの守備位置のどれか」だけでなく、**極座標(方向の角度・深さ・強さ)**でも持つ。
+これが無いと右前のポテンヒットと右中間を破る二塁打が同じ「右翼」になり、スプレーチャートが
+9か所の団子になる。強さは `weak / normal / hard`、空欄は「未記録」(平凡ではない)。
+
+### 投球・走者・交代
+
+- **投球**: 1球ずつ `ball / strike / foul / inplay` をタップ(任意)。4ボール/3ストライク相当で
+  確認カードが自動で出る(振り逃げ対応)。タップ漏れは確定時に `ensureMinimumPitches` が補完
+  (四球=4球、三振=3球)
+- **走者**: ダイヤモンドの塁をタップして盗塁/盗塁死/暴投/捕逸/牽制死/進塁を記録。
+  打席確定時は `moves: [{from, to}]` でまとめて適用(4=生還)。3塁走者から順に処理
+- **交代**: 代打・代走・守備交代・投手交代・再出場警告(公式ルールでは再出場不可という
+  注意表示のみ。記録は続行できる)
+- **DH制**: 指名打者を使う場合も、投手は守備位置の選択肢に出る
+
+### ひとつのプレイに複数の記録が付く場合
+
+外野の二塁打で、拾った野手の送球エラーで打者走者が三塁まで行った ——
+記録上は**ヒットとエラーの両方**が付く。片方しか入れられないと実際の記録と合わないので、
+結果(安打)とは別に守備側のエラーを併記できる。
+
+### ファインプレー(好守)
+
+守備のファインプレーを記録できる(入力時の表現は「ファインプレー」、記録上は「好守」)。
+ゲッツー(⚡)とは別のマークを使う。選手ごとに集計され、成績の守備欄に出る(§3)。
+
+### 試合中の打順修正(`src/lib/lineupOrder.js`)
+
+「7番と8番を逆に組んだまま3回まで記録してしまった」を直せる。交代とは別物として扱う。
+交代は「途中でその枠の人が代わった」ことで代わる前の打席は前の選手のものだが、こちらは
+「最初から並びが違っていた」ことなので、**すでに記録した打席も本来の選手へ付け替える**。
+
+- **隣どうしの入れ替えだけ**を許す。離れた枠へ動かすと間の枠が全部ずれ、どの打席が誰のものか
+  を1つずつ決め直すことになる。隣との入れ替えを繰り返せば同じところへ届く
+- 付け替えるのは**その2人の打席だけ**。枠だけ見て一律に付け替えると、途中で入った代打の
+  打席まで動いてしまう
+- 守備位置は選手について回る(打順だけ入れ替わり、守る場所は変わらない)
+
+### 相手チーム
+
+実名を入力せず記号 **A〜T**(20人)で打順管理。相手選手名は任意で入力でき、入力すると
+**表示時に解決**されて流れ・ログにも名前で出る(`src/lib/oppBox.js` の `logTextOf`。
+ログ本文は記号のまま保存し、描画時に差し替える。後から名前を入れても過去のログに反映される)。
+相手打者の結果も同じResultPadで記録し、自チーム投手の成績に反映される。
+継投を跨ぐ失点は「責任投手ダイアログ」で帰属先を選ぶ。
+
+### 音声入力
+
+「中堅に単打」「四球」「盗塁成功」等の**日本語**実況をオフラインのルールエンジン
+(`src/lib/voiceParser.js`)が解釈し、信頼度付きの確認カードを表示 → タップで確定。
+低信頼時のみ任意でGeminiによるLLM解釈を併用(設定でAPIキー)。
+常時リスニングモードあり(`continuousSpeech.js`。2.5秒のオプトアウト猶予で自動確定)。
+
+**⚠️ ネイティブアプリ版では音声は使えない**(§8のハマりどころを必ず読むこと)。
+
+### 事後修正
+
+過去プレイの結果種別・方向・打点の編集/削除、回別スコアの手動増減(±)、投手成績の微調整、
+守備位置・交代の修正、打順の入れ替え(上記)、Undo(直近50操作のスナップショット)。
+
+### 打席スナップショット
+
+全打席が開始時状態 `{runners, outs, inning, isTop, scoreDiff}` を保持する。
+RISP・進塁打・クラッチ判定・流れの計算はすべてこのスナップショットが根拠。
 
 ### 試合ルールエンジン(`src/lib/rules.js`)
-- `rules = { innings, mercy: [{after, diff}], pitchLimit: {perGame, warnAt}|null, timeLimitMin|null }`
-- エディション別プリセット(草野球7回90分/120分/無制限、学童6回70球、中学7回100球、
-  高校9回地方大会コールド、大学9回)+カスタム。**数値は代表例**であり大会要項に合わせて調整可能とする
-- **強制終了しない**のが思想: 規定回数終了/X勝ち・サヨナラ/コールド成立/時間切れ
-  (草野球の「時間切れ後は新しい回に入らない」慣例)を検知して**提案バナー**を出すだけ。
-  記録の主導権は常にユーザー。球数制限は守備時に現投手の球数で警告表示
-- 旧データ(rules無し)では全判定が無効(null)になり互換動作
 
-## 3. スタッツ定義(全計算式・`src/lib/stats.js`)
+`rules = { innings, mercy: [{after, diff}], pitchLimit: {perGame, warnAt}|null, timeLimitMin|null }`
 
-集計は「対象試合の配列 `games` を渡して選手別に合算」する方式。**通算/シーズン(大会)/
-試合単位の切替は呼び出し側が games を絞るだけ**(集計エンジンは期間を知らない)。
+エディション+区分別のプリセット + カスタム。**数値は代表例**で、大会要項に合わせて調整できる。
+
+**強制終了しないのが思想**。規定回数終了/サヨナラ/コールド成立/時間切れ(草野球の
+「時間切れ後は新しい回に入らない」慣例)を検知して**提案バナーを出すだけ**。記録の主導権は
+常にユーザー。現場の記録は例外だらけ(練習試合の続行等)で、自動終了はデータを壊すリスクの方が大きい。
+
+---
+
+## 3. スタッツ定義(`src/lib/stats.js`)
+
+「対象試合の配列 `games` を渡して選手別に合算」する方式。通算/シーズン/試合単位の切替は
+**呼び出し側が games を絞るだけ**(集計エンジンは期間を知らない)。
 分母0の指標は `null` を返し、UIで「-」表示(0.000と区別する)。
 
 ### 打者(battingMetrics)
-- 打席 PA / 打数 AB(AB = RESULTSの `ab: true` のみ加算)
+
+- 打席 PA / 打数 AB(`RESULTS` の `ab: true` のみ加算)
 - **打率 BA = H ÷ AB**
 - **得点圏打率 RISP = (打席開始時に走者2塁or3塁だった打席の安打) ÷ (同打席の打数)**
 - **出塁率 OBP = (H + BB + HBP) ÷ (AB + BB + HBP + 犠飛)**
-- **長打率 SLG = 塁打 TB ÷ AB**(TB = 単打1+二塁打2+三塁打3+本塁打4)
+- **長打率 SLG = 塁打TB ÷ AB**(TB = 単打1+二塁打2+三塁打3+本塁打4)
 - **OPS = OBP + SLG**(どちらかがnullならnull)
-- **進塁打成功率 = 進塁打成功 ÷ 進塁打機会**(機会 = 走者ありの凡打(三振除く)。
-  成功 = そのプレイで走者が進塁or生還。確定時に手動上書き可)
+- **進塁打成功率 = 成功 ÷ 機会**(機会 = 走者ありの凡打(三振除く)、成功 = 走者が進塁or生還)
 - **PPA(球/打席) = 総投球数 ÷ PA**
-- **クラッチ打数** = 先制打+同点打+逆転打+勝ち越し打の合計(カウント)。判定は打席開始時
-  点差×その打席の打点: 負けていて打点後にプラス=逆転 / ゼロ=同点、同点から勝ち越し
-  (0-0からは先制)。打点0はクラッチにならない
+- **クラッチ打数** = 先制打+同点打+逆転打+勝ち越し打。打席開始時点差×その打席の打点で判定。打点0は非該当
 - **初球安打率 = 初球インプレー安打 ÷ 初球インプレー打席**
-- 得点・盗塁は打席レコードではなく**PlayLog(kind: 'run'/'sb')から集計**する(打席外の事象のため)
+- 得点・盗塁は打席レコードではなく **PlayLog(`kind: 'run'` / `'sb'`)から集計**(打席外の事象のため)
 
 ### 投手(pitchingMetrics)
-- 投球回は内部的に**アウト数(outsRecorded)**で保持。表示は `4.2 = 4回2/3`(formatIP)
-- **防御率(7回換算) ERA7 = (自責点 ÷ (outsRecorded/3)) × 7** ← 草野球の7回制に合わせ
-  9ではなく**7倍**が既定(プロ野球定義と異なる点に注意)
-- **WHIP = (被安打 + 与四球 + 与死球) ÷ 投球回** ← 与死球を含める実装(MLB定義は四球のみ)
-- **K/BB = 奪三振 ÷ 与四球**。与四球0のときは null とせず「`{奪三振数} (与四球0)`」表示、
-  ソートは奪三振数を使う
+
+- 投球回は内部的に**アウト数(outsRecorded)**で保持。表示は `4.2 = 4回2/3`(`formatIP`)
+- **防御率 ERA = (自責点 ÷ (outsRecorded/3)) × basis**。basis の既定は**7**(草野球の7回制に合わせる)。
+  プロ野球の9とは違う点に注意。エディションで既定が変わる
+- **WHIP = (被安打 + 与四球 + 与死球) ÷ 投球回** ← 与死球を含める(MLB定義は四球のみ)
+- **K/BB = 奪三振 ÷ 与四球**。与四球0のときは null とせず「`{奪三振数} (与四球0)`」表示、ソートは奪三振数
 - **被打率 = 被安打 ÷ 被打数(abFaced)**
 - 勝利/セーブ/ホールドは手動付与(勝・Sは1試合1人、Hは複数可)
 
+### 守備(aggregateFielding / rankFielding)
+
+`kind === 'defense'` のプレイログから、**ファインプレー(好守)の回数**と**失策の回数**を
+選手ごとに数える。並べ替えは好守の多い順、同数なら失策の少ない順。
+
+⚠️ 記録しているのは回数だけ。**UZR等の守備指標は現行データでは計算不能**(打球の座標と
+リーグ平均が要る)。AI分析を攻撃系に限定しているのはこのため。
+
 ### タイトル(ホーム画面の👑カード)
+
 打者: 安打王/打点王/得点王/本塁打王/二塁打王/三塁打王/盗塁王/選球眼王(BB+HBP)/塁打王。
 投手: 最多勝/奪三振王/セーブ王/ホールド王/イニング王。**同数は同順位で全員表示**。
+`BATTING_TITLES` / `PITCHING_TITLES` は `en` / `enCrown` を持ち、英語表示に対応済み。
 
-### CSV取り込み(importedBatting/importedPitching)
-過去試合のボックススコア合計値を選手別に保持し、集計時に加算する(プレイ単位の記録なし)。
+### 貢献度(`src/lib/contrib.js`)
+
+打率も打点も「どの場面だったか」を捨てている。9回2死同点の一打も大差の試合の1本も同じ1安打。
+ここはそこを分ける。
+
+- **WPA** … その打席で勝つ確率をどれだけ動かしたかの積み上げ。場面の重さがそのまま入る
+- **RE24** … 得点期待値の差の積み上げ。「点」の単位で読める
+
+⚠️ **守備側のWPAは現状すべて投手に付く**(`contrib.js:50`)。野手の守備での貢献は分離できていない。
+
+### チーム力・相手との差
+
+- **`teamPower.js`** — 比べる相手を他チームではなく「その場面そのもの」にする。
+  無死一塁という場面はそのレベルの野球なら平均で何点入るかが決まっているので、
+  リーグも順位表も要らず、1試合でも20試合でも同じ意味で読める
+- **`teamGap.js`** — 相手との力の差を**勝率そのもの**で入れる。「格上だから得点期待値0.85倍」は
+  0.85の根拠がどこにもないが、「10回やって3回は勝てる相手」なら記録員が試合前に答えられる。
+  そこから倍率を逆算する
+- **`matchup.js`** — 「自軍投手×相手打者」「自軍打者×相手投手」を試合をまたいで積む。
+  相手の記号A〜Tは試合をまたぐ意味が無いので、**「対戦相手チーム名 + 相手選手名」**を同一人物の鍵にする
+
+### CSV取り込み分(importedBatting / importedPitching)
+
+過去試合のボックススコア合計値を選手別に保持し、集計時に加算(プレイ単位の記録は無い)。
 単打が空欄なら `H−2B−3B−HR`、塁打が空欄なら再計算で補完。空欄は0扱い。
 
-## 4. データモデル
+---
 
-### 永続化(localStorage+IndexedDBミラー)
-- チームレジストリ: キー `bbscorer.profiles.v1` = `{ profiles: [{id, name, edition, officialTeamId?, createdAt}], activeId }`
-- チームごとのデータ: キー `bbscorer.v1.profile.{id}`(旧単一チーム時代のキー `bbscorer.v1` は
-  初回起動時に最初のプロフィールへ自動移行し、ロールバック用に残置)
+## 4. 試合の流れ(このアプリの中心)
+
+「野球は流れのスポーツ」と誰もが言うのに、スコアブックにも成績表にも流れに対応する数字が
+一つも無い。ここではすでに記録している内容だけから流れを数字にする。**入力は増やさない。**
+
+### 4-1. 得点期待値(RE)— `src/lib/flow.js`
+
+24状態(走者の有無3ビット × アウト0/1/2)それぞれの「回の終わりまでに平均何点入るか」。
+
+**自分たちの試合から作るのが基本。** MLBの公開表をそのまま使うと、草野球・高校野球の得点環境
+(四球とエラーが多く点が入りやすい)と合わず全部の評価がずれる。
+
+- 自チームの記録(相手の打席も含む)から24状態の平均得点を数える
+- 回数が少ない状態は基準表の側へ寄せる(shrink、`SHRINK_K = 30`)
+- **回数は必ず持ち回り、少ないうちは画面にも出す**
+
+**基準表の出どころ(数値の根拠は必ず明示する)**
+
+| 用途 | 出典 | 中身 |
+|---|---|---|
+| 既定の土台 | baseball.piupapp.com「得点期待値 / 得点確率」 | NPB 2023–2025、投手を含む全打席。掲載値を無加工で書き写し |
+| ブカツの土台 | 明治大学 総合数理学部 2018年度卒業研究「夏の高校野球甲子園大会における得点期待値と走者生還率の分析」 | 2015–2017年 夏の甲子園 全144試合。論文の戦術別の値を実行回数で重み付けして戦術によらない値に直してある |
+
+MLBではなくNPBを土台にした理由は2つ。(1) 使う人が日本でプレーしているので「プロだとこれくらい」の
+感覚と地続きになる (2) 得点環境がMLBより低く、日本の野球の形(バントの多さ等)を含んでいる。
+ただしアマチュアはNPBより点が入るので、これもあくまで土台。`LEVEL_K = 40` で自分たちの水準へ寄る。
+
+⚠️ **高校・中学・草野球の公表された完全なRE表は存在しない。** 甲子園の4状況以外は
+NPBベース×水準倍率で埋めている。この割り切りは画面にも明記してある。
+
+### 4-2. 勝つ確率(WE)— `src/lib/winExp.js`
+
+流れの土台に使うのは**得点期待値ではなく勝利期待値**。RE24の積み上げは回の切れ目でそのときの
+点差と一致し、回の途中はアウトのぶん必ず下へ流れるので、完全な0-0の試合でも先に攻めるほうが
+有利に見えてしまう。
+
+`buildWinModel({dists, oppDists, isHome, regulation, halfStartKey})` が
+「この回・このアウト・この走者・この点差から最終的に勝つ確率」を返す。
+
+⚠️ **決着した打席は 0% / 100% になる。** サヨナラの一打を含めたいので「動いた最大幅」は
+全打席から探すが、「いちばん苦しかったところ」は決着した打席を除いて探す(除かないと
+負け試合では必ず最後の0%が選ばれ、何も言っていないのと同じになる)。
+
+⚠️ 既知の割り切り: 延長は1イニング先までしか見ていない。
+
+### 4-3. 流れタグ(記録員が押す)
+
+スコア入力画面の▲▼で、記録員が「流れが来た / 切れた」と**感じたときに押す**。
+押した数の目標値は無い。
+
+**答え合わせは一致ではなく順番で行う。** 走者一掃の直後に押せばほぼ当たるが、それは起きたことを
+なぞっただけで価値がない。「動く前に押せたか」だけを予兆とする。
+
+| 判定 | 条件 |
+|---|---|
+| **予兆(pre)** | 押した後、`windowAfter`(既定5打席)以内に、その向きへ `minSwing` 以上動いた |
+| **反応(post)** | 押す直前 `windowBefore`(既定3打席)以内に、もうその向きへ動いていた |
+| **空振り(miss)** | どちらでもない |
+
+出すのは2つだけ。**順番に読む鎖の形**にしてある。
+
+- **確度** … 押したうち、動く前に読めていた割合(分母 = **押した回数**)
+- **幅** … 読めたとき、勝つ確率がどれだけ動いたか(分母 = **読めた回数**)
+
+「押した11回 → 読めた3回 → そのとき平均31%動いた」と繋がるので、どちらを見ればいいか迷わない。
+
+> **設計の失敗の記録(同じ轍を踏まないこと)**
+> - 旧「読みの精度 / 読みの広さ」は、分母が「押した数」と「試合で起きた動き全部」で
+>   競合する2つの物差しになっていて読めなかった。しかも後者は「感じたときだけでOK」と
+>   書いてあるタグを、押さないと下がる形で罰していた
+> - 「動いた幅の合計」「1回あたりの平均」も試したが、天井も比べる先も無く読めなかった
+> - 「いちばん良かったところ」は、勝った試合では必ず最後の100%を指すので廃止し、
+>   **「1打席で動いた最大幅(上下とも)」**に置き換えた
+
+### 4-4. 記録員(`src/lib/scorers.js`)
+
+流れタグは打った・投げたの記録ではなく、**記録員が見て押した判断そのもの**。誰が付けた試合かを
+残さないと当たり外れを積み上げられない。試合に記録員を1人置き、**タグにも押した時点の記録員を
+焼き込む**(途中で交代してもタグの持ち主は変わらない)。
+
+蓄積されると、その記録員の「読みの当たる確度と幅」がデータになる。
+
+---
+
+## 5. データモデル
+
+### 永続化(localStorage + IndexedDBミラー)
+
+- チームレジストリ: `bbscorer.profiles.v1` = `{ profiles: [{id, name, edition, officialTeamId?, createdAt}], activeId }`
+- チームごとのデータ: `bbscorer.v1.profile.{id}`(旧単一チーム時代の `bbscorer.v1` は初回起動時に
+  最初のプロフィールへ自動移行し、ロールバック用に残置)
 - 保存対象(PERSIST_KEYS): `players, members, games, currentGameId, settings, demoLoaded`
-- IndexedDB(DB名 `aibss`/ストア `kv`)に同じJSONをミラー保存。起動時にlocalStorageが
-  消えていたらIDBから復旧(`src/lib/durableStore.js`)。iOSの自動削除対策で
-  `navigator.storage.persist()` も要求
-- 検証用上書き: `bbscorer.officialConfig`(公式クラウド接続情報)
+- IndexedDB(DB名 `aibss` / ストア `kv`)に同じJSONをミラー。起動時にlocalStorageが消えていたら
+  IDBから復旧(`src/lib/durableStore.js`)。`navigator.storage.persist()` も要求
+- 検証用上書き: `bbscorer.officialConfig`
 
 ### 主要スキーマ(ファクトリは `src/lib/model.js`)
+
 ```
-Player  { id, name, number, createdAt, scoutTags[], scoutCatchphrase, scoutReport, scoutPhoto(dataURL) }
-Member  { id, name, role(マネージャー等), participation(回数), scout系同上 }  ← 参加メンバー(試合に出ない人)
-Game    { id, date(YYYY-MM-DD), opponent, season, isHome, status(ongoing|finished),
+Player  { id, name, number, createdAt, throws, bats, position, subPositions[],
+          entryYear(入学年度→学年を導出), teamRole(captain|vice),
+          scoutTags[], scoutCatchphrase, scoutReport, scoutPhoto(dataURL),
+          archivedAt, archivedYear, archiveNote }
+Member  { id, name, role, participation, scout系同上 }   ← 試合に出ない参加メンバー
+Game    { id, date, opponent, season, isHome, status(ongoing|finished),
           inning, isTop, outs, runners{1,2,3}, myScore, oppScore,
-          lineup[{order,playerId,position}], usedPlayerIds[], retiredPlayerIds[], batterIndex,
-          currentPitcherId, oppLineup[{order,letter,position}], opp系各種,
+          lineup[{order,playerId,position}], startingLineup[], usedPlayerIds[],
+          retiredPlayerIds[], batterIndex, currentPitcherId,
+          oppLineup[{order,letter,position}], oppNames{letter:name},
           atBats[], playLogs[], pitchingRecords[], linescore{回:{my,opp}},
-          importedBatting[], importedPitching[], rules|null, startedAt, updatedAt }
+          importedBatting[], importedPitching[], rules|null, scorerId,
+          startedAt, updatedAt }
 AtBat   { id, playerId, order, result, outType, soType, direction, rbi, runsOnPlay,
-          pitches[{type,ts}], pitchCount, firstPitch, firstPitchHit,
-          snapshot{runners,outs,inning,isTop,scoreDiff}, advSuccess, clutch, ts }
-PlayLog { id, inning, isTop, kind(atbat|defense|run|sb|runner|sub|pitcher|change|...), text, payload }
-PitchingRecord { id, playerId, appearanceOrder, outsRecorded, runs, earnedRuns, hitsAllowed,
-          walks, hitByPitch, strikeouts, pitches, abFaced, win, save, hold }
+          battedBall{angle,depth,contact}, pitches[], pitchCount, firstPitch,
+          firstPitchHit, snapshot{runners,outs,inning,isTop,scoreDiff},
+          advSuccess, clutch, ts }
+PlayLog { id, inning, isTop, kind, text, payload }
+PitchingRecord { id, playerId, appearanceOrder, outsRecorded, runs, earnedRuns,
+          hitsAllowed, walks, hitByPitch, strikeouts, pitches, abFaced, win, save, hold }
 ```
+
+**`playLogs` は単一の順序付きストリーム**。`kind` は
+`atbat / defense / flow / runner / sb / run / sub / pitcher / oppsub / position`。
 
 ### 入出力形式
-- **バックアップJSON**: `{ app: 'aibss-baseball-scorer'(旧互換で維持), version: 1, exportedAt,
-  players, members, games, currentGameId, settings, demoLoaded }` — ファイル名 `aibss-backup_日付.json`
-- **取り込みCSV**(`src/lib/importCsv.js`): セクション形式。`[GAME]`(日付/自チーム/相手/先攻後攻/
-  大会/試合メモ)、`[LINESCORE]`(ヘッダ行の数字ラベルで列→回をマップ。「合計」等の非数値列は無視)、
-  `[BATTERS]`(名前,背番号,守備位置,打席,打数,安打,二塁打,三塁打,本塁打,打点,四球,死球,三振,犠打,盗塁,得点,メモ)、
-  `[PITCHERS]`(名前,投球回,失点,自責点,被安打,与四球,与死球,奪三振,投球数,勝,セーブ,ホールド,メモ)。
-  守備位置は数字1〜9/漢字1字/漢字フル/カタカナの表記ゆれを吸収。投球回 `4.2`=4回2/3。
-  **必ずUTF-8 BOM付きでDL**(共通の `downloadCSV()` を使う。素のBlobだとExcelが文字化け)。
-  `#`行はコメント。「例)」で始まる名前はスキップ。取り込み確認画面で全項目を手修正できる
-- **出力CSV**: 打者成績/投手成績/プレイログ/打席詳細(投球シーケンス `B/S/F/X` 文字列付き)
+
+- **バックアップJSON**: `{ app: 'aibss-baseball-scorer'(旧互換), version, exportedAt, players,
+  members, games, currentGameId, settings, demoLoaded }` — `aibss-backup_日付.json`
+- **取り込みCSV**(`src/lib/importCsv.js`): セクション形式 `[GAME]` `[LINESCORE]` `[BATTERS]` `[PITCHERS]`。
+  守備位置は数字1〜9/漢字1字/漢字フル/カタカナの表記ゆれを吸収。投球回 `4.2` = 4回2/3。
+  **必ずUTF-8 BOM付きでDL**(共通の `downloadCSV()` を使う)。`#` 行はコメント
+- **出力CSV**: 打者成績 / 投手成績 / プレイログ / 打席詳細(投球シーケンス `B/S/F/X` 付き)
 
 ### 公式クラウド(Supabase・`supabase/schema.sql`)
-テーブル: `teams(id,name,edition,owner_uid,plan,created_at)` /
-`team_members(team_id,uid,role[owner|scorer|viewer],name,email,invite,joined_at)` /
-`invites(token,team_id,role,created_by,expires_at)` /
-`team_games|team_players|team_crew(team_id,id,data jsonb,updated_at)` —
-**dataカラムにlocalStorageと同一形のJSONを丸ごと格納**(移行最小・RLS単純の方針)。
-RLSはsecurity definer関数 `member_role(team_id)` で再帰なく判定。招待は `get_invite(token)` RPCのみで
-取得可能(テーブルselectはowner限定=トークン列挙防止)。Realtimeはpostgres_changesでRLS適用配信。
 
-## 5. アーキテクチャ
+`teams` / `team_members(role: owner|scorer|viewer)` / `invites` /
+`team_games | team_players | team_crew(team_id, id, data jsonb, updated_at)` —
+**dataカラムにlocalStorageと同一形のJSONを丸ごと格納**(移行最小・RLS単純の方針)。
+
+- RLSは security definer 関数 `member_role(team_id)` で再帰なく判定
+- 招待は `get_invite(token)` RPCのみで取得可能(テーブルselectはowner限定 = トークン列挙防止)
+- Realtimeは postgres_changes でRLS適用配信
+- **`delete_my_account()`** — アカウント削除(ストア要件)。クライアントのanonキーでは
+  `auth.users` を触れないのでSECURITY DEFINERのRPC。外部キーの都合で
+  **自分がownerのチーム → 他チームへの参加 → ユーザー本体** の順に消す必要がある
+
+---
+
+## 6. アーキテクチャ
 
 React 18(関数コンポーネント+hooks)+ Vite + 素のCSS(`src/styles.css`、CSS変数でテーマ。
-Tailwind不使用)。状態管理は**React標準のuseReducer+Contextのみ**(`src/state/store.jsx`)。
+Tailwind不使用)。状態管理は **React標準の useReducer + Context のみ**(`src/state/store.jsx`)。
 
 ### 主要ファイル
-- `src/main.jsx` — 起動順序が重要: 旧データIDB復旧 → チームレジストリ確定(ensureRegistry) →
-  アクティブプロフィールのIDB復旧 → mount → persistent storage要求。`?watch=1` は観戦専用ページ
-- `src/state/store.jsx` — 全リデューサ(CONFIRM_PLAY が心臓部: 投球確定・走者適用・得点/自責点・
-  AtBat/PlayLog生成・チェンジ処理まで一手に担う)。UNDOは試合の深いコピーを履歴スタックに積む方式
-- `src/lib/model.js` — スキーマ定義兼ファクトリ、EDITIONS、normalizeEdition(旧表記の移行)
+
+- `src/main.jsx` — 起動順序が重要: 旧データIDB復旧 → チームレジストリ確定 →
+  アクティブプロフィールのIDB復旧 → mount → persistent storage要求。`?watch=1` は観戦専用
+- `src/state/store.jsx` — 全リデューサ(**`CONFIRM_PLAY` が心臓部**: 投球確定・走者適用・
+  得点/自責点・AtBat/PlayLog生成・チェンジ処理を一手に担う)。UNDOは試合の深いコピーを積む方式
+- `src/lib/i18n.js` — **フラットなキー辞書 `MESSAGES{ja,en}`**。`useT()` → `t(key, params)`。
+  現在 **1824キー**。`scripts/check-i18n.mjs` が ja/en のキー一致を強制(CIではなく手動実行)
+- `src/lib/model.js` — スキーマ定義兼ファクトリ、`RESULTS`、`POSITIONS`、`positionLabel(pos, lang)`、
+  `editionLabel`、`playErrorOf` / `finePlayOf`、`normalizeEdition`
 - `src/lib/stats.js` — 集計エンジン(§3)
-- `src/lib/rules.js` — ルールエンジン(§2)。純関数で、描画時に判定するだけ(reducerに手を入れない)
-- `src/lib/profiles.js` — 複数チームのローカルプロフィール管理(切替はpersist→reload方式)
+- `src/lib/flow.js` / `winExp.js` / `contrib.js` / `scorers.js` — 流れの系統(§4)
+- `src/lib/rules.js` — ルールエンジン(§2)。純関数で描画時に判定するだけ(reducerに手を入れない)
+- `src/lib/notation.js` — スコアシートの表記(`右安` / `1B`)。**ja/en 両対応**。
+  印刷スコアシートと入力画面のライブ表示が同じ関数を使う(画面ごとに違う書き方になると別物に見える)
+- `src/lib/editionKind.js` / `lineupOrder.js` / `oppBox.js` / `battedBall.js` — §1〜2の各機能
+- `src/lib/profiles.js` — 複数チームのローカルプロフィール管理(切替は persist → reload 方式)
 - `src/lib/durableStore.js` — IndexedDBミラーによるデータ消失対策
-- `src/lib/officialCloud.js` + `officialConfig.js` — 公式クラウド(Supabase)の認証/チーム/招待/同期
-- `src/lib/cloud.js` — 旧方式(ユーザー自前のFirebase config+チームコード)。上級者向けに併存
-- `src/components/CloudSync.jsx` — ヘッドレス同期。公式(officialTeamId)優先、無ければ旧方式。
-  受信=MERGE_REMOTE(試合はupdatedAtの新しい方=Last-Write-Wins、選手/参加メンバーはidマージ)、
-  送信=800msデバウンスで差分push(送信済みJSON/updatedAtをrefにキャッシュしてループ防止)
-- `src/lib/gemini.js` — Gemini連携(モデルは廃止に強い `gemini-flash-latest` エイリアス+
-  `thinkingConfig:{thinkingBudget:0}` 必須)。AI選手名鑑/AIスタメン/AI新聞/CSV補完
-- `src/lib/voiceParser.js` + `llm.js` — 音声実況の解釈(オフライン規則+任意LLM補助)
-- 画面: ScoreTab(入力)/OrderTab/StatsTab(+MemberSection)/HomeTab/ResultTab/SettingsTab、
-  PlayerView(個人ページ)/ScoutCard(名鑑)/HeadCoachView(AIスタメン)/ImportCsvView/
-  ScoreSheetView(印刷)/NewspaperView/HighlightSheet/WatchView(観戦)
-- `e2e/stage1〜12*.mjs` — playwright-coreによる回帰テスト(§8)
+- `src/lib/officialCloud.js` + `officialConfig.js` — 公式クラウド(Supabase)
+- `src/lib/cloud.js` — 旧方式(ユーザー自前のFirebase config)。上級者向けに併存
+- `src/lib/speech.js` / `continuousSpeech.js` / `tts.js` — 音声(**§8のハマりどころ必読**)
+- `src/lib/gemini.js` — Gemini連携。AI選手名鑑/AIスタメン/AIスポーツ新聞/CSV補完
+- `src/lib/nativeBridge.js` — Capacitorネイティブ時のみ動く薄いブリッジ(Web版では常にno-op)
+- `src/components/CloudSync.jsx` — ヘッドレス同期。公式優先。受信=MERGE_REMOTE
+  (試合は updatedAt の新しい方 = Last-Write-Wins、選手/メンバーはidマージ)、
+  送信=800msデバウンスで差分push(送信済みJSONをrefにキャッシュしてループ防止)
 
 ### 処理の流れ(1打席)
-PitchCounterのタップ → `ADD_PITCH`(pendingバッファ+守備時は投手球数加算) →
-結果選択(ResultPad/音声/自動検知) → PlaySheetで走者・打点確認 → `CONFIRM_PLAY` →
-走者移動適用・得点/linescore/自責点・AtBat+PlayLog生成・3アウトでチェンジ → 永続化(150msデバウンス)
-→ CloudSyncが差分push。
 
-## 6. 設計判断の記録(なぜそうしたか)
+PitchCounterのタップ → `ADD_PITCH` → 結果選択(ResultPad/音声/自動検知) →
+PlaySheetで走者・打点確認 → **`CONFIRM_PLAY`** → 走者移動適用・得点/linescore/自責点・
+AtBat+PlayLog生成・3アウトでチェンジ → 永続化(150msデバウンス) → CloudSyncが差分push。
+
+---
+
+## 7. 設計判断の記録(なぜそうしたか)
 
 - **状態管理にライブラリを使わない**: 依存を最小にし、localStorageと同一形のプレーンJSONを
-  そのまま永続化・同期スキーマに使うため。Firestore/Supabaseにも同じ形で入れる(スキーマ一元化)
-- **同期はLast-Write-Wins(試合単位)**: 楽観的CRDT等は過剰。1試合を同時編集する記録係は実質1人で、
-  観戦者は読むだけという運用実態に合わせた
+  そのまま永続化・同期スキーマに使う(スキーマ一元化)
+- **同期はLast-Write-Wins(試合単位)**: 1試合を同時編集する記録係は実質1人で観戦者は読むだけ、
+  という運用実態に合わせた。楽観的CRDT等は過剰
 - **相手チームは記号A〜T**: 相手選手の個人情報を保持しない(プライバシー)+入力コスト削減。
-  相手個人成績は追わない割り切り
-- **ルールエンジンは「提案のみ」**: 現場の記録は例外だらけ(練習試合の続行等)。自動終了は
-  データを壊すリスクの方が大きい
-- **エディションは単一エンジン+フラグ切替**(別アプリ2〜3本は不採用): ソロ開発で複数ストア
-  申請・保守は持続不可能。機能の大半(入力/音声/統計)は共通。`settings.edition` が
-  テーマ・ルールプリセット・AI機能可否に波及する
-- **AIスタメン・AI選手名鑑・(将来の)スタメン最適化は草野球限定**: パワプロ風の際どい寸評が
-  未成年・部活の文脈に不適切なため。エディションでUIごと非表示
-- **AI補完(CSV)は「元データを絶対に上書きしない」**: 空欄のみ埋める。メモの具体的記述と
-  線スコアの整合性だけを根拠にし、創作を明示的に禁止するプロンプト
-- **名称の変遷**: AIBSS → AI-BASE(アイベース)にリブランド → 「AI Base」系の既存サービス多数と
-  判明 → **AI-BSS(アイブス)** で確定(造語で被りゼロ、URL aibss.vercel.appと一致、J-ABSとも区別)。
-  ロゴ(ホームベース型五角形ゴールド+AI青+回路風塁線、完全自作SVG)は名称非依存で継続。
-  **視覚素材はすべて自作**(他アプリの意匠を参照しない)が標準ルール
-- **公式クラウドはFirebase→Supabaseへ移行**: 実装・検証까지Firebaseで完了していたが、
-  新規プロジェクトのFirestoreが課金アカウント必須と判明。Google Cloudには支出のハードキャップが
-  無く、運営者の「従量課金は絶対不可」の方針と両立しないため、**カード登録自体が不要な**
-  Supabase無料プランに全面移植(公開APIを揃えたのでUI変更は最小)。Firebase版の実装と
-  エミュレータ検証(11項目)はgit履歴 `a3eab58` 参照
-- **選手アカウント/キャリアパスポートは不採用**(運営者判断): アカウントを持つのはチーム運営者
-  (owner/scorer/viewer)のみ。選手はチームが持つデータ
+  名前は任意で、入れた場合も表示時解決にとどめる
+- **ルールエンジンは「提案のみ」**: 現場の記録は例外だらけ。自動終了はデータを壊すリスクの方が大きい
+- **エディションは単一エンジン+フラグ切替**(別アプリ2〜3本は不採用): ソロ開発で複数ストア申請・
+  保守は持続不可能。機能の大半(入力/音声/統計/流れ)は共通
+- **AIスタメン・AI選手名鑑は草野球・社会人限定**: パワプロ風の際どい寸評が未成年・部活の文脈に
+  不適切なため。エディションでUIごと非表示
+- **AI補完(CSV)は元データを絶対に上書きしない**: 空欄のみ埋める。メモの具体的記述と線スコアの
+  整合性だけを根拠にし、創作を明示的に禁止するプロンプト
+- **数値は根拠を必ず明示する**: 出典の無い数字は一気に嘘くさくなる。RE表・勝率モデルは
+  出典・対象・加工の有無を画面に出す。作れないもの(UZR、WAR)は「作れない」と言う
+- **公式クラウドはFirebase→Supabaseへ移行**: 新規プロジェクトのFirestoreが課金アカウント必須と判明。
+  Google Cloudに支出のハードキャップが無く、運営者の「従量課金は絶対不可」の方針と両立しない。
+  **カード登録自体が不要な**Supabase無料プランへ全面移植。Firebase版の実装は git `a3eab58` 参照
+- **選手アカウントは不採用**(運営者判断): アカウントを持つのはチーム運営者のみ。選手はチームが持つデータ
+- **視覚素材はすべて自作**(他アプリの意匠を参照しない)が標準ルール
 - **検討して捨てた案**: 手書きスコアブックのVision OCR直読み(手書きダイヤモンド記法の解釈が
-  不安定→CSVテンプレート+メモのAI補完方式に転換)/Firebaseエミュレータ相当のSupabaseローカル
-  検証(Docker無し環境のため、UI状態テスト+実プロジェクト手動確認に切替)
+  不安定 → CSVテンプレート+メモのAI補完へ転換)
 
-## 7. ハマりどころと解決策
+---
 
-- **Gemini**: `gemini-1.5-flash` は完全廃止済み → バージョン固定せず `gemini-flash-latest` を使う。
-  さらに `thinkingConfig: { thinkingBudget: 0 }` を入れないと内部思考がトークンを食い潰して
-  本文が空になる(finishReason: MAX_TOKENS)
-- **CSVのExcel文字化け**: UTF-8 BOM(﻿)必須。ダウンロード経路を必ず共通の `downloadCSV()` に
-  通すこと(過去に独自Blob生成で文字化け事故)
-- **線スコアの二重計上**: 列を先頭から回番号とみなすと「合計」列を余分な回として加算してしまう。
-  ヘッダ行の数字ラベルで列→回をマップし非数値列を無視する実装になっている
-- **[GAME]のキー判定順**: 「自チームは先攻か後攻」が「自チーム」の正規表現に先に一致して
-  チーム名を上書きするバグがあった。**先攻/後攻の判定をチーム名より先に**置くこと
-- **設定のマージ**: 保存データ読み込みで `{...init, ...saved}` とするとsettingsが丸ごと置換され、
-  後から追加した設定キーが欠落する。**settingsは必ず既定値とマージ**する(StoreProviderの初期化参照)
+## 8. ハマりどころと解決策
+
+### 音声(最重要)
+
+- **iOSのWKWebViewは `webkitSpeechRecognition` を露出したまま動かない**
+  ([WebKit bug 239816](https://bugs.webkit.org/show_bug.cgi?id=239816))。
+  存在チェックだけの判定だと `true` が返り、**音声UIが出るのに押しても無反応**という
+  一番たちの悪い壊れ方をする。`speechAvailable()` は `window.Capacitor.isNativePlatform()` を見て
+  ネイティブでは一律 `false` を返す。`createRecognizer()` にも同じ関門がある。
+  判定は純関数 `speechSupported(window)` に切り出し、`tests/unit.mjs` が4ケースで固定している
+- ネイティブで音声を使うには `@capacitor-community/speech-recognition` 等の
+  ネイティブプラグインが必要(未着手)
+
+### 描画とテスト
+
+- **ErrorBoundaryが描画エラーを飲み込む**ので、e2eからは「ロケータのタイムアウト」にしか見えない。
+  全e2eに **`crashGuard`** を入れてある(`try` の外で定義すること。中で定義すると `catch` から
+  参照して `ReferenceError` になる)。実例: `Chart` が `game` をpropsに取らずに使って画面が落ちた
 - **e2eセレクタ**: `button:has-text("追加")` のような曖昧セレクタはUI追加で壊れる。
   カードで修飾する(`.card:has(h2:has-text("選手登録")) button:has-text("追加")`)
-- **Playwrightの `networkidle`**: Firestore/Supabase Realtimeの常時接続があると永遠に来ない。
-  同期系の画面では `waitUntil: 'load'` を使う
-- **iOSのボトムシート**: `.main` のスクロールコンテキスト内だとタブバー下に潜る →
-  `createPortal` でbody直下に描画+表示中は背景スクロールをロック(Sheet.jsx)
+- **Playwrightの `networkidle`**: Supabase Realtimeの常時接続があると永遠に来ない。`waitUntil: 'load'` を使う
+- **デモ選手はLineupWizardから除外される**(`!p.id.startsWith('demo-')`)。e2eでは実選手を登録すること。
+  同様に**ResultTabはデモ試合を表示しない**
+- **テストが黙って通っていないか疑う**: `if (rates.length === 2)` のような条件付きチェックは
+  条件を満たさないと素通りする。**タイル数そのものを検査項目にする**。新しいテストは
+  必ず一度**わざと壊して落ちることを確認**する
+
+### データと互換
+
+- **設定のマージ**: 読み込みで `{...init, ...saved}` とすると settings が丸ごと置換され、後から
+  追加した設定キーが欠落する。**settingsは必ず既定値とマージ**する
+- **CSVのExcel文字化け**: UTF-8 BOM必須。必ず共通の `downloadCSV()` を通す
+- **線スコアの二重計上**: 列を先頭から回番号とみなすと「合計」列を余分な回として加算する。
+  ヘッダ行の数字ラベルで列→回をマップし非数値列を無視する
+- **[GAME]のキー判定順**: 「自チームは先攻か後攻」が「自チーム」の正規表現に先に一致して
+  チーム名を上書きするバグがあった。**先攻/後攻の判定をチーム名より先に**置く
 - **iOS/SafariのlocalStorage自動削除**: IndexedDBミラー+起動時復旧+`storage.persist()`+
-  バックアップ促し(7日で警告)の四段構え
-- **Firebaseの落とし穴(2026年時点)**: 新規プロジェクトのFirestore作成はSpark(無料)プランでは
-  不可(リージョン問わず課金アカウント必須)。Blazeにハードキャップは無い
+  バックアップ促し(7日で警告)の四段構え。**ネイティブアプリ版ではこの問題自体が消える**
+  (WKWebViewはアプリのサンドボックス領域を使うためITPの対象外)
+
+### その他
+
+- **Gemini**: `gemini-1.5-flash` は廃止済み → `gemini-flash-latest` エイリアスを使う。
+  `thinkingConfig: { thinkingBudget: 0 }` を入れないと内部思考がトークンを食い潰して本文が空になる
+  (finishReason: MAX_TOKENS)
+- **i18n**: キーを片方の言語にだけ足すと `check-i18n.mjs` が落ちる。**末尾のカンマ忘れ**による
+  構文エラーが頻出
+- **変数のシャドーイング**: `VoiceControl` で `handleAnswer` のローカル変数 `t`(発話文字列)が
+  翻訳関数 `t` を隠して画面が落ちた。翻訳関数は `t`、発話は `said` にしてある
+- **iOSのボトムシート**: `.main` のスクロールコンテキスト内だとタブバー下に潜る →
+  `createPortal` でbody直下に描画+表示中は背景スクロールをロック(`Sheet.jsx`)
 - **サンドボックスの癖**: `pkill` が終了コード144を返し `&&` 連結を切る(コマンドを分ける)。
-  playwright-coreのimportはリポジトリ直下から実行(node_modules解決)。`vite preview --port 4173` は
-  nohup+disownで起動し、curlで200を確認してからテストを回す
+  playwright-coreのimportはリポジトリ直下から実行(node_modules解決)
 
-## 8. 使い方
+---
 
-### 開発
-```
-npm install
-npm run dev            # 開発サーバ
-npx vite build         # 本番ビルド(コミット前に必ず通す)
-npx vite preview --port 4173   # e2e用プレビュー
-node e2e/stage1-skeleton.mjs   # 各回帰テスト(stage1〜12を全部回すのが習慣)
+## 9. 英語対応の現状(2026-09-11 総合レビュー)
+
+フィリピン代表チームでの利用検討を受けて総ざらいした結果。
+**記録の中心部は英語で完結している**(スコア入力・オーダー・成績・試合結果のトップ階層は
+英語モードで日本語ゼロを実機確認済み)。スコアシート表記も `1B / 2B / GO / FO / K / ꓘ / BB` と英語化済み。
+
+穴は4層。
+
+### 第1層: 画面ごと日本語のまま
+
+| 画面 | `t()` 呼出 | 日本語行 |
+|---|---|---|
+| `NewspaperView.jsx`(AIスポーツ新聞) | **0** | 34 |
+| `ScoutCard.jsx`(AI選手名鑑) | **0** | 53 |
+| `HeadCoachView.jsx`(AIヘッドコーチ) | 4 | 24 |
+| `VoiceControl.jsx`(音声入力) | 1 | 73 |
+
+比較: `SettingsTab.jsx` は226回、`ScoreTab.jsx` は157回。
+`ScoutCard` の寸評タグ(約60語)は翻訳ではなく英語圏の野球語彙への**作り直し**が要る。
+
+### 第2層: 英語画面に日本語が混ざる(データ層に言語が無い) — ✅ 対応済み
+
+原因は共通で、**表示する文字列を組み立てる側が言語を受け取っていなかった**こと。
+直した内容は以下。いずれも「訳文で分岐しない」を徹底してある(訳文で分岐すると、
+言語を足すたびに分岐が増え、英語表示のとき静かに壊れる)。
+
+- **守備位置**: `positionListLabel(list, lang)` を `model.js` に追加。区切りも言語で変える
+  (日本語の「・」は英文の中では区切りとして読めない)。守備位置を選ぶシートの丸/四角チップも
+  `positionLabel` を通すようにした
+- **試合結果のハイライト**: `computeHighlights(game, nameOf, lang, basis)` /
+  `highlightShareText(game, h, lang)` に。勝敗は訳文ではなく **`resultKey`('win'|'lose'|'draw')**
+  を別に返し、色分けはそちらで判定する。`shareImage.js` が訳文で色を決めていたので、
+  英語表示にすると勝敗ピルが全部グレーになるところだった
+- **ボックススコアの出場表記**: `打中`(代打→中堅)のような1文字を詰める日本語の書き方は
+  英語だと `PHCF` になって読めない。英語では `-` で繋ぐ(`PH-CF` / `CF-LF`)
+- **K/BB**: `pitchingMetrics(s, basis, lang)` に。`(与四球0)` / `(no walks)`
+- **設定ギアの `aria-label`**: `t('tab.settings')` に
+- **CSV**: 出力4種すべて見出しを `csv.*` のキーで持ち、ファイル名も言語で変える。
+  画面の表(`stats.col.*`)は幅の都合で短くしてあるが、CSVは表計算に貼ってから読むので
+  被安打と安打が同じ「H」にならないよう別に持つ
+
+**機械で見張る仕組みを入れた。** `tests/unit.mjs` に「英語辞書に日本語の文字が残っていない」
+という検査がある。日本語だけ足して英語を忘れると静かに戻るため。
+この検査で `box.desc`(`打 PH / 走 PR` の説明)、`gp.nlErrInning`(例が `3回`)、
+英語文中の中黒による箇条書き5か所も見つかって直っている。
+
+⚠️ **同じ作業で見つかった、i18nではない実害のバグ**: 成績タブの「7回/9回換算」の
+切り替えが投手表に効いておらず、**防御率が常に7回換算で出ていた**(`pitchingMetrics(s)` を
+引数なしで呼んでいた)。9回制のチームでは全投手の防御率が違う値になる。個人ページも同様
+だったので、そちらは `defaultInningBasis(games)` から導くようにした。
+
+### 第3層: 機能そのものが日本語専用
+
+- **AIの出力 — ✅ 対応済み**: `gemini.js` に `langInstruction(lang)` を追加し、
+  AI新聞・AI名鑑・AIスタメンのプロンプト末尾に付ける。プロンプト本体は日本語のままでよい
+  (役割や禁止事項の指示であって出力ではない)が、何も言わないとモデルはプロンプトの言語に
+  引きずられる。**JSONのキー名は解析に使うので英語のまま**、**選手名・チーム名は記録された
+  綴りのまま**(勝手に音訳されると名簿と照合できない)を明示している
+- **音声 — 未対応(今回は対象外)**: `speech.js` が `rec.lang = 'ja-JP'` 固定、`tts.js` も同様。
+  `voiceParser.js`(96行)と `correctionParser.js`(68行)は日本語の言い回し専用のルールベース
+  解析器。**フォールバックのテキスト入力UIまで日本語**なので、英語では入口ごと使えない
+
+### 第4層: ガワ
+
+- `index.html` が `lang="ja"`、`<title>` と description が日本語
+- `manifest.webmanifest` の `name` / `description` / `lang` が日本語
+  → **ホーム画面に追加したときのアプリ名が日本語**
+- 招待リンクからの参加フロー(`App.jsx`、`t()` が2回)が日本語。
+  **海外チームが最初に触る画面**の可能性が高い
+
+### 翻訳とは別に残る論点(海外チーム固有)
+
+1. **エディションが日本の学校制度前提**。代表チームは消去法で「社会人・クラブ」を選ぶことになり、
+   ヘッダーに *for Amateur & Club* と出る
+2. **ルール既定が日本のアマチュア前提**(7回制90分等)。国際試合・代表戦向けプリセットが無い
+3. **得点期待値の土台がNPB**。設計上は実測が貯まれば寄るが、導入初期はNPBベースで動くことを
+   先方に説明できる形にしておく
+4. **年度が4月始まり**(`settings.yearStartMonth` で変更可)
+
+### 推奨する着手順
+
+**第2層 → 第3層のAIプロンプト → 第1層 → 音声**。
+**第2層と第3層のAIプロンプトは対応済み**(2026-09-11)。英語モードで実際に描画を採取して
+確認したところ、残る日本語は言語切替ボタンの「日本語」(これは日本語話者が見つけるために
+必要)とデモデータの選手名・チーム名だけになっている。
+第1層は新規キー150〜200個規模。音声は別プロジェクト(まず英語モードではテキスト入力に倒し、
+そのUIを英語化するのが現実的)。
+
+---
+
+## 10. ストア申請の状況
+
+### 済んでいること
+
+- Capacitorでネイティブ化(`ios/` `android/`)。ステータスバー・スプラッシュ・Android戻るボタン配線済み
+- **音声のWKWebView問題を修正**(§8)。ネイティブではテキスト入力へ確実に倒れる
+- **アカウント削除**(App Store 5.1.1(v))。設定タブ → 公式クラウド。
+  メールアドレスの一致入力+確認ダイアログの二段階。実削除はRPC `delete_my_account()`
+- **プライバシーポリシー** `public/privacy.html`(ja/en)。`public/` にあるのでWeb版のデプロイ先の
+  `/privacy.html` がそのまま申請用URLになり、アプリ版にも同梱される。設定タブからリンク済み
+- **`ios/App/App/PrivacyInfo.xcprivacy`**。Xcodeプロジェクトのリソースにも登録済み
+  (置くだけでは同梱されない)。申告はメールアドレス/氏名/写真/その他ユーザーコンテンツの4項目、
+  いずれも Linked=true・Tracking=false
+
+### 残っていること
+
+- **`public/privacy.html` のプレースホルダ**(制定日・運営者名・問い合わせ先)を埋める
+- **`delete_my_account()` を本番Supabaseに適用**(SQL Editorで実行)。忘れるとボタンがエラーになる
+- **`appId` がプレースホルダ** `app.aibss.diamond`(一度登録すると変更不可)
+- **Gemini BYOK** — 審査員が自分のAPIキーを持っていないのでAI機能を試せない。
+  審査ノートに検証用キーを添えるのが最短
+- **Mac実機でのビルド・確認**(この開発環境では踏めない)
+- 少年野球エディションを**Kidsカテゴリに登録しない**(審査基準が大幅に厳しくなる)
+
+### 注意
+
+- **モデル識別子をコミットメッセージ・PR・コード・リポジトリ内の成果物に書かない**
+- 顔写真(`scoutPhoto`)は**クラウドへ同期される**。少年野球・中学では未成年の顔写真になるため、
+  プライバシーポリシー第5項で「登録前に本人(未成年なら保護者)の同意を得ること」を明記してある
+
+---
+
+## 11. 開発の進め方
+
+```bash
+npm ci                         # 依存(node_modulesが消えることがある)
+npm run dev                    # 開発サーバ
+npm run build                  # 本番ビルド(コミット前に必ず通す)
+node scripts/check-i18n.mjs    # ja/en のキー整合(現在1824キー)
+node --test tests/unit.mjs     # ユニット(現在422件)
+node tests/<name>.e2e.mjs      # e2e 個別
+npm test                       # 上記を一括
 node scripts/gen-icons.mjs     # ロゴSVGからPWAアイコン再生成
+npm run cap:sync               # ネイティブへ反映
 ```
-- 開発フロー: 機能実装 → 使い捨てのplaywright検証スクリプトで動作確認(確認後削除) →
-  **全stageの回帰** → コミット(日本語・なぜを書く) → `main` へpush(=本番デプロイ)
-- Vercel: `main` 直結。PWAのSWキャッシュ名は `public/sw.js` の `CACHE`(大きい資産変更時にbump)
 
-### ユーザー操作の典型例
-1. 設定タブ: チーム名・エディション・選手登録(またはデモデータ投入で試用)
-2. スコア入力タブ: 対戦相手・先攻後攻・ルールプリセット選択 → 試合開始 → 打順自動セット可
-3. 記録: 打者カードの下の投球ボタン(B/S/F)→結果パッド→確認シート。または🎤音声
-4. 成績タブ: 指標ボタンでランキング切替、選手名タップで個人ページ(名鑑・スプレー・推移)
-5. ホームタブ: タイトルカード、CSV取り込み(テンプレDL→記入→アップロード→確認・修正→取り込み)
-6. AI機能(任意): 設定タブでGemini APIキーを入れると名鑑寸評/AIスタメン(草野球のみ)/AI新聞/CSV補完が有効化
+### テスト構成
 
-### 公式クラウド(運営者)
-`docs/supabase-setup.md` 参照。要点: Supabase無料プロジェクト作成(東京可)→ SQL Editorで
-`supabase/schema.sql` 実行 → Authの「Confirm email」をオフ → Project URLとanonキーを
-`src/lib/officialConfig.js` の `FILE_CONFIG` へ → push。ユーザーはメール+パスワードでログインし、
-「チームをクラウドに登録」→招待リンク(?ct=トークン)で記録係/観戦を追加。
+- `tests/unit.mjs` — 純関数のユニット(node:test、依存追加なし)。**422件**
+- `tests/*.e2e.mjs` — playwright-core。**14スイート**:
+  `golden voice roster scoresheet rules fixplay oppbench drift flow outtype crash dh fielding fixorder`
+  - Chromiumは `executablePath: '/opt/pw-browsers/chromium'`
+- `e2e/stage1〜12*.mjs` — **旧世代の回帰テスト**。`npm test` には含まれない(歴史的資産)
 
-## 9. 未完了の課題・今後やりたいこと
+### ブランチと手順
 
-### 直近(ブロック中/待ち)
-- **Supabase実プロジェクトの接続**: 運営者がプロジェクト作成中。URL+anonキーが来たら
-  `officialConfig.js` に設定し、docs手順5の実機フロー確認(登録→招待→参加→双方向同期)を行う
+開発ブランチは `claude/migrate-baseball-scorer-5b8dvv`。
+**コミット → push → `main` へ `--no-ff` マージ → main push → 開発ブランチへ戻る。**
+コミットメッセージは日本語で、**何をしたかではなく「なぜそうしたか」**を書く。
+
+---
+
+## 12. 未完了の課題・今後やりたいこと
+
+### 直近
+
+- **英語対応**(§9)。フィリピン代表の件で優先度が上がっている
 - **観戦(viewer)ロールのUI制御**: RLSで書き込みは拒否されるが、UI側はまだ入力可能に見える
-  (pushが失敗してエラー表示になる)。viewer時は入力UIを隠す/観戦ページへ誘導する制御が未実装
-- 公式クラウドの**マジックリンクは補助扱い**(Supabase既定SMTPの頻度制限)。本格運用時は
-  カスタムSMTP設定を検討
+  (pushが失敗してエラー表示になる)。viewer時は入力UIを隠す制御が未実装
+- 公式クラウドの**マジックリンクは補助扱い**(Supabase既定SMTPの頻度制限)。
+  本格運用時はカスタムSMTP設定を検討
 
-### ロードマップ(運営者と合意済みの構想)
-- **投手の累積球数管理**(次の有力候補): 現在の球数警告は1試合単位。学童「1日70球」等の
-  日/週単位の累積・登板間隔管理を、既存の全試合データから実装できる。少年野球の看板機能になる
-- **③確定的スタメン最適化(草野球限定)**: 現行のGemini任せのAIスタメンを、打席データからの
-  wOBA風指標+得点期待値シミュレーションによる再現性ある提案に置き換える
-- **④プライバシー・法務**: 利用規約/プライバシーポリシー/保護者同意(少年野球)の草案と同意フロー
-- **対戦ネットワーク**: 両チームがAI-BSSなら1試合1記録で共有(相手A〜T記号の制約が解ける)
-- **大会運営モード**/**卒団・引退アルバム自動生成**/**匿名ベンチマーク**(同年代平均との比較)
+### ロードマップ
+
+- **投手の累積球数管理**: 現在の球数警告は1試合単位。学童「1日70球」等の日/週単位の累積・
+  登板間隔管理を既存の全試合データから実装できる。少年野球の看板機能になる
+- **確定的スタメン最適化**: 現行のGemini任せのAIスタメンを、打席データからの wOBA風指標+
+  得点期待値シミュレーションによる再現性ある提案に置き換える
+- **守備側WPAの分離**: 現状すべて投手に付いている(§3)
+- **勝率モデルの延長対応**: 現状1イニング先までしか見ていない
+- **対戦ネットワーク**: 両チームがAI-BASEなら1試合1記録で共有(相手A〜T記号の制約が解ける)
+- **大会運営モード** / **卒団・引退アルバム自動生成** / **匿名ベンチマーク**
 - **収益化(¥980チーム買い切り)**: 設計資産が `docs/monetization-and-backend-design.md` と
-  `supabase/migrations/0001_init.sql` + `supabase/functions/revenuecat-webhook` にある(未接続)。
-  要点: `teams.is_premium` はRevenueCat webhook(service_role)のみが更新/ストア掲載には
-  Capacitorでのネイティブ化が別途必要。**今回の公式クラウド(schema.sql)とは別系統の設計**なので、
-  統合時に invites方式(現行) と join_team(code)方式(旧設計) の整合を取ること
-- タイブレーク走者自動配置、時間制限の残り時間表示、WatchViewの公式クラウド統合 など
+  `supabase/migrations/0001_init.sql` + `supabase/functions/revenuecat-webhook` にある(**未接続**)。
+  ⚠️ ドキュメントは `src/lib/entitlement.js` を「実装済み」と書いているが、**そのファイルは存在しない**。
+  RevenueCatも未導入。統合時は invites方式(現行)と join_team(code)方式(旧設計)の整合を取ること
 
 ### 既知の割り切り
-- Supabase同期にオフライン書き込みキューは無い(オフライン時はローカル保存のみ、
-  復帰後の変更やリロードで追い付く)。Firestore版はSDKのオフラインキューがあった
-- 守備指標(UZR等)は現行データでは計算不能(座標データが無い)。AI分析は攻撃系に限定するのが誠実
-- 無料Supabaseは1週間無アクセスで休眠(ダッシュボードから復帰)
+
+- **UZR等の守備指標は計算不能**(座標データとリーグ平均が要る)。AI分析は攻撃系に限定するのが誠実
+- **WARも計算不能**(リーグ平均・代替選手水準が要る)
+- **個人の失策数は位置しか持っていない**(捕球/送球の別が無い)
+- Supabase同期に**オフライン書き込みキューは無い**(オフライン時はローカル保存のみ、復帰後に追い付く)
+- 無料Supabaseは**1週間無アクセスで休眠**(ダッシュボードから復帰)

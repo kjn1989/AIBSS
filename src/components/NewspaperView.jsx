@@ -24,7 +24,7 @@ function buildSummary(game, h, teamName) {
 // APIキー未設定/失敗時のテンプレート記事
 function buildFallbackArticle(game, h, teamName) {
   const rl = h.resultLabel;
-  const headline = rl === '勝利' ? `${teamName} 快勝！` : rl === '敗北' ? `${teamName} 惜敗` : `${teamName} 引き分け`;
+  const headline = h.resultKey === 'win' ? `${teamName} 快勝！` : h.resultKey === 'lose' ? `${teamName} 惜敗` : `${teamName} 引き分け`;
   let body = `${game.date}、${teamName}は${game.opponent || '対戦相手'}と対戦し、${game.myScore}対${game.oppScore}で${rl}した。`;
   if (h.topBatter) body += `打線では${h.topBatter.name}が${h.topBatter.h}安打${h.topBatter.rbi}打点と気を吐いた。`;
   if (h.topPitcher) body += `マウンドでは${h.topPitcher.name}が${h.topPitcher.line}と力投。`;
@@ -90,6 +90,7 @@ export default function NewspaperView({ game, onClose }) {
       edition: state.settings.edition,
       kind: kindOf(state.settings),
       season: game.season || '',
+      lang: state.settings.lang || 'ja',
     });
     setLoading(false);
     if (r && !r.error) {
