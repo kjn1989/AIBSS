@@ -19,6 +19,7 @@ import { draftNarrative, noteOf, noteKeyOf } from '../src/lib/narrative.js';
 import { tiebreakPlacement, backInOrder, halfHasPlays, halfStartKeyOf } from '../src/lib/tiebreak.js';
 import { aggregateScorers, rankScorers, scorerName, tagScorerId } from '../src/lib/scorers.js';
 import { speechSupported } from '../src/lib/speech.js';
+import { detectLang, resolveLang } from '../src/lib/langStore.js';
 import { MESSAGES } from '../src/lib/i18n.js';
 import { positionListLabel } from '../src/lib/model.js';
 import { computeHighlights } from '../src/lib/highlights.js';
@@ -5833,4 +5834,34 @@ test('チーム内1位の材料は、訳文ではなくデータで首位タイ�
   const en = teamHighlights('p1', bat, {}, 'en');
   assert.deepEqual(ja.map((f) => f.tied), en.map((f) => f.tied));
   assert.notEqual(ja[0].text, en[0].text);
+});
+
+// ---------------- 表示言語をどう決めるか ----------------
+// 以前は言語がチーム(プロフィール)単位だったので、招待リンクで2チーム目に
+// 参加すると日本語に戻っていた。端末に1つ持つ形へ移したうえで、
+// 決める順番と推定の規則をここで固定する。
+test('言語の推定: 日本語があれば日本語、無ければ英語', () => {
+  assert.equal(detectLang(['ja']), 'ja');
+  assert.equal(detectLang(['ja-JP']), 'ja');
+  assert.equal(detectLang(['en-US', 'ja']), 'ja', '2番目以降でも日本語があれば日本語');
+  assert.equal(detectLang(['en-US']), 'en');
+  assert.equal(detectLang(['en-PH', 'fil-PH']), 'en', 'フィリピンの端末は英語で開く');
+  assert.equal(detectLang(['fil-PH', 'tl']), 'en', '日本語でなければ英語に倒す');
+  assert.equal(detectLang(['ko-KR']), 'en');
+  assert.equal(detectLang(['java']), 'en', '前方一致で ja を誤爆しない');
+  assert.equal(detectLang([]), 'ja', '何も分からなければアプリの母語');
+});
+
+test('言語の優先順位: URL > 端末の保存 > チームの保存 > 推定', () => {
+  const L = ['en-US']; // 推定すると en になる端末
+  assert.equal(resolveLang({ url: 'ja', stored: 'en', profile: 'en', languages: L }), 'ja', 'リンクが最優先');
+  assert.equal(resolveLang({ stored: 'ja', profile: 'en', languages: L }), 'ja', '端末の保存がチームより強い');
+  assert.equal(resolveLang({ profile: 'ja', languages: L }), 'ja', '端末単位へ移す前の選択を引き継ぐ');
+  assert.equal(resolveLang({ languages: L }), 'en', 'どれも無ければ推定');
+  assert.equal(resolveLang({ languages: ['ja-JP'] }), 'ja');
+});
+
+test('言語: 知らない値は無視して次の候補へ進む', () => {
+  assert.equal(resolveLang({ url: 'fr', stored: 'ja', languages: ['en'] }), 'ja');
+  assert.equal(resolveLang({ url: '', stored: null, profile: undefined, languages: ['en'] }), 'en');
 });

@@ -16,25 +16,29 @@ export function decodeConfig(cfgParam) {
   }
 }
 
-export function encodeWatchLink({ configText, teamCode }) {
+export function encodeWatchLink({ configText, teamCode, lang }) {
   const cfg = btoa(unescape(encodeURIComponent(configText)));
   const url = new URL(window.location.href);
   url.search = '';
   url.searchParams.set('watch', '1');
   url.searchParams.set('team', teamCode);
   url.searchParams.set('cfg', cfg);
+  // 作った人の言語でリンクを開かせる。受け取る側はまだ設定を持っていないので、
+  // これが無いと全員が日本語で開くことになる
+  if (lang) url.searchParams.set('lang', lang);
   return url.toString();
 }
 
 // チーム招待リンク: 開くと同期設定(config+チームコード)を自動で取り込み、
 // 書き込み可能なメンバーとして参加できる。観戦(閲覧専用)リンクとは別物。
-export function encodeInviteLink({ configText, teamCode }) {
+export function encodeInviteLink({ configText, teamCode, lang }) {
   const cfg = btoa(unescape(encodeURIComponent(configText)));
   const url = new URL(window.location.href);
   url.search = '';
   url.searchParams.set('invite', '1');
   url.searchParams.set('team', teamCode);
   url.searchParams.set('cfg', cfg);
+  if (lang) url.searchParams.set('lang', lang);
   return url.toString();
 }
 

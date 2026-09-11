@@ -30,7 +30,7 @@ const check = (n, c, d = '') => { console.log(`${c ? 'ok' : 'NG'} - ${n}${c ? ''
 const browser = await chromium.launch({ executablePath: resolveChromium() });
 
 try {
-  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, acceptDownloads: true });
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, acceptDownloads: true, locale: 'ja-JP' });
   // 描画エラーは console に出る(意図的に落としているので、失敗にはしない)
   page.on('pageerror', () => {});
 

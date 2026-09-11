@@ -57,7 +57,7 @@ const crashGuard = async (where) => {
 
 const browser = await chromium.launch({ executablePath: resolveChromium() });
 try {
-  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, locale: 'ja-JP' });
   pageRef = page;
   page.on('pageerror', (err) => { console.log('PAGE EXCEPTION:', err.message); failures++; });
   page.on('dialog', (d) => d.accept());

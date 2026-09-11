@@ -22,6 +22,7 @@ const UNIQUE_POSITIONS = new Set(['投', '捕', '一', '二', '三', '遊', '左
 import { remapPlayerInGame, fillPlayerGaps } from '../lib/mergePlayers.js';
 import { rebuildBatters } from '../lib/battersRebuild.js';
 import { idbSave } from '../lib/durableStore.js';
+import { storedLang, saveLang } from '../lib/langStore.js';
 import { saveGames, loadGames, pruneGames, gameIndex, stubGamesFromIndex } from '../lib/gameStore.js';
 import { translate, DEFAULT_LANG } from '../lib/i18n.js';
 import { getActiveProfileId, profileStorageKey, listProfiles, updateProfileMeta } from '../lib/profiles.js';
@@ -590,6 +591,8 @@ export function reducer(state, action) {
       return { ...state, games, gamesHydrated: true };
     }
     case 'UPDATE_SETTINGS':
+      // 言語は端末に1つ持つので、チームのデータとは別に書き出す(lib/langStore.js)
+      if (action.patch && action.patch.lang) saveLang(action.patch.lang);
       return { ...state, settings: { ...state.settings, ...action.patch } };
 
     // ===== 記録員(スコアラー) =====
@@ -2126,6 +2129,9 @@ export function StoreProvider({ children }) {
       // 設定は既定値とマージする(保存後に追加された設定キーの欠落を補う)。旧エディション表記も正規化
       const settings = { ...init.settings, ...(saved.settings || {}) };
       settings.edition = normalizeEdition(settings.edition) || init.settings.edition;
+      // 言語は端末に1つ(lib/langStore.js)。チームごとの保存値より端末側を優先する。
+      // これが無いと、招待リンクで参加して作られたプロフィールが日本語に戻る
+      settings.lang = storedLang() || settings.lang || init.settings.lang;
       const { gameIndex: _idx, games: _g, ...rest } = saved;
       return { ...init, ...rest, settings, games, gamesHydrated: hydrated };
     }
@@ -2136,6 +2142,7 @@ export function StoreProvider({ children }) {
         ...init,
         settings: {
           ...init.settings,
+          lang: storedLang() || init.settings.lang,
           teamName: meta.name,
           edition: meta.edition,
           officialTeamId: meta.officialTeamId || null,
@@ -2143,7 +2150,7 @@ export function StoreProvider({ children }) {
         },
       };
     }
-    return init;
+    return { ...init, settings: { ...init.settings, lang: storedLang() || init.settings.lang } };
   });
 
   // 起動直後は localStorage の索引だけで描き、試合の本体は IndexedDB から追いかけて読む。

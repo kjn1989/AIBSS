@@ -1109,8 +1109,9 @@ function CloudCard() {
       window.prompt(t('set.copyPrompt'), link);
     }
   };
-  const watchLink = () => encodeWatchLink({ configText: s.firebaseConfigText, teamCode: s.teamCode });
-  const inviteLink = () => encodeInviteLink({ configText: s.firebaseConfigText, teamCode: s.teamCode });
+  // リンクには作った人の言語を載せる。受け取る側はまだ設定を持っていない
+  const watchLink = () => encodeWatchLink({ configText: s.firebaseConfigText, teamCode: s.teamCode, lang: s.lang });
+  const inviteLink = () => encodeInviteLink({ configText: s.firebaseConfigText, teamCode: s.teamCode, lang: s.lang });
 
   return (
     <div className="card">

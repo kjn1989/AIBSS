@@ -27,6 +27,7 @@ export default function OfficialCloudCard() {
   const [myRole, setMyRole] = useState('');
   const [myTeams, setMyTeams] = useState(null); // このアカウントが参加済みのクラウドのチーム
   const [delText, setDelText] = useState(''); // アカウント削除の確認入力(メールアドレスの一致を求める)
+  const lang = state.settings.lang || 'ja';
   const teamId = state.settings.officialTeamId;
   const available = officialAvailable();
 
@@ -132,7 +133,8 @@ export default function OfficialCloudCard() {
 
   const makeInvite = (role) => run(async () => {
     const token = await createInvite(teamId, role);
-    const url = inviteUrl(token);
+    // リンクには招待した人の言語を載せる。招かれた側はまだ設定を持っていない
+    const url = inviteUrl(token, lang);
     setInvite({ url, role });
     setShowQr(false);
     try {

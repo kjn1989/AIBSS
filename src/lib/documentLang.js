@@ -21,13 +21,3 @@ export function applyDocumentLang(lang) {
   const mf = document.querySelector('link[rel="manifest"]');
   if (mf) mf.setAttribute('href', en ? './manifest.en.webmanifest' : './manifest.webmanifest');
 }
-
-// 起動時用: ストアの初期化より前に要るので、保存済みJSONから直接読む
-export function langFromStorage(key) {
-  try {
-    const raw = key ? localStorage.getItem(key) : null;
-    return raw ? (JSON.parse(raw)?.settings?.lang || 'ja') : 'ja';
-  } catch {
-    return 'ja'; // 壊れていても既定で続ける
-  }
-}

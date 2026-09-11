@@ -196,9 +196,12 @@ export async function createInvite(teamId, role = 'scorer') {
   return token;
 }
 
-export function inviteUrl(token) {
+export function inviteUrl(token, lang) {
   const url = new URL(window.location.origin + window.location.pathname);
   url.searchParams.set('ct', token);
+  // 招待した人の言語で開かせる。招かれた側はまだ設定を持っていないので、
+  // これが無いと参加の画面が全員日本語になる
+  if (lang) url.searchParams.set('lang', lang);
   return url.toString();
 }
 
