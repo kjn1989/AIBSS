@@ -9,11 +9,12 @@ export default function HighlightSheet({ game, onClose }) {
   const { state } = useStore();
   const t = useT();
   const nameOf = usePlayerName();
-  const h = computeHighlights(game, nameOf);
-  const shareText = highlightShareText(game, h);
+  const lang = state.settings.lang || 'ja';
+  const h = computeHighlights(game, nameOf, lang);
+  const shareText = highlightShareText(game, h, lang);
   const teamName = state.settings.teamName || t('restab.teamFallback');
   const empty = !h.clutch && !h.topBatter && !h.topPitcher && h.extraBaseHits.length === 0;
-  const wlKey = { 勝利: 'restab.win', 敗北: 'restab.lose', 引き分け: 'restab.draw' }[h.resultLabel];
+
 
   const share = async () => {
     if (navigator.share) {
@@ -38,8 +39,8 @@ export default function HighlightSheet({ game, onClose }) {
         <div className="hl-score">
           <span className="hl-vs">{game.date} vs {game.opponent || t('restab.opponentFallback')}</span>
           <div className="hl-final">{game.myScore} - {game.oppScore}</div>
-          <span className={`pill ${h.resultLabel === '勝利' ? 'green' : h.resultLabel === '敗北' ? 'red' : ''}`}>
-            {wlKey ? t(wlKey) : h.resultLabel}
+          <span className={`pill ${h.resultKey === 'win' ? 'green' : h.resultKey === 'lose' ? 'red' : ''}`}>
+            {h.resultLabel}
           </span>
         </div>
 

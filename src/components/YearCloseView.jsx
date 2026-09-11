@@ -77,7 +77,7 @@ export default function YearCloseView({ year, onClose }) {
     }
     if (kind === 'csv' || kind === 'both') {
       const nameOf = (id) => state.players.find((p) => p.id === id)?.name || id;
-      downloadCSV(archiveFileName(year, 'atbats.csv'), atBatCSV(gamesInYear(state.games, year, startMonth), nameOf));
+      downloadCSV(archiveFileName(year, 'atbats.csv'), atBatCSV(gamesInYear(state.games, year, startMonth), nameOf, state.settings.lang || 'ja'));
     }
     setExported(true);
   };

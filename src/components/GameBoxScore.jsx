@@ -58,7 +58,7 @@ function MyTree({ game }) {
   const lang = state.settings.lang || 'ja';
   const nameOf = usePlayerName();
   const numberOf = (id) => state.players.find((p) => p.id === id)?.number || '';
-  const rows = buildLineupRows(game);
+  const rows = buildLineupRows(game, lang);
   if (!rows.length) return null;
   const sbLogs = (game.playLogs || []).filter((l) => l.kind === 'sb');
   // 打撃成績は「1人=1行」に集約(打順を移った選手が複数カードに分散しないように)

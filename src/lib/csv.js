@@ -6,6 +6,12 @@
 // ============================================================
 import { DIRECTIONS, OUT_TYPES, formatIP, resultLabelOf } from './model.js';
 import { aggregateBatting, aggregatePitching, battingMetrics, pitchingMetrics, fmtAvg, fmt2, fmtPct } from './stats.js';
+import { translate } from './i18n.js';
+
+// 見出しはキーで並べて、書き出すときにその言語へ引く。
+// 画面の表(stats.col.*)は幅の都合で「H」「回」のように短くしてあるが、CSVは
+// 表計算に貼ってから読むものなので、被安打と安打が同じ「H」にならないよう別に持つ。
+const head = (lang, keys) => keys.map((k) => translate(lang, k));
 
 function esc(v) {
   const s = v === null || v === undefined ? '' : String(v);
@@ -17,13 +23,13 @@ export function toCSV(rows) {
 }
 
 // ---- 打者成績CSV ----
-export function battingCSV(games, nameOf) {
+export function battingCSV(games, nameOf, lang = 'ja') {
   const stats = aggregateBatting(games);
-  const rows = [[
-    '選手', '打席', '打数', '安打', '単打', '二塁打', '三塁打', '本塁打', '塁打',
-    '打点', '得点', '盗塁', '四球', '敬遠', '死球', '三振', '犠打', '犠飛', '失策出塁',
-    '打率', '得点圏打率', '出塁率', '長打率', 'OPS', '進塁打成功率', 'PPA', 'クラッチ打数', '初球安打率', '総投球数',
-  ]];
+  const rows = [head(lang, [
+    'csv.player', 'csv.pa', 'csv.ab', 'csv.h', 'csv.single', 'csv.double', 'csv.triple', 'csv.hr', 'csv.tb',
+    'csv.rbi', 'csv.runs', 'csv.sb', 'csv.bb', 'csv.ibb', 'csv.hbp', 'csv.so', 'csv.sacBunt', 'csv.sacFly', 'csv.error',
+    'csv.ba', 'csv.risp', 'csv.obp', 'csv.slg', 'csv.ops', 'csv.adv', 'csv.ppa', 'csv.clutch', 'csv.fhit', 'csv.totalPitches',
+  ])];
   for (const s of Object.values(stats).sort((a, b) => b.h - a.h)) {
     const m = battingMetrics(s);
     rows.push([
@@ -37,14 +43,19 @@ export function battingCSV(games, nameOf) {
 }
 
 // ---- 投手成績CSV ----
-export function pitchingCSV(games, nameOf) {
+export function pitchingCSV(games, nameOf, lang = 'ja', basis = 7) {
   const stats = aggregatePitching(games);
   const rows = [[
-    '投手', '登板', '投球回', '投球数', '失点', '自責点', '被安打', '被打数', '与四球', '与故意四球', '与死球', '奪三振',
-    '勝利', 'セーブ', 'ホールド', '防御率(7回換算)', '被打率', 'WHIP', 'K/BB',
+    ...head(lang, [
+      'csv.pitcher', 'csv.app', 'csv.ip', 'csv.pitches', 'csv.runs', 'csv.er', 'csv.ha', 'csv.abFaced',
+      'csv.walks', 'csv.iwalks', 'csv.hbpP', 'csv.k', 'csv.wins', 'csv.saves', 'csv.holds',
+    ]),
+    // 防御率は何回換算かで意味が変わるので、見出しにその回数を入れる
+    translate(lang, 'csv.era', { n: basis }),
+    ...head(lang, ['csv.oba', 'csv.whip', 'csv.kbb']),
   ]];
   for (const s of Object.values(stats).sort((a, b) => b.outsRecorded - a.outsRecorded)) {
-    const m = pitchingMetrics(s);
+    const m = pitchingMetrics(s, basis, lang);
     rows.push([
       nameOf(s.playerId), s.games, formatIP(s.outsRecorded), s.pitches, s.runs, s.earnedRuns,
       s.hitsAllowed, s.abFaced, s.walks, s.intentionalWalks, s.hitByPitch, s.strikeouts, s.wins, s.saves, s.holds,
@@ -56,12 +67,12 @@ export function pitchingCSV(games, nameOf) {
 }
 
 // ---- プレイログCSV ----
-export function playLogCSV(games, nameOf, teamName) {
-  const rows = [['日付', '対戦相手', 'イニング', '表裏', '種別', '内容', '選手']];
+export function playLogCSV(games, nameOf, teamName, lang = 'ja') {
+  const rows = [head(lang, ['csv.date', 'csv.opponent', 'csv.inning', 'csv.half', 'csv.kind', 'csv.text', 'csv.player'])];
   for (const g of games) {
     for (const l of g.playLogs || []) {
       rows.push([
-        g.date, g.opponent, l.inning, l.isTop ? '表' : '裏', l.kind, l.text,
+        g.date, g.opponent, l.inning, translate(lang, l.isTop ? 'csv.top' : 'csv.bot'), l.kind, l.text,
         l.payload?.playerId ? nameOf(l.payload.playerId) : '',
       ]);
     }
@@ -70,18 +81,19 @@ export function playLogCSV(games, nameOf, teamName) {
 }
 
 // 打球の強さ。空欄は未記録(平凡ではない)
-const CONTACT_LABEL = { weak: '弱い', normal: '平凡', hard: '強い' };
+const CONTACT_KEY = { weak: 'csv.contactWeak', normal: 'csv.contactNormal', hard: 'csv.contactHard' };
 
 // ---- 打席詳細CSV(スナップショット・投球シーケンス込み) ----
-export function atBatCSV(games, nameOf) {
-  const rows = [[
-    '日付', '対戦相手', 'イニング', '打順', '選手', '結果', '打球種別', '方向',
-    '打球の強さ', '打球角度', '打球の深さ',
-    '打点', '打席時得点', '投球数', '初球', '初球安打', '投球シーケンス',
-    '開始時走者一', '開始時走者二', '開始時走者三', '開始時アウト', '開始時点差',
-    '進塁打', 'クラッチ',
-  ]];
-  const clutchLabel = { first: '先制打', tie: '同点打', comeback: '逆転打', goahead: '勝ち越し打' };
+export function atBatCSV(games, nameOf, lang = 'ja') {
+  const T = (k) => translate(lang, k);
+  const rows = [head(lang, [
+    'csv.date', 'csv.opponent', 'csv.inning', 'csv.order', 'csv.player', 'csv.result', 'csv.outType', 'csv.direction',
+    'csv.contact', 'csv.hitAngle', 'csv.hitDepth',
+    'csv.rbi', 'csv.runsOnPlay', 'csv.pitchCount', 'csv.firstPitch', 'csv.firstPitchHit', 'csv.pitchSeq',
+    'csv.r1', 'csv.r2', 'csv.r3', 'csv.outsAtStart', 'csv.diffAtStart',
+    'csv.adv', 'csv.clutchKind',
+  ])];
+  const clutchKey = { first: 'csv.clutchFirst', tie: 'csv.clutchTie', comeback: 'csv.clutchComeback', goahead: 'csv.clutchGoahead' };
   const pitchLabel = { ball: 'B', strike: 'S', foul: 'F', inplay: 'X' };
   for (const g of games) {
     for (const ab of g.atBats || []) {
@@ -89,11 +101,11 @@ export function atBatCSV(games, nameOf) {
       const snap = ab.snapshot || {};
       rows.push([
         g.date, g.opponent, snap.inning ?? '', ab.order, nameOf(ab.playerId),
-        resultLabelOf(ab),
-        ab.outType ? OUT_TYPES[ab.outType] : '',
-        ab.direction ? DIRECTIONS[ab.direction] : '',
+        lang === 'en' ? translate('en', `result.${ab.result}`) : resultLabelOf(ab),
+        ab.outType ? (lang === 'en' ? translate('en', `outType.${ab.outType}`) : OUT_TYPES[ab.outType]) : '',
+        ab.direction ? (lang === 'en' ? translate('en', `dir.${ab.direction}`) : DIRECTIONS[ab.direction]) : '',
         // 未記録は空欄。「平凡」と書くと押していないものまで平凡になってしまう
-        CONTACT_LABEL[ab.contact] || '',
+        CONTACT_KEY[ab.contact] ? T(CONTACT_KEY[ab.contact]) : '',
         ab.hitAngle != null ? ab.hitAngle.toFixed(1) : '',
         ab.hitDepth != null ? ab.hitDepth.toFixed(3) : '',
         ab.rbi, ab.runsOnPlay, ab.pitchCount,
@@ -101,8 +113,8 @@ export function atBatCSV(games, nameOf) {
         (ab.pitches || []).map((p) => pitchLabel[p.type] || '?').join(''),
         snap.runners?.[1] ? '○' : '', snap.runners?.[2] ? '○' : '', snap.runners?.[3] ? '○' : '',
         snap.outs ?? '', snap.scoreDiff ?? '',
-        ab.advSuccess === true ? '成功' : ab.advSuccess === false ? '失敗' : '',
-        clutchLabel[ab.clutch] || '',
+        ab.advSuccess === true ? T('csv.yes') : ab.advSuccess === false ? T('csv.no') : '',
+        clutchKey[ab.clutch] ? T(clutchKey[ab.clutch]) : '',
       ]);
     }
   }

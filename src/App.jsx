@@ -183,7 +183,7 @@ export default function App() {
             <div className="brand-team">{state.settings.teamName || t('app.teamFallback')}</div>
           </div>
         </div>
-        <button className="ghost small header-gear" onClick={() => setTab('settings')} aria-label="設定">
+        <button className="ghost small header-gear" onClick={() => setTab('settings')} aria-label={t('tab.settings')}>
           ⚙️
         </button>
       </header>

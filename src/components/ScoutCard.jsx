@@ -175,7 +175,7 @@ export default function ScoutCard({ player, batting, pitching, battingM, pitchin
       return;
     }
     setLoading(true);
-    const result = await generateScoutReport({ apiKey, name, number: player?.number, tags, statsSummary, uniqueFacts, recentSummary });
+    const result = await generateScoutReport({ apiKey, name, number: player?.number, tags, statsSummary, uniqueFacts, recentSummary, lang: state.settings.lang || 'ja' });
     setLoading(false);
     if (result && !result.error) {
       if (result.catchphrase) setCatchphrase(result.catchphrase);
