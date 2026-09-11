@@ -49,7 +49,7 @@ const ALLOWED = /佐藤|鈴木|高橋|田中|伊藤|渡辺|山本|中村|小林|
 const isInitial = (s) => s.trim().length === 1;
 
 try {
-  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, locale: 'ja-JP' });
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
 
@@ -146,6 +146,64 @@ try {
   check('AI選手名鑑: 日本語が出ていない', scoutJa.length === 0, JSON.stringify(scoutJa.slice(0, 5)));
   check('AI選手名鑑: 英語のタグ語彙になっている', scoutText.includes('Power hitter'), scoutText.slice(0, 160));
   check('AI選手名鑑: 記録員カードのキーと衝突していない', !scoutText.includes('Scorer’s read'), scoutText.slice(0, 120));
+
+  // ---- 言語の決まり方 ----
+  // 以前は言語がチーム単位だったので、チームを増やした瞬間に日本語へ戻っていた。
+  // 端末に1つ持つ形になったので、プロフィールをまたいでも英語のままであること。
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForTimeout(700);
+  check('端末に言語が保存されている', (await page.evaluate(() => localStorage.getItem('bbscorer.lang'))) === 'en');
+
+  await page.click('button[aria-label="Settings"]');
+  await page.waitForTimeout(500);
+  const addBtn = page.locator('button:has-text("Add a team")').first();
+  check('チームを追加するボタンがある', (await addBtn.count()) === 1);
+  if (await addBtn.count()) {
+    await addBtn.click();
+    await page.waitForTimeout(400);
+    const nameInput = page.locator('.card').filter({ has: page.locator('button:has-text("Add & switch")') })
+      .locator('input').first();
+    await nameInput.fill('Manila Test');
+    await page.locator('button:has-text("Add & switch")').first().click();
+    await page.waitForTimeout(1800);
+    check('チームを増やしても英語のまま', (await page.evaluate(() => document.documentElement.lang)) === 'en',
+      `html lang=${await page.evaluate(() => document.documentElement.lang)}`);
+    await scan('チーム追加後');
+  }
+
+  // ---- 共有リンクが運ぶ言語(C) ----
+  // 招待・観戦リンクを受け取るのは、まだ何の設定も持っていない端末。
+  // 日本語の端末であっても、リンクに載った言語で開くこと。
+  const jaCtx = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'ja-JP' });
+  const fromLink = await jaCtx.newPage();
+  await fromLink.goto(`${URL_}?lang=en`, { waitUntil: 'load' });
+  await fromLink.waitForTimeout(1000);
+  check('?lang=en は日本語の端末でも英語で開く',
+    (await fromLink.evaluate(() => document.documentElement.lang)) === 'en');
+  check('リンクの言語が端末に残る',
+    (await fromLink.evaluate(() => localStorage.getItem('bbscorer.lang'))) === 'en');
+  const linkTabs = await fromLink.evaluate(() => [...document.querySelectorAll('.tabbar button')].map((b) => b.innerText.trim()).join(' '));
+  check('リンクから開いた画面のタブが英語', !JA.test(linkTabs), linkTabs);
+  await jaCtx.close();
+
+  // ---- 端末の言語からの推定(B1) ----
+  // 何も設定が無い初回だけ効く。日本語が無ければ英語に倒す
+  const phCtx = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'en-PH' });
+  const ph = await phCtx.newPage();
+  await ph.goto(URL_, { waitUntil: 'load' });
+  await ph.waitForTimeout(1000);
+  check('英語圏の端末は初回から英語で開く', (await ph.evaluate(() => document.documentElement.lang)) === 'en',
+    `html lang=${await ph.evaluate(() => document.documentElement.lang)}`);
+  const phTabs = await ph.evaluate(() => [...document.querySelectorAll('.tabbar button')].map((b) => b.innerText.trim()).join(' '));
+  check('英語圏の端末はタブも英語', !JA.test(phTabs), phTabs);
+  await phCtx.close();
+
+  const jpCtx = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'ja-JP' });
+  const jp = await jpCtx.newPage();
+  await jp.goto(URL_, { waitUntil: 'load' });
+  await jp.waitForTimeout(1000);
+  check('日本語の端末は初回から日本語で開く', (await jp.evaluate(() => document.documentElement.lang)) === 'ja');
+  await jpCtx.close();
 
   check('描画中の例外なし', errors.length === 0, errors.join(' / '));
 } catch (e) {

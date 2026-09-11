@@ -7,12 +7,29 @@ import { StoreProvider } from './state/store.jsx';
 import { recoverIfNeeded, requestPersistentStorage } from './lib/durableStore.js';
 import { ensureRegistry, getActiveProfileId, profileStorageKey, LEGACY_DATA_KEY } from './lib/profiles.js';
 import { initNativeChrome } from './lib/nativeBridge.js';
-import { applyDocumentLang, langFromStorage } from './lib/documentLang.js';
+import { applyDocumentLang } from './lib/documentLang.js';
+import { resolveLang, storedLang, langFromUrl, saveLang } from './lib/langStore.js';
 import { keepAlivePing } from './lib/officialCloud.js';
 import './styles.css';
 
 // ?watch=1 が付いたリンクは観戦専用ページ(読み取り専用)を表示する
 const isWatchMode = new URLSearchParams(window.location.search).get('watch') === '1';
+
+// 表示言語を決めて保存し、文書側(lang/title/manifest)へ反映する。
+// 判断の順番は lib/langStore.js に書いてある。プロフィールの settings.lang を
+// 見るのは、端末単位へ移す前に選んでいた人の引き継ぎのため(1回で端末側へ移る)。
+function applyLang(storageKey) {
+  let profile = null;
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (raw) profile = JSON.parse(raw)?.settings?.lang || null;
+  } catch {
+    /* 壊れていても推定へ落ちる */
+  }
+  const lang = resolveLang({ url: langFromUrl(), stored: storedLang(), profile });
+  saveLang(lang);
+  applyDocumentLang(lang);
+}
 
 
 
@@ -40,7 +57,10 @@ recoverIfNeeded(LEGACY_DATA_KEY)
   .then(() => {
     ensureRegistry();
     const activeId = getActiveProfileId();
-    applyDocumentLang(langFromStorage(activeId ? profileStorageKey(activeId) : LEGACY_DATA_KEY));
+    // 表示言語を決めて端末に残す。描画前にやる理由は2つ:
+    //  ・<html lang> とタイトルが最初の1フレームから正しくなる
+    //  ・ストアの初期化(settings.lang)がこの結果を読む
+    applyLang(activeId ? profileStorageKey(activeId) : LEGACY_DATA_KEY);
     return activeId ? recoverIfNeeded(profileStorageKey(activeId)) : null;
   })
   .catch(() => {})

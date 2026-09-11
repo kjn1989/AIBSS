@@ -382,7 +382,7 @@ Tailwind不使用)。状態管理は **React標準の useReducer + Context の�
 - `src/state/store.jsx` — 全リデューサ(**`CONFIRM_PLAY` が心臓部**: 投球確定・走者適用・
   得点/自責点・AtBat/PlayLog生成・チェンジ処理を一手に担う)。UNDOは試合の深いコピーを積む方式
 - `src/lib/i18n.js` — **フラットなキー辞書 `MESSAGES{ja,en}`**。`useT()` → `t(key, params)`。
-  現在 **2184キー**。`scripts/check-i18n.mjs` が ja/en のキー一致・二重定義・使用キーの実在を強制
+  現在 **2184キー**。表示言語の決め方は `lib/langStore.js`(§9)。`scripts/check-i18n.mjs` が ja/en のキー一致・二重定義・使用キーの実在を強制
 - `src/lib/model.js` — スキーマ定義兼ファクトリ、`RESULTS`、`POSITIONS`、`positionLabel(pos, lang)`、
   `editionLabel`、`playErrorOf` / `finePlayOf`、`normalizeEdition`
 - `src/lib/stats.js` — 集計エンジン(§3)
@@ -588,6 +588,44 @@ AtBat+PlayLog生成・3アウトでチェンジ → 永続化(150msデバウン�
   `manifest.webmanifest` / `manifest.en.webmanifest` を1本ずつ持ち、`link` を差し替える
 - 招待リンクからの参加フロー(`App.jsx`)。**海外チームが最初に触る画面**
 
+### 言語の切り替え方(`src/lib/langStore.js`)
+
+**言語は端末に1つ**。以前は `settings.lang`、つまりチーム(プロフィール)単位だった。
+言語は人の属性でチームの属性ではないので、次の形で壊れていた:
+
+- **招待リンクで2チーム目に参加すると日本語に戻る**。`addProfile()` が作る新しい
+  プロフィールには保存データが無いので、設定が既定から始まる。英語で使っていた人が
+  参加した瞬間に日本語になる。フィリピン代表が通る経路そのもの
+- チームを切り替えるだけで言語が変わる
+
+**決める順番**(`resolveLang`)。純関数にして、順番そのものをテストで固定している。
+
+| 順 | 元 | なぜ |
+|---|---|---|
+| 1 | URLの `?lang=` | 共有リンクが運んできた言語。受け取る側はまだ設定を持っていない |
+| 2 | 端末に保存された選択(`bbscorer.lang`) | 一度選んだらそれが正 |
+| 3 | いま開いているチームの `settings.lang` | 端末単位へ移す前の既存ユーザーの引き継ぎ(1回で端末側へ移る) |
+| 4 | 端末の言語からの推定 | 初回だけ |
+
+**推定の規則**: `navigator.languages` に日本語があれば日本語、無ければ英語。
+外したときの戻しやすさが非対称なのでこうしている。日本語話者が英語画面に当たっても、
+言語カードは設定タブの2番目で見出しが「🌐 言語 / Language」と両言語なので1タップで戻せる。
+逆に日本語話者でない人が日本語画面に当たると、そこへ辿り着くまで全部日本語になる。
+推定が効くのは保存された選択が無いときだけなので、既存ユーザーには影響しない。
+
+**共有リンクは言語を運ぶ**。招待(`inviteUrl` / `encodeInviteLink`)と観戦(`encodeWatchLink`)は
+作った人の言語を `&lang=` で載せる。フィリピンの記録員が作ったリンクは自然に英語で開く。
+推定で拾えない端末(タガログ語設定など)もここで拾える。
+
+⚠️ **この変更で全e2eが英語で起動するようになった**。Playwrightの既定ロケールが `en-US` なので
+推定が英語を返す。日本語UIを前提にしたスイートには `locale: 'ja-JP'` を指定してある
+(実際の日本人ユーザーと同じ条件になるので、そもそもこうあるべきだった)。
+`tests/english.e2e.mjs` は逆に `en-PH` のコンテキストも作って推定そのものを確かめている。
+
+⚠️ **プレイログのテキストは記録時の言語で固定される**。既存の方針で、言語を切り替えても
+過去のログは記録時の言語のまま残る。シーズン途中で記録員が入れ替わると、過去のログだけ
+前の言語になる。
+
 ### 翻訳とは別に残る論点(海外チーム固有)
 
 1. **エディションが日本の学校制度前提**。代表チームは消去法で「社会人・クラブ」を選ぶことになり、
@@ -663,7 +701,7 @@ npm ci                         # 依存(node_modulesが消えることがある)
 npm run dev                    # 開発サーバ
 npm run build                  # 本番ビルド(コミット前に必ず通す)
 node scripts/check-i18n.mjs    # ja/en のキー整合・二重定義・使用キーの実在(現在2184キー)
-node --test tests/unit.mjs     # ユニット(現在430件)
+node --test tests/unit.mjs     # ユニット(現在433件)
 node tests/<name>.e2e.mjs      # e2e 個別
 npm test                       # 上記を一括
 node scripts/gen-icons.mjs     # ロゴSVGからPWAアイコン再生成
@@ -672,8 +710,8 @@ npm run cap:sync               # ネイティブへ反映
 
 ### テスト構成
 
-- `tests/unit.mjs` — 純関数のユニット(node:test、依存追加なし)。**430件**
-- `tests/*.e2e.mjs` — playwright-core。**15スイート**:
+- `tests/unit.mjs` — 純関数のユニット(node:test、依存追加なし)。**433件**
+- `tests/*.e2e.mjs` — playwright-core。**15スイート**(全スイートで `locale` を明示):
   `golden voice roster scoresheet rules fixplay oppbench drift flow outtype crash dh fielding fixorder english`
   - Chromiumは `executablePath: '/opt/pw-browsers/chromium'`
 - `e2e/stage1〜12*.mjs` — **旧世代の回帰テスト**。`npm test` には含まれない(歴史的資産)

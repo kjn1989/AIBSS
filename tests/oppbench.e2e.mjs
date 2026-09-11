@@ -25,7 +25,7 @@ const server = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--stric
 for(let i=0;i<60;i++){try{if((await fetch(URL_)).ok)break;}catch{}await new Promise(r=>setTimeout(r,500));}
 let fail=0; const ok=(n,c,d='')=>{console.log(`${c?'ok':'not ok'} - ${n}${c?'':' :: '+d}`);if(!c)fail++;};
 const b=await chromium.launch({executablePath:resolveChromium()});
-const p=await b.newPage({viewport:{width:390,height:900}});
+const p=await b.newPage({viewport:{width:390,height:900},locale:'ja-JP'});
 p.on('pageerror',e=>{console.log('EXC:',e.message);fail++;});
 await p.goto(URL_,{waitUntil:'load'}); await p.waitForTimeout(900);
 await p.click('button[aria-label="設定"]'); await p.waitForTimeout(400);
