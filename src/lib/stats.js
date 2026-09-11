@@ -520,25 +520,29 @@ export function detailRanking(metricDef, battingMap, pitchingMap, tr, basis = 7)
 // この選手が「チーム内で他の誰にも負けていない」と言える項目を抽出する(AI選手名鑑で
 // 独自の強みを具体的な数字とともに指摘するために使う)。タイトル系は同率首位も含め、
 // レートスタッツ(打率・OPS・防御率等)は比較対象が2人以上いる時だけ意味を持つので絞る。
-export function teamHighlights(playerId, battingMap, pitchingMap) {
+export function teamHighlights(playerId, battingMap, pitchingMap, lang = 'ja') {
   const facts = [];
+  // 戻り値は { text, tied } の配列。
+  // 以前は訳文に「タイ」の語が入っているかで単独首位を見分けていたが、
+  // それは日本語の言い回しに依存していて英語では成り立たない。
+  // 見分けるための印は文ではなくデータとして持つ。
+  const fact = (label, tied, display) => ({
+    text: translate(lang, tied ? 'sum.tiedFirst' : 'sum.first', { label, display }),
+    tied,
+  });
   for (const t of BATTING_TITLES) {
     const { leaders, value, display } = titleLeaders(battingMap, t.key);
-    if (value > 0 && leaders.includes(playerId)) {
-      facts.push(`${t.label}チーム${leaders.length > 1 ? '1位タイ' : '1位'}(${display})`);
-    }
+    if (value > 0 && leaders.includes(playerId)) facts.push(fact(mLabel(t, lang), leaders.length > 1, display));
   }
   for (const t of PITCHING_TITLES) {
     const { leaders, value, display } = titleLeaders(pitchingMap, t.key);
-    if (value > 0 && leaders.includes(playerId)) {
-      facts.push(`${t.label}チーム${leaders.length > 1 ? '1位タイ' : '1位'}(${display})`);
-    }
+    if (value > 0 && leaders.includes(playerId)) facts.push(fact(mLabel(t, lang), leaders.length > 1, display));
   }
   for (const md of DETAIL_METRICS) {
     const rows = detailRanking(md, battingMap, pitchingMap);
     if (rows.length < 2) continue; // 比較対象が1人以下なら「独自の強み」として意味がない
     const row = rows.find((r) => r.playerId === playerId);
-    if (row && row.rank === 1) facts.push(`${md.label}チーム1位(${row.display})`);
+    if (row && row.rank === 1) facts.push(fact(mLabel(md, lang), false, row.display));
   }
   return facts;
 }
@@ -550,13 +554,19 @@ export function recentGames(games, n = 3) {
 }
 
 // 選手の集計成績(打撃/投手)を短い日本語サマリーに変換する(AI選手名鑑・個人ページ共通)
-export function buildStatsSummary(batting, pitching, m, pm) {
+export function buildStatsSummary(batting, pitching, m, pm, lang = 'ja') {
   const parts = [];
   if (batting && batting.pa > 0 && m) {
-    parts.push(`打率${fmtAvg(m.ba)} 本塁打${batting.hr} 打点${batting.rbi} OPS${m.ops === null ? '-' : m.ops.toFixed(3)}`);
+    parts.push(translate(lang, 'sum.batting', {
+      ba: fmtAvg(m.ba), hr: batting.hr, rbi: batting.rbi,
+      ops: m.ops === null ? '-' : m.ops.toFixed(3),
+    }));
   }
   if (pitching && (pitching.outsRecorded > 0 || pitching.games > 0) && pm) {
-    parts.push(`防御率${pm.era === null ? '-' : pm.era.toFixed(2)} 奪三振${pitching.strikeouts} WHIP${pm.whip === null ? '-' : pm.whip.toFixed(2)}`);
+    parts.push(translate(lang, 'sum.pitching', {
+      era: pm.era === null ? '-' : pm.era.toFixed(2), k: pitching.strikeouts,
+      whip: pm.whip === null ? '-' : pm.whip.toFixed(2),
+    }));
   }
   return parts.join(' / ');
 }

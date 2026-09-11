@@ -7,7 +7,7 @@ import { parseUtterance, playLabel, normalize, stripWakeWord, parseCommand, need
 import { interpretUtterance, maskNames } from '../lib/gemini.js';
 import { speechAvailable, createRecognizer } from '../lib/speech.js';
 import { createContinuousRecognizer } from '../lib/continuousSpeech.js';
-import { speak, beep, beepForPitch } from '../lib/tts.js';
+import { speak, beep, beepForPitch, setSpeakLang } from '../lib/tts.js';
 import { proposeMoves, runnerDestOptions } from '../lib/plays.js';
 
 const LLM_THRESHOLD = 0.5; // これ未満の信頼度ならLLMに問い合わせ(設定時のみ)
@@ -18,6 +18,10 @@ const PENDING_MS = 2500; // 常時リスニングモード: オプトアウト�
 export default function VoiceControl({ game }) {
   const t = useT();
   const { state, dispatch } = useStore();
+  const lang = state.settings.lang || 'ja';
+  // 読み上げの声を表示言語に合わせる。英語の文を日本語の声で読ませると
+  // 単語ごとにローマ字読みになって聞き取れない
+  useEffect(() => { setSpeakLang(lang); }, [lang]);
   const nameOf = usePlayerName();
   const [mode, setMode] = useState('idle'); // idle | listening | confirming | editing
   const [interim, setInterim] = useState('');
@@ -38,7 +42,7 @@ export default function VoiceControl({ game }) {
   const [confirmDests, setConfirmDests] = useState(null);
   // 確認カードに答えたのにウェイクワードが無かった発話。理由を出すために持つ
   const [wakeMissed, setWakeMissed] = useState('');
-  const baseLabel = { 1: '一塁', 2: '二塁', 3: '三塁' };
+  const baseLabel = { 1: t('vc.base1'), 2: t('vc.base2'), 3: t('vc.base3') };
   const runnersOnNow = () => ({ 1: !!game.runners[1], 2: !!game.runners[2], 3: !!game.runners[3] });
 
   // 候補(play)が走者確認を要するなら、既定の進塁提案でdestsを初期化して返す(不要ならnull)
@@ -61,10 +65,12 @@ export default function VoiceControl({ game }) {
   const stripNegation = (raw) => (raw || '')
     .replace(/^[\s]*(いいえ|いえ|いやいや|いや|ちがくて|ちがう|違くて|違う|ちゃう|のー|ノー|no)[\s、,。.・:：\-ー]*/i, '')
     .trim();
-  const destWord = (from, to) => (to === 4 ? '得点' : to === 'out' ? 'アウト' : to === from ? 'そのまま' : `${baseLabel[to]}へ`);
+  const destWord = (from, to) => (to === 4 ? t('vc.scored') : to === 'out' ? t('vc.out') : to === from ? t('vc.stays') : t('vc.toBase', { base: baseLabel[to] }));
   const describeDests = (dests) => {
     const on = runnersOnNow();
-    return [3, 2, 1].filter((b) => on[b]).map((b) => `${baseLabel[b]}走者${destWord(b, dests[b])}`).join('、');
+    return [3, 2, 1].filter((b) => on[b])
+      .map((b) => t('vc.runnerDest', { base: baseLabel[b], dest: destWord(b, dests[b]) }))
+      .join(t('vc.listJoin'));
   };
 
   const interpret = async (text) => {
@@ -86,10 +92,10 @@ export default function VoiceControl({ game }) {
             llm.kind === 'play'
               ? playLabel(llm.result, llm.direction, llm.outType)
               : llm.kind === 'pitch'
-                ? { ball: 'ボール', strike: 'ストライク', foul: 'ファウル' }[llm.pitchType]
+                ? { ball: t('vc.ball'), strike: t('vc.strike'), foul: t('vc.foul') }[llm.pitchType]
                 : llm.kind === 'sb'
-                  ? '盗塁成功'
-                  : '盗塁死',
+                  ? t('vc.sbOk')
+                  : t('vc.sbOut'),
           fromLLM: true,
         };
         cands = [cand, ...cands.filter((c) => c.label !== cand.label)].slice(0, 3);
@@ -100,7 +106,7 @@ export default function VoiceControl({ game }) {
     const dests = initConfirmDests(cands[0]);
     setConfirmDests(dests);
     setMode('confirming');
-    if (dests) speak(`${cands[0].label}。${describeDests(dests)}`);
+    if (dests) speak(t('vc.spPlayRunners', { label: cands[0].label, dests: describeDests(dests) }));
   };
 
   const [micError, setMicError] = useState(false);
@@ -172,7 +178,7 @@ export default function VoiceControl({ game }) {
           type: 'CONFIRM_PLAY', gameId: game.id, batterName: batterName || '',
           payload: { result: 'so', soType: cand.sub === 'looking' ? 'looking' : 'swinging', direction: null, moves: [], batterTo: 'out' },
         });
-        speak('三振');
+        speak(t('vc.spStrikeout'));
       } else if (cand.pitchType === 'ball' && dispB >= 3) {
         const runnersOn = { 1: !!game.runners[1], 2: !!game.runners[2], 3: !!game.runners[3] };
         const proposal = proposeMoves('bb', runnersOn);
@@ -180,7 +186,7 @@ export default function VoiceControl({ game }) {
           type: 'CONFIRM_PLAY', gameId: game.id, batterName: batterName || '',
           payload: { result: 'bb', direction: null, moves: proposal.moves, batterTo: proposal.batterTo },
         });
-        speak('フォアボール');
+        speak(t('vc.spWalk'));
       }
       setMode('idle');
       return;
@@ -395,10 +401,10 @@ export default function VoiceControl({ game }) {
             llm.kind === 'play'
               ? playLabel(llm.result, llm.direction, llm.outType)
               : llm.kind === 'pitch'
-                ? { ball: 'ボール', strike: 'ストライク', foul: 'ファウル' }[llm.pitchType]
+                ? { ball: t('vc.ball'), strike: t('vc.strike'), foul: t('vc.foul') }[llm.pitchType]
                 : llm.kind === 'sb'
-                  ? '盗塁成功'
-                  : '盗塁死',
+                  ? t('vc.sbOk')
+                  : t('vc.sbOut'),
           fromLLM: true,
         };
         cands = [cand, ...cands.filter((c) => c.label !== cand.label)].slice(0, 3);
@@ -415,7 +421,7 @@ export default function VoiceControl({ game }) {
 
     if (op === 'change') {
       dispatch({ type: 'FORCE_CHANGE_HALF', gameId: game.id });
-      speak('チェンジ');
+      speak(t('vc.spChange'));
       return true;
     }
 
@@ -424,14 +430,14 @@ export default function VoiceControl({ game }) {
     const bench = state.players.filter((p) => !inLineup.has(p.id));
     const matched = matchPlayer(name, bench) || matchPlayer(name, state.players);
     if (!matched) {
-      speak('選手が聞き取れませんでした');
+      speak(t('vc.spNoPlayer'));
       beep(320, 90);
       return true;
     }
     // 照合に失敗すると全選手から拾い直すので、既に出場中の選手が返りうる。
     // そのまま代打・代走にすると、その選手が2つの打順を占める
     if ((op === 'ph' || op === 'pr') && inLineup.has(matched.id)) {
-      speak(`${matched.name}は出場中です`);
+      speak(t('vc.spAlreadyIn', { name: matched.name }));
       beep(320, 90);
       return true;
     }
@@ -440,21 +446,21 @@ export default function VoiceControl({ game }) {
       dispatch({
         type: 'SET_PITCHER', gameId: game.id, playerId: matched.id,
         label: game.currentPitcherId
-          ? `継投: ${matched.name} (← ${nameOf(game.currentPitcherId)})`
-          : `先発: ${matched.name}`,
+          ? t('vc.lbRelief', { name: matched.name, prev: nameOf(game.currentPitcherId) })
+          : t('vc.lbStarter', { name: matched.name }),
       });
-      speak(`投手 ${matched.name}`);
+      speak(t('vc.spPitcher', { name: matched.name }));
       return true;
     }
 
     if (op === 'ph') {
       const slot = currentBatter(game);
-      if (!slot) { speak('打者がいません'); return true; }
+      if (!slot) { speak(t('vc.spNoBatter')); return true; }
       dispatch({
         type: 'SUBSTITUTE', gameId: game.id, order: slot.order, playerId: matched.id,
-        position: slot.position, label: `代打: ${matched.name} (${slot.order}番 ${nameOf(slot.playerId)}に代わり)`,
+        position: slot.position, label: t('vc.lbPinchHit', { name: matched.name, order: slot.order, prev: nameOf(slot.playerId) }),
       });
-      speak(`代打 ${matched.name}`);
+      speak(t('vc.spPinchHit', { name: matched.name }));
       return true;
     }
 
@@ -464,15 +470,15 @@ export default function VoiceControl({ game }) {
         const r = game.runners[b];
         return r?.playerId && game.lineup.some((l) => l.playerId === r.playerId);
       });
-      if (!base) { speak('塁上に走者がいません'); return true; }
+      if (!base) { speak(t('vc.spNoRunner')); return true; }
       const runnerPid = game.runners[base].playerId;
       const slot = game.lineup.find((l) => l.playerId === runnerPid);
       dispatch({
         type: 'SUBSTITUTE', gameId: game.id, order: slot.order, playerId: matched.id,
         position: slot.position, asRunner: true,
-        label: `代走: ${matched.name} (${slot.order}番 ${nameOf(runnerPid)}に代わり)`,
+        label: t('vc.lbPinchRun', { name: matched.name, order: slot.order, prev: nameOf(runnerPid) }),
       });
-      speak(`代走 ${matched.name}`);
+      speak(t('vc.spPinchRun', { name: matched.name }));
       return true;
     }
 
@@ -495,7 +501,7 @@ export default function VoiceControl({ game }) {
     if (cmd === 'unmute') {
       if (muted) {
         setMuted(false);
-        speak('マイク再開');
+        speak(t('vc.spMicOn'));
       }
       return;
     }
@@ -504,7 +510,7 @@ export default function VoiceControl({ game }) {
     if (cmd === 'mute') {
       setMuted(true);
       cancelPendingCommit();
-      speak('ミュートしました');
+      speak(t('vc.spMuted'));
       return;
     }
     if (cmd === 'undo') {
@@ -512,7 +518,7 @@ export default function VoiceControl({ game }) {
       const last = state.history[state.history.length - 1];
       if (last && last.gameId === game.id) {
         dispatch({ type: 'UNDO' });
-        speak('取り消しました');
+        speak(t('vc.spUndone'));
       }
       return;
     }
@@ -521,7 +527,7 @@ export default function VoiceControl({ game }) {
     if (pendingCommit) {
       if (cmd === 'cancel') {
         cancelPendingCommit();
-        speak('キャンセルしました');
+        speak(t('vc.spCancelled'));
         return;
       }
       if (cmd === 'confirm') {
@@ -564,7 +570,7 @@ export default function VoiceControl({ game }) {
       setCandidates(cands);
       setConfirmDests(runnerDests);
       setMode('confirming');
-      speak(runnerDests ? `${top.label}。${describeDests(runnerDests)}。よろしいですか` : `${top.label}でよろしいですか`);
+      speak(runnerDests ? t('vc.spConfirmRunners', { label: top.label, dests: describeDests(runnerDests) }) : t('vc.spConfirm', { label: top.label }));
       return;
     }
     // sb/cs、または走者のいない単純なプレイ: オプトアウト自動確定
@@ -627,14 +633,14 @@ export default function VoiceControl({ game }) {
         className="cont-mode-toggle"
         onClick={() => speechAvailable() && setContMode(true)}
         disabled={!speechAvailable()}
-        title={speechAvailable() ? '常時リスニングモードを開始' : '音声認識が利用できません'}
+        title={speechAvailable() ? t('vc.contStart') : t('vc.unavailableShort')}
       >
-        🎙️常時
+        {t('vc.contBtn')}
       </button>
       <button
         className={`voice-fab${mode === 'listening' ? ' listening' : ''}`}
         onClick={() => (mode === 'listening' ? stopListening() : startListening())}
-        aria-label="音声実況"
+        aria-label={t('vc.micLabel')}
       >
         {mode === 'listening' ? '⏹' : '🎙'}
       </button>
@@ -644,11 +650,11 @@ export default function VoiceControl({ game }) {
       <button
         className={`cont-status-pill ${muted ? 'muted' : contStatus === 'listening' ? 'live' : 'connecting'}`}
         onClick={() => setMuted((m) => !m)}
-        aria-label="ミュート切り替え"
+        aria-label={t('vc.muteLabel')}
       >
-        {muted ? '🔇 ミュート' : contStatus === 'listening' ? '🎙️ LIVE' : '🤔 接続中'}
+        {muted ? t('vc.muted') : contStatus === 'listening' ? t('vc.live') : t('vc.connecting')}
       </button>
-      <button className="cont-exit-btn" onClick={() => setContMode(false)}>常時モード終了</button>
+      <button className="cont-exit-btn" onClick={() => setContMode(false)}>{t('vc.contExit')}</button>
     </>
   );
 
@@ -668,8 +674,8 @@ export default function VoiceControl({ game }) {
           <span className="cont-live-dot" />
           <span className="cont-live-text">
             {muted
-              ? '🔇 ミュート中 —「ログ、ミュート解除」で再開'
-              : contInterim || '常時リスニング中 —「ログ、〜」と話すと記録します'}
+              ? t('vc.mutedHint')
+              : contInterim || t('vc.listeningHint')}
           </span>
         </div>
       )}
@@ -681,7 +687,7 @@ export default function VoiceControl({ game }) {
             dispatch({ type: 'UNDO' });
           }}
         >
-          ↩ 1つ前に戻す
+          {t('vc.undoOne')}
         </button>
       )}
       {contMode && pendingCommit && (
@@ -694,19 +700,19 @@ export default function VoiceControl({ game }) {
               style={{ '--pending-ms': `${PENDING_MS}ms` }}
             />
           </div>
-          <button className="ghost small" onClick={cancelPendingCommit}>キャンセル</button>
+          <button className="ghost small" onClick={cancelPendingCommit}>{t('vc.cancel')}</button>
         </div>
       )}
 
       {mode === 'listening' && (
-        <Sheet title="🎙 実況をどうぞ…" onClose={stopListening}>
+        <Sheet title={t('vc.sheetTitle')} onClose={stopListening}>
           <div className="big-note" style={{ padding: '18px 8px' }}>
-            {interim || '「センター前ヒット」「サードがエラー」のように話してください'}
+            {interim || t('vc.sheetPlaceholder')}
           </div>
           <div className="flex">
             <input
               className="grow"
-              placeholder="またはテキストで実況を入力"
+              placeholder={t('vc.textFallback')}
               value={manualText}
               onChange={(e) => setManualText(e.target.value)}
               onKeyDown={(e) => {
@@ -726,12 +732,17 @@ export default function VoiceControl({ game }) {
                 interpret(manualText.trim());
               }}
             >
-              解釈
+              {t('vc.interpret')}
             </button>
           </div>
+          {/* 認識エンジンは日本語の実況しか解釈しない。英語表示のときは、
+              マイクが動く環境でも結果が出ないので、押す前にそう言っておく */}
+          {lang === 'en' && !micError && speechAvailable() && (
+            <div className="warn-box mt8">{t('vc.jaOnly')}</div>
+          )}
           {(micError || !speechAvailable()) && (
             <div className="warn-box mt8">
-              音声認識が利用できません(非対応ブラウザ/マイク拒否)。テキスト入力をご利用ください。
+              {t('vc.unavailable')}
             </div>
           )}
         </Sheet>
@@ -755,40 +766,40 @@ export default function VoiceControl({ game }) {
                   <span className="cont-live-dot" />
                   <span className="confirm-live-text">
                     {liveText
-                      || (listening ? '聞き取り中… そのまま話してください'
-                        : contMode ? '一時停止中' : '🎙 タップして音声入力を再開')}
+                      || (listening ? t('vc.hearing')
+                        : contMode ? t('vc.paused') : t('vc.tapResume'))}
                   </span>
                 </div>
               );
             })()}
-            <div className="small dim">「{prettifyTranscript(transcript)}」{llmUsed && <span className="pill blue" style={{ marginLeft: 6 }}>AI解釈</span>}</div>
+            <div className="small dim">「{prettifyTranscript(transcript)}」{llmUsed && <span className="pill blue" style={{ marginLeft: 6 }}>{t('vc.aiRead')}</span>}</div>
             {/* 聞こえてはいるが頭に「ログ」が無い。黙って捨てると原因が分からない */}
             {contMode && wakeMissed && (
               <div className="warn-box mt8">{t('voice.wakeMissed', { text: wakeMissed })}</div>
             )}
             {candidates.length === 0 ? (
               <>
-                <div className="q mt8">解釈できませんでした 🙏</div>
+                <div className="q mt8">{t('vc.cannotRead')}</div>
                 <div className="sheet-actions">
-                  {!contMode && <button onClick={startListening}>🎙 やり直す</button>}
-                  <button className="ghost" onClick={() => setMode('idle')}>閉じる</button>
+                  {!contMode && <button onClick={startListening}>{t('vc.retry')}</button>}
+                  <button className="ghost" onClick={() => setMode('idle')}>{t('vc.close')}</button>
                 </div>
               </>
             ) : (
               <>
                 <div className="q mt8">
-                  {candidates[0].label} でよろしいですか？
+                  {t('vc.confirmQ', { label: candidates[0].label })}
                   {candidates[0].result === 'so' && !candidates[0].soExplicit && (
-                    <span className="dim small" style={{ display: 'block', fontSize: 13 }}>空振り/見逃しを選んで確定</span>
+                    <span className="dim small" style={{ display: 'block', fontSize: 13 }}>{t('vc.soPick')}</span>
                   )}
                 </div>
                 {/* 走者ありのプレイ: 各走者の到達塁を確認/修正(タップ or 音声「◯塁ランナーは△塁」) */}
                 {confirmDests && (
                   <div className="voice-runners mt8">
-                    <div className="section-title" style={{ marginTop: 0 }}>走者の動き(タップ/音声で修正)</div>
+                    <div className="section-title" style={{ marginTop: 0 }}>{t('vc.runnerTitle')}</div>
                     {[3, 2, 1].filter((b) => runnersOnNow()[b]).map((b) => (
                       <div className="runner-move" key={b}>
-                        <span className="who">{baseLabel[b]}走者</span>
+                        <span className="who">{t('vc.runnerOn', { base: baseLabel[b] })}</span>
                         <div className="dests">
                           {runnerDestOptions(b).map((to) => (
                             <button
@@ -796,7 +807,7 @@ export default function VoiceControl({ game }) {
                               className={confirmDests[b] === to ? `sel${to === 'out' ? ' out' : ''}` : ''}
                               onClick={() => setConfirmDests({ ...confirmDests, [b]: to })}
                             >
-                              {to === 'out' ? 'アウト' : to === 4 ? '得点' : to === b ? 'そのまま' : `${baseLabel[to]}へ`}
+                              {to === 'out' ? t('vc.out') : to === 4 ? t('vc.scored') : to === b ? t('vc.stays') : t('vc.toBase', { base: baseLabel[to] })}
                             </button>
                           ))}
                         </div>
@@ -808,21 +819,21 @@ export default function VoiceControl({ game }) {
                   {candidates[0].kind === 'play' && candidates[0].result === 'so' && !candidates[0].soExplicit ? (
                     <div className="grid2">
                       <button className="top" style={{ minHeight: 54 }} onClick={() => apply({ ...candidates[0], soType: 'swinging' })}>
-                        ✔ 空振り三振
+                        {t('vc.soSwinging')}
                       </button>
                       <button className="top" style={{ minHeight: 54 }} onClick={() => apply({ ...candidates[0], soType: 'looking' })}>
-                        ✔ 見逃し三振
+                        {t('vc.soLooking')}
                       </button>
                     </div>
                   ) : (
                     <button className="top" onClick={() => apply(candidates[0], confirmDests ? destsToMoves(confirmDests) : undefined)}>
-                      ✔ はい、{candidates[0].label}
-                      <span className="dim small"> (信頼度{Math.round(candidates[0].confidence * 100)}%)</span>
+                      {t('vc.yesLabel', { label: candidates[0].label })}
+                      <span className="dim small">{t('vc.confidence', { n: Math.round(candidates[0].confidence * 100) })}</span>
                     </button>
                   )}
                   {candidates[0].kind === 'play' && (
                     <button onClick={() => { setEditCand(candidates[0]); setMode('editing'); }}>
-                      ✎ 走者・方向を修正して確定
+                      {t('vc.editConfirm')}
                     </button>
                   )}
                   {candidates.slice(1).map((c, i) => (
@@ -833,22 +844,22 @@ export default function VoiceControl({ game }) {
                 </div>
                 {contMode ? (
                   <p className="small dim mt8" style={{ textAlign: 'center' }}>
-                    🎙️ 「ログ、はい」で確定・「ログ、ライト」で方向修正
-                    {confirmDests && <>・「ログ、二塁ランナーは三塁」で走者修正</>}
-                    ・「ログ、いいえ ◯◯」で言い直し
+                    {t('vc.contHelp')}
+                    {confirmDests && <>{t('vc.contHelpRunners')}</>}
+                    {t('vc.contHelpRedo')}
                   </p>
                 ) : (
                   <>
                     <p className="small dim mt8" style={{ textAlign: 'center' }}>
-                      「はい」で確定。方向は「ライト」、
-                      {confirmDests && '走者は「二塁ランナーは三塁」、'}
-                      間違いは「いいえ ◯◯」で音声修正できます
+                      {t('vc.help')}
+                      {confirmDests && t('vc.helpRunners')}
+                      {t('vc.helpRedo')}
                     </p>
                   </>
                 )}
                 <div className="sheet-actions">
-                  {!contMode && <button onClick={startListening}>🎙 やり直す</button>}
-                  <button className="ghost" onClick={() => setMode('idle')}>キャンセル</button>
+                  {!contMode && <button onClick={startListening}>{t('vc.retry')}</button>}
+                  <button className="ghost" onClick={() => setMode('idle')}>{t('vc.cancel')}</button>
                 </div>
               </>
             )}

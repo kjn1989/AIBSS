@@ -3,11 +3,20 @@
 // 常時リスニングモードで画面を見なくても状況を把握できるようにする。
 // ============================================================
 
+// 読み上げの言語。アプリの表示言語に合わせる。
+// 英語の文を ja-JP の声で読ませると、単語ごとにローマ字読みになって聞き取れない。
+// setSpeakLang() を1か所から呼ぶ形にしているのは、speak() の呼び出しが
+// コンポーネントの深いところに散っていて、毎回引数で渡すと漏れるため。
+let speakLang = 'ja-JP';
+export function setSpeakLang(lang) {
+  speakLang = lang === 'en' ? 'en-US' : 'ja-JP';
+}
+
 export function speak(text, { rate = 1.05 } = {}) {
   if (!window.speechSynthesis || !text) return;
   window.speechSynthesis.cancel(); // 前の読み上げを打ち切り、常に最新を優先(テンポ重視)
   const u = new SpeechSynthesisUtterance(text);
-  u.lang = 'ja-JP';
+  u.lang = speakLang;
   u.rate = rate;
   window.speechSynthesis.speak(u);
 }

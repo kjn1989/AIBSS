@@ -17,6 +17,7 @@ import { persist } from './state/store.jsx';
 import { DiamondIcon, LedWordmark } from './components/BrandMark.jsx';
 import EditionText from './components/EditionText.jsx';
 import { registerBackButtonHandler } from './lib/nativeBridge.js';
+import { applyDocumentLang } from './lib/documentLang.js';
 
 // ラベルは i18n キー(lib/i18n.js)。表示時に useT() で現在の言語に解決する
 const TABS = [
@@ -54,7 +55,7 @@ function useInvite(dispatch) {
 
 // 公式クラウドの招待リンク(?ct=トークン)で開かれたら、ログイン→チーム参加→専用の
 // チームプロフィール作成、まで面倒を見る
-function useOfficialJoin(state) {
+function useOfficialJoin(state, t) {
   const [token, setToken] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -79,7 +80,7 @@ function useOfficialJoin(state) {
     try {
       if (!(await currentUserAsync())) {
         if (!email.includes('@') || password.length < 6) {
-          throw new Error('メールアドレスとパスワード(6文字以上)を入力してください');
+          throw new Error(t('join.errFields'));
         }
         await loginWithPassword(email.trim(), password);
       }
@@ -103,7 +104,7 @@ export default function App() {
   const { state, dispatch } = useStore();
   const t = useT();
   const { invite, accept, dismiss } = useInvite(dispatch);
-  const officialJoin = useOfficialJoin(state);
+  const officialJoin = useOfficialJoin(state, t);
 
   // Android物理/ジェスチャー「戻る」: ホーム以外ならホームタブへ、ホームなら最小化(Webでは無効)
   const tabRef = useRef(tab);
@@ -116,6 +117,11 @@ export default function App() {
     return registerBackButtonHandler(() => tabRef.current === 'home', () => setTab('home'));
   }, []);
 
+  // 言語を切り替えた瞬間に、タブの名前と <html lang> も追いつかせる。
+  // 起動時(main.jsx)だけだと、切り替えても次に開くまで古いままになる
+  const lang = state.settings.lang || 'ja';
+  useEffect(() => { applyDocumentLang(lang); }, [lang]);
+
   return (
     <div className="app" data-edition={state.settings.edition || '草野球'}>
       <CloudSync />
@@ -123,28 +129,25 @@ export default function App() {
       {officialJoin.token && (
         <div className="invite-overlay">
           <div className="invite-card">
-            <h2>チームに参加 (AI-BASE公式クラウド)</h2>
-            <p className="small dim">
-              招待リンクからの参加です。参加するとこのチーム専用のプロフィールが作られて、
-              選手・試合データが同期されます。
-            </p>
+            <h2>{t('join.officialTitle')}</h2>
+            <p className="small dim">{t('join.officialDesc')}</p>
             {officialJoin.needLogin && (
               <>
                 <input
-                  type="email" placeholder="メールアドレス"
+                  type="email" placeholder={t('join.email')}
                   value={officialJoin.email} onChange={(e) => officialJoin.setEmail(e.target.value)}
                 />
                 <input
-                  type="password" placeholder="パスワード(6文字以上・初回は自動登録)" className="mt8"
+                  type="password" placeholder={t('join.password')} className="mt8"
                   value={officialJoin.password} onChange={(e) => officialJoin.setPassword(e.target.value)}
                 />
               </>
             )}
             {officialJoin.error && <div className="warn-box mt8">⚠️ {officialJoin.error}</div>}
             <div className="sheet-actions">
-              <button className="ghost" onClick={officialJoin.dismiss} disabled={officialJoin.busy}>今はしない</button>
+              <button className="ghost" onClick={officialJoin.dismiss} disabled={officialJoin.busy}>{t('join.notNow')}</button>
               <button className="primary" onClick={officialJoin.join} disabled={officialJoin.busy}>
-                {officialJoin.busy ? '参加中…' : officialJoin.needLogin ? 'ログインして参加' : '参加する'}
+                {officialJoin.busy ? t('join.joining') : officialJoin.needLogin ? t('join.signInAndJoin') : t('join.join')}
               </button>
             </div>
           </div>
@@ -153,14 +156,11 @@ export default function App() {
       {invite && (
         <div className="invite-overlay">
           <div className="invite-card">
-            <h2>チームに参加</h2>
-            <p className="small dim">
-              チーム「{invite.team}」への招待リンクです。参加すると、このチームの
-              試合データがこの端末とリアルタイムで同期されます(書き込みも可能)。
-            </p>
+            <h2>{t('join.title')}</h2>
+            <p className="small dim">{t('join.desc', { team: invite.team })}</p>
             <div className="sheet-actions">
-              <button className="ghost" onClick={dismiss}>今はしない</button>
-              <button className="primary" onClick={accept}>参加する</button>
+              <button className="ghost" onClick={dismiss}>{t('join.notNow')}</button>
+              <button className="primary" onClick={accept}>{t('join.join')}</button>
             </div>
           </div>
         </div>

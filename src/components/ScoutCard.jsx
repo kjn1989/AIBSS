@@ -19,7 +19,7 @@ import FullscreenView from './FullscreenView.jsx';
 // type: 'plus'(長所) / 'minus'(短所) / 'joke'(個性・チーム貢献)
 const TAG_GROUPS = [
   {
-    categoryKey: 'sc.catBatting',
+    categoryKey: 'scout.catBatting',
     type: 'plus',
     ids: [
       'contact', 'power', 'allFields', 'oppoField', 'multiHit', 'grinder',
@@ -27,7 +27,7 @@ const TAG_GROUPS = [
     ],
   },
   {
-    categoryKey: 'sc.catPitchDefRun',
+    categoryKey: 'scout.catPitchDefRun',
     type: 'plus',
     ids: [
       'lateLife', 'sharpBreak', 'heavyBall', 'strikeouts', 'strongerLate', 'outOfTrouble', 'glove', 'cannonArm',
@@ -35,12 +35,12 @@ const TAG_GROUPS = [
     ],
   },
   {
-    categoryKey: 'sc.catWeakness',
+    categoryKey: 'scout.catWeakness',
     type: 'minus',
     ids: ['strikesOut', 'wild', 'command', 'errors', 'pullHappy', 'fadesLate', 'predictable', 'bloopers'],
   },
   {
-    categoryKey: 'sc.catCharacter',
+    categoryKey: 'scout.catCharacter',
     type: 'joke',
     ids: [
       'dugoutSpark', 'quickReply', 'rainMagnet', 'sunshine', 'socialSecretary', 'gearNerd',
@@ -79,40 +79,42 @@ function buildDummyReport(name, tags, statsSummary, uniqueFacts, recentSummary, 
   const plus = pick('plus');
   const minus = pick('minus');
   const joke = pick('joke');
-  const who = name || t('sc.unnamed');
+  const who = name || t('scout.unnamed');
 
   if (tags.length === 0 && !statsSummary) {
     return {
-      report: t('sc.dummyEmpty', { name: who }),
-      nextGameTip: t('sc.dummyEmptyNext'),
-      practiceTip: t('sc.dummyEmptyPractice'),
+      report: t('scout.dummyEmpty', { name: who }),
+      nextGameTip: t('scout.dummyEmptyNext'),
+      practiceTip: t('scout.dummyEmptyPractice'),
     };
   }
 
   const parts = [];
   if (uniqueFacts.length) {
     // 同率よりも単独首位の方が際立つので優先して取り上げる
-    const best = uniqueFacts.find((f) => !f.includes(t('sc.tieWord'))) || uniqueFacts[0];
-    parts.push(t('sc.dummyUnique', { name: who, fact: best }));
+    // 同率よりも単独首位の方が際立つので優先して取り上げる。
+    // uniqueFacts は { text, tied } なので、訳文を読まずに見分けられる
+    const best = uniqueFacts.find((f) => !f.tied) || uniqueFacts[0];
+    parts.push(t('scout.dummyUnique', { name: who, fact: best.text }));
   } else if (statsSummary) {
-    parts.push(t('sc.dummyStats', { name: who, stats: statsSummary }));
+    parts.push(t('scout.dummyStats', { name: who, stats: statsSummary }));
   } else {
-    parts.push(t('sc.dummyOpen', { name: who }));
+    parts.push(t('scout.dummyOpen', { name: who }));
   }
   if (plus.length) {
-    parts.push(t('sc.dummyPlus', {
+    parts.push(t('scout.dummyPlus', {
       first: plus[0],
-      rest: plus.length > 1 ? t('sc.dummyPlusRest', { list: plus.slice(1).join(t('sc.listJoin')) }) : '',
+      rest: plus.length > 1 ? t('scout.dummyPlusRest', { list: plus.slice(1).join(t('scout.listJoin')) }) : '',
     }));
   }
-  if (minus.length) parts.push(t('sc.dummyMinus', { first: minus[0] }));
+  if (minus.length) parts.push(t('scout.dummyMinus', { first: minus[0] }));
   // 個性は実際のタグがある時だけ触れる(無いのに褒めると嘘くさくなるため)
-  if (joke.length) parts.push(t('sc.dummyJoke', { list: joke.join(t('sc.listJoin')) }));
+  if (joke.length) parts.push(t('scout.dummyJoke', { list: joke.join(t('scout.listJoin')) }));
 
   return {
-    report: parts.join(t('sc.sentenceJoin')),
-    nextGameTip: recentSummary ? t('sc.dummyNextWith', { recent: recentSummary }) : t('sc.dummyNext'),
-    practiceTip: minus.length ? t('sc.dummyPracticeWith', { first: minus[0] }) : t('sc.dummyPractice'),
+    report: parts.join(t('scout.sentenceJoin')),
+    nextGameTip: recentSummary ? t('scout.dummyNextWith', { recent: recentSummary }) : t('scout.dummyNext'),
+    practiceTip: minus.length ? t('scout.dummyPracticeWith', { first: minus[0] }) : t('scout.dummyPractice'),
   };
 }
 
@@ -150,10 +152,10 @@ export default function ScoutCard({ player, batting, pitching, battingM, pitchin
   const t = useT();
   const lang = state.settings.lang || 'ja';
   const apiKey = state.settings.geminiApiKey;
-  const statsSummary = buildStatsSummary(batting, pitching, battingM, pitchingM);
+  const statsSummary = buildStatsSummary(batting, pitching, battingM, pitchingM, lang);
   // プリセットタグは id から引く。id が無いもの(自由入力・古いデータ)は保存された文字をそのまま
   const labelOf = (tag) => { const id = tagIdOf(tag); return id ? t(`tag.${id}`) : tag.label; };
-  const catchOf = (id) => t(`sc.catch.${id}`);
+  const catchOf = (id) => t(`scout.catch.${id}`);
   const [catchphrase, setCatchphrase] = useState(player?.scoutCatchphrase || catchOf(CATCHPHRASE_IDS[0]));
   const [photo, setPhoto] = useState(player?.scoutPhoto || ''); // 顔写真のdataURL
   const [tags, setTags] = useState(player?.scoutTags || []); // { id?, label, type }
@@ -167,7 +169,7 @@ export default function ScoutCard({ player, batting, pitching, battingM, pitchin
   const [errorDetail, setErrorDetail] = useState('');
   const [dirty, setDirty] = useState(false); // 確定(保存)していない変更があるか
 
-  const name = player?.name || t('sc.playerFallback');
+  const name = player?.name || t('scout.playerFallback');
 
   // 同一判定は id を優先する。日本語で付けたタグを英語表示で見ても同じタグとして扱うため
   const sameTag = (a, b) => {
@@ -229,7 +231,10 @@ export default function ScoutCard({ player, batting, pitching, battingM, pitchin
     setLoading(true);
     // AIへ渡すタグも表示と同じ言語にする(日本語のタグから英語の寸評を書かせない)
     const tagsForAi = tags.map((x) => ({ label: labelOf(x), type: x.type }));
-    const result = await generateScoutReport({ apiKey, name, number: player?.number, tags: tagsForAi, statsSummary, uniqueFacts, recentSummary, lang });
+    const result = await generateScoutReport({
+      apiKey, name, number: player?.number, tags: tagsForAi, statsSummary,
+      uniqueFacts: uniqueFacts.map((f) => f.text), recentSummary, lang,
+    });
     setLoading(false);
     if (result && !result.error) {
       if (result.catchphrase) setCatchphrase(result.catchphrase);
@@ -245,7 +250,7 @@ export default function ScoutCard({ player, batting, pitching, battingM, pitchin
   };
 
   const handleClose = () => {
-    if (dirty && !window.confirm(t('sc.discardConfirm'))) return;
+    if (dirty && !window.confirm(t('scout.discardConfirm'))) return;
     onClose();
   };
 
@@ -267,15 +272,15 @@ export default function ScoutCard({ player, batting, pitching, battingM, pitchin
       <header className="fullscreen-header">
         <button className="ghost small" onClick={handleClose}>{t('common.back')}</button>
         <h2>
-          {t('sc.title')}
-          {dirty && <span className="small" style={{ color: 'var(--amber)', marginLeft: 6, fontWeight: 700 }}>{t('sc.unsaved')}</span>}
+          {t('scout.title')}
+          {dirty && <span className="small" style={{ color: 'var(--amber)', marginLeft: 6, fontWeight: 700 }}>{t('scout.unsaved')}</span>}
         </h2>
-        <button className="primary small" onClick={handleConfirm}>{t('sc.confirm')}</button>
+        <button className="primary small" onClick={handleConfirm}>{t('scout.confirm')}</button>
       </header>
       <div className="fullscreen-body">
         <div className="scout-card">
           <div className="scout-top">
-            <label className="scout-photo" title={t('sc.photoHint')}>
+            <label className="scout-photo" title={t('scout.photoHint')}>
               {photo ? <img src={photo} alt={name} /> : initial}
               <span className="scout-photo-cam">📷</span>
               <input
@@ -294,17 +299,17 @@ export default function ScoutCard({ player, batting, pitching, battingM, pitchin
           </div>
 
           <div className="scout-mid">
-            {statsSummary && <p className="small dim mb8">{t('sc.seasonStats', { stats: statsSummary })}</p>}
-            {recentSummary && <p className="small dim mb8">{t('sc.recentForm', { recent: recentSummary })}</p>}
+            {statsSummary && <p className="small dim mb8">{t('scout.seasonStats', { stats: statsSummary })}</p>}
+            {recentSummary && <p className="small dim mb8">{t('scout.recentForm', { recent: recentSummary })}</p>}
             {uniqueFacts.length > 0 && (
-              <p className="small dim mb8">{t('sc.teamStrengths', { list: uniqueFacts.join(t('sc.listJoin')) })}</p>
+              <p className="small dim mb8">{t('scout.teamStrengths', { list: uniqueFacts.map((f) => f.text).join(t('scout.listJoin')) })}</p>
             )}
             <div className="selected-tags-panel">
               <div className="section-title" style={{ margin: 0 }}>
-                {t('sc.tagsTitle')} {tags.length > 0 && <span className="tag-count-badge">{tags.length}</span>}
+                {t('scout.tagsTitle')} {tags.length > 0 && <span className="tag-count-badge">{tags.length}</span>}
               </div>
               {tags.length === 0 ? (
-                <p className="small dim mt8">{t('sc.tagsEmpty')}</p>
+                <p className="small dim mt8">{t('scout.tagsEmpty')}</p>
               ) : (
                 <>
                   <div className="tag-pill-row mt8">
@@ -312,14 +317,14 @@ export default function ScoutCard({ player, batting, pitching, battingM, pitchin
                       <TagPill key={tagIdOf(tag) || tag.label} label={labelOf(tag)} type={tag.type} onClick={() => removeTag(tag)} />
                     ))}
                   </div>
-                  <p className="small dim mt8">{t('sc.tagsRemoveHint')}</p>
+                  <p className="small dim mt8">{t('scout.tagsRemoveHint')}</p>
                 </>
               )}
             </div>
 
             {TAG_GROUPS.map((g) => (
               <div key={g.categoryKey}>
-                <div className="section-title small">{t(g.categoryKey)} <span className="dim">({t(`sc.type.${g.type}`)})</span></div>
+                <div className="section-title small">{t(g.categoryKey)} <span className="dim">({t(`scout.type.${g.type}`)})</span></div>
                 <div className="tag-suggest-row">
                   {g.ids.map((id) => (
                     <button
@@ -334,54 +339,54 @@ export default function ScoutCard({ player, batting, pitching, battingM, pitchin
               </div>
             ))}
 
-            <div className="section-title small">{t('sc.freeTag')}</div>
+            <div className="section-title small">{t('scout.freeTag')}</div>
             <div className="flex" style={{ gap: 6 }}>
               <input
                 style={{ flex: 1 }}
-                placeholder={t('sc.freeTagPlaceholder')}
+                placeholder={t('scout.freeTagPlaceholder')}
                 value={freeText}
                 onChange={(e) => setFreeText(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && addFreeTag()}
               />
               <select style={{ width: 96 }} value={freeType} onChange={(e) => setFreeType(e.target.value)}>
-                <option value="plus">{t('sc.type.plus')}</option>
-                <option value="minus">{t('sc.type.minus')}</option>
-                <option value="joke">{t('sc.type.joke')}</option>
+                <option value="plus">{t('scout.type.plus')}</option>
+                <option value="minus">{t('scout.type.minus')}</option>
+                <option value="joke">{t('scout.type.joke')}</option>
               </select>
-              <button className="small" onClick={addFreeTag}>{t('sc.add')}</button>
+              <button className="small" onClick={addFreeTag}>{t('scout.add')}</button>
             </div>
           </div>
 
           <div className="scout-bottom">
             <div className="flex" style={{ marginBottom: 8 }}>
-              <div className="grow section-title" style={{ margin: 0 }}>{t('sc.coachComment')}</div>
+              <div className="grow section-title" style={{ margin: 0 }}>{t('scout.coachComment')}</div>
               <button className="small primary" onClick={generate} disabled={loading}>
-                {loading ? t('sc.generating') : apiKey ? t('sc.genAi') : t('sc.genDummy')}
+                {loading ? t('scout.generating') : apiKey ? t('scout.genAi') : t('scout.genDummy')}
               </button>
             </div>
             <div className="scout-report">
               {report || buildDummyReport(name, tags, statsSummary, uniqueFacts, recentSummary, t, labelOf).report}
             </div>
-            {source === 'ai' && <p className="small mt8" style={{ color: 'var(--green)' }}>{t('sc.byAi')}</p>}
+            {source === 'ai' && <p className="small mt8" style={{ color: 'var(--green)' }}>{t('scout.byAi')}</p>}
             {source === 'dummy-error' && (
               <p className="small mt8" style={{ color: 'var(--amber)' }}>
-                {t('sc.aiFailed')}{errorDetail && `(${errorDetail})`}
+                {t('scout.aiFailed')}{errorDetail && `(${errorDetail})`}
               </p>
             )}
             {source !== 'ai' && source !== 'dummy-error' && (
-              <p className="small dim mt8">{apiKey ? t('sc.notYet') : t('sc.noKey')}</p>
+              <p className="small dim mt8">{apiKey ? t('scout.notYet') : t('scout.noKey')}</p>
             )}
             {(nextGameTip || practiceTip) && (
               <div className="scout-tips mt12">
                 {nextGameTip && (
                   <div className="scout-tip">
-                    <div className="scout-tip-label">{t('sc.tipNext')}</div>
+                    <div className="scout-tip-label">{t('scout.tipNext')}</div>
                     <div className="scout-tip-body">{nextGameTip}</div>
                   </div>
                 )}
                 {practiceTip && (
                   <div className="scout-tip">
-                    <div className="scout-tip-label">{t('sc.tipPractice')}</div>
+                    <div className="scout-tip-label">{t('scout.tipPractice')}</div>
                     <div className="scout-tip-body">{practiceTip}</div>
                   </div>
                 )}
