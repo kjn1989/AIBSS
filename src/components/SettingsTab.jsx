@@ -392,7 +392,7 @@ export default function SettingsTab() {
   // 名簿の並び。学年順のときは学年ごとの見出しを差し込む(どこで区切れるか分かるように)
   // 誰も守れない位置。現役の名簿だけで見る(アーカイブ済みは出られない)
   const holes = uncoveredPositions(state.players.filter((p) => !isArchived(p)));
-  const posLang = state.settings.lang || 'ja';
+  const lang = state.settings.lang || 'ja';
 
   const rosterRows = (() => {
     const active = state.players.filter((p) => !isArchived(p));
@@ -440,7 +440,10 @@ export default function SettingsTab() {
       <TeamSwitcherCard />
 
       <div className="card">
-        <h2>🌐 {t('settings.language')} / Language</h2>
+        {/* 日本語表示のときだけ英語を併記する。アプリの既定が日本語なので、
+            英語話者がこのカードを見つけられる必要がある。英語表示では
+            併記すると「Language / Language」になるので出さない */}
+        <h2>🌐 {t('settings.language')}{lang === 'ja' ? ' / Language' : ''}</h2>
         <div className="toggle-row">
           <button
             className={(state.settings.lang || 'ja') === 'ja' ? 'active' : ''}
@@ -699,7 +702,7 @@ export default function SettingsTab() {
           })()}
           {/* 誰も守れない位置があると、そもそもスタメンが組めない。名簿の側で先に言う */}
           {holes.length > 0 && (
-            <div className="warn-box mt8">{t('pos.uncovered', { list: positionListLabel(holes, posLang) })}</div>
+            <div className="warn-box mt8">{t('pos.uncovered', { list: positionListLabel(holes, lang) })}</div>
           )}
         </div>
       </div>
