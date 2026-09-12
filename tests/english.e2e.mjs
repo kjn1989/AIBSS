@@ -288,6 +288,18 @@ try {
       check('打席シートに守備位置のボタンが出ている', posBtns.length > 0, String(posBtns.length));
       check('打席シートの守備位置が英語表記', posBtns.length > 0 && posBtns.every((x) => !JA.test(x)),
         JSON.stringify(posBtns.slice(0, 9)));
+
+      // 確定してプレイログを出す。ログの文は保存時に日本語で焼かれているので、
+      // ここが英語で出るかどうかが「表示時に組み直す」の実地確認になる
+      const ok = g.locator('.sheet-actions button.primary').last();
+      if (await ok.count()) { await ok.click(); await g.waitForTimeout(1200); }
+      await gscan('打席を記録した後のスコア入力(プレイログを含む)');
+      const logLines = await g.locator('.log-line, .pc-text').allInnerTexts().catch(() => []);
+      check('プレイログが1行以上出ている', logLines.length > 0, String(logLines.length));
+      // 選手名は訳す対象ではない(デモの名簿は日本語のまま)。他のスキャンと同じ扱いにする
+      const jaInLogs = logLines.filter((x) => JA.test(x) && !ALLOWED.test(x));
+      check('プレイログが英語で出ている', logLines.length > 0 && jaInLogs.length === 0,
+        JSON.stringify(jaInLogs.slice(0, 4)));
     }
     await g.close();
   }
