@@ -786,7 +786,9 @@ export default function SettingsTab() {
 // 動いているビルドの識別子。「直したのに反映されない」ときに、
 // 端末が新しいビルドを読めているかをその場で確認できるようにする。
 function BuildInfoCard() {
+  const { state } = useStore();
   const t = useT();
+  const lang = state.settings.lang || 'ja';
   const info = typeof __BUILD_INFO__ === 'undefined' ? { sha: 'dev', time: '' } : __BUILD_INFO__;
   const reload = async () => {
     try {
@@ -814,7 +816,9 @@ function BuildInfoCard() {
           開けないため。privacy.html 側に「戻る」を用意してある。
           public/ に置いてあるので、Web版・アプリ版のどちらでも同梱される。 */}
       <p className="small" style={{ margin: '10px 0 0' }}>
-        <a href="./privacy.html">{t('set.privacyPolicy')}</a>
+        {/* 英語版は同じファイルの後半にある。素のリンクだと日本語の先頭に着地し、
+            英語で読む人は全文スクロールしないと辿り着けなかった */}
+        <a href={`./privacy.html${lang === 'en' ? '#en' : ''}`}>{t('set.privacyPolicy')}</a>
       </p>
     </div>
   );
@@ -881,7 +885,7 @@ function TeamSwitcherCard() {
     restoreProfile(id).then(() => {
       switchActiveProfile(id);
       window.location.reload();
-    }).catch((e) => window.alert(e?.message || '復元に失敗しました'));
+    }).catch((e) => window.alert(e?.message || t('restore.failed')));
   };
 
   const switchTo = (id) => {

@@ -199,7 +199,32 @@ try {
     `html lang=${await ph.evaluate(() => document.documentElement.lang)}`);
   const phTabs = await ph.evaluate(() => [...document.querySelectorAll('.tabbar button')].map((b) => b.innerText.trim()).join(' '));
   check('英語圏の端末はタブも英語', !JA.test(phTabs), phTabs);
+
+  // 回数の確認。既定(7回制)のまま黙って始まらないよう、日本語以外の端末には
+  // ホームで1回だけ出す。押すまで出続け、押したら消えることまで見る。
+  const region = ph.locator('.region-setup');
+  check('英語圏の端末には回数の確認が出る', await region.count() > 0);
+  if (await region.count()) {
+    const txt = await region.innerText();
+    check('回数の確認が英語で出ている', !JA.test(txt), txt.slice(0, 80));
+    await region.getByRole('button').first().click(); // 9回制にする
+    await ph.waitForTimeout(500);
+    check('選ぶと確認は消える', await ph.locator('.region-setup').count() === 0);
+    await ph.reload({ waitUntil: 'load' });
+    await ph.waitForTimeout(800);
+    check('選んだあとは再訪しても出ない', await ph.locator('.region-setup').count() === 0);
+  }
   await phCtx.close();
+
+  // 日本語の端末には出さない(既定がそのまま正しいので、ただの邪魔になる)
+  {
+    const jaHome = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'ja-JP' });
+    const jh = await jaHome.newPage();
+    await jh.goto(URL_, { waitUntil: 'load' });
+    await jh.waitForTimeout(900);
+    check('日本語の端末には回数の確認を出さない', await jh.locator('.region-setup').count() === 0);
+    await jaHome.close();
+  }
 
   const jpCtx = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'ja-JP' });
   const jp = await jpCtx.newPage();

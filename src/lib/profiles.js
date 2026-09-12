@@ -6,7 +6,13 @@
 // クラウド共有設定(teamCode等)もチームごとに独立するため、別々のクラウドチームへ接続できる。
 // ============================================================
 import { uid, normalizeEdition } from './model.js';
+import { translate, DEFAULT_LANG } from './i18n.js';
+import { storedLang, detectLang } from './langStore.js';
 import { idbAllKeys, idbLoad } from './durableStore.js';
+
+// 下の文はそのまま alert に出る。React の外なので言語は端末の保存値から引く
+// (main.jsx が起動時に必ず書き込む)
+const tc = (key) => translate(storedLang() || detectLang() || DEFAULT_LANG, key);
 
 export const REGISTRY_KEY = 'bbscorer.profiles.v1';
 export const LEGACY_DATA_KEY = 'bbscorer.v1'; // 複数チーム対応前(単一チーム時代)のデータキー
@@ -162,7 +168,7 @@ export async function listOrphanedProfiles() {
 export async function restoreProfile(id) {
   const key = profileStorageKey(id);
   const snap = await idbLoad(key);
-  if (!snap) throw new Error('復元データが見つかりません');
+  if (!snap) throw new Error(tc('restore.noSnapshot'));
   localStorage.setItem(key, snap);
   const reg = loadRegistry() || { profiles: [], activeId: null };
   if (!reg.profiles.some((p) => p.id === id)) {

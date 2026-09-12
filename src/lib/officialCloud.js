@@ -10,6 +10,13 @@
 import { createClient } from '@supabase/supabase-js';
 import { getOfficialConfig, officialAvailable } from './officialConfig.js';
 import { uid as newId } from './model.js';
+import { translate, DEFAULT_LANG } from './i18n.js';
+import { storedLang, detectLang } from './langStore.js';
+
+// ここが throw する文は、そのまま画面に出る(招待リンクを開いた直後の参加画面を含む)。
+// 参加は全員が通る導線なので、失敗したときだけ日本語に戻ってはいけない。
+// React の外なので、言語は端末に保存されたもの(main.jsx が起動時に必ず書く)から引く。
+const tc = (key, params) => translate(storedLang() || detectLang() || DEFAULT_LANG, key, params);
 
 export { officialAvailable };
 
@@ -36,7 +43,7 @@ function ensureClient() {
 // Supabaseのuserをアプリ内の共通形( uid / email / displayName )へ
 function toUser(u) {
   if (!u) return null;
-  return { uid: u.id, email: u.email || '', displayName: u.user_metadata?.name || u.email || '名無し' };
+  return { uid: u.id, email: u.email || '', displayName: u.user_metadata?.name || u.email || tc('cloud.userFallback') };
 }
 
 // fetch自体が失敗(サーバー未到達)かどうか。WebKitは"Load failed"、Chromeは"Failed to fetch"を投げる。
@@ -50,17 +57,16 @@ function isNetworkError(error) {
   );
 }
 
-function jpAuthError(error) {
+// Supabaseが返す英語の生メッセージを、読み手の言語の文に置き換える。
+// 当てはまらないものは生のまま返す(訳せないものを訳したふりはしない)。
+function authError(error) {
   const m = error?.message || String(error);
   // 通信不達は認証エラーより先に判定(生の"Load failed"を出さない)
-  if (isNetworkError(error)) {
-    return 'クラウドに接続できませんでした。通信環境をご確認のうえ、少し待って再度お試しください。'
-      + '(サーバーが一時休止中の場合、初回アクセスから復帰まで数十秒かかることがあります)';
-  }
-  if (/Invalid login credentials/i.test(m)) return 'メールアドレスまたはパスワードが違います';
-  if (/Password should be at least/i.test(m)) return 'パスワードは6文字以上にしてください';
-  if (/rate limit/i.test(m)) return '試行回数が多すぎます。しばらく待ってから再度お試しください';
-  if (/already registered/i.test(m)) return 'このメールアドレスは登録済みです(パスワードが違う可能性)';
+  if (isNetworkError(error)) return tc('cloud.netFail');
+  if (/Invalid login credentials/i.test(m)) return tc('cloud.badCredentials');
+  if (/Password should be at least/i.test(m)) return tc('cloud.pwTooShort');
+  if (/rate limit/i.test(m)) return tc('cloud.rateLimit');
+  if (/already registered/i.test(m)) return tc('cloud.alreadyRegistered');
   return m;
 }
 
@@ -102,33 +108,33 @@ export function currentUserAsync() {
 // ログイン。未登録なら自動で新規登録も試す(確認メール設定がONの場合はメール確認を促す)
 export async function loginWithPassword(email, password) {
   const sb = ensureClient();
-  if (!sb) throw new Error('公式クラウドは未設定です');
+  if (!sb) throw new Error(tc('cloud.notConfigured'));
   const { error } = await sb.auth.signInWithPassword({ email, password });
   if (!error) return;
   if (/Invalid login credentials/i.test(error.message)) {
     const { data, error: e2 } = await sb.auth.signUp({ email, password });
-    if (e2) throw new Error(jpAuthError(e2));
+    if (e2) throw new Error(authError(e2));
     if (!data.session) {
       // 確認メール設定がONでも、DB側でauto-confirm(トリガ)している場合は即ログインできる。
       // 一度だけsign inを試し、成功すればメール確認なしで完了。失敗時のみメール案内を出す。
       const { error: e3 } = await sb.auth.signInWithPassword({ email, password });
       if (!e3) return;
-      throw new Error('確認メールを送信しました。メール内のリンクを開いてから、もう一度ログインしてください。');
+      throw new Error(tc('cloud.confirmSent'));
     }
     return; // 新規登録+即ログイン成功
   }
-  throw new Error(jpAuthError(error));
+  throw new Error(authError(error));
 }
 
 // マジックリンク(パスワード不要)。Supabase既定のメール送信は頻度制限があるため補助扱い
 export async function sendLoginLink(email) {
   const sb = ensureClient();
-  if (!sb) throw new Error('公式クラウドは未設定です');
+  if (!sb) throw new Error(tc('cloud.notConfigured'));
   const { error } = await sb.auth.signInWithOtp({
     email,
     options: { emailRedirectTo: window.location.origin + window.location.pathname },
   });
-  if (error) throw new Error(jpAuthError(error));
+  if (error) throw new Error(authError(error));
 }
 
 export async function logout() {
@@ -146,9 +152,9 @@ export async function logout() {
 // auth.usersを触れないため。
 export async function deleteMyAccount() {
   const sb = ensureClient();
-  if (!sb) throw new Error('公式クラウドは未設定です');
+  if (!sb) throw new Error(tc('cloud.notConfigured'));
   const { error } = await sb.rpc('delete_my_account');
-  if (error) throw new Error(jpAuthError(error));
+  if (error) throw new Error(authError(error));
   // 消えたユーザーのトークンを持ったままだと以降のリクエストが401で滑る。
   // サインアウト自体の失敗は握りつぶす(削除はもう済んでいる)
   try {
@@ -161,13 +167,13 @@ export async function deleteMyAccount() {
 // ---------------- チーム管理 ----------------
 async function requireUser() {
   const u = await currentUserAsync();
-  if (!u) throw new Error('ログインしてください');
+  if (!u) throw new Error(tc('cloud.needLogin'));
   return u;
 }
 
 export async function createCloudTeam({ name, edition }) {
   const sb = ensureClient();
-  if (!sb) throw new Error('公式クラウドは未設定です');
+  if (!sb) throw new Error(tc('cloud.notConfigured'));
   const u = await requireUser();
   const teamId = newId();
   const { error: e1 } = await sb.from('teams').insert({
@@ -184,7 +190,7 @@ export async function createCloudTeam({ name, edition }) {
 // 招待トークンを発行(URLに埋め込む。トークンを知っていること自体が参加権)
 export async function createInvite(teamId, role = 'scorer') {
   const sb = ensureClient();
-  if (!sb) throw new Error('公式クラウドは未設定です');
+  if (!sb) throw new Error(tc('cloud.notConfigured'));
   const u = await requireUser();
   const token = newId() + newId();
   const { error } = await sb.from('invites').insert({
@@ -207,13 +213,13 @@ export function inviteUrl(token, lang) {
 
 export async function joinByInvite(token) {
   const sb = ensureClient();
-  if (!sb) throw new Error('公式クラウドは未設定です');
+  if (!sb) throw new Error(tc('cloud.notConfigured'));
   const u = await requireUser();
   const { data, error } = await sb.rpc('get_invite', { tok: token });
   if (error) throw new Error(error.message);
   const inv = data?.[0];
-  if (!inv) throw new Error('招待が見つかりません(削除済み・URL誤りの可能性)');
-  if (inv.expires_at < Date.now()) throw new Error('招待の有効期限が切れています');
+  if (!inv) throw new Error(tc('cloud.inviteNotFound'));
+  if (inv.expires_at < Date.now()) throw new Error(tc('cloud.inviteExpired'));
   const { error: e2 } = await sb.from('team_members').insert({
     team_id: inv.team_id, uid: u.uid, role: inv.role,
     name: u.displayName, email: u.email, invite: token, joined_at: Date.now(),
@@ -233,7 +239,7 @@ export async function listMyTeams() {
     .select('team_id, role, teams(name, edition)')
     .eq('uid', u.uid);
   if (error) return [];
-  return (data || []).map((r) => ({ teamId: r.team_id, role: r.role, teamName: r.teams?.name || 'チーム' }));
+  return (data || []).map((r) => ({ teamId: r.team_id, role: r.role, teamName: r.teams?.name || tc('cloud.teamFallback') }));
 }
 
 export async function listMembers(teamId) {
@@ -242,6 +248,36 @@ export async function listMembers(teamId) {
   const { data, error } = await sb.from('team_members').select('*').eq('team_id', teamId).order('joined_at');
   if (error) return [];
   return data || [];
+}
+
+// チームの所有者を別のアカウントへ移す。
+//
+// これが無いと、チームを作ったアカウントが永久にそのチームを握り続ける。
+// delete_my_account() は「自分が owner_uid のチーム」を消すので、作った人が
+// 退会した時点で、参加している全員のチームが消える。代替わりのある組織では
+// これが効いてくる(作った人が抜けられない)。
+//
+// RLS 側は前から teams の更新を owner に許しているので、足りないのは入口だけだった。
+// 先に相手を owner ロールにしてから owner_uid を移す。途中で失敗しても
+// 「owner が2人」で止まり、誰も触れない状態にはならない。
+export async function transferOwnership(teamId, uid) {
+  const sb = ensureClient();
+  if (!sb) throw new Error(tc('cloud.notConfigured'));
+  await requireUser();
+  const { error: e1 } = await sb.from('team_members').update({ role: 'owner' }).eq('team_id', teamId).eq('uid', uid);
+  if (e1) throw new Error(e1.message);
+  const { error: e2 } = await sb.from('teams').update({ owner_uid: uid }).eq('id', teamId);
+  if (e2) throw new Error(e2.message);
+}
+
+// いま teams.owner_uid が誰か。「退会するとチームが消えるアカウント」はこれ1つだけで、
+// メンバー一覧の owner ロールとは別物。画面で区別できるように読めるようにする
+export async function teamOwnerUid(teamId) {
+  const sb = ensureClient();
+  if (!sb) return null;
+  const { data, error } = await sb.from('teams').select('owner_uid').eq('id', teamId).maybeSingle();
+  if (error) return null;
+  return data?.owner_uid || null;
 }
 
 export async function setMemberRole(teamId, uid, role) {
@@ -260,12 +296,12 @@ export async function removeMember(teamId, uid) {
 // FKのON DELETE CASCADEで一緒に削除される。teamsのDELETEはRLSポリシーで許可が必要。
 export async function deleteCloudTeam(teamId) {
   const sb = ensureClient();
-  if (!sb) throw new Error('公式クラウドは未設定です');
+  if (!sb) throw new Error(tc('cloud.notConfigured'));
   const { data, error } = await sb.from('teams').delete().eq('id', teamId).select();
   if (error) throw new Error(error.message);
   // RLSのDELETEポリシー未設定だと0行(エラー無し)で消えないため明示的に検知
   if (!data || data.length === 0) {
-    throw new Error('削除できませんでした。SupabaseでチームのDELETE許可(RLSポリシー)を追加してください。');
+    throw new Error(tc('cloud.deleteFailed'));
   }
 }
 

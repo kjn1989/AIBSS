@@ -2623,3 +2623,12 @@ button.manage-open {
 /* 打順を直すモードの▲▼ */
 .ord-move { display: flex; gap: 4px; flex: none; }
 .ord-move button { width: 40px; padding: 8px 0; font-weight: 800; }
+
+/* メンバー一覧の「このチームの所有者」。ロールの選択肢と並ぶので、
+   選べるものではないと分かる形にする(押せない札) */
+.owner-chip {
+  display: inline-block; margin-left: 8px; vertical-align: 1px;
+  font-size: 10px; letter-spacing: .04em; white-space: nowrap;
+  padding: 1px 7px; border-radius: 5px;
+  color: var(--accent); border: 1px solid var(--accent);
+}

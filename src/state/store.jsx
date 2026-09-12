@@ -63,6 +63,7 @@ export const initialState = {
     yearStartMonth: 4, // 年度の開始月。日本の年度に合わせて4月始まりが既定(1=暦年 / 9=北米式)
     adultType: null, // 'kusa'|'shakaijin'。草野球エディションの中の区分。未設定は草野球
     schoolType: null, // 'elementary'|'junior'|'high'|'university'。最終学年(卒業の判定)を決める。草野球はnull
+    regionSetupDone: false, // 日本語以外で開いた人に一度だけ出す回数の確認を、押し終えたか
     officialTeamId: null, // 公式クラウド(lib/officialCloud.js)のチームID。null=未接続
     officialRole: null, // 公式クラウドでの自分のロール(owner/scorer/viewer)。CloudSyncが接続時に更新
     // 記録員(スコアラー)の名簿: [{ id, name }]。選手とは別に持つ

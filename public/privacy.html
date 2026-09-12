@@ -29,10 +29,14 @@
   a { color: #58a6ff; }
   .todo { color: #f0a848; font-weight: 600; }
   hr { border: 0; border-top: 1px solid #21262d; margin: 40px 0; }
+  /* 英語版は前からあったが、アプリのリンクが日本語の先頭に着地するため、
+     日本語の全文をスクロールしないと辿り着けなかった */
+  .langjump { font-size: 13px; color: #8b949e; margin: 0 0 18px; }
+  .langjump b { color: #e6edf3; }
 </style>
 </head>
 <body>
-<main>
+<main id="top">
 
 <!-- アプリから同じWebViewで開かれた場合に戻れるようにする。
      ネイティブ版のWKWebViewは target=_blank を新規タブで開けないため、
@@ -41,16 +45,18 @@
 <p id="back" style="display:none"><a href="#" onclick="history.back();return false;">← 戻る / Back</a></p>
 <script>if (history.length > 1) document.getElementById('back').style.display = '';</script>
 
+<p class="langjump"><b>日本語</b> ／ <a href="#en">English</a></p>
+
 <h1>プライバシーポリシー</h1>
 <p class="dim">AI-BASE DIAMOND（以下「本アプリ」）<br>
-制定日: <span class="todo">〔YYYY年M月D日〕</span> ／ 最終更新: <span class="todo">〔YYYY年M月D日〕</span></p>
+制定日: 2026年9月12日 ／ 最終更新: 2026年9月12日</p>
 
 <div class="box warn">
-<p class="todo" style="margin:0 0 6px">⚠️ 公開前に埋めてください</p>
-<p class="dim" style="margin:0">オレンジの箇所（制定日・運営者名・連絡先）を実際の値に置き換えてから公開してください。連絡先はストア審査で必須です。</p>
+<p class="todo" style="margin:0 0 6px">⚠️ 連絡先が未設定です</p>
+<p class="dim" style="margin:0">第9項の問い合わせ先メールアドレスがまだ決まっていません。開示・訂正・利用停止の請求を受ける窓口であり、ストア審査でも必須なので、公開前に設定してください。</p>
 </div>
 
-<p>本アプリは、野球の試合記録・成績集計を行うアプリです。運営者は <span class="todo">〔運営者名／個人名〕</span>（以下「当方」）です。本ポリシーは、本アプリが扱う情報の内容と取り扱いを説明するものです。</p>
+<p>本アプリは、野球の試合記録・成績集計を行うアプリです。運営者は AI-BASE DIAMOND開発者（以下「当方」）です。本ポリシーは、本アプリが扱う情報の内容と取り扱いを説明するものです。</p>
 
 <h2>1. 基本方針</h2>
 <ul>
@@ -139,16 +145,25 @@
 <h2>9. お問い合わせ</h2>
 <p>本ポリシーおよび個人情報の取り扱いに関するお問い合わせ先:</p>
 <div class="box">
-<p style="margin:0">運営者: <span class="todo">〔運営者名／個人名〕</span><br>
+<p style="margin:0">運営者: AI-BASE DIAMOND開発者<br>
 連絡先: <span class="todo">〔問い合わせ用メールアドレス〕</span></p>
 </div>
 
 <hr>
 
+<p class="langjump"><a href="#top">日本語</a> ／ <b>English</b></p>
+
 <h1 id="en">Privacy Policy</h1>
 <p class="dim">AI-BASE DIAMOND ("the App")<br>
-Effective: <span class="todo">[YYYY-MM-DD]</span> / Last updated: <span class="todo">[YYYY-MM-DD]</span><br>
+Effective: 2026-09-12 / Last updated: 2026-09-12<br>
 This is a reference translation. The Japanese text above prevails in case of any discrepancy.</p>
+
+<div class="box warn">
+<p class="todo" style="margin:0 0 6px">⚠️ No contact address yet</p>
+<p class="dim" style="margin:0">The contact address in section 9 has not been set. It is the channel for access, correction and suspension requests, and app stores require it, so it must be filled in before release.</p>
+</div>
+
+<p>The App records baseball games and compiles statistics. It is operated by the AI-BASE DIAMOND developer ("we"). This policy explains what information the App handles and how.</p>
 
 <h2>1. Principles</h2>
 <ul>
@@ -193,7 +208,7 @@ This is a reference translation. The Japanese text above prevails in case of any
 <p>We may update this policy as the law or the App's features change. Material changes will be announced in the App or on this page.</p>
 
 <h2>9. Contact</h2>
-<p>Operator: <span class="todo">[operator name]</span><br>
+<p>Operator: the AI-BASE DIAMOND developer<br>
 Email: <span class="todo">[contact email address]</span></p>
 
 </main>
