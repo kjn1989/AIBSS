@@ -13,7 +13,8 @@ import HeatmapSheet from './HeatmapSheet.jsx';
 import ReTableSheet from './ReTableSheet.jsx';
 import WinExpSheet from './WinExpSheet.jsx';
 import { computeBoxScore, hitsByInning } from '../lib/boxscore.js';
-import { oppNameOf as oppNameFor, logTextOf } from '../lib/oppBox.js';
+import { oppNameOf as oppNameFor } from '../lib/oppBox.js';
+import { renderPlayLog } from '../lib/playLogText.js';
 import { playLabel } from '../lib/voiceParser.js';
 import { draftNarrative, noteOf, noteKeyOf } from '../lib/narrative.js';
 import Sheet from './Sheet.jsx';
@@ -171,7 +172,7 @@ function SwingStory({ game, run, draft, onSave, t }) {
   );
 }
 
-function Chart({ series, tags, order, t, linescore, opening, game }) {
+function Chart({ series, tags, order, t, linescore, opening, game, lang, nameOf, edition }) {
   const svgRef = useRef(null);
   // 押した打席。線を見て「ここは何%?」と思ったときに読めるようにする
   const [sel, setSel] = useState(null);
@@ -334,7 +335,7 @@ function Chart({ series, tags, order, t, linescore, opening, game }) {
         <div className="fv-read">
           <div className="fv-read-head">
             <b>{t(cur.isTop ? 'scoreboard.top' : 'scoreboard.bottom', { n: cur.inning })}</b>
-            <span className="fv-read-text">{logTextOf(game, cur.log)}</span>
+            <span className="fv-read-text">{renderPlayLog(game, cur.log, { lang, t, nameOf, edition })}</span>
           </div>
           {/* 「+8pt」だけでは何のことか分からない。引いた結果ではなく、
               引いた元(打席の前と後の勝率)をそのまま見せる */}
@@ -509,6 +510,7 @@ export default function FlowView({ game, onClose }) {
             series={series} tags={judged.tags} order={order} t={t}
             linescore={(cols) => <AlignedLinescore game={game} cols={cols} t={t} />}
             opening={opening} game={game}
+            lang={lang} nameOf={nameOf} edition={edition}
           />
           {/* 相手との力の差。ここで変えると線の出発点がその場で動くので、
               設定が効いているかがその場で分かる */}

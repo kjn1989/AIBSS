@@ -13,7 +13,8 @@ import { parseBatterCorrection, findTargetAtBat, parseSubstitutions, parseBatter
 import { posFull, buildLineupRows, findPositionIssues, alignmentByInning } from '../lib/lineupBox.js';
 import LiveRulesSheet from './LiveRulesSheet.jsx';
 import { findDuplicateAtBats, canRebuildOrders, findOrderBreaks } from '../lib/battersRebuild.js';
-import { oppNameOf, logTextOf } from '../lib/oppBox.js';
+import { oppNameOf } from '../lib/oppBox.js';
+import { renderPlayLog } from '../lib/playLogText.js';
 import { interpretCorrection } from '../lib/gemini.js';
 import Sheet from './Sheet.jsx';
 import EditPlaySheet from './EditPlaySheet.jsx';
@@ -75,7 +76,7 @@ function PlayCard({ log, nameOf, numberOf, onEdit, edition, lang, t, oppName, ga
         <MiniDiamond runners={p.beforeRunners} />
         <CountDots balls={p.balls} strikes={p.strikes} outsBefore={p.outsBefore} />
         <div className="pc-text">
-          <div>{logTextOf(game, log)}</div>
+          <div>{renderPlayLog(game, log, { lang, t, nameOf, edition })}</div>
           {(p.moveLines || []).map((t, i) => <div key={i} className="dim">{t}</div>)}
         </div>
       </div>
@@ -86,10 +87,10 @@ function PlayCard({ log, nameOf, numberOf, onEdit, edition, lang, t, oppName, ga
 
 // その他イベント(交代・投手交代・走者イベント等)の簡易行。
 // count>1 のときは「牽制 ×3」のように回数バッジ付きで1行にまとめて表示する
-function SimpleLogLine({ log, count = 1, game }) {
+function SimpleLogLine({ log, count = 1, game, lang, t, nameOf, edition }) {
   return (
     <div className="log-line">
-      {logTextOf(game, log)}
+      {renderPlayLog(game, log, { lang, t, nameOf, edition })}
       {count > 1 && <span className="log-count">×{count}</span>}
     </div>
   );
@@ -970,7 +971,12 @@ export function GameProgressContent({ game, editable = false, showLinescore = tr
                     onEdit={editable ? setEditLog : null}
                   />
                 )
-                : <SimpleLogLine key={row.log.id} log={row.log} count={row.count} game={game} />
+                : (
+                  <SimpleLogLine
+                    key={row.log.id} log={row.log} count={row.count} game={game}
+                    lang={lang} t={t} nameOf={nameOf} edition={state.settings.edition}
+                  />
+                )
             )}
           </div>
         );

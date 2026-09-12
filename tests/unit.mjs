@@ -5865,3 +5865,107 @@ test('言語: 知らない値は無視して次の候補へ進む', () => {
   assert.equal(resolveLang({ url: 'fr', stored: 'ja', languages: ['en'] }), 'ja');
   assert.equal(resolveLang({ url: '', stored: null, profile: undefined, languages: ['en'] }), 'en');
 });
+
+// ============================================================
+// プレイログの文を、出すときに組み立てる
+//
+// 守りたいこと: 保存された text は日本語のまま(集計の内部キーなので変えられない)。
+// それでも英語の読み手には英語で出る。そして payload が無い古いログでは、
+// 訳したふりをせず保存された文をそのまま出す。
+// ============================================================
+{
+  const { renderPlayLog } = await import('../src/lib/playLogText.js');
+  const tOf = (lang) => (key, params) => translate(lang, key, params);
+  const nameOf = (id) => ({ p1: 'Cruz', p2: '佐藤' }[id] || '');
+  const ctx = (lang) => ({ lang, t: tOf(lang), nameOf, edition: '草野球' });
+
+  test('打席ログ: 保存は日本語のまま、英語では英語で出る', () => {
+    const log = {
+      kind: 'atbat',
+      text: '佐藤 遊撃ゴロ・アウト',
+      payload: { playerId: 'p1', result: 'out', outType: 'ground', direction: 'SS', outsOnPlay: 1 },
+    };
+    const en = renderPlayLog({}, log, ctx('en'));
+    assert.ok(!/[ぁ-んァ-ヶ一-龥]/.test(en), en);
+    assert.ok(en.includes('Cruz'), en);
+    assert.equal(log.text, '佐藤 遊撃ゴロ・アウト'); // 保存は書き換えない
+  });
+
+  test('打席ログ: 失策・好守の守備位置も英語になる', () => {
+    const log = {
+      kind: 'atbat',
+      text: '佐藤 右翼ヒット +投失',
+      payload: {
+        playerId: 'p1', result: 'single', direction: 'RF',
+        playError: { pos: '投', kind: 'throw' }, finePlay: { pos: '遊' }, runs: 2,
+      },
+    };
+    const en = renderPlayLog({}, log, ctx('en'));
+    assert.ok(!/[ぁ-んァ-ヶ一-龥]/.test(en), en);
+    assert.ok(en.includes('P') && en.includes('SS'), en);   // 投→P, 遊→SS
+    assert.ok(en.includes('+2'), en);                        // 得点
+    // 日本語で読むときは保存された文がそのまま正しい。組み直して文言を動かさない
+    assert.equal(renderPlayLog({}, log, ctx('ja')), log.text);
+  });
+
+  test('日本語で読むときは、保存された文を組み直さない', () => {
+    // 英語のために組み直す仕組みが、日本語の画面の文言まで動かしてはいけない
+    const log = {
+      kind: 'atbat',
+      text: '佐藤 遊撃凡打(アウト)',
+      payload: { playerId: 'p2', result: 'out', outType: 'ground', direction: 'SS', outsOnPlay: 1 },
+    };
+    assert.equal(renderPlayLog({}, log, ctx('ja')), '佐藤 遊撃凡打(アウト)');
+    assert.notEqual(renderPlayLog({}, log, ctx('en')), '佐藤 遊撃凡打(アウト)');
+  });
+
+  test('走者イベント: 内部キーは日本語のまま、表示だけ言語で変わる', () => {
+    for (const [text, en, ja] of [
+      ['盗塁死', 'Caught stealing', '盗塁死'],
+      ['暴投', 'Wild pitch', '暴投'],
+      ['ボーク', 'Balk', 'ボーク'],
+    ]) {
+      const log = { kind: 'runner', text, payload: {} };
+      assert.equal(renderPlayLog({}, log, ctx('en')), en);
+      assert.equal(renderPlayLog({}, log, ctx('ja')), ja);
+      assert.equal(log.text, text); // 集計が数えている文字列は不変
+    }
+  });
+
+  test('相手打者の見出し: 名前を後から入れても英語の体裁になる', () => {
+    const log = {
+      kind: 'defense',
+      text: '相手打者A(3番): 中堅フライ・アウト',
+      payload: { result: 'out', outType: 'fly', direction: 'CF', letter: 'A', order: 3 },
+    };
+    assert.ok(renderPlayLog({}, log, ctx('en')).startsWith('Opp A (#3)'));
+    assert.ok(renderPlayLog({ oppNames: { A: 'Reyes' } }, log, ctx('en')).startsWith('Reyes (#3)'));
+    assert.ok(renderPlayLog({ oppNames: { A: '石田' } }, log, ctx('ja')).startsWith('石田(3番)'));
+  });
+
+  test('payload が無い古いログは、保存された文をそのまま出す', () => {
+    const old = { kind: 'atbat', text: '佐藤 遊撃ゴロ・アウト', payload: {} };
+    assert.equal(renderPlayLog({}, old, ctx('en')), '佐藤 遊撃ゴロ・アウト');
+    const oldDef = { kind: 'defense', text: '相手打者A(1番): 二塁凡打(アウト)', payload: {} };
+    assert.equal(renderPlayLog({ oppNames: { A: '石田' } }, oldDef, ctx('en')), '石田(1番): 二塁凡打(アウト)');
+  });
+
+  test('名前を別の欄に出す画面では、結果だけを組み立てる', () => {
+    // イニングの流れシートは名前を左に出しているので、文に名前が二重に出てはいけない
+    const ab = { kind: 'atbat', text: '佐藤 遊撃ゴロ・アウト',
+      payload: { playerId: 'p1', result: 'out', outType: 'ground', direction: 'SS', outsOnPlay: 1 } };
+    const only = renderPlayLog({}, ab, { ...ctx('en'), omitWho: true });
+    assert.ok(!only.includes('Cruz'), only);
+    assert.ok(only.includes('SS'), only);
+    const df = { kind: 'defense', text: '相手打者A(3番): 中堅フライ・アウト',
+      payload: { result: 'out', outType: 'fly', direction: 'CF', letter: 'A', order: 3 } };
+    assert.ok(!renderPlayLog({}, df, { ...ctx('en'), omitWho: true }).includes('Opp A'));
+  });
+
+  test('得点・チェンジ・流れタグも言語で変わる', () => {
+    assert.equal(renderPlayLog({}, { kind: 'run', text: '得点', payload: {} }, ctx('en')), 'Run scored');
+    assert.equal(renderPlayLog({}, { kind: 'change', text: 'チェンジ', payload: {} }, ctx('ja')), 'チェンジ');
+    const up = { kind: 'flow', text: '▲ 流れ来た', payload: { dir: 'up' } };
+    assert.ok(renderPlayLog({}, up, ctx('en')).includes('Momentum'));
+  });
+}

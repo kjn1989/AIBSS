@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { useStore, useT } from '../state/store.jsx';
+import { useStore, useT, usePlayerName } from '../state/store.jsx';
 import { connectCloud } from '../lib/cloud.js';
 import Scoreboard from './Scoreboard.jsx';
 import Diamond from './Diamond.jsx';
-import { logTextOf } from '../lib/oppBox.js';
+import { renderPlayLog } from '../lib/playLogText.js';
 
 // URLの ?watch=1&team=<チームコード>&cfg=<base64のfirebaseConfig> を読み取って
 // 読み取り専用でFirestoreを購読し、試合速報だけを表示する観戦者向けページ。
@@ -43,8 +43,10 @@ export function encodeInviteLink({ configText, teamCode, lang }) {
 }
 
 export default function WatchView() {
-  const { dispatch } = useStore();
+  const { state, dispatch } = useStore();
   const t = useT();
+  const lang = state.settings.lang || 'ja';
+  const nameOf = usePlayerName();
   const [games, setGames] = useState([]);
   const [status, setStatus] = useState('connecting');
 
@@ -108,7 +110,7 @@ export default function WatchView() {
         <h2>{t('watch.playLog')}</h2>
         {[...game.playLogs].slice(-15).reverse().map((l) => (
           <div className="log-line" key={l.id}>
-            <b>{t('score.logInning', { inning: l.inning, half: t(l.isTop ? 'half.top' : 'half.bottom') })}</b> {logTextOf(game, l)}
+            <b>{t('score.logInning', { inning: l.inning, half: t(l.isTop ? 'half.top' : 'half.bottom') })}</b> {renderPlayLog(game, l, { lang, t, nameOf, edition: state.settings.edition })}
           </div>
         ))}
         {game.playLogs.length === 0 && <div className="dim small">{t('score.noPlays')}</div>}

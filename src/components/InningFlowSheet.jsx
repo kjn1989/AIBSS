@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useStore, usePlayerName, useT } from '../state/store.jsx';
+import { renderPlayLog } from '../lib/playLogText.js';
 import { oppNameOf } from '../lib/oppBox.js';
 import { isPlateAppearance, timingAnchor } from '../lib/logOrder.js';
 import { isTiebreakInning, rulesAtInning, runnersPlaced, placedRunsScored } from '../lib/rules.js';
@@ -23,9 +24,10 @@ const ICON = {
 const isPa = isPlateAppearance;
 
 export default function InningFlowSheet({ game, inning, onClose, onEditLog }) {
-  const { dispatch } = useStore();
+  const { state, dispatch } = useStore();
   const t = useT();
   const nameOf = usePlayerName();
+  const lang = state.settings.lang || 'ja';
   // 自軍が攻める半回。後攻なら裏に打つ
   const offTop = !game.isHome;
   const [half, setHalf] = useState(offTop); // true=表を見る
@@ -43,9 +45,10 @@ export default function InningFlowSheet({ game, inning, onClose, onEditLog }) {
   };
   const resOf = (l) => {
     if (!isPa(l)) return '';
-    // log.text は「名前 結果」の形。名前は左に出しているので結果側だけを取る
-    const nm = l.kind === 'defense' ? oppNameOf(game, l.payload?.letter) : nameOf(l.payload?.playerId);
-    return String(l.text || '').replace(nm, '').trim();
+    // 名前は左の欄に出しているので、結果だけを組み立てる
+    return renderPlayLog(game, l, {
+      lang, t, nameOf, edition: state.settings.edition, omitWho: true,
+    }).trim();
   };
   // 交代のタイミングは行の位置そのもの。動かしたら表示も追従させる
   // (固定の文言にすると、並べ替えた瞬間に嘘になる)
