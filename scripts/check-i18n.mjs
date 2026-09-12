@@ -124,4 +124,34 @@ if (unknown.size) {
   console.log(`ok - ソースが使うキーはすべて辞書にある`);
 }
 
+// ---- 画面に出る日本語のベタ書きを見つける ----
+//
+// 上の検査は t() を通ったキーしか見ない。辞書に入れずに直接書いた文字列は
+// 素通りする。実際に officialCloud.js では認証・参加のエラー14件が日本語の
+// ベタ書きのままで、英語で使っている人が「参加に失敗したときだけ日本語」と
+// いう状態になっていた。参加は全員が通る導線なので、ここは見逃せない。
+//
+// そのまま利用者の目に入る経路(throw / alert / confirm)に限って検査する。
+// コメントとログは対象外(訳す必要が無い)。
+const JA = /[぀-ゟ゠-ヿ一-鿿]/;
+const SURFACES = /(?:throw new Error|window\.alert|window\.confirm|alert|confirm)\(\s*(['"])((?:\\.|(?!\1)[^\\])*)\1/g;
+const ALLOW = [
+  path.join('src', 'components', 'ErrorBoundary.jsx'), // selftest: わざと落とす文。利用者向けではない
+];
+const hardcoded = [];
+for (const f of files) {
+  if (ALLOW.includes(f)) continue;
+  const src = fs.readFileSync(f, 'utf8');
+  for (const m of src.matchAll(SURFACES)) {
+    if (JA.test(m[2])) hardcoded.push([f, m[2].slice(0, 48)]);
+  }
+}
+if (hardcoded.length) {
+  failed = true;
+  console.error(`NG - 画面に出る日本語のベタ書き (${hardcoded.length}件):`);
+  for (const [f, txt] of hardcoded) console.error(`  - ${f}: "${txt}"`);
+} else {
+  console.log('ok - 画面に出る文の日本語ベタ書きなし');
+}
+
 process.exit(failed ? 1 : 0);

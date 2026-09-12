@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useStore, useT } from '../state/store.jsx';
 import { currentYear, labelOfYear, DEFAULT_YEAR_START_MONTH } from '../lib/year.js';
 import { yearSummary } from '../lib/yearArchive.js';
+import { kindOf, kindPatch, DEFAULT_ADULT_TYPE } from '../lib/editionKind.js';
 import YearCloseView from './YearCloseView.jsx';
 
 // ホーム: 「いま何をすればいいか」が一目で分かる入口に徹する。
@@ -21,6 +22,16 @@ export default function HomeTab({ onNavigate }) {
     .filter((g) => g.status === 'finished')
     .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.updatedAt || 0) - (a.updatedAt || 0));
   const firstRun = state.players.length === 0 && games.length === 0;
+  // 既定は日本のアマチュア野球(草野球エディション=7回制90分)。日本語以外で
+  // 開いている人には、そのままだと7回制で始まることが画面のどこにも出ていなかった。
+  // ここで直せるようにして、直したら消える(押すまでは出続ける)。
+  const lang = state.settings.lang || 'ja';
+  // 7回制のまま進むのも正解なので、「7回でよい」を押したときは
+  // 値が変わらない。押したことを別に覚えておかないとカードが消えない。
+  const needsRegionSetup = lang !== 'ja'
+    && !state.settings.regionSetupDone
+    && state.settings.edition === '草野球'
+    && kindOf(state.settings) === DEFAULT_ADULT_TYPE;
   const live = ongoing[0];
 
   // 年度が変わり、前年度に記録があって、まだ締めていなければ案内を出す。
@@ -106,6 +117,27 @@ export default function HomeTab({ onNavigate }) {
               <button className="small" onClick={() => onNavigate?.('settings')}>{t('home.registerBtn')}</button>
             </p>
           )}
+        </div>
+      )}
+
+      {/* 日本の既定のまま始めようとしている海外のチームに、1回だけ選ばせる。
+          「設定を見に行け」ではなく、ここで押せば終わる形にする */}
+      {needsRegionSetup && (
+        <div className="card region-setup">
+          <h2>{t('region.title')}</h2>
+          <p className="small">{t('region.body')}</p>
+          <div className="grid2 mt8">
+            <button
+              className="primary"
+              onClick={() => dispatch({ type: 'UPDATE_SETTINGS', patch: kindPatch('草野球', 'shakaijin') })}
+            >
+              {t('region.nine')}
+            </button>
+            <button onClick={() => dispatch({ type: 'UPDATE_SETTINGS', patch: { adultType: DEFAULT_ADULT_TYPE, regionSetupDone: true } })}>
+              {t('region.seven')}
+            </button>
+          </div>
+          <p className="small dim mt8">{t('region.hint')}</p>
         </div>
       )}
 

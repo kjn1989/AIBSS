@@ -3,6 +3,7 @@ import { useStore, useT, persist } from '../state/store.jsx';
 import {
   officialAvailable, watchAuth, loginWithPassword, logout,
   createCloudTeam, createInvite, inviteUrl, listMyTeams, listMembers, setMemberRole, removeMember, deleteCloudTeam,
+  sendLoginLink, transferOwnership, teamOwnerUid,
   deleteMyAccount,
 } from '../lib/officialCloud.js';
 import { getActiveProfileId, findProfileByOfficialTeamId, addProfile, switchActiveProfile } from '../lib/profiles.js';
@@ -19,6 +20,8 @@ export default function OfficialCloudCard() {
   const [user, setUser] = useState(undefined); // undefined=確認中 / null=未ログイン
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [linkSent, setLinkSent] = useState(false);
+  const [ownerUid, setOwnerUid] = useState(null); // 退会でチームが消えるアカウント
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [invite, setInvite] = useState(null); // { url, role }
@@ -87,12 +90,13 @@ export default function OfficialCloudCard() {
 
   // 接続中チームの自分のロールとメンバー一覧を取得
   useEffect(() => {
-    if (!user || !teamId) { setMembers(null); setMyRole(''); return; }
+    if (!user || !teamId) { setMembers(null); setMyRole(''); setOwnerUid(null); return; }
     (async () => {
       try {
         const mine = (await listMyTeams()).find((t) => t.teamId === teamId);
         setMyRole(mine?.role || '');
         setMembers(await listMembers(teamId));
+        setOwnerUid(await teamOwnerUid(teamId));
       } catch (e) {
         setErr(e?.message || t('occ.membersError'));
       }
@@ -185,7 +189,23 @@ export default function OfficialCloudCard() {
           </button>
           <details className="forgot-help mt8">
             <summary>{t('occ.forgotSummary')}</summary>
+            {/* 以前はここが読み物だけで、オーナーには「管理者に連絡」としか書いておらず
+                (本人が管理者なので堂々巡り)、実際に復旧する手段が画面に無かった。
+                サインインリンクの送信は前からライブラリにあったので、出口を付ける */}
             <p className="small dim" style={{ whiteSpace: 'pre-line', marginTop: 6 }}>{t('occ.forgotBody')}</p>
+            <button
+              className="mt8" style={{ width: '100%' }}
+              disabled={busy || !email.includes('@')}
+              onClick={run(async () => {
+                await sendLoginLink(email.trim());
+                setLinkSent(true);
+              })}
+            >
+              {t('occ.sendLinkBtn')}
+            </button>
+            <p className="small dim" style={{ marginTop: 6 }}>
+              {linkSent ? t('occ.linkSent') : t('occ.sendLinkHint')}
+            </p>
           </details>
         </>
       )}
@@ -270,10 +290,14 @@ export default function OfficialCloudCard() {
           {members && (
             <>
               <div className="section-title">{t('occ.membersCount', { n: members.length })}</div>
+              {/* 「owner ロール」と「チームを所有するアカウント」は別物。後者は1つだけで、
+                  そのアカウントが退会するとチームごと消える。区別が付かないと危ない */}
+              {ownerUid && <p className="small dim" style={{ marginBottom: 8 }}>{t('occ.ownerExplain')}</p>}
               {members.map((m) => (
                 <div className="row" key={m.uid}>
                   <div className="grow">
                     <b>{m.name || m.email}</b>
+                    {m.uid === ownerUid && <span className="owner-chip">{t('occ.ownerChip')}</span>}
                     <div className="dim small">{m.email}</div>
                   </div>
                   {myRole === 'owner' && m.uid !== user.uid ? (
@@ -289,6 +313,19 @@ export default function OfficialCloudCard() {
                       >
                         {ROLE_KEYS.map((k) => <option key={k} value={k}>{roleLabel(k)}</option>)}
                       </select>
+                      {/* 所有アカウントを持っている本人だけが渡せる。渡すと自分は渡せなくなる */}
+                      {user.uid === ownerUid && m.uid !== ownerUid && (
+                        <button
+                          className="small ghost"
+                          onClick={() => window.confirm(t('occ.transferConfirm', { name: m.name || m.email })) && run(async () => {
+                            await transferOwnership(teamId, m.uid);
+                            setOwnerUid(m.uid);
+                            setMembers(await listMembers(teamId));
+                          })()}
+                        >
+                          {t('occ.transfer')}
+                        </button>
+                      )}
                       <button
                         className="small ghost"
                         style={{ color: 'var(--red)' }}
