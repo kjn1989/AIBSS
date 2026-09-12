@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import Sheet from './Sheet.jsx';
 import { useStore, useT, usePlayerName, isMyTeamBatting } from '../state/store.jsx';
-import { RESULTS, DIRECTIONS, SO_TYPES, outTypeLabel, allowsFoul , infieldFlyPossible, FIELD_POSITIONS, DIR_TO_POSITION, ERROR_KINDS, playErrorOf, finePlayOf } from '../lib/model.js';
+import { RESULTS, DIRECTIONS, SO_TYPES, outTypeLabel, allowsFoul , infieldFlyPossible, FIELD_POSITIONS, DIR_TO_POSITION, ERROR_KINDS, playErrorOf, finePlayOf, positionLabel } from '../lib/model.js';
 import { proposeMoves, batterDestOptions, runnerDestOptions, judgeAdvance } from '../lib/plays.js';
 import FieldPad from './FieldPad.jsx';
 import BattedBallPad from './BattedBallPad.jsx';
@@ -266,7 +266,8 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
       ? t('playsheet.batterDest', { base: t(`base.${batterTo}`) })
       : '';
     // 守備も確認文に出す。押したのに文に出ないと、入ったのか分からない
-    const dPos = defPos || DIR_TO_POSITION[direction] || '';
+    // 守備位置は内部では日本語1文字('投'等)。確認文に素で差すと英文に漢字が混ざる
+    const dPos = positionLabel(defPos || DIR_TO_POSITION[direction] || '', lang);
     const errSuffix = isErr
       ? t('playsheet.errSuffix', { pos: dPos, kind: t(`errKind.${defKind}`) })
       : isFine ? t('playsheet.fineSuffix', { pos: dPos }) : '';
@@ -495,7 +496,7 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
                     className={defPos === p ? 'primary' : ''}
                     onClick={() => setDefPos(p)}
                   >
-                    {p}
+                    {positionLabel(p, lang)}
                     {!myBatting && <i>{nameAtPos(p) || '—'}</i>}
                   </button>
                 ))}

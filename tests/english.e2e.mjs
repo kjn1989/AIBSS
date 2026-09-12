@@ -45,8 +45,11 @@ const JA = /[぀-ヿ一-龯]/;
 //  - デモデータの選手名・チーム名(記録された通りの名前なので日本語で正しい)
 //  - 言語切替ボタン自身の「日本語」(日本語話者が見つけるために必要)
 const ALLOWED = /佐藤|鈴木|高橋|田中|伊藤|渡辺|山本|中村|小林|加藤|吉田|山田|グリーンホークス|ブルーウェーブス|レッドスターズ|マイチーム|^日本語$/;
-// 顔写真が無いときに出る名前の頭文字1文字も、訳す対象ではない
-const isInitial = (s) => s.trim().length === 1;
+// 顔写真が無いときに出る名前の頭文字1文字は、訳す対象ではない。
+// ただし守備位置は内部コードが1文字('投'等)なので、これを頭文字と一緒に
+// 見逃すと「英語画面に漢字のポジションボタンが並ぶ」のを永久に検出できない。
+const POS_CODE = /^[投捕一二三遊左中右打控]$/;
+const isInitial = (s) => s.trim().length === 1 && !POS_CODE.test(s.trim());
 
 try {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 }, locale: 'ja-JP' });
@@ -204,6 +207,90 @@ try {
   await jp.waitForTimeout(1000);
   check('日本語の端末は初回から日本語で開く', (await jp.evaluate(() => document.documentElement.lang)) === 'ja');
   await jpCtx.close();
+
+  // ---- 試合の導線(ここを開いていなかったので漏れていた) ----
+  // 上でチームを増やしているので、この状態のまま続けると選手が0人のチームに当たる。
+  // 汚れていないページで、デモを入れてから英語にして辿る。
+  {
+    const g = await browser.newPage({ viewport: { width: 390, height: 844 }, locale: 'ja-JP' });
+    g.on('dialog', (d) => d.accept());
+    const gscan = async (label) => {
+      await g.waitForTimeout(400);
+      if (await g.locator('.crash').count()) {
+        check(`画面が落ちていない (${label})`, false, (await g.locator('.crash').innerText()).slice(0, 200));
+        return;
+      }
+      const lines = (await g.locator('body').innerText()).split('\n').map((x) => x.trim()).filter(Boolean);
+      const ja = lines.filter((l) => JA.test(l) && !ALLOWED.test(l) && !isInitial(l));
+      check(`${label}: 日本語が出ていない`, ja.length === 0, JSON.stringify(ja.slice(0, 5)));
+    };
+
+    await g.goto(URL_, { waitUntil: 'load' });
+    await g.waitForTimeout(900);
+    await g.click('button[aria-label="設定"]');
+    await g.waitForTimeout(400);
+    const demo2 = g.locator('button:has-text("デモデータを投入")');
+    if (await demo2.count()) { await demo2.click(); await g.waitForTimeout(800); }
+    await g.locator('button:has-text("English")').first().click();
+    await g.waitForTimeout(900);
+
+    // 既定のチーム名は「マイチーム」。英語では最初に変えるものなので、変えてから見る
+    const teamBox = g.locator('input').first();
+    if (await teamBox.count()) { await teamBox.fill('Manila Stars'); await g.waitForTimeout(400); }
+    await g.locator('.tabbar button').nth(1).click();
+    await g.waitForTimeout(700);
+    await gscan('試合作成の画面');
+    await g.locator('input[placeholder="Opponent name"]').first().fill('Manila Bay');
+    await g.locator('button:has-text("Start Game")').last().click();
+    await g.waitForTimeout(1100);
+    await gscan('今日のメンバー');
+    const go = g.locator('button:has-text("Start with these")').first();
+    check('「今日のメンバー」の確定が英語で出ている', (await go.count()) > 0);
+    if (await go.count()) { await go.click(); await g.waitForTimeout(1200); }
+    await gscan('スコア入力(試合中)');
+
+    const auto = g.locator('button:has-text("Auto-set lineup from players")').first();
+    check('オーダーの自動セットが英語で出ている', (await auto.count()) > 0);
+    if (await auto.count()) { await auto.click(); await g.waitForTimeout(1000); }
+
+    // 守備位置が入っていないと、打球の守備欄に選手が出ない
+    await g.locator('.tabbar button').nth(2).click();
+    await g.waitForTimeout(800);
+    await g.evaluate(() => {
+      const want = ['投', '捕', '一', '二', '三', '遊', '左', '中', '右'];
+      [...document.querySelectorAll('.card .row select')].forEach((sel, i) => {
+        if (!want[i]) return;
+        sel.value = want[i];
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    });
+    await g.waitForTimeout(700);
+    await gscan('オーダー(試合中)');
+
+    await g.locator('.tabbar button').nth(1).click();
+    await g.waitForTimeout(900);
+    const pad2 = g.locator('.result-pad button:not([disabled])').first();
+    check('打撃結果のパッドが押せる', (await pad2.count()) > 0);
+    if (await pad2.count()) {
+      await pad2.click();
+      await g.waitForTimeout(500);
+      const coach = g.locator('.pad-coach button');
+      if (await coach.count()) { await coach.click(); await g.waitForTimeout(200); }
+      const spot = g.locator('.field-pad button.field-pos').first();
+      if (await spot.count()) { await spot.click(); await g.waitForTimeout(800); }
+      // 位置ボタンは「失策」等を選んだときだけ出る
+      const errBtn = g.locator('button:has-text("Error")').last();
+      if (await errBtn.count()) { await errBtn.click(); await g.waitForTimeout(600); }
+      await gscan('打席の確定シート(失策の入力中)');
+      // 守備位置ボタンは英語表記(P/C/1B…)のはず。漢字なら gscan が拾うが、
+      // 「そもそも出ていない」と区別できないので実在も確かめる
+      const posBtns = await g.locator('.pe-pos button').allInnerTexts().catch(() => []);
+      check('打席シートに守備位置のボタンが出ている', posBtns.length > 0, String(posBtns.length));
+      check('打席シートの守備位置が英語表記', posBtns.length > 0 && posBtns.every((x) => !JA.test(x)),
+        JSON.stringify(posBtns.slice(0, 9)));
+    }
+    await g.close();
+  }
 
   check('描画中の例外なし', errors.length === 0, errors.join(' / '));
 } catch (e) {

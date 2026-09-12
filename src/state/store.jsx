@@ -649,7 +649,7 @@ export function reducer(state, action) {
 
     // ===== デモデータ =====
     case 'LOAD_DEMO': {
-      const { players, games } = generateDemoData();
+      const { players, games } = generateDemoData(state.settings.lang || 'ja');
       const gameMap = { ...state.games };
       for (const g of games) gameMap[g.id] = g;
       const existingIds = new Set(state.players.map((p) => p.id));
