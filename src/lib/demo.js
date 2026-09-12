@@ -4,7 +4,15 @@
 // ============================================================
 import { newPlayer, newGame, newAtBat, newPlayLog, newPitchingRecord, newPitch, uid } from './model.js';
 
-const NAMES = ['佐藤', '鈴木', '高橋', '田中', '伊藤', '渡辺', '山本', '中村', '小林', '加藤', '吉田', '山田'];
+// デモは「アプリが何をするか」を見せるための入口なので、表示言語に合わせる。
+// 英語の端末で日本語の名前とログが並ぶと、そこが最初の印象になってしまう。
+// 守備位置は内部コード('投'等)のままでよい(表示時に positionLabel を通す)。
+const NAMES_JA = ['佐藤', '鈴木', '高橋', '田中', '伊藤', '渡辺', '山本', '中村', '小林', '加藤', '吉田', '山田'];
+const NAMES_EN = ['Cruz', 'Santos', 'Reyes', 'Garcia', 'Mendoza', 'Torres', 'Flores', 'Ramos', 'Castillo', 'Aquino', 'Navarro', 'Bautista'];
+const TEAMS_JA = ['レッドスターズ', 'ブルーウェーブス', 'グリーンホークス'];
+const TEAMS_EN = ['Red Stars', 'Blue Waves', 'Green Hawks'];
+const LOG_JA = { run: '得点', hrRun: '本塁打で得点', sfRun: '犠飛で得点', sb: '盗塁成功' };
+const LOG_EN = { run: 'Run scored', hrRun: 'Run scored on a home run', sfRun: 'Run scored on a sacrifice fly', sb: 'Stolen base' };
 const RESULT_POOL = [
   'single', 'single', 'single', 'single', 'double', 'double', 'triple', 'hr',
   'out', 'out', 'out', 'out', 'out', 'out', 'out', 'so', 'so', 'bb', 'bb', 'hbp', 'error', 'sacBunt', 'sacFly',
@@ -21,7 +29,11 @@ function mulberry32(a) {
   };
 }
 
-export function generateDemoData() {
+export function generateDemoData(lang = 'ja') {
+  const en = lang === 'en';
+  const NAMES = en ? NAMES_EN : NAMES_JA;
+  const TEAMS = en ? TEAMS_EN : TEAMS_JA;
+  const L = en ? LOG_EN : LOG_JA;
   const rand = mulberry32(20260702);
   const pick = (arr) => arr[Math.floor(rand() * arr.length)];
 
@@ -29,7 +41,7 @@ export function generateDemoData() {
   const games = [];
 
   for (let gi = 0; gi < 3; gi++) {
-    const g = newGame({ opponent: ['レッドスターズ', 'ブルーウェーブス', 'グリーンホークス'][gi], isHome: gi % 2 === 0 });
+    const g = newGame({ opponent: TEAMS[gi], isHome: gi % 2 === 0 });
     g.id = 'demo-g' + gi;
     g.date = `2026-0${4 + gi}-1${gi + 2}`;
     g.status = 'finished';
@@ -80,19 +92,19 @@ export function generateDemoData() {
               runners[b] = false;
               if (nb >= 4) {
                 runs++;
-                g.playLogs.push(newPlayLog({ gameId: g.id, inning, isTop: !g.isHome, kind: 'run', text: '得点', payload: { playerId: players[(batterIdx + b) % 9].id } }));
+                g.playLogs.push(newPlayLog({ gameId: g.id, inning, isTop: !g.isHome, kind: 'run', text: L.run, payload: { playerId: players[(batterIdx + b) % 9].id } }));
               } else runners[nb] = true;
             }
           }
           if (bases >= 4) {
             runs++;
-            g.playLogs.push(newPlayLog({ gameId: g.id, inning, isTop: !g.isHome, kind: 'run', text: '本塁打で得点', payload: { playerId: p.id } }));
+            g.playLogs.push(newPlayLog({ gameId: g.id, inning, isTop: !g.isHome, kind: 'run', text: L.hrRun, payload: { playerId: p.id } }));
           } else runners[Math.min(bases, 3)] = true;
         } else if (result === 'sacFly' && runners[3]) {
           runners[3] = false;
           runs++;
           outs++;
-          g.playLogs.push(newPlayLog({ gameId: g.id, inning, isTop: !g.isHome, kind: 'run', text: '犠飛で得点', payload: { playerId: players[(batterIdx + 3) % 9].id } }));
+          g.playLogs.push(newPlayLog({ gameId: g.id, inning, isTop: !g.isHome, kind: 'run', text: L.sfRun, payload: { playerId: players[(batterIdx + 3) % 9].id } }));
         } else if (result === 'sacBunt') {
           for (let b = 3; b >= 1; b--) {
             if (runners[b] && b < 3) { runners[b + 1] = true; runners[b] = false; }
@@ -138,7 +150,7 @@ export function generateDemoData() {
         // たまに盗塁
         if (runners[1] && rand() < 0.15) {
           runners[1] = false; runners[2] = true;
-          g.playLogs.push(newPlayLog({ gameId: g.id, inning, isTop: !g.isHome, kind: 'sb', text: '盗塁成功', payload: { playerId: players[batterIdx % 9].id } }));
+          g.playLogs.push(newPlayLog({ gameId: g.id, inning, isTop: !g.isHome, kind: 'sb', text: L.sb, payload: { playerId: players[batterIdx % 9].id } }));
         }
       }
     }

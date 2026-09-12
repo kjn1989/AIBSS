@@ -125,6 +125,7 @@ export default function RunnerEventSheet({ game, base, onClose, onPinchRunner, o
         </button>
         <button onClick={() => fire('wp', allAdvanceMoves)}>{t('runner.wp')}</button>
         <button onClick={() => fire('pb', allAdvanceMoves)}>{t('runner.pb')}</button>
+        <button onClick={() => fire('balk', allAdvanceMoves)}>{t('runner.balk')}</button>
         <button className="danger" onClick={() => fire('pickoff', [{ from: base, to: 'out' }])}>
           {t('runner.pickoff')}
         </button>

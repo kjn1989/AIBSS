@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useStore, usePlayerName, useT } from '../state/store.jsx';
-import { FIELD_POSITIONS } from '../lib/model.js';
+import { FIELD_POSITIONS, positionLabel } from '../lib/model.js';
 import { inGamePlayerIds } from '../lib/correctionParser.js';
 import Sheet from './Sheet.jsx';
 
@@ -18,6 +18,9 @@ const SUB_KINDS = ['def', 'ph', 'pr'];
 
 export default function DefenseFixSheet({ game, playerId, order, currentPos, onClose }) {
   const { state, dispatch } = useStore();
+  const lang = state.settings.lang || 'ja';
+  // 守備位置は内部では日本語1文字('投' 等)で持っている。画面に出すときは必ず通す
+  const posName = (v) => positionLabel(v, lang);
   const t = useT();
   const nameOf = usePlayerName();
   const [kind, setKind] = useState(null);
@@ -40,10 +43,10 @@ export default function DefenseFixSheet({ game, playerId, order, currentPos, onC
   const preview = () => {
     if (!kind) return '';
     if (!pos) return t('df.pickPos');
-    if (kind === 'start') return t('df.pvStart', { name: nameOf(playerId), from: currentPos || '—', to: pos });
-    if (kind === 'from') return t('df.pvFrom', { inning, name: nameOf(playerId), to: pos });
+    if (kind === 'start') return t('df.pvStart', { name: nameOf(playerId), from: currentPos ? posName(currentPos) : '—', to: posName(pos) });
+    if (kind === 'from') return t('df.pvFrom', { inning, name: nameOf(playerId), to: posName(pos) });
     if (!inId) return t('df.pickIn');
-    return t('df.pvSub', { inning, inName: nameOf(inId), outName: nameOf(playerId), to: pos, kind: t(`df.sub_${subKind}`) });
+    return t('df.pvSub', { inning, inName: nameOf(inId), outName: nameOf(playerId), to: posName(pos), kind: t(`df.sub_${subKind}`) });
   };
 
   const save = () => {
@@ -69,7 +72,7 @@ export default function DefenseFixSheet({ game, playerId, order, currentPos, onC
     <Sheet title={t('df.title')} onClose={onClose}>
       <p className="small dim" style={{ margin: '0 0 12px' }}>
         {order ? `${order}${t('gp.nlOrderSuffix')} ` : ''}{nameOf(playerId)}
-        {currentPos ? `（${currentPos}）` : ''}
+        {currentPos ? (lang === 'ja' ? `（${posName(currentPos)}）` : ` (${posName(currentPos)})`) : ''}
       </p>
 
       <div className="section-title" style={{ marginTop: 0 }}>{t('df.whatToFix')}</div>
@@ -132,7 +135,7 @@ export default function DefenseFixSheet({ game, playerId, order, currentPos, onC
           <div className="section-title">{t(`df.posLbl_${kind}`)}</div>
           <div className="chips-row">
             {FIELD_POSITIONS.map((p) => (
-              <button key={p} className={`small ${pos === p ? 'primary' : ''}`} onClick={() => setPos(p)}>{p}</button>
+              <button key={p} className={`small ${pos === p ? 'primary' : ''}`} onClick={() => setPos(p)}>{posName(p)}</button>
             ))}
           </div>
 

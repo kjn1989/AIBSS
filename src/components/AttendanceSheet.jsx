@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Sheet from './Sheet.jsx';
 import { useStore, useT } from '../state/store.jsx';
-import { lastAttendees } from '../lib/model.js';
+import { lastAttendees, positionLabel } from '../lib/model.js';
 import { isArchived } from '../lib/year.js';
 
 // ============================================================
@@ -16,6 +16,7 @@ import { isArchived } from '../lib/year.js';
 // ============================================================
 export default function AttendanceSheet({ initial, onDone, onClose, confirmKey = 'att.start' }) {
   const { state } = useStore();
+  const lang = state.settings.lang || 'ja';
   const t = useT();
   const players = state.players.filter((p) => !isArchived(p));
   const prev = lastAttendees(Object.values(state.games));
@@ -77,7 +78,7 @@ export default function AttendanceSheet({ initial, onDone, onClose, confirmKey =
               <span className="att-box">✓</span>
               <span className="att-name">{p.name}</span>
               {p.number ? <span className="att-num">#{p.number}</span> : null}
-              <span className="att-pos">{p.position || '—'}</span>
+              <span className="att-pos">{p.position ? positionLabel(p.position, lang) : '—'}</span>
             </div>
           );
         })}
