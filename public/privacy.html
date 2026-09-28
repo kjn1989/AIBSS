@@ -49,7 +49,7 @@
 
 <h1>プライバシーポリシー</h1>
 <p class="dim">AI-BASE DIAMOND（以下「本アプリ」）<br>
-制定日: 2026年9月12日 ／ 最終更新: 2026年9月12日</p>
+制定日: 2026年9月12日 ／ 最終更新: 2026年9月28日</p>
 
 <div class="box warn">
 <p class="todo" style="margin:0 0 6px">⚠️ 連絡先が未設定です</p>
@@ -100,8 +100,8 @@
 </ul>
 
 <h3>3-3. 音声入力（任意）</h3>
-<p>ブラウザ版で音声入力を使用した場合、ブラウザの標準機能（Web Speech API）を通じて、<b>音声データがブラウザ提供元（Apple または Google）のサーバーへ送信され、文字に変換されます</b>。これはブラウザの機能であり、当方はこの音声データを取得しません。取り扱いは各社のプライバシーポリシーに従います。</p>
-<p class="dim">iOS／Androidのアプリ版では、この機能はOSの制約により無効化されており、音声データの送信は発生しません（テキスト入力をご利用ください）。</p>
+<p>音声入力を使用した場合、<b>音声データがOSまたはブラウザの提供元（Apple または Google）のサーバーへ送信され、文字に変換されます</b>。ブラウザ版ではブラウザの標準機能（Web Speech API）を、iOS／Androidのアプリ版ではOSの音声認識機能を使います。当方はこの音声データを取得しません。取り扱いは各社のプライバシーポリシーに従います。</p>
+<p class="dim">アプリ版では、初めて音声入力を使うときにマイクと音声認識の許可を求めます。許可しなくても、テキスト入力ですべての記録ができます。許可は端末の設定からいつでも取り消せます。</p>
 
 <h3>3-4. 旧方式のクラウド同期（任意・上級者向け）</h3>
 <p>利用者が自ら用意した Firebase プロジェクトの設定を入力した場合、記録は<b>利用者自身が管理するFirebaseプロジェクト</b>へ送信されます。当方はその保存先にアクセスできません。</p>
@@ -111,7 +111,7 @@
 <ul>
   <li><b>Supabase Inc.</b>（公式クラウド同期の保存先）</li>
   <li><b>Google LLC</b>（Gemini API。利用者自身のAPIキーによる利用）</li>
-  <li><b>Apple Inc. / Google LLC</b>（ブラウザの音声認識機能）</li>
+  <li><b>Apple Inc. / Google LLC</b>（ブラウザおよびOSの音声認識機能）</li>
 </ul>
 <p>これら以外へ個人情報を提供することはありません。ただし、法令に基づく開示請求があった場合はこの限りではありません。</p>
 
@@ -155,7 +155,7 @@
 
 <h1 id="en">Privacy Policy</h1>
 <p class="dim">AI-BASE DIAMOND ("the App")<br>
-Effective: 2026-09-12 / Last updated: 2026-09-12<br>
+Effective: 2026-09-12 / Last updated: 2026-09-28<br>
 This is a reference translation. The Japanese text above prevails in case of any discrepancy.</p>
 
 <div class="box warn">
@@ -186,13 +186,14 @@ This is a reference translation. The Japanese text above prevails in case of any
 <p>AI features run only if you enter your own Google Gemini API key. Requests go directly from your device to Google LLC using <b>your</b> key; they do not pass through our servers and we do not receive their contents. <b>For voice interpretation, registered player names are replaced with a generic word before sending.</b> AI player profiles, the AI newspaper, and lineup suggestions necessarily include player names.</p>
 
 <h3>3-3. Voice input (optional)</h3>
-<p>In the browser version, voice input uses the browser's Web Speech API, which <b>sends audio to the browser vendor (Apple or Google) for transcription</b>. We do not receive this audio. In the iOS/Android app versions this feature is disabled by platform limitation, so no audio is sent.</p>
+<p>When you use voice input, <b>audio is sent to the operating system or browser vendor (Apple or Google) for transcription</b>. The browser version uses the browser's Web Speech API; the iOS/Android app versions use the operating system's speech recognition. We do not receive this audio.</p>
+<p class="dim">The app versions ask for microphone and speech-recognition permission the first time you use voice input. Everything can be recorded by typing instead, and you can withdraw the permission at any time in your device settings.</p>
 
 <h3>3-4. Legacy cloud sync (optional, advanced)</h3>
 <p>If you supply your own Firebase project configuration, records are sent to <b>your own</b> Firebase project. We have no access to it.</p>
 
 <h2>4. Processors</h2>
-<p>Supabase Inc. (official cloud storage), Google LLC (Gemini API, under your own key), Apple Inc. / Google LLC (browser speech recognition). We disclose information to no one else, except where required by law.</p>
+<p>Supabase Inc. (official cloud storage), Google LLC (Gemini API, under your own key), Apple Inc. / Google LLC (browser and operating-system speech recognition). We disclose information to no one else, except where required by law.</p>
 
 <h2>5. About player information (important)</h2>
 <p><b>Most information entered into the App describes other people — your teammates — rather than the person using the App.</b> Before entering player names or face photos and enabling cloud sync, you must obtain the consent of each player, or of a parent or guardian where the player is a minor. This is particularly important for youth and junior-high teams, where players are minors. Face photos are optional; without one, the player's initial is shown instead.</p>

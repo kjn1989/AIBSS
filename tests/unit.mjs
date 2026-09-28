@@ -19,6 +19,7 @@ import { draftNarrative, noteOf, noteKeyOf } from '../src/lib/narrative.js';
 import { tiebreakPlacement, backInOrder, halfHasPlays, halfStartKeyOf } from '../src/lib/tiebreak.js';
 import { aggregateScorers, rankScorers, scorerName, tagScorerId } from '../src/lib/scorers.js';
 import { speechSupported } from '../src/lib/speech.js';
+import { createNativeSpeechEngine, mapNativeError, SILENCE_MS, NO_SPEECH_MS, STOP_GRACE_MS } from '../src/lib/nativeSpeech.js';
 import { detectLang, resolveLang } from '../src/lib/langStore.js';
 import { MESSAGES } from '../src/lib/i18n.js';
 import { positionListLabel } from '../src/lib/model.js';
@@ -5716,6 +5717,16 @@ test('音声: ネイティブWebViewの中では、APIが露出していても�
   assert.equal(speechSupported(capWindow(true)), false, 'WKWebViewでは動かないので弾く');
 });
 
+test('音声: ネイティブでもOSの認識プラグインが組み込まれていれば使える', () => {
+  const w = capWindow(true);
+  w.Capacitor.isPluginAvailable = (n) => n === 'SpeechRecognition';
+  w.Capacitor.Plugins = { SpeechRecognition: {} };
+  assert.equal(speechSupported(w), true);
+  // ネイティブ側に無い(古いビルド)なら、JSだけ登録されていても使えない
+  w.Capacitor.isPluginAvailable = () => false;
+  assert.equal(speechSupported(w), false);
+});
+
 test('音声: Capacitorを読み込んだWeb版(PWA)では使える', () => {
   // 同じコードがブラウザでも動く。isNativePlatform()がfalseなら従来どおり
   assert.equal(speechSupported(capWindow(false)), true);
@@ -5991,4 +6002,175 @@ test('newGame: 作った時点のエディションと区分を持つ(既定は�
   const g = newGame({ edition: '草野球', kind: 'shakaijin' });
   assert.equal(g.edition, '草野球');
   assert.equal(g.kind, 'shakaijin');
+});
+
+// ---------------- ネイティブ音声認識のアダプタ ----------------
+// OSの認識器(プラグイン)を Web Speech API と同じ start/stop/abort と
+// onInterim/onResult/onError/onEnd の形に揃える。実機でしか動かないので、
+// プラグインの振る舞い(iOS/Android のソースで確かめたもの)を偽物で再現して確かめる。
+function fakeSpeech({ permission = 'granted', startError = null } = {}) {
+  const listeners = {};
+  const calls = [];
+  let now = 0;
+  let timers = [];
+  let seq = 0;
+  let nextSession = 0;
+  const plugin = {
+    addListener: (name, fn) => { listeners[name] = fn; return Promise.resolve({ remove() {} }); },
+    checkPermissions: async () => ({ speechRecognition: permission === 'granted' ? 'granted' : 'prompt' }),
+    requestPermissions: async () => { calls.push('request'); return { speechRecognition: permission }; },
+    start: async (opts) => {
+      calls.push(['start', opts]);
+      if (startError) throw new Error(startError);
+      nextSession += 1;
+      plugin.session = nextSession;
+      emit('listeningState', { state: 'startingListening', sessionId: nextSession });
+    },
+    // iOS: stop すると確定結果を出さずに、すぐ止まった通知を出す
+    stop: async () => { calls.push('stop'); emit('listeningState', { state: 'stopped', sessionId: plugin.session }); },
+    forceStop: async () => { calls.push('forceStop'); },
+  };
+  const emit = (name, ev) => listeners[name]?.(ev);
+  const deps = {
+    setTimeout: (fn, ms) => { seq += 1; timers.push({ id: seq, at: now + ms, fn }); return seq; },
+    clearTimeout: (id) => { timers = timers.filter((t) => t.id !== id); },
+  };
+  const advance = async (ms) => {
+    const end = now + ms;
+    for (;;) {
+      await flush();
+      const due = timers.filter((t) => t.at <= end).sort((a, b) => a.at - b.at)[0];
+      if (!due) break;
+      timers = timers.filter((t) => t !== due);
+      now = due.at;
+      due.fn();
+    }
+    now = end;
+    await flush();
+  };
+  return { plugin, emit, calls, deps, advance };
+}
+const flush = async () => { for (let i = 0; i < 20; i++) await new Promise((r) => setImmediate(r)); };
+const recorder = () => {
+  const log = [];
+  return {
+    log,
+    cbs: {
+      onInterim: (t) => log.push(['interim', t]),
+      onResult: (t) => log.push(['result', t]),
+      onError: (e) => log.push(['error', e]),
+      onEnd: () => log.push(['end']),
+    },
+  };
+};
+
+test('ネイティブ音声: 途中結果が止まったら最後の途中結果を確定として渡す(iOS は自分で止まらない)', async () => {
+  const f = fakeSpeech();
+  const r = recorder();
+  const rec = createNativeSpeechEngine(f.plugin, f.deps).createRecognizer(r.cbs);
+  rec.start();
+  await flush();
+  const opts = f.calls.find((c) => c[0] === 'start')[1];
+  assert.equal(opts.language, 'ja-JP');
+  assert.equal(opts.partialResults, true);
+  assert.ok(opts.contextualStrings.includes('センター'), '野球用語を認識器に渡す');
+  f.emit('partialResults', { matches: ['センター前'] });
+  await f.advance(SILENCE_MS - 100);
+  f.emit('partialResults', { matches: ['センター前ヒット'] });
+  await f.advance(SILENCE_MS - 1);
+  assert.ok(!f.calls.includes('stop'), '話している間は止めない');
+  await f.advance(1);
+  assert.ok(f.calls.includes('stop'));
+  assert.deepEqual(r.log, [['interim', 'センター前'], ['interim', 'センター前ヒット'], ['result', 'センター前ヒット'], ['end']]);
+});
+
+test('ネイティブ音声: Android の自動停止では、止まった後に届く確定結果を使う', async () => {
+  const f = fakeSpeech();
+  const r = recorder();
+  const rec = createNativeSpeechEngine(f.plugin, f.deps).createRecognizer(r.cbs);
+  rec.start();
+  await flush();
+  f.emit('partialResults', { matches: ['ライト'] });
+  f.emit('partialResults', { matches: ['ライトフライ'] });
+  f.emit('listeningState', { state: 'stopped', sessionId: f.plugin.session });
+  await flush();
+  assert.deepEqual(r.log.slice(-2), [['result', 'ライトフライ'], ['end']]);
+});
+
+test('ネイティブ音声: 何も言わなければ no-speech で終わる', async () => {
+  const f = fakeSpeech();
+  const r = recorder();
+  createNativeSpeechEngine(f.plugin, f.deps).createRecognizer(r.cbs).start();
+  await f.advance(NO_SPEECH_MS);
+  assert.deepEqual(r.log, [['error', 'no-speech'], ['end']]);
+});
+
+test('ネイティブ音声: マイクを許可されなければ not-allowed(常時モードの再試行が止まる名前)', async () => {
+  const f = fakeSpeech({ permission: 'denied' });
+  const r = recorder();
+  createNativeSpeechEngine(f.plugin, f.deps).createRecognizer(r.cbs).start();
+  await flush();
+  assert.ok(f.calls.includes('request'), 'まず許可を求める');
+  assert.ok(!f.calls.some((c) => c[0] === 'start'), '許可なしでは開始しない');
+  assert.deepEqual(r.log, [['error', 'not-allowed'], ['end']]);
+});
+
+test('ネイティブ音声: stop はそれまでの分を結果に、abort は何も返さない', async () => {
+  const f = fakeSpeech();
+  const eng = createNativeSpeechEngine(f.plugin, f.deps);
+  const a = recorder();
+  const ra = eng.createRecognizer(a.cbs);
+  ra.start();
+  await flush();
+  f.emit('partialResults', { matches: ['ボール'] });
+  ra.stop();
+  await flush();
+  assert.deepEqual(a.log.slice(-2), [['result', 'ボール'], ['end']]);
+
+  const b = recorder();
+  const rb = eng.createRecognizer(b.cbs);
+  rb.start();
+  await flush();
+  f.emit('partialResults', { matches: ['はい'] });
+  rb.abort();
+  await flush();
+  assert.deepEqual(b.log, [['interim', 'はい']], '捨てたセッションから結果もエラーも来ない');
+});
+
+test('ネイティブ音声: 前のセッションが止まるまで次を始めない', async () => {
+  const f = fakeSpeech();
+  // 止まった通知がすぐ来ない(OS側で片付けに時間がかかる)ケース
+  f.plugin.stop = async () => { f.calls.push('stop'); };
+  const eng = createNativeSpeechEngine(f.plugin, f.deps);
+  const a = eng.createRecognizer(recorder().cbs);
+  a.start();
+  await flush();
+  const first = f.plugin.session;
+  a.abort();
+  const b = recorder();
+  eng.createRecognizer(b.cbs).start();
+  await flush();
+  assert.equal(f.calls.filter((c) => c[0] === 'start').length, 1, 'まだ始めない');
+  f.emit('listeningState', { state: 'stopped', sessionId: first });
+  await f.advance(STOP_GRACE_MS);
+  assert.equal(f.calls.filter((c) => c[0] === 'start').length, 2, '止まってから始める');
+  // 前のセッションの遅れた通知で、新しいセッションが止まらない
+  f.emit('listeningState', { state: 'stopped', sessionId: first });
+  f.emit('partialResults', { matches: ['ストライク'] });
+  await flush();
+  assert.deepEqual(b.log, [['interim', 'ストライク']]);
+});
+
+test('ネイティブ音声: プラグインのエラーを Web Speech API の名前に寄せる', () => {
+  assert.equal(mapNativeError('MICROPHONE_PERMISSION_DENIED'), 'not-allowed');
+  assert.equal(mapNativeError('Missing speech recognition permission.'), 'not-allowed');
+  assert.equal(mapNativeError('INSUFFICIENT_PERMISSIONS'), 'not-allowed');
+  assert.equal(mapNativeError('NO_MATCH'), 'no-speech');
+  assert.equal(mapNativeError('SPEECH_TIMEOUT'), 'no-speech');
+  assert.equal(mapNativeError('KAFASSISTANTERRORDOMAIN_1110'), 'no-speech');
+  assert.equal(mapNativeError('NETWORK_TIMEOUT'), 'network');
+  assert.equal(mapNativeError('AUDIO_ENGINE_START_FAILED'), 'audio-capture');
+  assert.equal(mapNativeError('RECOGNIZER_UNAVAILABLE'), 'service-not-allowed');
+  assert.equal(mapNativeError('UNSUPPORTED_LOCALE'), 'service-not-allowed');
+  assert.equal(mapNativeError('something else'), 'unknown');
 });
