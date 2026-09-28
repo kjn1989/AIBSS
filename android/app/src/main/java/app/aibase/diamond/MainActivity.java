@@ -1,4 +1,4 @@
-package app.aibss.diamond;
+package app.aibase.diamond;
 
 import com.getcapacitor.BridgeActivity;
 

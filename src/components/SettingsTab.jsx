@@ -819,6 +819,8 @@ function BuildInfoCard() {
         {/* 英語版は同じファイルの後半にある。素のリンクだと日本語の先頭に着地し、
             英語で読む人は全文スクロールしないと辿り着けなかった */}
         <a href={`./privacy.html${lang === 'en' ? '#en' : ''}`}>{t('set.privacyPolicy')}</a>
+        {' · '}
+        <a href={`./support.html${lang === 'en' ? '#en' : ''}`}>{t('set.support')}</a>
       </p>
     </div>
   );
