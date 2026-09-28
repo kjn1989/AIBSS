@@ -327,7 +327,9 @@ Player  { id, name, number, createdAt, throws, bats, position, subPositions[],
           scoutTags[], scoutCatchphrase, scoutReport, scoutPhoto(dataURL),
           archivedAt, archivedYear, archiveNote }
 Member  { id, name, role, participation, scout系同上 }   ← 試合に出ない参加メンバー
-Game    { id, date, opponent, season, isHome, status(ongoing|finished),
+Game    { id, schemaVersion, appBuild, origin(live|import|demo),
+          gameType(official|practice|null), edition, kind, teamGap, paDeletions,
+          date, opponent, season, isHome, status(ongoing|finished),
           inning, isTop, outs, runners{1,2,3}, myScore, oppScore,
           lineup[{order,playerId,position}], startingLineup[], usedPlayerIds[],
           retiredPlayerIds[], batterIndex, currentPitcherId,
@@ -339,7 +341,7 @@ AtBat   { id, playerId, order, result, outType, soType, direction, rbi, runsOnPl
           battedBall{angle,depth,contact}, pitches[], pitchCount, firstPitch,
           firstPitchHit, snapshot{runners,outs,inning,isTop,scoreDiff},
           advSuccess, clutch, ts }
-PlayLog { id, inning, isTop, kind, text, payload }
+PlayLog { id, inning, isTop, kind, text, payload, ts, editedAt(後から直した打席) }
 PitchingRecord { id, playerId, appearanceOrder, outsRecorded, runs, earnedRuns,
           hitsAllowed, walks, hitByPitch, strikeouts, pitches, abFaced, win, save, hold }
 ```
@@ -756,6 +758,14 @@ npm run cap:sync               # ネイティブへ反映
 - **勝率モデルの延長対応**: 現状1イニング先までしか見ていない
 - **対戦ネットワーク**: 両チームがAI-BASEなら1試合1記録で共有(相手A〜T記号の制約が解ける)
 - **大会運営モード** / **卒団・引退アルバム自動生成** / **匿名ベンチマーク**
+- **データ基盤(匿名の集計データを同意のうえで集める)**: v1.1以降。送信・同意画面・プライバシー申告は
+  **その版で入れて審査に出す**(送信コードを先に入れてサーバー側で後から有効にするのは審査ガイドライン2.3.1の
+  「隠れた機能」に当たるのでやらない)。手戻りを防ぐため、**記録した時にしか書けない項目は先に入れてある**:
+  試合の `schemaVersion` / `appBuild` / `origin` / `gameType` / `edition` / `kind`、打席の `editedAt`、
+  試合の `paDeletions`。取り出しは `src/lib/datasetExtract.js`(純関数・どこからも呼ばれていない)。
+  名前・ID・相手名・大会名・自由記述を落とし、日付は年月まで。取り出せる形は `tests/unit.mjs` が固定している。
+  送る版で決めること: 同意の範囲(過去の試合も含めるか)、ゲームIDのハッシュ化(同じ試合を複数端末から
+  送ったときの重複除去用。送る時にハッシュする)、送信先と保存期間
 - **収益化(¥980チーム買い切り)**: 設計資産が `docs/monetization-and-backend-design.md` と
   `supabase/migrations/0001_init.sql` + `supabase/functions/revenuecat-webhook` にある(**未接続**)。
   ⚠️ ドキュメントは `src/lib/entitlement.js` を「実装済み」と書いているが、**そのファイルは存在しない**。

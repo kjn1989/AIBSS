@@ -22,7 +22,9 @@ import { speechSupported } from '../src/lib/speech.js';
 import { createNativeSpeechEngine, mapNativeError, SILENCE_MS, NO_SPEECH_MS, STOP_GRACE_MS } from '../src/lib/nativeSpeech.js';
 import { detectLang, resolveLang } from '../src/lib/langStore.js';
 import { MESSAGES } from '../src/lib/i18n.js';
-import { positionListLabel } from '../src/lib/model.js';
+import { positionListLabel, GAME_SCHEMA_VERSION } from '../src/lib/model.js';
+import { extractGameDataset, datasetEligibility, DATASET_VERSION } from '../src/lib/datasetExtract.js';
+import { generateDemoData } from '../src/lib/demo.js';
 import { computeHighlights } from '../src/lib/highlights.js';
 import { buildRunDists, buildWinModel, priorDist, remainingHalves, SCORE_PROB, MAX_RUNS } from '../src/lib/winExp.js';
 import { TEAM_GAPS, buildGapModel, gapTables, gapOf, scaleDist, scaleDists, S_EXP } from '../src/lib/teamGap.js';
@@ -6173,4 +6175,120 @@ test('ネイティブ音声: プラグインのエラーを Web Speech API の�
   assert.equal(mapNativeError('RECOGNIZER_UNAVAILABLE'), 'service-not-allowed');
   assert.equal(mapNativeError('UNSUPPORTED_LOCALE'), 'service-not-allowed');
   assert.equal(mapNativeError('something else'), 'unknown');
+});
+
+// ---------------- 試合の出どころと形の版 ----------------
+// あとで集計するときに「どの項目があるはずの試合か」「1プレーずつ付けた試合か」を
+// 見分けるための項目。作った時にしか書けない
+test('newGame: 形の版と出どころを持つ', () => {
+  const g = newGame({});
+  assert.equal(g.schemaVersion, GAME_SCHEMA_VERSION);
+  assert.equal(g.origin, 'live');
+  assert.equal(g.appBuild, null, 'テスト(node)ではビルド情報が無い');
+  assert.equal(newGame({ origin: 'import' }).origin, 'import');
+  assert.equal(newGame({ origin: 'demo' }).origin, 'demo');
+  assert.equal(newGame({ origin: 'xxx' }).origin, 'live');
+  assert.ok(generateDemoData().games.every((x) => x.origin === 'demo'), 'デモ試合は demo');
+});
+
+// ---------------- 集計用データの取り出し ----------------
+// 送る仕組みはまだ無い。いま記録している形から、個人を特定できない形で
+// 取り出せることを固定しておく(足りない項目に後から気づいても過去には戻れない)
+function datasetGame() {
+  const g = newGame({ opponent: '赤星クラブ', season: '春季大会', edition: '草野球', kind: 'shakaijin', gameType: 'official',
+    rules: { innings: 7, mercy: [], pitchLimit: null, timeLimitMin: null } });
+  g.date = '2026-09-20';
+  g.status = 'finished';
+  g.scorerId = 'scorer-1';
+  g.attendees = ['p-aoki', 'p-inoue'];
+  g.startedAt = 1_000_000;
+  g.myScore = 1; g.oppScore = 0;
+  const R = (a, b, c) => ({ 1: a ? { playerId: 'p-aoki', label: '青木' } : null, 2: b ? { playerId: 'p-inoue', label: '井上' } : null, 3: c ? { playerId: 'p-x', label: 'X' } : null });
+  const log = (i, kind, ts, payload, extra = {}) => ({ id: 'l' + i, gameId: g.id, inning: 1, isTop: kind === 'defense', kind, text: '青木 中安', ts, payload, ...extra });
+  g.playLogs = [
+    // 1回表(相手の攻撃): 三者凡退
+    log(1, 'defense', 1_060_000, { letter: 'A', order: 1, result: 'out', outType: 'fly', direction: 'CF', beforeRunners: R(), outsBefore: 0, runs: 0, outsOnPlay: 1, scoreAfter: { my: 0, opp: 0 } }),
+    log(2, 'defense', 1_120_000, { letter: 'B', order: 2, result: 'so', soType: 'swinging', beforeRunners: R(), outsBefore: 1, runs: 0, outsOnPlay: 1, scoreAfter: { my: 0, opp: 0 } }),
+    log(3, 'defense', 1_180_000, { letter: 'C', order: 3, result: 'out', beforeRunners: R(), outsBefore: 2, runs: 0, outsOnPlay: 1, scoreAfter: { my: 0, opp: 0 } }),
+    // 1回裏: 安打 → 二塁打で1点 → 凡退3つ
+    log(4, 'atbat', 1_300_000, { playerId: 'p-aoki', order: 1, result: 'single', direction: 'CF', contact: 'hard', hitAngle: 12, hitDepth: 0.6, beforeRunners: R(), outsBefore: 0, runs: 0, outsOnPlay: 0, balls: 1, strikes: 1, pitchCount: 3, scoreAfter: { my: 0, opp: 0 } }),
+    log(5, 'atbat', 1_360_000, { playerId: 'p-inoue', order: 2, result: 'double', direction: 'LF', playError: { pos: 'LF', kind: 'throw', playerId: 'opp-7' }, beforeRunners: R(1), outsBefore: 0, runs: 1, outsOnPlay: 0, scoreAfter: { my: 1, opp: 0 } }, { editedAt: 1_900_000 }),
+    log(6, 'atbat', 1_420_000, { playerId: 'p-x', order: 3, result: 'out', beforeRunners: R(0, 1), outsBefore: 0, runs: 0, outsOnPlay: 1, scoreAfter: { my: 1, opp: 0 } }),
+    log(7, 'atbat', 1_480_000, { playerId: 'p-y', order: 4, result: 'so', beforeRunners: R(0, 1), outsBefore: 1, runs: 0, outsOnPlay: 1, scoreAfter: { my: 1, opp: 0 } }),
+    log(8, 'atbat', 1_540_000, { playerId: 'p-z', order: 5, result: 'out', beforeRunners: R(0, 1), outsBefore: 2, runs: 0, outsOnPlay: 1, scoreAfter: { my: 1, opp: 0 } }),
+    // 打席以外のログ(交代・得点)は数えない
+    { id: 'l9', gameId: g.id, inning: 1, isTop: false, kind: 'run', text: '得点', payload: { playerId: 'p-aoki' }, ts: 1_360_001 },
+  ];
+  g.flowNotes = { l4: '青木の一打で流れが来た' };
+  return g;
+}
+
+test('集計用データ: 個人を特定できるものを含まない', () => {
+  const out = extractGameDataset(datasetGame());
+  const json = JSON.stringify(out);
+  for (const bad of ['青木', '井上', '赤星クラブ', '春季大会', 'p-aoki', 'p-inoue', 'opp-7', 'scorer-1', '流れが来た', '2026-09-20']) {
+    assert.ok(!json.includes(bad), `含まない: ${bad}`);
+  }
+  assert.equal(out.game.month, '2026-09', '日付は年月まで');
+  assert.deepEqual(out.plays[4].playError, { pos: 'LF', kind: 'throw' }, '失策は位置と種類だけ');
+});
+
+test('集計用データ: 試合の条件と打席の状況が取り出せる', () => {
+  const out = extractGameDataset(datasetGame());
+  assert.equal(out.datasetVersion, DATASET_VERSION);
+  assert.equal(out.schemaVersion, GAME_SCHEMA_VERSION);
+  assert.deepEqual(
+    { e: out.game.edition, k: out.game.kind, t: out.game.gameType, i: out.game.innings },
+    { e: '草野球', k: 'shakaijin', t: 'official', i: 7 });
+  assert.equal(out.plays.length, 8, '打席のログだけ');
+  const dbl = out.plays[4];
+  assert.equal(dbl.state, '100|0', '走者は有無だけ');
+  assert.equal(dbl.diffBefore, 0, '打席の前の点差(攻撃側から)');
+  assert.equal(dbl.offense, 'my');
+  assert.equal(dbl.edited, true, '後から直した打席が分かる');
+  assert.equal(out.plays[0].offense, 'opp', '相手の攻撃も入る');
+  assert.equal(out.plays[3].contact, 'hard');
+  assert.equal(out.plays[3].t, 300, '試合開始からの秒数');
+  assert.equal(out.quality.spanSec, 480);
+  assert.equal(out.quality.edited, 1);
+});
+
+test('集計用データ: その回の残りの点は得点期待値の数え方と同じ', () => {
+  const out = extractGameDataset(datasetGame());
+  // 1回裏は1点。先頭(無死無走者)からは1点、二塁打の打席からも1点、その後は0点
+  assert.deepEqual(out.plays.slice(3).map((x) => x.runsRestOfHalf), [1, 1, 0, 0, 0]);
+  assert.deepEqual(out.plays.slice(0, 3).map((x) => x.runsRestOfHalf), [0, 0, 0]);
+});
+
+test('集計用データ: デモ・CSV取り込み・進行中・打席なしの試合は出さない', () => {
+  const g = datasetGame();
+  assert.equal(datasetEligibility(g).ok, true);
+  assert.equal(datasetEligibility({ ...g, origin: 'demo' }).reason, 'demo');
+  assert.equal(datasetEligibility({ ...g, id: 'demo-g1' }).reason, 'demo');
+  assert.equal(datasetEligibility({ ...g, origin: 'import' }).reason, 'import');
+  assert.equal(datasetEligibility({ ...g, origin: undefined, importedBatting: [{ playerId: 'p', pa: 4 }] }).reason, 'import', '出どころの項目が無い古い取り込み試合');
+  assert.equal(datasetEligibility({ ...g, importedBatting: [] }).ok, true, '空の配列はどの試合にもある');
+  assert.equal(datasetEligibility({ ...g, status: 'ongoing' }).reason, 'unfinished');
+  assert.equal(datasetEligibility({ ...g, playLogs: [] }).reason, 'no-plays');
+  assert.equal(extractGameDataset({ ...g, status: 'ongoing' }), null);
+});
+
+test('集計用データ: 形の版を持たない古い試合も取り出せる(項目は空になる)', () => {
+  const g = datasetGame();
+  delete g.schemaVersion; delete g.origin; delete g.gameType; delete g.edition; delete g.kind; delete g.appBuild;
+  const out = extractGameDataset(g);
+  assert.equal(out.schemaVersion, null);
+  assert.equal(out.game.gameType, null);
+  assert.equal(out.plays.length, 8);
+});
+
+test('集計用データ: デモの試合から作った記録でも名前が漏れない', () => {
+  const { players, games } = generateDemoData();
+  for (const dg of games) {
+    const out = extractGameDataset({ ...dg, id: 'x-' + dg.id, origin: 'live' });
+    assert.ok(out && out.plays.length > 0);
+    const json = JSON.stringify(out);
+    for (const p of players) assert.ok(!json.includes(p.name) && !json.includes(p.id), p.name);
+    assert.ok(!json.includes(dg.opponent));
+  }
 });

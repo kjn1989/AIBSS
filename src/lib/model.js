@@ -410,9 +410,25 @@ export function newMember(name, role = 'マネージャー') {
   };
 }
 
-export function newGame({ opponent = '', isHome = false, date = null, season = '', rules = null, allowReentry = false, attendees = null, scorerId = null, teamGap = 'even', gameType = null, edition = null, kind = null } = {}) {
+// 試合レコードの形の版。あとで記録を読み出す側(集計・書き出し)が、
+// どの項目があるはずの試合かを判断できるようにする。項目の意味を変えたら上げる。
+// 1 = gameType / edition / kind / origin / appBuild を持つ最初の版。
+// これより前の試合は schemaVersion を持たない(undefined)
+export const GAME_SCHEMA_VERSION = 1;
+
+// どのビルドで作った試合か。あとで特定のビルドの不具合で記録が歪んでいたと
+// 分かったとき、その範囲の試合を見分けるため。テスト(node)では null
+const APP_BUILD = typeof __BUILD_INFO__ === 'undefined' ? null : (__BUILD_INFO__?.sha || null);
+
+export function newGame({ opponent = '', isHome = false, date = null, season = '', rules = null, allowReentry = false, attendees = null, scorerId = null, teamGap = 'even', gameType = null, edition = null, kind = null, origin = 'live' } = {}) {
   return {
     id: uid(),
+    schemaVersion: GAME_SCHEMA_VERSION,
+    appBuild: APP_BUILD,
+    // この試合がどうやって入ったか。'live'(アプリで1プレーずつ記録) |
+    // 'import'(CSVの完成済み成績から作った。打席ごとの記録が無い) | 'demo'。
+    // 打席ごとの記録から何かを数えるときは 'live' だけを見る
+    origin: origin === 'import' || origin === 'demo' ? origin : 'live',
     date: date || new Date().toISOString().slice(0, 10),
     opponent,
     season, // シーズン/大会名(任意。集計フィルタに使用)
