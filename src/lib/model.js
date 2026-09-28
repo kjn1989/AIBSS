@@ -410,7 +410,7 @@ export function newMember(name, role = 'マネージャー') {
   };
 }
 
-export function newGame({ opponent = '', isHome = false, date = null, season = '', rules = null, allowReentry = false, attendees = null, scorerId = null, teamGap = 'even', gameType = null } = {}) {
+export function newGame({ opponent = '', isHome = false, date = null, season = '', rules = null, allowReentry = false, attendees = null, scorerId = null, teamGap = 'even', gameType = null, edition = null, kind = null } = {}) {
   return {
     id: uid(),
     date: date || new Date().toISOString().slice(0, 10),
@@ -438,6 +438,13 @@ export function newGame({ opponent = '', isHome = false, date = null, season = '
     // 大会名の自由入力では集計に使えない(書き方がばらける・空欄が多い)ので別に持つ。
     // 公式戦と練習試合は、打ち切りルールや継投の考え方が違い、記録の性格も違う
     gameType: gameType === 'official' || gameType === 'practice' ? gameType : null,
+    // 試合を作った時点のエディションと区分(草野球/社会人・クラブ、中学/高校/大学…)。
+    // チームの設定は「いまの値」を1つ持つだけなので、あとで区分を変えると
+    // 過去の試合まで新しい区分の試合に化けてしまう。rules や teamGap と同じく
+    // 試合に焼き込んでおく。記録を水準別に集計するときの第一の軸で、
+    // 変えられた後からは復元できない。null = この項目より前に作られた試合
+    edition: edition || null,
+    kind: kind || null,
     // 流れの区間ごとに、記録員が書き直した文 { 区間の先頭打席ID: 文 }。
     // 自動の下書きは記録からしか組めないので、見ていたことは記録員が書く
     flowNotes: {},

@@ -5980,3 +5980,15 @@ test('newGame: 試合の種別は既定で未指定、公式戦/練習試合だ�
   assert.equal(newGame({ gameType: 'scrimmage' }).gameType, null);
   assert.equal(newGame({ gameType: '' }).gameType, null);
 });
+
+// ---------------- エディションと区分のスナップショット ----------------
+// 設定は「いまの値」しか持たないので、あとで区分を変えると過去の試合が化ける。
+// 試合を作った時点の値を試合に焼き込む。
+test('newGame: 作った時点のエディションと区分を持つ(既定は未設定)', () => {
+  const g0 = newGame({});
+  assert.equal(g0.edition, null);
+  assert.equal(g0.kind, null);
+  const g = newGame({ edition: '草野球', kind: 'shakaijin' });
+  assert.equal(g.edition, '草野球');
+  assert.equal(g.kind, 'shakaijin');
+});
