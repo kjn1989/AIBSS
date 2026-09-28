@@ -23,6 +23,7 @@ import { remapPlayerInGame, fillPlayerGaps } from '../lib/mergePlayers.js';
 import { rebuildBatters } from '../lib/battersRebuild.js';
 import { idbSave } from '../lib/durableStore.js';
 import { storedLang, saveLang } from '../lib/langStore.js';
+import { kindOf } from '../lib/editionKind.js';
 import { saveGames, loadGames, pruneGames, gameIndex, stubGamesFromIndex } from '../lib/gameStore.js';
 import { translate, DEFAULT_LANG } from '../lib/i18n.js';
 import { getActiveProfileId, profileStorageKey, listProfiles, updateProfileMeta } from '../lib/profiles.js';
@@ -816,7 +817,8 @@ export function reducer(state, action) {
     // ===== 試合 =====
     case 'CREATE_GAME': {
       const { oppRoster, ...rest } = action.payload || {};
-      const g = newGame(rest);
+      // 作った時点のエディションと区分を焼き込む(画面からは渡さない。設定が正)
+      const g = newGame({ ...rest, edition: state.settings.edition || null, kind: kindOf(state.settings) });
       // 前回の対戦から相手の並びを引き継ぐ。名前を入れる手間が「次に当たるとき」に
       // 返ってくることが、相手選手名を入力し続けてもらえるかどうかの分かれ目になる。
       if (oppRoster) {
@@ -855,7 +857,10 @@ export function reducer(state, action) {
         myScore = (batters || []).reduce((s, b) => s + (b.runs || 0), 0);
       }
       const g = {
-        ...newGame({ opponent: meta.opponent, date: meta.date || undefined, isHome: meta.isHome, season: meta.season }),
+        ...newGame({
+          opponent: meta.opponent, date: meta.date || undefined, isHome: meta.isHome, season: meta.season,
+          edition: state.settings.edition || null, kind: kindOf(state.settings),
+        }),
         status: 'finished', myScore, oppScore, linescore: linescore || {},
         importedBatting, importedPitching,
         inning: Math.max(1, lsKeys.length), isTop: false,
