@@ -126,7 +126,8 @@ AI機能の可否**に波及する。区分の保存先が `settings.schoolType`
 低信頼時のみ任意でGeminiによるLLM解釈を併用(設定でAPIキー)。
 常時リスニングモードあり(`continuousSpeech.js`。2.5秒のオプトアウト猶予で自動確定)。
 
-**⚠️ ネイティブアプリ版では音声は使えない**(§8のハマりどころを必ず読むこと)。
+ネイティブアプリ版はOSの認識器(`@capgo/capacitor-speech-recognition`)を `lib/nativeSpeech.js` 経由で使う
+(§8のハマりどころを必ず読むこと)。
 
 ### 事後修正
 
@@ -444,11 +445,22 @@ AtBat+PlayLog生成・3アウトでチェンジ → 永続化(150msデバウン�
 - **iOSのWKWebViewは `webkitSpeechRecognition` を露出したまま動かない**
   ([WebKit bug 239816](https://bugs.webkit.org/show_bug.cgi?id=239816))。
   存在チェックだけの判定だと `true` が返り、**音声UIが出るのに押しても無反応**という
-  一番たちの悪い壊れ方をする。`speechAvailable()` は `window.Capacitor.isNativePlatform()` を見て
-  ネイティブでは一律 `false` を返す。`createRecognizer()` にも同じ関門がある。
-  判定は純関数 `speechSupported(window)` に切り出し、`tests/unit.mjs` が4ケースで固定している
-- ネイティブで音声を使うには `@capacitor-community/speech-recognition` 等の
-  ネイティブプラグインが必要(未着手)
+  一番たちの悪い壊れ方をする。`speechSupported(window)` はネイティブでは `webkitSpeechRecognition` を
+  一切見ず、OSの認識プラグインがネイティブ側に組み込まれているとき(`Capacitor.isPluginAvailable('SpeechRecognition')`)
+  だけ `true` を返す。プラグインの無い古いビルドではテキスト入力に倒れる
+- **ネイティブの認識は `@capgo/capacitor-speech-recognition`**(MPL-2.0)。`@capacitor-community/speech-recognition` は
+  podspec しか無く、iOSプロジェクトが Swift Package Manager なので `cap sync` で組み込まれない(警告だけ出て黙って抜ける)。
+  プラグインを足したら `ios/App/CapApp-SPM/Package.swift` に入ったかを必ず見る
+- `lib/nativeSpeech.js` が Web Speech API と同じ形(start/stop/abort, onInterim/onResult/onError/onEnd)に揃える。
+  **iOSは発話が終わっても自分では止まらず、止めると確定結果を出さない**ので、途中結果が1.2秒変わらなければ
+  アプリ側で止めて最後の途中結果を確定として渡す。Androidは自分で止まって確定結果を途中結果イベントで送ってくる。
+  OS側は同時に1セッションだけなので、前のセッションの `stopped` を待ってから次を始める。
+  JS側の登録は `nativeBridge.js` の side-effect import(`speech.js` は `window.Capacitor.Plugins` から取るので
+  単体テストに Capacitor が要らない)。偽ブリッジで本物の `@capacitor/core` を通す e2e が `tests/nativevoice.e2e.mjs`
+- 権限文言は `ios/App/App/Info.plist` の `NSMicrophoneUsageDescription` / `NSSpeechRecognitionUsageDescription`
+  (日英併記。英語UIの利用者もいるため)。Androidは `RECORD_AUDIO`。音声はApple/Googleに送られる(プライバシーポリシー3-3)
+- **実機でしか確かめられないこと**: 認識精度、読み上げ(TTS)との干渉(プラグインが音声セッションを
+  `.playAndRecord` / `.measurement` にする)、Androidの開始音
 
 ### 描画とテスト
 
@@ -667,7 +679,7 @@ AtBat+PlayLog生成・3アウトでチェンジ → 永続化(150msデバウン�
 ### 済んでいること
 
 - Capacitorでネイティブ化(`ios/` `android/`)。ステータスバー・スプラッシュ・Android戻るボタン配線済み
-- **音声のWKWebView問題を修正**(§8)。ネイティブではテキスト入力へ確実に倒れる
+- **音声のWKWebView問題を修正**(§8)。ネイティブではテキスト入力へ確実に倒れる(のちにOSの認識器で音声対応)
 - **アカウント削除**(App Store 5.1.1(v))。設定タブ → 公式クラウド。
   メールアドレスの一致入力+確認ダイアログの二段階。実削除はRPC `delete_my_account()`
 - **プライバシーポリシー** `public/privacy.html`(ja/en)。`public/` にあるのでWeb版のデプロイ先の

@@ -40,7 +40,12 @@ npm install -D @capacitor/assets
 npx capacitor-assets generate --iconBackgroundColor '#0d1117' --splashBackgroundColor '#0d1117'
 ```
 
-### 3. 音声入力(Web Speech API)はネイティブWebViewでは動きません — 重要
+### 3. 音声入力 — ネイティブではOSの認識器を使います
+
+**現在の状態**: アプリ版は `@capgo/capacitor-speech-recognition`(iOS: `SFSpeechRecognizer` / Android: `SpeechRecognizer`)
+を `src/lib/nativeSpeech.js` 経由で使います。詳細は `AIBSS_KNOWLEDGE.md` §8。以下は経緯です。
+
+#### 経緯: Web Speech API はネイティブWebViewでは動かない
 
 これがこのアプリのCapacitor化における**最大の技術的注意点**です。
 
@@ -58,7 +63,7 @@ npx capacitor-assets generate --iconBackgroundColor '#0d1117' --splashBackground
   `tests/unit.mjs` が4ケースで固定しています。
 - ただし「手放しで音声入力」という目玉機能が、ネイティブアプリ版では**事実上使えなくなります**。
 
-**対応するには**(Phase 3として別途着手を推奨):
+**対応するには**(→ 対応済み。プラグインは SPM 対応の `@capgo/capacitor-speech-recognition` に変更):
 `@capacitor-community/speech-recognition` のようなネイティブブリッジプラグイン(iOS: `SFSpeechRecognizer` /
 Android: `SpeechRecognizer` を呼ぶ)を導入し、`lib/speech.js` の `createRecognizer()` をネイティブ実行時は
 そちらに差し替える。既存の `createContinuousRecognizer`(常時リスニング)や確認フローはそのまま使い回せる設計に

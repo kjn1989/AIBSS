@@ -5,6 +5,10 @@
 // import自体は安全(Capacitor.isNativePlatform()はブラウザではfalseを返す)。
 // ============================================================
 import { Capacitor } from '@capacitor/core';
+// OSの音声認識プラグインを Capacitor.Plugins.SpeechRecognition に登録する。
+// speech.js はここ経由でしか触らない(単体テストを Capacitor 抜きで回すため)。
+// ブラウザ版では登録されるだけで使われない(Web Speech API を直接使う)
+import '@capgo/capacitor-speech-recognition';
 
 export const isNative = () => Capacitor.isNativePlatform();
 
