@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>サポート — AI-BASE DIAMOND</title>
+<style>
+  /* プライバシーポリシーと同じ体裁。App Store Connect はサポートURLを必須項目として
+     求めるので、メールアドレスだけではなくページが要る。 */
+  :root { color-scheme: dark; }
+  body {
+    margin: 0; padding: 24px 18px 64px;
+    background: #0d1117; color: #e6edf3;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    line-height: 1.8; font-size: 15px;
+  }
+  main { max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 17px; margin: 32px 0 8px; padding-top: 12px; border-top: 1px solid #21262d; }
+  p, li { color: #c9d1d9; }
+  ul { padding-left: 20px; }
+  li { margin: 6px 0; }
+  .dim { color: #8b949e; font-size: 13px; }
+  .box { background: #161b22; border: 1px solid #21262d; border-radius: 10px; padding: 12px 14px; margin: 12px 0; }
+  .warn { border-color: #7d3c00; background: #1c1408; }
+  a { color: #58a6ff; }
+  .todo { color: #f0a848; font-weight: 600; }
+  hr { border: 0; border-top: 1px solid #21262d; margin: 40px 0; }
+  .langjump { font-size: 13px; color: #8b949e; margin: 0 0 18px; }
+  .langjump b { color: #e6edf3; }
+  .mail { font-size: 17px; font-weight: 600; }
+  dt { font-weight: 600; margin-top: 14px; }
+  dd { margin: 4px 0 0; color: #c9d1d9; }
+</style>
+</head>
+<body>
+<main id="top">
+
+<!-- アプリから同じWebViewで開かれたときに戻れるようにする(privacy.html と同じ理由)。
+     直接URLで開いた場合(履歴が無い)は出さない。 -->
+<p id="back" style="display:none"><a href="#" onclick="history.back();return false;">← 戻る / Back</a></p>
+<script>if (history.length > 1) document.getElementById('back').style.display = '';</script>
+
+<p class="langjump"><b>日本語</b> ／ <a href="#en">English</a></p>
+
+<h1>サポート</h1>
+<p class="dim">AI-BASE DIAMOND — 野球のスコア記録・成績集計アプリ</p>
+
+<h2>お問い合わせ</h2>
+<div class="box">
+<p class="mail"><span class="todo">〔問い合わせ用メールアドレス〕</span></p>
+<p class="dim" style="margin:0">不具合のご報告、ご要望、データに関するお問い合わせはこちらへお願いします。個人で運営しているため、お返事までに数日いただくことがあります。</p>
+</div>
+<div class="box warn">
+<p class="todo" style="margin:0 0 6px">⚠️ 連絡先が未設定です</p>
+<p class="dim" style="margin:0">公開前に、上のオレンジの箇所を実際のメールアドレスに置き換えてください。App Store / Google Play の審査で必須です。</p>
+</div>
+
+<h2>不具合のご報告に添えていただけると助かること</h2>
+<ul>
+  <li>お使いの端末（iPhone / Android / PC）とブラウザ</li>
+  <li>どの画面で、何をしたときに起きたか</li>
+  <li>画面の写真（撮れる場合）</li>
+</ul>
+<p class="dim">設定タブのいちばん下に、アプリのバージョン情報が出ています。あわせてお知らせいただけると原因を絞り込みやすくなります。</p>
+
+<h2>よくあるお問い合わせ</h2>
+<dl>
+  <dt>記録が消えてしまいました</dt>
+  <dd>ブラウザのデータを削除すると記録も消えます。<strong>設定タブの「バックアップを保存」で、定期的にファイルへ書き出しておいてください。</strong>ホーム画面に追加しておくと、消えにくくなります。チームを誤って削除した場合は、設定タブの「所属チーム」から復元できることがあります。</dd>
+
+  <dt>機種変更したい</dt>
+  <dd>設定タブでバックアップを保存し、新しい端末で復元してください。クラウド共有をお使いの場合は、新しい端末でログインしてチームに接続すれば同期されます。</dd>
+
+  <dt>パスワードを忘れました</dt>
+  <dd>ログイン欄にメールアドレスを入れ、「パスワードを忘れた」から<strong>サインインリンク</strong>を送信してください。届いたリンクを開くとパスワード無しで入れます。</dd>
+
+  <dt>音声入力が使えません</dt>
+  <dd>音声入力は日本語のみで、ブラウザ（Safari・Chrome）で開いたときだけ動作します。アプリ版や英語表示では、代わりにテキスト入力に切り替わります。<strong>音声でしかできない操作はありません。</strong></dd>
+
+  <dt>AI機能を使うにはお金がかかりますか</dt>
+  <dd>アプリ自体に課金はありません。AI機能はGoogleのGemini APIキーをご自身で取得して入力する方式で、請求先を紐付けない限り無料枠の中で動作します。キーが無くてもアプリはすべて動きます。</dd>
+
+  <dt>選手のデータを削除したい</dt>
+  <dd>設定タブの「選手をまとめて整理する」から、アーカイブまたは削除ができます。クラウド上のアカウントごと削除する場合は、設定タブ → 公式クラウド → 「アカウントを削除する」からご自身で行えます。</dd>
+</dl>
+
+<h2>使いかた</h2>
+<p>操作の詳細は使い方ガイドにまとめています。試合の記録、オーダーと交代、成績の読みかた、チームでの共有まで全25章です。</p>
+<ul>
+  <li><a href="https://claude.ai/code/artifact/61cef197-30ba-48be-9b27-cf6f901316e5">使い方ガイド（日本語）</a></li>
+  <li><a href="https://claude.ai/code/artifact/918206dd-5e9d-446a-a27c-4209ce6a68ef">Field Guide（English）</a></li>
+</ul>
+
+<h2>プライバシー</h2>
+<p>広告の配信、アクセス解析、行動追跡は一切行っていません。記録は既定でお使いの端末内にのみ保存されます。詳細は<a href="./privacy.html">プライバシーポリシー</a>をご覧ください。</p>
+
+<hr>
+
+<p class="langjump"><a href="#top">日本語</a> ／ <b>English</b></p>
+
+<h1 id="en">Support</h1>
+<p class="dim">AI-BASE DIAMOND — baseball scorekeeping and statistics</p>
+
+<h2>Contact</h2>
+<div class="box">
+<p class="mail"><span class="todo">[contact email address]</span></p>
+<p class="dim" style="margin:0">For bug reports, requests, and questions about your data. The app is run by one person, so a reply may take a few days.</p>
+</div>
+<div class="box warn">
+<p class="todo" style="margin:0 0 6px">⚠️ No contact address yet</p>
+<p class="dim" style="margin:0">Replace the orange placeholder above with a real address before release. App Store and Google Play both require it.</p>
+</div>
+
+<h2>Helpful details for a bug report</h2>
+<ul>
+  <li>Your device (iPhone / Android / PC) and browser</li>
+  <li>Which screen, and what you were doing when it happened</li>
+  <li>A photo of the screen, if you can take one</li>
+</ul>
+<p class="dim">The bottom of the Settings tab shows the app version. Including it helps narrow down the cause.</p>
+
+<h2>Common questions</h2>
+<dl>
+  <dt>My records have disappeared</dt>
+  <dd>Clearing your browser data also clears the records. <strong>Use “Save a backup” on the Settings tab regularly to write a file out.</strong> Adding the app to your home screen makes loss much less likely. If you deleted a team by mistake, it can often be restored from “My Teams” in Settings.</dd>
+
+  <dt>I am changing phones</dt>
+  <dd>Save a backup in Settings and restore it on the new device. If you use cloud sharing, sign in on the new device and connect to your team instead — everything syncs down.</dd>
+
+  <dt>I forgot my password</dt>
+  <dd>Enter your email on the sign-in screen, open “Forgot your password”, and send yourself a <strong>sign-in link</strong>. Opening it signs you in without a password.</dd>
+
+  <dt>Voice input does not work</dt>
+  <dd>Voice input is Japanese only, and works only in a browser (Safari or Chrome). In the app build, and in English, it switches to text entry instead. <strong>Nothing is reachable only by voice.</strong></dd>
+
+  <dt>Does the AI cost money?</dt>
+  <dd>The app itself has no charges. AI features use a Google Gemini API key that you obtain yourself, and stay within the free tier unless you attach billing. The whole app works without a key.</dd>
+
+  <dt>I want to delete player data</dt>
+  <dd>Settings → “Manage the roster” lets you archive or delete players. To remove your cloud account entirely, use Settings → Official Cloud → “Delete your account”.</dd>
+</dl>
+
+<h2>How to use it</h2>
+<p>The field guide covers scoring, substitutions, reading the statistics, and sharing with your squad — twenty-five chapters.</p>
+<ul>
+  <li><a href="https://claude.ai/code/artifact/918206dd-5e9d-446a-a27c-4209ce6a68ef">Field Guide (English)</a></li>
+  <li><a href="https://claude.ai/code/artifact/61cef197-30ba-48be-9b27-cf6f901316e5">使い方ガイド (Japanese)</a></li>
+</ul>
+
+<h2>Privacy</h2>
+<p>No advertising, no analytics, no tracking. Records stay on your device by default. See the <a href="./privacy.html#en">privacy policy</a> for the detail.</p>
+
+</main>
+</body>
+</html>
