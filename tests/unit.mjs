@@ -5969,3 +5969,14 @@ test('言語: 知らない値は無視して次の候補へ進む', () => {
     assert.ok(renderPlayLog({}, up, ctx('en')).includes('Momentum'));
   });
 }
+
+// ---------------- 試合の種別 ----------------
+// 大会名の自由入力では集計に使えないので、公式戦/練習試合を別に持つ。既定は未指定。
+test('newGame: 試合の種別は既定で未指定、公式戦/練習試合だけを受け付ける', () => {
+  assert.equal(newGame({}).gameType, null);
+  assert.equal(newGame({ gameType: 'official' }).gameType, 'official');
+  assert.equal(newGame({ gameType: 'practice' }).gameType, 'practice');
+  // 想定外の値は未指定に倒す(集計で「種別不明」として扱えるように)
+  assert.equal(newGame({ gameType: 'scrimmage' }).gameType, null);
+  assert.equal(newGame({ gameType: '' }).gameType, null);
+});

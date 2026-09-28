@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useStore, useT, useCurrentGame, usePlayerName, isMyTeamBatting, currentBatter, currentOppBatter } from '../state/store.jsx';
+import GameTypeToggle from './GameTypeToggle.jsx';
 import Scoreboard from './Scoreboard.jsx';
 import Diamond from './Diamond.jsx';
 import PitchCounter from './PitchCounter.jsx';
@@ -193,6 +194,7 @@ function GameSetup() {
   const [opponent, setOpponent] = useState('');
   const [isHome, setIsHome] = useState(false);
   const [season, setSeason] = useState('');
+  const [gameType, setGameType] = useState(null); // 公式戦/練習試合。既定は未指定
   const edition = state.settings.edition || '草野球';
   // ルール選択: 前回の選択を記憶(ただしエディションが一致する場合のみ)。初回はエディションの既定プリセット
   const [presetId, setPresetId] = useState(initialPresetIdFor(
@@ -236,7 +238,7 @@ function GameSetup() {
         // 表記ゆれを入口で止める: 過去に対戦した相手なら、その書き方に揃える
         opponent: matched ? matched.name : opponent.trim(),
         isHome, season: season.trim(), rules: { ...resolveRulesFrom(presetId, custom), ...live }, allowReentry,
-        attendees, scorerId, teamGap,
+        attendees, scorerId, teamGap, gameType,
         oppRoster: carryOver && recall ? recall : null,
       },
     });
@@ -287,6 +289,7 @@ function GameSetup() {
             {knownSeasons.map((s) => <option key={s} value={s} />)}
           </datalist>
         )}
+        <GameTypeToggle value={gameType} onChange={setGameType} />
         <div className="toggle-row mt12">
           <button className={!isHome ? 'active' : ''} onClick={() => setIsHome(false)}>{t('gamesetup.first')}</button>
           <button className={isHome ? 'active' : ''} onClick={() => setIsHome(true)}>{t('gamesetup.second')}</button>
