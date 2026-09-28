@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useStore, usePlayerName, useT } from '../state/store.jsx';
+import GameTypeToggle from './GameTypeToggle.jsx';
 import { computeHighlights, highlightShareText } from '../lib/highlights.js';
 import { shareHighlightImage } from '../lib/shareImage.js';
 import { GameProgressContent, LinescoreTable } from './GameProgressView.jsx';
@@ -191,6 +192,12 @@ export default function ResultTab() {
                 {knownSeasons.map((s) => <option key={s} value={s} />)}
               </datalist>
             )}
+            {/* 既存の試合にも後から付けられるようにする。付けないまま貯まった試合を
+                遡って仕分けられないと、種別を持たせた意味が半分になる */}
+            <GameTypeToggle
+              value={game.gameType || null}
+              onChange={(v) => dispatch({ type: 'UPDATE_GAME_META', id: game.id, patch: { gameType: v } })}
+            />
             <button
               className="ghost danger mt12"
               style={{ width: '100%' }}

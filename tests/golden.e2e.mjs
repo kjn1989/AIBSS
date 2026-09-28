@@ -76,6 +76,16 @@ try {
   await page.click('nav button:has-text("スコア入力")');
   await page.waitForTimeout(400);
   await page.fill('input[placeholder="対戦相手名"]', 'ゴールデンパス');
+  // 試合の種別(任意)。押すと選ばれ、もう一度押すと未指定に戻る
+  const official = page.locator('button:has-text("公式戦")').first();
+  check('試合作成に「公式戦」がある', (await official.count()) > 0);
+  if (await official.count()) {
+    await official.click(); await page.waitForTimeout(150);
+    check('公式戦を押すと選ばれる', (await official.getAttribute('aria-pressed')) === 'true');
+    await official.click(); await page.waitForTimeout(150);
+    check('もう一度押すと未指定に戻る', (await official.getAttribute('aria-pressed')) === 'false');
+    await official.click(); await page.waitForTimeout(150);
+  }
   await page.click('button:has-text("試合開始")');
   // 試合開始は「今日のメンバー」を必ず通る。登録選手が全員来るとは限らないので、
   // 誰が来ているかを決めてから試合が始まる(既定は前回の参加者、初回は全員)

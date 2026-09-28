@@ -910,7 +910,7 @@ export function reducer(state, action) {
       // 試合の対戦相手・日付・シーズンを後から編集
       const g = deep(state.games[action.id]);
       if (!g) return state;
-      Object.assign(g, action.patch); // { opponent, date, season }
+      Object.assign(g, action.patch); // { opponent, date, season, gameType }
       g.updatedAt = Date.now();
       return { ...state, games: { ...state.games, [g.id]: g } };
     }
