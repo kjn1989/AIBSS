@@ -859,7 +859,7 @@ export function reducer(state, action) {
       const g = {
         ...newGame({
           opponent: meta.opponent, date: meta.date || undefined, isHome: meta.isHome, season: meta.season,
-          edition: state.settings.edition || null, kind: kindOf(state.settings),
+          edition: state.settings.edition || null, kind: kindOf(state.settings), origin: 'import',
         }),
         status: 'finished', myScore, oppScore, linescore: linescore || {},
         importedBatting, importedPitching,
@@ -1587,6 +1587,9 @@ export function reducer(state, action) {
         log.text = `相手打者${log.payload.letter}(${log.payload.order}番): ${dir}${label}` +
           (newRuns ? ` (${newRuns}失点)` : '');
       }
+      // 後から直した打席。直すのは結果の項目だけで、その打席の前後の状況
+      // (走者・アウト・得点)は記録した時のまま残るので、読み出す側が区別できるようにする
+      log.editedAt = Date.now();
       log.payload = {
         ...log.payload,
         result,
@@ -1618,6 +1621,9 @@ export function reducer(state, action) {
       const wasPa = log.kind === 'atbat' || log.kind === 'defense';
       if (wasPa) applyRunsDelta(g, log.inning, log.kind === 'atbat', -(Number(log.payload?.runs) || 0));
       g.playLogs = g.playLogs.filter((l) => l.id !== action.logId);
+      // 消した打席の数。消すと前後の打席の状況がつながらなくなることがあるので、
+      // 記録の連続性を当てにする集計が、その試合を見分けられるようにする
+      if (wasPa) g.paDeletions = (Number(g.paDeletions) || 0) + 1;
       if (wasPa) syncLiveAfterEdit(g, log);
       g.updatedAt = Date.now();
       return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };

@@ -120,6 +120,29 @@ ok('走者の確認を促す', /塁上の走者だけは記録から作り直せ
 await p.locator('button:has-text("走者は合っている")').click(); await p.waitForTimeout(400);
 ok('確認したら印が消える', !/塁上の走者だけは記録から作り直せない/.test(await p.locator('body').innerText()));
 
+// 保存された試合に「後から直した打席」の印と、形の版・出どころ・ビルドが残っている。
+// あとで記録を集計するとき、実況で付けたままの打席と直した打席を分けるため
+await p.waitForTimeout(1500); // 保存は即時ではない
+const saved = await p.evaluate(() => new Promise((resolve) => {
+  const req = indexedDB.open('aibss');
+  req.onsuccess = () => {
+    const r = req.result.transaction('games', 'readonly').objectStore('games').getAll();
+    r.onsuccess = () => {
+      const g = (r.result || []).map((x) => x.game || x).find((x) => x && x.opponent === '記録修正');
+      resolve(g ? {
+        schemaVersion: g.schemaVersion, origin: g.origin, appBuild: g.appBuild,
+        edited: (g.playLogs || []).filter((l) => l.editedAt).length,
+      } : null);
+    };
+    r.onerror = () => resolve(null);
+  };
+  req.onerror = () => resolve(null);
+}));
+ok('試合が保存されている', !!saved, 'IndexedDB に見つからない');
+ok('形の版と出どころを持つ', saved?.schemaVersion === 1 && saved?.origin === 'live', JSON.stringify(saved));
+ok('作ったビルドを持つ', typeof saved?.appBuild === 'string' && saved.appBuild.length > 0, JSON.stringify(saved));
+ok('直した打席に印が付く', saved?.edited === 2, JSON.stringify(saved));
+
 // ラインスコア: 終わった半回は0点でも数字を出す(空欄のままだと「表の得点が出ない」に見える)
 // 三振3つで表を終わらせ、裏に移った時点で表の欄に0が出ることを見る
 const play = async (label) => {

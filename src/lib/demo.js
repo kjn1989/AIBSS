@@ -41,7 +41,7 @@ export function generateDemoData(lang = 'ja') {
   const games = [];
 
   for (let gi = 0; gi < 3; gi++) {
-    const g = newGame({ opponent: TEAMS[gi], isHome: gi % 2 === 0 });
+    const g = newGame({ opponent: TEAMS[gi], isHome: gi % 2 === 0, origin: 'demo' });
     g.id = 'demo-g' + gi;
     g.date = `2026-0${4 + gi}-1${gi + 2}`;
     g.status = 'finished';
