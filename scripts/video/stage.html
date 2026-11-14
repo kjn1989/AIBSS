@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>AI-BASE DIAMOND 使い方ムービー(収録用ステージ)</title>
+<!--
+  使い方ムービーの収録用ステージ。scripts/video/record.mjs が dist/ に置いて開く。
+  左にアプリ(同じオリジンの iframe)をスマホの枠で、右に字幕を出す。
+  アプリ本体には何も足さない(字幕もタップの印もこのページ側に描く)。
+-->
+<style>
+  :root {
+    --bg1: #0b1220; --bg2: #0d1117; --ink: #e6edf3; --soft: #9aa7b4; --faint: #5f6b77;
+    --teal: #2fc7aa; --gold: #e6b84f; --line: #223040;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; }
+  body {
+    font-family: 'Noto Sans JP', sans-serif; color: var(--ink);
+    background:
+      radial-gradient(1200px 800px at 18% 40%, rgba(47,199,170,.10), transparent 60%),
+      radial-gradient(900px 700px at 85% 15%, rgba(230,184,79,.07), transparent 60%),
+      linear-gradient(160deg, var(--bg1), var(--bg2));
+  }
+
+  /* ---- スマホ ---- */
+  .phone {
+    position: absolute; left: 250px; top: 28px;
+    width: 500px; height: 1024px; border-radius: 64px;
+    background: #05080d; padding: 20px;
+    box-shadow: 0 0 0 2px #2a3644, 0 40px 90px -30px rgba(0,0,0,.8), 0 0 120px -40px rgba(47,199,170,.35);
+  }
+  .screen {
+    position: relative; width: 460px; height: 984px; border-radius: 46px; overflow: hidden;
+    background: #0d1117;
+  }
+  /* アプリは 390x844 の画面として描かせ、見た目だけ拡大する(レイアウトはスマホのまま) */
+  #app {
+    position: absolute; left: 0; top: 0; border: 0;
+    width: 390px; height: 834px;
+    transform-origin: 0 0; transform: scale(1.1795);
+    background: #0d1117;
+  }
+  /* 早送りの区間を隠す幕 */
+  .cover {
+    position: absolute; inset: 0; display: grid; place-items: center; text-align: center;
+    background: rgba(8,12,18,.92); backdrop-filter: blur(6px);
+    opacity: 0; transition: opacity .35s; pointer-events: none; padding: 40px;
+  }
+  .cover.on { opacity: 1; }
+  .cover b { display: block; font-size: 34px; font-weight: 800; margin-bottom: 12px; }
+  .cover span { font-size: 22px; color: var(--soft); line-height: 1.7; }
+  .cover .dots { margin-top: 22px; font-size: 30px; letter-spacing: .3em; color: var(--teal); }
+
+  /* ---- 字幕 ---- */
+  .panel { position: absolute; left: 860px; top: 0; width: 960px; height: 1080px; }
+  .brand {
+    position: absolute; top: 64px; left: 0; display: flex; align-items: center; gap: 14px;
+    font-size: 22px; font-weight: 800; letter-spacing: .14em; color: var(--soft);
+  }
+  .brand i { width: 14px; height: 14px; transform: rotate(45deg); background: var(--teal); border-radius: 2px; }
+  .cap { position: absolute; left: 0; top: 300px; width: 900px; transition: opacity .3s, transform .3s; }
+  .cap.out { opacity: 0; transform: translateY(14px); }
+  .kicker {
+    display: inline-block; font-size: 22px; font-weight: 800; letter-spacing: .18em;
+    color: var(--teal); border: 2px solid rgba(47,199,170,.5); border-radius: 999px;
+    padding: 6px 20px; margin-bottom: 26px;
+  }
+  .title { font-size: 66px; font-weight: 900; line-height: 1.25; margin: 0 0 28px; letter-spacing: .01em; }
+  .body { font-size: 36px; line-height: 1.75; color: #c9d4de; margin: 0; font-weight: 500; }
+  .body em { font-style: normal; color: var(--gold); font-weight: 800; }
+  .chapters {
+    position: absolute; left: 0; bottom: 70px; display: flex; gap: 10px; flex-wrap: wrap; width: 960px;
+  }
+  .chapters span {
+    font-size: 19px; font-weight: 700; color: var(--faint); padding: 8px 16px; border-radius: 10px;
+    border: 1px solid var(--line); background: rgba(255,255,255,.02);
+  }
+  .chapters span.done { color: var(--soft); }
+  .chapters span.now { color: #06120e; background: var(--teal); border-color: var(--teal); }
+
+  /* ---- タップの印 ---- */
+  .tap {
+    position: absolute; width: 64px; height: 64px; margin: -32px 0 0 -32px; border-radius: 50%;
+    border: 5px solid rgba(255,214,90,.95); background: rgba(255,214,90,.28);
+    pointer-events: none; z-index: 50; animation: tap .7s ease-out forwards;
+  }
+  @keyframes tap {
+    0% { transform: scale(.35); opacity: 1; }
+    60% { transform: scale(1); opacity: .95; }
+    100% { transform: scale(1.35); opacity: 0; }
+  }
+
+  /* ---- 全面カード(タイトル・終わり) ---- */
+  .card {
+    position: absolute; inset: 0; z-index: 80; display: grid; place-items: center; text-align: center;
+    background:
+      radial-gradient(900px 600px at 50% 40%, rgba(47,199,170,.16), transparent 65%),
+      linear-gradient(160deg, var(--bg1), var(--bg2));
+    opacity: 0; transition: opacity .6s; pointer-events: none;
+  }
+  .card.on { opacity: 1; }
+  .card .eyebrow { font-size: 26px; font-weight: 800; letter-spacing: .4em; color: var(--teal); margin-bottom: 30px; }
+  .card h1 { font-size: 110px; font-weight: 900; margin: 0; letter-spacing: .01em; line-height: 1.1; }
+  .card h2 { font-size: 54px; font-weight: 800; margin: 18px 0 0; color: #d9e2ea; }
+  .card p { font-size: 34px; color: var(--soft); margin: 40px 0 0; line-height: 1.7; }
+  .card .url {
+    display: inline-block; margin-top: 46px; font-size: 52px; font-weight: 800; color: #06120e;
+    background: var(--teal); padding: 14px 40px; border-radius: 18px; letter-spacing: .02em;
+  }
+</style>
+</head>
+<body>
+  <div class="phone"><div class="screen">
+    <iframe id="app" src="/" title="AI-BASE DIAMOND"></iframe>
+    <div class="cover" id="cover"><div><b id="coverTitle"></b><span id="coverBody"></span><div class="dots">▸▸▸</div></div></div>
+  </div></div>
+
+  <div class="panel">
+    <div class="brand"><i></i>AI-BASE DIAMOND</div>
+    <div class="cap out" id="cap">
+      <div class="kicker" id="kicker"></div>
+      <h3 class="title" id="title"></h3>
+      <p class="body" id="body"></p>
+    </div>
+    <div class="chapters" id="chapters"></div>
+  </div>
+
+  <div class="card" id="card"><div id="cardInner"></div></div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  window.stage = {
+    async caption({ kicker = '', title = '', body = '' }) {
+      const cap = $('cap');
+      if (!cap.classList.contains('out')) { cap.classList.add('out'); await wait(300); }
+      $('kicker').textContent = kicker;
+      $('kicker').style.display = kicker ? '' : 'none';
+      $('title').innerHTML = title;
+      $('body').innerHTML = body;
+      cap.classList.remove('out');
+    },
+    chapters(list, now) {
+      $('chapters').innerHTML = list
+        .map((t, i) => `<span class="${i < now ? 'done' : i === now ? 'now' : ''}">${i + 1}. ${t}</span>`)
+        .join('');
+    },
+    tap(x, y) {
+      const d = document.createElement('div');
+      d.className = 'tap';
+      d.style.left = x + 'px';
+      d.style.top = y + 'px';
+      document.body.appendChild(d);
+      setTimeout(() => d.remove(), 800);
+    },
+    cover(title, body = '') {
+      $('coverTitle').textContent = title || '';
+      $('coverBody').innerHTML = body;
+      $('cover').classList.toggle('on', !!title);
+    },
+    card(html) {
+      if (html) $('cardInner').innerHTML = html;
+      $('card').classList.toggle('on', !!html);
+    },
+  };
+</script>
+</body>
+</html>

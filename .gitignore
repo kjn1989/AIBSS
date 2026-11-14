@@ -3,3 +3,4 @@ dist/
 .DS_Store
 *.local
 firestore-debug.log
+video-out/
