@@ -132,12 +132,28 @@ AI機能の可否**に波及する。区分の保存先が `settings.schoolType`
 ### かんたん記録(`game.recordMode === 'simple'`)
 
 1球ずつ付けるのは公式戦なら見合うが、練習試合では頼む側も付ける側も重い、という利用者の声から。
-試合を作るときに「かんたん/くわしく」を選ぶ(前回の選択を覚える。初めての試合はかんたん)。
+試合を作るときに「かんたん/くわしく」を選ぶ(前回の選択を覚える。覚えが無いときは決めつけず、説明つきの2択から選ぶまで始められない)。
 試合操作から途中でも切り替えられる。**記録の形は同じ**で、かんたんの試合は次が空になるだけ:
 球数・カウント(`pitchCount` 0、暗黙の1球も足さない)、打球の強さ深さ(`contact`/`hitDepth` null)、
 三振の内訳(`soType` null)、流れタグ・記録員・力の差。打球方向は守備位置の1タップ
 (内野=ゴロ・外野=フライを既定にして、違えば直せる)。判定は `isSimpleGame(game)`(model.js)。
 e2e は `tests/simple.e2e.mjs`。既存の e2e は「くわしく」を押してから始める
+
+### 記録のバトン(`src/lib/baton.js`)— 複数の端末で交代しながら記録する
+
+クラウド同期は試合を丸ごと送る後勝ちなので、2台が同じ試合を入力すると片方の打席が黙って消える。
+記録は1打席ずつ順番に進むので「書けるのは常に1台」にして、交代だけを安全にした。
+- `game.recorder = { id: 端末ID, name, at }`。端末IDと名前は localStorage(`bbscorer.deviceId` / `bbscorer.recorderName`)。
+  アカウントはチームで共有されうるので、人ではなく端末で見分ける
+- **進行中の試合は、recorder が自分でなければ reducer が変更を止める**(`reducer` の入口。画面ごとに止めると漏れる)。
+  通すのは `TAKE_BATON` / `RESOLVE_BATON_CONFLICT` / `MERGE_REMOTE` / `SELECT_GAME` だけ
+- `MERGE_REMOTE` は `chooseRemote()` で決める: `recorder.at` が新しい方が正、同じなら従来の `updatedAt` 後勝ち
+- 電波が切れていた記録係の未送信の記録は `state.batonConflicts[gameId]` に取っておき、どちらを残すか選ばせる
+- 引き継ぎはクラウドにつながっているときだけ(つながっていないと相手の最新を知らないまま上書きする)
+- `CloudSync` は、手元の版を採ったとき(自分が後から引き継いだ)は「送信済み」と覚えない(覚えると二度と送られない)
+- recorder の無い試合(以前の試合)は従来どおり誰でも書ける
+- e2e は `tests/baton.e2e.mjs`(2つのブラウザを模擬クラウドで中継。`window.__AIBSS_TEST_CLOUD__` が CloudSync の差し込み口)。
+  **本物の Supabase での2台確認は未実施**
 
 ### 事後修正
 

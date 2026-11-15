@@ -25,6 +25,7 @@ import { MESSAGES } from '../src/lib/i18n.js';
 import { positionListLabel, GAME_SCHEMA_VERSION } from '../src/lib/model.js';
 import { extractGameDataset, datasetEligibility, DATASET_VERSION } from '../src/lib/datasetExtract.js';
 import { generateDemoData } from '../src/lib/demo.js';
+import { chooseRemote, lockedFor, holdsBaton, unsentLogs, deviceId } from '../src/lib/baton.js';
 import { computeHighlights } from '../src/lib/highlights.js';
 import { buildRunDists, buildWinModel, priorDist, remainingHalves, SCORE_PROB, MAX_RUNS } from '../src/lib/winExp.js';
 import { TEAM_GAPS, buildGapModel, gapTables, gapOf, scaleDist, scaleDists, S_EXP } from '../src/lib/teamGap.js';
@@ -6308,4 +6309,50 @@ test('集計用データ: かんたん記録の試合だと分かる(球数が�
   assert.equal(extractGameDataset(g).game.recordMode, 'simple');
   delete g.recordMode;
   assert.equal(extractGameDataset(g).game.recordMode, 'detail', 'この項目より前の試合はくわしく扱い');
+});
+
+// ---------------- 記録のバトン ----------------
+// 進行中の試合を書けるのは1台だけ。交代と、電波が切れていた端末の扱いを固定する
+const bg = (o) => ({ id: 'g1', status: 'ongoing', updatedAt: 100, playLogs: [], ...o });
+const rec = (id, at, name = '') => ({ id, at, name });
+
+test('バトン: 別の端末が記録中の進行中の試合は、この端末からは変更できない', () => {
+  assert.equal(lockedFor(bg({ recorder: rec('other', 1) }), 'me'), true);
+  assert.equal(lockedFor(bg({ recorder: rec('me', 1) }), 'me'), false);
+  assert.equal(lockedFor(bg({}), 'me'), false, '記録係が無い試合(以前の試合)は従来どおり');
+  assert.equal(lockedFor(bg({ recorder: rec('other', 1), status: 'finished' }), 'me'), false, '終わった試合は誰でも直せる');
+  assert.equal(holdsBaton(bg({ recorder: rec('me', 1) }), 'me'), true);
+  assert.equal(typeof deviceId(), 'string');
+});
+
+test('バトン: 同じ記録係の間は新しい方を採る(これまでどおり)', () => {
+  const local = bg({ recorder: rec('a', 10), updatedAt: 100 });
+  assert.equal(chooseRemote(local, bg({ recorder: rec('a', 10), updatedAt: 120 }), 'b').take, 'remote');
+  assert.equal(chooseRemote(local, bg({ recorder: rec('a', 10), updatedAt: 90 }), 'b').take, 'local');
+  assert.equal(chooseRemote(null, bg({}), 'b').take, 'remote');
+});
+
+test('バトン: あとから引き継いだ方が正(更新時刻が古くても)', () => {
+  // 自分が引き継いだ直後に、前の記録係の端末から1打席ぶん新しい版が届いた
+  const mine = bg({ recorder: rec('me', 50), updatedAt: 100 });
+  const stale = bg({ recorder: rec('old', 10), updatedAt: 130, playLogs: [{ id: 'x' }] });
+  assert.equal(chooseRemote(mine, stale, 'me').take, 'local', '前の記録係の版では上書きされない');
+  // 逆に、前の記録係の端末には引き継いだ側の版が届く
+  const r = chooseRemote(stale, mine, 'old');
+  assert.equal(r.take, 'remote');
+  assert.equal(r.conflict, true, '相手に無い打席があるので、黙って捨てない');
+  assert.equal(r.lost, 1);
+});
+
+test('バトン: 引き継がれても、未送信の記録が無ければ衝突にしない', () => {
+  const logs = [{ id: 'a' }, { id: 'b' }];
+  const mine = bg({ recorder: rec('me', 10), playLogs: logs });
+  const theirs = bg({ recorder: rec('other', 50), playLogs: [...logs, { id: 'c' }], updatedAt: 200 });
+  const r = chooseRemote(mine, theirs, 'me');
+  assert.equal(r.take, 'remote');
+  assert.equal(r.conflict, false);
+  assert.deepEqual(unsentLogs(mine, theirs), []);
+  // 見ているだけの端末(記録係ではない)は、何があっても衝突にならない
+  const watcher = bg({ recorder: rec('old', 10), playLogs: [{ id: 'z' }] });
+  assert.equal(chooseRemote(watcher, theirs, 'me').conflict, false);
 });

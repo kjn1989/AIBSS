@@ -78,7 +78,7 @@ try {
   await page.click('button:has-text("くわしく")').catch(() => {}); // 既存のテストは1球ごとの記録が前提
   await page.fill('input[placeholder="対戦相手名"]', 'ゴールデンパス');
   // 試合の種別(任意)。押すと選ばれ、もう一度押すと未指定に戻る
-  const official = page.locator('button:has-text("公式戦")').first();
+  const official = page.getByRole('button', { name: '公式戦', exact: true });
   check('試合作成に「公式戦」がある', (await official.count()) > 0);
   if (await official.count()) {
     await official.click(); await page.waitForTimeout(150);

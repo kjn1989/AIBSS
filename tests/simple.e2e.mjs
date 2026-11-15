@@ -42,8 +42,18 @@ try {
   }
   await p.click('nav button:has-text("スコア入力")'); await W(400);
 
-  const simpleBtn = p.locator('button:has-text("かんたん")').first();
-  ok('初めての試合は「かんたん」が選ばれている', (await simpleBtn.getAttribute('aria-pressed')) === 'true');
+  // 最初は決めつけない。どちらかを選ぶまで始められない
+  const simpleBtn = p.locator('.mode-opt:has-text("かんたん")');
+  const detailBtn = p.locator('.mode-opt:has-text("くわしく")');
+  ok('最初はどちらも選ばれていない',
+    (await simpleBtn.getAttribute('aria-pressed')) === 'false' && (await detailBtn.getAttribute('aria-pressed')) === 'false');
+  ok('それぞれに説明が付いている',
+    (await simpleBtn.innerText()).includes('2〜3タップ') && (await detailBtn.innerText()).includes('1球ごと'));
+  ok('選ぶまで試合を始められない', await p.locator('button:has-text("試合開始")').isDisabled());
+  await detailBtn.click(); await W(200);
+  ok('くわしくでは記録員を聞く', (await p.locator('.main').innerText()).includes('記録員'));
+  await simpleBtn.click(); await W(200);
+  ok('選ぶと始められる', await p.locator('button:has-text("試合開始")').isEnabled());
   const setup = await p.locator('.main').innerText();
   ok('かんたんでは記録員・力の差・リエントリーを聞かない',
     !setup.includes('記録員') && !setup.includes('相手との力の差') && !setup.includes('リエントリー'), setup.slice(0, 300));
@@ -111,7 +121,7 @@ try {
   // 次の試合でも「かんたん」を覚えている
   await p.click('button:has-text("試合終了")'); await W(800);
   await p.locator('.sheet-overlay button:has-text("閉じる")').first().click(); await W(500);
-  ok('次の試合も「かんたん」から', (await p.locator('button:has-text("かんたん")').first().getAttribute('aria-pressed')) === 'true');
+  ok('次の試合は前回の「かんたん」が選ばれている', (await p.locator('.mode-opt:has-text("かんたん")').getAttribute('aria-pressed')) === 'true');
   ok('横あふれなし', !(await p.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1)));
 } catch (e) {
   console.log('ERROR:', e.message); fail++;

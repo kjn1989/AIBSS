@@ -10,6 +10,7 @@ import LineupWizard from './LineupWizard.jsx';
 import OppOrderCard, { OppSubstituteSheet } from './OppOrderCard.jsx';
 import HeadCoachView from './HeadCoachView.jsx';
 import AttendanceSheet from './AttendanceSheet.jsx';
+import { BatonLocked } from './BatonPanel.jsx';
 
 // ---- 交代シート(代打・代走・守備交代) ----
 // スコア入力タブ(打者カード/走者タップ)からも再利用するため export する
@@ -139,6 +140,7 @@ export default function OrderTab() {
   if (game.lineup.length === 0) {
     return (
       <div>
+        <BatonLocked game={game} compact />
         {aiCoachEnabled && (
           <div className="card">
             <div className="flex">
@@ -177,6 +179,7 @@ export default function OrderTab() {
   if (team === 'opp') {
     return (
       <div>
+        <BatonLocked game={game} compact />
         {seg}
         <OppOrderCard game={game} onSubstitute={setOppSlot} />
         {oppSlot && <OppSubstituteSheet game={game} slot={oppSlot} initialKind="def" onClose={() => setOppSlot(null)} />}
@@ -186,6 +189,7 @@ export default function OrderTab() {
 
   return (
     <div>
+      <BatonLocked game={game} compact />
       {seg}
       <div className="card">
         <div className="flex" style={{ marginBottom: 8 }}>

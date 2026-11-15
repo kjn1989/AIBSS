@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../state/store.jsx';
 import { connectCloud } from '../lib/cloud.js';
 import { connectOfficial, watchAuth, officialAvailable, listMyTeams, canWriteCloud } from '../lib/officialCloud.js';
+import { chooseRemote } from '../lib/baton.js';
 
 // ヘッドレス同期コンポーネント: 設定に応じて Firestore と双方向同期する。
 // 接続先は2系統(公式クラウドを優先):
@@ -17,6 +18,18 @@ export default function CloudSync() {
   const playerCache = useRef({}); // playerId -> JSON (送信済み)
   const crewCache = useRef({}); // memberId -> JSON (送信済み)
   const [officialUser, setOfficialUser] = useState(null);
+
+  // 届いた試合を「クラウドにある版」として覚える。ただし手元の方を採る場合
+  // (自分が後から記録を引き継いでいて、届いたのは前の記録係の版)は覚えない。
+  // 覚えてしまうと「もう送ってある」と見なして、引き継いだ版が二度と送られない
+  const gamesRef = useRef(state.games);
+  gamesRef.current = state.games;
+  const noteRemote = (games) => {
+    for (const g of games) {
+      const keepLocal = !g.deleted && chooseRemote(gamesRef.current[g.id], g).take === 'local';
+      remoteVersions.current[g.id] = keepLocal ? 0 : (g.updatedAt || 0);
+    }
+  };
 
   const { cloudEnabled, firebaseConfigText, teamCode, officialTeamId } = state.settings;
   const useOfficial = !!(officialTeamId && officialAvailable());
@@ -34,6 +47,25 @@ export default function CloudSync() {
       connRef.current?.teardown();
       connRef.current = null;
     };
+
+    // テスト用の差し込み口。e2e が window.__AIBSS_TEST_CLOUD__ を置いたときだけ、
+    // 本物のクラウドの代わりにそれへつなぐ(2台の端末の受け渡しを本番と同じ経路で確かめるため)
+    const testCloud = typeof window !== 'undefined' ? window.__AIBSS_TEST_CLOUD__ : null;
+    if (testCloud) {
+      const conn = testCloud.connect({
+        onStatus: (status) => dispatch({ type: 'SET_CLOUD_STATUS', status }),
+        onGames: (games) => {
+          noteRemote(games);
+          dispatch({ type: 'MERGE_REMOTE', games });
+        },
+        onPlayers: (players) => {
+          for (const p of players) playerCache.current[p.id] = JSON.stringify(p);
+          dispatch({ type: 'MERGE_REMOTE', players });
+        },
+      });
+      connRef.current = conn;
+      return teardown;
+    }
 
     if (useOfficial) {
       if (!officialUser) {
@@ -56,7 +88,7 @@ export default function CloudSync() {
         teamId: officialTeamId,
         onStatus: (status) => dispatch({ type: 'SET_CLOUD_STATUS', status }),
         onGames: (games) => {
-          for (const g of games) remoteVersions.current[g.id] = g.updatedAt || 0;
+          noteRemote(games);
           dispatch({ type: 'MERGE_REMOTE', games });
         },
         onPlayers: (players) => {
@@ -82,7 +114,7 @@ export default function CloudSync() {
       teamCode,
       onStatus: (status) => dispatch({ type: 'SET_CLOUD_STATUS', status }),
       onGames: (games) => {
-        for (const g of games) remoteVersions.current[g.id] = g.updatedAt || 0;
+        noteRemote(games);
         dispatch({ type: 'MERGE_REMOTE', games });
       },
       onPlayers: (players) => {
