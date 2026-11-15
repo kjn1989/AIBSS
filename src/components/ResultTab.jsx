@@ -6,6 +6,7 @@ import { shareHighlightImage } from '../lib/shareImage.js';
 import { GameProgressContent, LinescoreTable } from './GameProgressView.jsx';
 import GameBoxScore from './GameBoxScore.jsx';
 import OppNamePrompt from './OppNamePrompt.jsx';
+import ProvisionalNames from './ProvisionalNames.jsx';
 import OppPlayerView from './OppPlayerView.jsx';
 import { PitchingGameManagement } from './PitchingTab.jsx';
 import ScoreSheetView from './ScoreSheetView.jsx';
@@ -228,6 +229,7 @@ export default function ResultTab() {
       </button>
 
       {/* 成績が目の前にあるこの場所で、相手選手名を聞く(入力の動機が最大になる場所) */}
+      <ProvisionalNames game={game} />
       <OppNamePrompt game={game} />
       <GameBoxScore game={game} onOpenOpp={setOppKey} />
       {oppKey && <OppPlayerView oppKey={oppKey} onClose={() => setOppKey(null)} />}

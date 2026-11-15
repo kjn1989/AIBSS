@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useStore, useT, useCurrentGame, usePlayerName, isMyTeamBatting, currentBatter, currentOppBatter } from '../state/store.jsx';
 import GameTypeToggle from './GameTypeToggle.jsx';
 import { BatonLocked, BatonConflict, BatonMine } from './BatonPanel.jsx';
+import { NameButton } from './ProvisionalNames.jsx';
 import { lockedFor, recorderName, saveRecorderName } from '../lib/baton.js';
 import Scoreboard from './Scoreboard.jsx';
 import Diamond from './Diamond.jsx';
@@ -853,10 +854,20 @@ export default function ScoreTab() {
         noLineup ? (
           <div className="card">
             <div className="warn-box">{t('score.noLineup')}</div>
-            <button className="primary" style={{ width: '100%' }} onClick={quickLineup} disabled={state.players.length === 0}>
-              {t('score.autoLineup')}
+            {state.players.length > 0 && (
+              <button className="primary" style={{ width: '100%' }} onClick={quickLineup}>
+                {t('score.autoLineup')}
+              </button>
+            )}
+            {/* 選手を登録していなくても始められる。名前は試合中でも試合後でも入れられる */}
+            <button
+              className={state.players.length === 0 ? 'primary' : ''}
+              style={{ width: '100%', marginTop: state.players.length > 0 ? 8 : 0 }}
+              onClick={() => dispatch({ type: 'START_WITH_PLACEHOLDERS', gameId: game.id })}
+            >
+              {t('prov.start')}
             </button>
-            {state.players.length === 0 && <p className="small dim mt8">{t('score.registerFirst')}</p>}
+            <p className="small dim mt8">{t('prov.startHint')}</p>
           </div>
         ) : (
           <div className="card sit-card">
@@ -867,6 +878,7 @@ export default function ScoreTab() {
                 <div className="sit-main">
                   <span className="nm">{nameOf(batter.playerId)}</span>
                   <span className="pos">{positionLabel(batter.position, lang)}</span>
+                  <NameButton playerId={batter.playerId} game={game} className="pill" />
                 </div>
               </div>
               <button className="pill blue sit-changebtn" onClick={() => setSheet({ kind: 'batter' })}>{t('score.changeBatter')}</button>

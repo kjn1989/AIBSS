@@ -8,6 +8,7 @@ import React, { createContext, useContext, useReducer, useEffect, useRef } from 
 import {
   newPlayer, newMember, newGame, newAtBat, newPitch, newPlayLog, newPitchingRecord, RESULTS, DIRECTIONS, OUT_TYPES,
   OPP_LETTERS, DEFAULT_EDITION, normalizeEdition, multiOutLabel, uid, attendeesOf, resultLabelOf, playErrorOf, finePlayOf,
+  FIELD_POSITIONS, nextProvisionalNames,
 } from '../lib/model.js';
 import { generateDemoData } from '../lib/demo.js';
 import { rebuildPitchingStats } from '../lib/pitchingRebuild.js';
@@ -731,10 +732,31 @@ function reduce(state, action) {
 
     // ===== 選手 =====
     case 'ADD_PLAYER': {
-      const p = newPlayer(action.name, action.number || '', {
+      // provisional: 名簿に居ない人をその場で入れる(交代など)。名前が空なら仮の名前を振る
+      const name = String(action.name || '').trim()
+        || nextProvisionalNames(state.players, 1, state.settings.lang || 'ja')[0];
+      const p = newPlayer(name, action.number || '', {
         throws: action.throws || '', bats: action.bats || '', entryYear: action.entryYear ?? null,
+        id: action.id || undefined, provisional: !!action.provisional && !String(action.name || '').trim(),
       });
       return { ...state, players: [...state.players, p] };
+    }
+    // 選手登録なしで試合を始める。仮の選手を9人作り、打順と守備位置を既定で埋める。
+    // 名前はあとから入れられる(記録は選手IDに付いているので、入れた時点で全部その名前になる)
+    case 'START_WITH_PLACEHOLDERS': {
+      const g0 = state.games[action.gameId];
+      if (!g0 || g0.lineup.length) return state;
+      const names = nextProvisionalNames(state.players, 9, state.settings.lang || 'ja');
+      const added = names.map((nm) => newPlayer(nm, '', { provisional: true }));
+      const lineup = added.map((pl, i) => ({ order: i + 1, playerId: pl.id, position: FIELD_POSITIONS[i] }));
+      let next = { ...state, players: [...state.players, ...added] };
+      if (Array.isArray(g0.attendees)) {
+        const g = deep(g0);
+        g.attendees = [...g.attendees, ...added.map((pl) => pl.id)];
+        next = { ...next, games: { ...next.games, [g.id]: g } };
+      }
+      next = reduce(next, { type: 'SET_LINEUP', gameId: action.gameId, lineup });
+      return reduce(next, { type: 'SET_PITCHER', gameId: action.gameId, playerId: added[0].id, label: action.pitcherLabel });
     }
     case 'UPDATE_PLAYER': {
       const players = state.players.map((p) => (p.id === action.id ? { ...p, ...action.patch } : p));

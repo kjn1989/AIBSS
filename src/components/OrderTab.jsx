@@ -11,6 +11,8 @@ import OppOrderCard, { OppSubstituteSheet } from './OppOrderCard.jsx';
 import HeadCoachView from './HeadCoachView.jsx';
 import AttendanceSheet from './AttendanceSheet.jsx';
 import { BatonLocked } from './BatonPanel.jsx';
+import { NameButton } from './ProvisionalNames.jsx';
+import { uid, nextProvisionalNames } from '../lib/model.js';
 
 // ---- 交代シート(代打・代走・守備交代) ----
 // スコア入力タブ(打者カード/走者タップ)からも再利用するため export する
@@ -22,6 +24,9 @@ export function SubstituteSheet({ game, slot, onClose, initialKind = 'ph' }) {
   const [kind, setKind] = useState(initialKind); // ph=代打 pr=代走 def=守備交代
   const [playerId, setPlayerId] = useState('');
   const [position, setPosition] = useState(slot.position);
+  // 名簿に居ない人をその場で入れる。名前は空でもよい(仮の名前で入り、あとで入れられる)
+  const NEW = '__new__';
+  const [newName, setNewName] = useState('');
 
   const inLineup = new Set(game.lineup.map((l) => l.playerId));
   const candidates = state.players.filter((p) => !inLineup.has(p.id));
@@ -53,7 +58,14 @@ export function SubstituteSheet({ game, slot, onClose, initialKind = 'ph' }) {
             {p.name}{game.retiredPlayerIds.includes(p.id) ? t('order.sub.usedMark') : ''}
           </option>
         ))}
+        <option value={NEW}>{t('prov.subNew')}</option>
       </select>
+      {playerId === NEW && (
+        <>
+          <input className="mt8" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={t('prov.subNewPh')} />
+          <p className="small dim mt8">{t('prov.subNewNote')}</p>
+        </>
+      )}
 
       {isRetired && (
         <div className="warn-box">
@@ -74,16 +86,24 @@ export function SubstituteSheet({ game, slot, onClose, initialKind = 'ph' }) {
           className="primary"
           disabled={!playerId || (kind === 'pr' && !runnerBase)}
           onClick={() => {
+            let inId = playerId;
+            let inName = nameOf(playerId);
+            if (playerId === NEW) {
+              // 先に選手を作ってから交代させる(名前が空なら仮の名前)
+              inId = uid();
+              inName = newName.trim() || nextProvisionalNames(state.players, 1, lang)[0];
+              dispatch({ type: 'ADD_PLAYER', id: inId, name: newName.trim(), provisional: true });
+            }
             dispatch({
               type: 'SUBSTITUTE',
               gameId: game.id,
               order: slot.order,
-              playerId,
+              playerId: inId,
               position,
               kind, // ph=代打 / pr=代走 / def=守備交代(伝統表記の生成に使う)
               asRunner: kind === 'pr',
               label: t('order.sub.log', {
-                kind: kindLabel, inName: nameOf(playerId), order: slot.order, outName: nameOf(slot.playerId),
+                kind: kindLabel, inName, order: slot.order, outName: nameOf(slot.playerId),
               }),
             });
             onClose();
@@ -230,6 +250,7 @@ export default function OrderTab() {
             <span className="rank-badge">{slot.order}</span>
             <div className="grow" onClick={() => (fixOrder ? null : setSubSlot(slot))} role="button">
               <b>{nameOf(slot.playerId)}</b>
+              <NameButton playerId={slot.playerId} game={game} className="pill" />
               {i === game.batterIndex && <span className="pill blue" style={{ marginLeft: 6 }}>{t('order.nextBatter')}</span>}
               {game.retiredPlayerIds.includes(slot.playerId) && <span className="pill amber" style={{ marginLeft: 6 }}>{t('order.reentry')}</span>}
             </div>

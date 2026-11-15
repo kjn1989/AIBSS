@@ -22,7 +22,7 @@ import { speechSupported } from '../src/lib/speech.js';
 import { createNativeSpeechEngine, mapNativeError, SILENCE_MS, NO_SPEECH_MS, STOP_GRACE_MS } from '../src/lib/nativeSpeech.js';
 import { detectLang, resolveLang } from '../src/lib/langStore.js';
 import { MESSAGES } from '../src/lib/i18n.js';
-import { positionListLabel, GAME_SCHEMA_VERSION } from '../src/lib/model.js';
+import { positionListLabel, GAME_SCHEMA_VERSION, nextProvisionalNames, isProvisional } from '../src/lib/model.js';
 import { extractGameDataset, datasetEligibility, DATASET_VERSION } from '../src/lib/datasetExtract.js';
 import { generateDemoData } from '../src/lib/demo.js';
 import { chooseRemote, lockedFor, holdsBaton, unsentLogs, deviceId } from '../src/lib/baton.js';
@@ -6355,4 +6355,21 @@ test('バトン: 引き継がれても、未送信の記録が無ければ衝突
   // 見ているだけの端末(記録係ではない)は、何があっても衝突にならない
   const watcher = bg({ recorder: rec('old', 10), playLogs: [{ id: 'z' }] });
   assert.equal(chooseRemote(watcher, theirs, 'me').conflict, false);
+});
+
+// ---------------- 仮の選手(選手登録なしで始める) ----------------
+test('仮の選手: 既定では仮ではなく、指定したときだけ仮になる', () => {
+  assert.equal(isProvisional(newPlayer('青木')), false);
+  assert.equal(isProvisional(newPlayer('選手1', '', { provisional: true })), true);
+});
+
+test('仮の名前: 番号は続きから振り、名前を入れて空いた番号は使い回さない', () => {
+  assert.deepEqual(nextProvisionalNames([], 3), ['選手1', '選手2', '選手3']);
+  assert.deepEqual(nextProvisionalNames([], 2, 'en'), ['Player 1', 'Player 2']);
+  // 選手1・選手2に名前を入れたあと。別の人がまた「選手1」になると取り違える
+  const players = [
+    { name: '青木', provisional: false }, { name: '井上', provisional: false },
+    { name: '選手3', provisional: true }, { name: '選手9', provisional: true },
+  ];
+  assert.deepEqual(nextProvisionalNames(players, 2), ['選手10', '選手11']);
 });

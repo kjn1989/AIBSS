@@ -2655,3 +2655,7 @@ button.manage-open {
 .baton-box.conflict { border-color: var(--amber); background: rgba(210,153,34,.12); }
 .baton-take { margin-top: 4px; }
 .baton-mine { color: var(--text-dim); padding: 2px 6px 6px; }
+
+/* ---- 仮の選手(名前がまだ) ---- */
+.name-btn { margin-left: 6px; border-color: var(--amber); color: var(--amber); white-space: nowrap; }
+.prov-card { border-color: var(--amber); }
