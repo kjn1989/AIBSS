@@ -253,6 +253,7 @@ await cap('STEP 2', '試合を始める', 'ホームの <em>新しい試合を�
 await tap(nav('ホーム'), 800);
 await tap(btn('新しい試合を開始'), 1000);
 await cap('STEP 2', '決めるのは2つだけ', '<em>対戦相手</em> と <em>先攻・後攻</em>。<br>ほかは既定のままで大丈夫です。', 600);
+await exactBtn('くわしく').click(); // この動画は1球ごとの記録(くわしく)を見せる
 await typeIn(app.locator('input[placeholder="対戦相手名"]'), 'レッドスターズ');
 await tap(exactBtn('先攻'), 900);
 await cap('STEP 2', '公式戦か練習試合か', '選んでおくと、あとで分けて集計できます（任意）。', 400);

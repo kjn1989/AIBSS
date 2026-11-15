@@ -2632,3 +2632,10 @@ button.manage-open {
   padding: 1px 7px; border-radius: 5px;
   color: var(--accent); border: 1px solid var(--accent);
 }
+
+/* ---- かんたん記録: 打球方向は守備位置の1タップ ---- */
+.simple-dir { display: flex; flex-direction: column; gap: 8px; }
+.simple-dir-row { display: flex; gap: 8px; justify-content: center; }
+.simple-dir-row button { flex: 1 1 0; max-width: 110px; padding: 14px 4px; font-size: 15px; font-weight: 800; }
+.simple-out { display: flex; gap: 8px; flex-wrap: wrap; }
+.simple-out button { flex: 1 1 0; min-width: 72px; padding: 10px 4px; }

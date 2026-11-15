@@ -420,7 +420,7 @@ export const GAME_SCHEMA_VERSION = 1;
 // 分かったとき、その範囲の試合を見分けるため。テスト(node)では null
 const APP_BUILD = typeof __BUILD_INFO__ === 'undefined' ? null : (__BUILD_INFO__?.sha || null);
 
-export function newGame({ opponent = '', isHome = false, date = null, season = '', rules = null, allowReentry = false, attendees = null, scorerId = null, teamGap = 'even', gameType = null, edition = null, kind = null, origin = 'live' } = {}) {
+export function newGame({ opponent = '', isHome = false, date = null, season = '', rules = null, allowReentry = false, attendees = null, scorerId = null, teamGap = 'even', gameType = null, edition = null, kind = null, origin = 'live', recordMode = 'detail' } = {}) {
   return {
     id: uid(),
     schemaVersion: GAME_SCHEMA_VERSION,
@@ -429,6 +429,12 @@ export function newGame({ opponent = '', isHome = false, date = null, season = '
     // 'import'(CSVの完成済み成績から作った。打席ごとの記録が無い) | 'demo'。
     // 打席ごとの記録から何かを数えるときは 'live' だけを見る
     origin: origin === 'import' || origin === 'demo' ? origin : 'live',
+    // 記録のしかた。'simple'(かんたん: 打席の結果と打球方向だけ) | 'detail'(くわしく: 1球ごと・打球の質・流れタグ)。
+    // 1球ずつ付けるのは公式戦なら見合うが、練習試合では頼む側も付ける側も重い。
+    // 記録の形は同じで、かんたんの試合は球数・カウント・打球の強さ深さが空になるだけ。
+    // 試合に持たせるのは、あとで「球数が無いのは投げていないからか、付けていないからか」を
+    // 見分けるため。この項目より前の試合は undefined(くわしく扱い)
+    recordMode: recordMode === 'simple' ? 'simple' : 'detail',
     date: date || new Date().toISOString().slice(0, 10),
     opponent,
     season, // シーズン/大会名(任意。集計フィルタに使用)
@@ -587,3 +593,6 @@ export function formatIP(outs) {
   const rem = outs % 3;
   return rem === 0 ? `${full}` : `${full}.${rem}`;
 }
+
+// その試合が「かんたん記録」か
+export const isSimpleGame = (game) => game?.recordMode === 'simple';

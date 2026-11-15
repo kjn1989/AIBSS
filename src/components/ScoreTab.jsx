@@ -18,7 +18,7 @@ import { OppSubstituteSheet } from './OppOrderCard.jsx';
 import { oppNameOf, oppPositionOf, oppHasName } from '../lib/oppBox.js';
 import { renderPlayLog } from '../lib/playLogText.js';
 import GameProgressView from './GameProgressView.jsx';
-import { POSITIONS, OPP_LETTERS, resultCategory, multiOutLabel, positionLabel, attendeesOf, autoLineupFrom } from '../lib/model.js';
+import { POSITIONS, OPP_LETTERS, resultCategory, multiOutLabel, positionLabel, attendeesOf, autoLineupFrom, isSimpleGame } from '../lib/model.js';
 import { playLabel } from '../lib/voiceParser.js';
 import { batterDrift } from '../lib/battersRebuild.js';
 import { convertMemoToPlay, guessPlayFromMemo, maskNames } from '../lib/gemini.js';
@@ -208,6 +208,11 @@ function GameSetup() {
   const [scorerId, setScorerId] = useState(state.settings.lastScorerId || null);
   // 相手との力の差。既定は互角で、そのときは何も変わらない
   const [teamGap, setTeamGap] = useState('even');
+  // 記録のしかた(かんたん/くわしく)。前回の選択を覚える。初めて試合を作るチームは
+  // かんたんから(1球ずつ付ける負担で最初の1試合が続かないのを避ける)
+  const hasGames = Object.values(state.games).some((g) => !g.id.startsWith('demo-'));
+  const [recordMode, setRecordMode] = useState(state.settings.lastRecordMode || (hasGames ? 'detail' : 'simple'));
+  const simple = recordMode === 'simple';
   const ongoing = Object.values(state.games).filter((g) => g.status === 'ongoing' && !g.id.startsWith('demo-'));
   // 既存試合で使われたシーズン名(サジェスト用)
   const knownSeasons = [...new Set(Object.values(state.games).map((g) => g.season).filter(Boolean))];
@@ -238,18 +243,26 @@ function GameSetup() {
         // 表記ゆれを入口で止める: 過去に対戦した相手なら、その書き方に揃える
         opponent: matched ? matched.name : opponent.trim(),
         isHome, season: season.trim(), rules: { ...resolveRulesFrom(presetId, custom), ...live }, allowReentry,
-        attendees, scorerId, teamGap, gameType,
+        attendees, gameType, recordMode,
+        // かんたん記録では画面に出していない項目。前回の値が黙って入らないよう既定に戻す
+        scorerId: simple ? null : scorerId, teamGap: simple ? 'even' : teamGap,
         oppRoster: carryOver && recall ? recall : null,
       },
     });
     // 次の試合でも同じ設定から始められるよう、選択を覚えておく
-    dispatch({ type: 'UPDATE_SETTINGS', patch: { lastRulePresetId: presetId, lastAllowReentry: allowReentry, lastScorerId: scorerId } });
+    dispatch({ type: 'UPDATE_SETTINGS', patch: { lastRulePresetId: presetId, lastAllowReentry: allowReentry, lastRecordMode: recordMode, ...(simple ? {} : { lastScorerId: scorerId }) } });
   };
 
   return (
     <div>
       <div className="card">
         <h2>{t('gamesetup.title')}</h2>
+        <label className="small dim">{t('mode.label')}</label>
+        <div className="toggle-row" style={{ marginBottom: 6 }}>
+          <button className={simple ? 'active' : ''} aria-pressed={simple} onClick={() => setRecordMode('simple')}>{t('mode.simple')}</button>
+          <button className={!simple ? 'active' : ''} aria-pressed={!simple} onClick={() => setRecordMode('detail')}>{t('mode.detail')}</button>
+        </div>
+        <p className="small dim" style={{ marginTop: 0 }}>{t(simple ? 'mode.simpleHint' : 'mode.detailHint')}</p>
         <label className="small dim">{t('gamesetup.opponent')}</label>
         <input value={opponent} onChange={(e) => setOpponent(e.target.value)} placeholder={t('gamesetup.opponent.placeholder')} />
         {pastOpponents.length > 0 && !matched && (
@@ -298,19 +311,25 @@ function GameSetup() {
         <RulePicker
           presetId={presetId} custom={custom} edition={edition}
           onPresetChange={onPresetChange} setCustom={setCustom}
-          allowReentry={allowReentry} setAllowReentry={setAllowReentry}
+          allowReentry={allowReentry} setAllowReentry={simple ? null : setAllowReentry}
         />
 
-        <button className="mt8" style={{ width: '100%' }} onClick={() => setLiveOpen(true)}>
-          {t('lr.open')}
-        </button>
-        <p className="small dim mt8">{liveSummary(live, t)}</p>
+        {/* かんたん記録では、決めなくても試合が成り立つものは出さない
+            (タイブレーク等は試合中の「ルールを決める」からいつでも決められる) */}
+        {!simple && (
+          <>
+            <button className="mt8" style={{ width: '100%' }} onClick={() => setLiveOpen(true)}>
+              {t('lr.open')}
+            </button>
+            <p className="small dim mt8">{liveSummary(live, t)}</p>
 
-        <label className="small dim mt12" style={{ display: 'block' }}>{t('scorer.label')}</label>
-        <ScorerPicker value={scorerId} onChange={setScorerId} />
+            <label className="small dim mt12" style={{ display: 'block' }}>{t('scorer.label')}</label>
+            <ScorerPicker value={scorerId} onChange={setScorerId} />
 
-        <label className="small dim mt12" style={{ display: 'block' }}>{t('gap.label')}</label>
-        <TeamGapPicker value={teamGap} onChange={setTeamGap} />
+            <label className="small dim mt12" style={{ display: 'block' }}>{t('gap.label')}</label>
+            <TeamGapPicker value={teamGap} onChange={setTeamGap} />
+          </>
+        )}
 
         <button className="primary" style={{ width: '100%' }} onClick={() => setAtt(true)}>
           {t('gamesetup.start')}
@@ -741,6 +760,7 @@ export default function ScoreTab() {
 
   // 守備側(攻撃中は相手投手/守備中は自軍投手)が未設定だと球数が記録されない。
   // 選ぶまで投球・結果入力をロックして、球数の記録漏れを防ぐ。
+  const simple = isSimpleGame(game);
   const needsPitcher = !noLineup && ((myBatting && !game.oppPitcherLetter) || (!myBatting && !game.currentPitcherId));
 
   // 画面の打者と記録がずれていないか。ずれていればその場で直せるようにする
@@ -872,15 +892,18 @@ export default function ScoreTab() {
         </div>
       )}
 
-      {needsPitcher && <div className="warn-box needs-pitcher">{t('score.needPitcher')}</div>}
+      {needsPitcher && <div className="warn-box needs-pitcher">{t(simple ? 'score.needPitcherSimple' : 'score.needPitcher')}</div>}
 
       <div className={needsPitcher ? 'input-locked' : ''} aria-disabled={needsPitcher}>
-        <PitchCounter
-          game={game}
-          onAutoEvent={(kind, soType) =>
-            setSheet(kind === 'so' ? { kind: 'strikeout', soType } : { kind: 'play', result: 'bb' })
-          }
-        />
+        {/* かんたん記録: 1球ごとのボタンは出さず、打席の結果だけを付ける */}
+        {!simple && (
+          <PitchCounter
+            game={game}
+            onAutoEvent={(kind, soType) =>
+              setSheet(kind === 'so' ? { kind: 'strikeout', soType } : { kind: 'play', result: 'bb' })
+            }
+          />
+        )}
 
         {(!myBatting || !noLineup) && (
           <div className="card rp-card">
@@ -931,8 +954,9 @@ export default function ScoreTab() {
         </div>
       )}
 
-      {/* 流れタグ: 感じた瞬間に押す。記録の本体には影響しないので、いつでも押せる */}
-      <div className="card flow-card">
+      {/* 流れタグ: 感じた瞬間に押す。記録の本体には影響しないので、いつでも押せる。
+          かんたん記録では出さない */}
+      {!simple && <div className="card flow-card">
         <div className="flex">
           <h2 className="grow" style={{ marginBottom: 0 }}>{t('flowtag.title')}</h2>
           <span className="small dim">{t('flowtag.hint')}</span>
@@ -967,7 +991,7 @@ export default function ScoreTab() {
         <button className="small mt8" style={{ width: '100%' }} onClick={() => setSheet({ kind: 'flowView' })}>
           {t('fv.open')}
         </button>
-      </div>
+      </div>}
 
       <div className="card">
         <h2>{t('score.gameOps')}</h2>
@@ -989,6 +1013,14 @@ export default function ScoreTab() {
           </button>
           <button style={{ gridColumn: '1 / -1' }} onClick={() => setSheet({ kind: 'note' })}>
             {t('score.noteBtn')}
+          </button>
+          {/* 途中からでも切り替えられる(「やっぱり球数も付けたい」「人手が足りなくなった」) */}
+          <button
+            style={{ gridColumn: '1 / -1' }}
+            onClick={() => window.confirm(t(simple ? 'mode.toDetailConfirm' : 'mode.toSimpleConfirm'))
+              && dispatch({ type: 'SET_RECORD_MODE', gameId: game.id, mode: simple ? 'detail' : 'simple' })}
+          >
+            {t(simple ? 'mode.toDetail' : 'mode.toSimple')}
           </button>
           <button
             className="danger"

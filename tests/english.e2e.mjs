@@ -265,6 +265,7 @@ try {
     await g.locator('.tabbar button').nth(1).click();
     await g.waitForTimeout(700);
     await gscan('試合作成の画面');
+    await g.locator('button:has-text("Detailed")').first().click().catch(() => {}); // このテストは1球ごとの記録が前提
     await g.locator('input[placeholder="Opponent name"]').first().fill('Manila Bay');
     await g.locator('button:has-text("Start Game")').last().click();
     await g.waitForTimeout(1100);
