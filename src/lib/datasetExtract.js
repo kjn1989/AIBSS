@@ -118,6 +118,8 @@ export function extractGameDataset(game) {
       edition: game.edition || null,
       kind: game.kind || null,
       gameType: game.gameType || null,
+      // かんたん記録の試合は球数・打球の質が「無い」のではなく「付けていない」
+      recordMode: game.recordMode === 'simple' ? 'simple' : 'detail',
       teamGap: game.teamGap || null,
       innings: num(game.rules?.innings),
       isHome: !!game.isHome,

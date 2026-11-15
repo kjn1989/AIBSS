@@ -1,7 +1,7 @@
 import React from 'react';
 import { useStore, useT, usePlayerName, isMyTeamBatting } from '../state/store.jsx';
 import { computeBoxScore, halfPlayed, hitsByInning } from '../lib/boxscore.js';
-import { resultCategory } from '../lib/model.js';
+import { resultCategory, isSimpleGame } from '../lib/model.js';
 import { shortLabel } from '../lib/notation.js';
 import { oppNameOf } from '../lib/oppBox.js';
 
@@ -148,7 +148,8 @@ export default function Scoreboard({ game }) {
           {t(game.isTop ? 'scoreboard.top' : 'scoreboard.bottom', { n: game.inning })}
         </span>
         <span className="li-live">
-          <span className="li-pc">{t('pitch.count.thisAtBat', { n: pitches.length })}</span>
+          {/* かんたん記録では球数・カウントを付けないので出さない(0のまま出ると付け忘れに見える) */}
+          {!isSimpleGame(game) && <span className="li-pc">{t('pitch.count.thisAtBat', { n: pitches.length })}</span>}
           {lastPaText && (
             <span className={`li-last ss-cell ${resultCategory(lastPa.payload?.result)}`}>
               {lastPaWho && <i>{lastPaWho}</i>}
@@ -174,13 +175,17 @@ export default function Scoreboard({ game }) {
         </table>
 
         <div className="led-bso">
-          <div className="r b"><b>B</b>{dots(balls, 3).map((v, i) => <i key={i} className={`d${v ? ' on' : ''}`} />)}</div>
-          <div className="r s"><b>S</b>{dots(strikes, 2).map((v, i) => <i key={i} className={`d${v ? ' on' : ''}`} />)}</div>
+          {!isSimpleGame(game) && (
+            <>
+              <div className="r b"><b>B</b>{dots(balls, 3).map((v, i) => <i key={i} className={`d${v ? ' on' : ''}`} />)}</div>
+              <div className="r s"><b>S</b>{dots(strikes, 2).map((v, i) => <i key={i} className={`d${v ? ' on' : ''}`} />)}</div>
+            </>
+          )}
           <div className="r o"><b>O</b>{dots(game.outs, 2).map((v, i) => <i key={i} className={`out-dot d${v ? ' on' : ''}`} />)}</div>
         </div>
       </div>
 
-      <PitchLines game={game} />
+      {!isSimpleGame(game) && <PitchLines game={game} />}
     </div>
   );
 }

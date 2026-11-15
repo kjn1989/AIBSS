@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import Sheet from './Sheet.jsx';
 import { useStore, useT, usePlayerName, isMyTeamBatting } from '../state/store.jsx';
-import { RESULTS, DIRECTIONS, SO_TYPES, outTypeLabel, allowsFoul , infieldFlyPossible, FIELD_POSITIONS, DIR_TO_POSITION, ERROR_KINDS, playErrorOf, finePlayOf, positionLabel } from '../lib/model.js';
+import { RESULTS, DIRECTIONS, SO_TYPES, outTypeLabel, allowsFoul , infieldFlyPossible, FIELD_POSITIONS, DIR_TO_POSITION, ERROR_KINDS, playErrorOf, finePlayOf, positionLabel, isSimpleGame } from '../lib/model.js';
 import { proposeMoves, batterDestOptions, runnerDestOptions, judgeAdvance } from '../lib/plays.js';
 import FieldPad from './FieldPad.jsx';
 import BattedBallPad from './BattedBallPad.jsx';
@@ -12,6 +12,10 @@ const NEEDS_DIRECTION = ['single', 'double', 'triple', 'hr', 'out', 'error', 'sa
 const TRAJECTORY_TYPES = ['ground', 'liner', 'fly'];
 
 // プレイ確定シート: 方向・走者進塁・打点をまとめて確認して1タップ確定
+// かんたん記録の打球方向。グラウンドの並びに近い3段(外野 / 内野 / バッテリー)
+const SIMPLE_DIR_ROWS = [['LF', 'CF', 'RF'], ['3B', 'SS', '2B', '1B'], ['P', 'C']];
+const OUTFIELD_DIRS = ['LF', 'CF', 'RF'];
+
 export default function PlaySheet({ game, initial, batterName, onClose }) {
   const { state, dispatch } = useStore();
   const t = useT();
@@ -32,6 +36,8 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
   const def = RESULTS[result];
   const resultLabel = lang === 'ja' ? def.label : t(`result.${result}`);
   const myBatting = isMyTeamBatting(game);
+  // かんたん記録: 打球は守備位置の1タップだけ。強さ・深さ・守備の出来・三振や四球の内訳は聞かない
+  const simple = isSimpleGame(game);
 
   const runnersOn = { 1: !!game.runners[1], 2: !!game.runners[2], 3: !!game.runners[3] };
   const [dirTouched, setDirTouched] = useState(false); // 走者を手で動かしたか
@@ -78,7 +84,8 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
   // 打球の強さ。既定は未記録(null)。押されていないものを平凡として
   // 数え始めるとハードヒット率がすぐ嘘になるので、既定値は入れない
   const [contact, setContact] = useState(initial.contact || null);
-  const [soType, setSoType] = useState(initial.soType || 'swinging');
+  // かんたん記録では空振り/見逃しを聞かないので、決めつけずに未記録(null)で残す
+  const [soType, setSoType] = useState(initial.soType || (simple ? null : 'swinging'));
   // この打球の守備。ふつう / ファインプレー / 失策 の3つ。
   // どちらも「守備がふつうではなかった」の記録で、向きが逆なだけなので同じ場所に置く。
   // 失策: 安打かどうかは打球で決まるので result は触らない。
@@ -252,7 +259,7 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
     const ot = asSacFly ? '' : contact && outType && TRAJECTORY_TYPES.includes(outType)
       ? t(`battedBall.${outType}.${contact}`)
       : result === 'out' && outType ? outLabel(outType) : '';
-    const soLabel = lang === 'ja' ? SO_TYPES[soType] : t(`soType.${soType}`);
+    const soLabel = !soType ? resultLabel : lang === 'ja' ? SO_TYPES[soType] : t(`soType.${soType}`);
     const label = result === 'so'
       ? soLabel + (batterTo === 1 ? t('playsheet.dropThird') : '')
       : asSacFly ? (lang === 'ja' ? RESULTS.sacFly.label : t('result.sacFly'))
@@ -321,7 +328,37 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
 
   return (
     <Sheet title={`${batterName ? batterName + ': ' : t('playsheet.oppBatter')}${resultLabel}`} onClose={onClose}>
-      {needsDir && (
+      {needsDir && simple && (
+        <div ref={dirRef}>
+          <div className="section-title" style={{ marginTop: 0 }}>{t('playsheet.direction')}</div>
+          <div className="simple-dir">
+            {SIMPLE_DIR_ROWS.map((row, i) => (
+              <div key={i} className="simple-dir-row">
+                {row.filter((k) => result !== 'hr' || OUTFIELD_DIRS.includes(k)).map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    className={direction === k ? 'primary' : ''}
+                    aria-pressed={direction === k}
+                    onClick={() => {
+                      setDirection(k);
+                      setPoint(null);
+                      // アウトの種類は位置から決める(内野=ゴロ、外野=フライ)。違えば下で直せる
+                      if (result === 'out' && outType !== 'dp' && outType !== 'ifly') {
+                        setOutType(OUTFIELD_DIRS.includes(k) ? 'fly' : 'ground');
+                      }
+                    }}
+                  >
+                    {lang === 'ja' ? DIRECTIONS[k] : t(`dir.${k}`)}
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {needsDir && !simple && (
         <div ref={dirRef}>
           <div className="section-title" style={{ marginTop: 0 }}>{t('playsheet.direction')}</div>
           {dirOpen ? (
@@ -347,7 +384,7 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
         </div>
       )}
 
-      {result === 'so' && (
+      {result === 'so' && !simple && (
         <>
           <div className="section-title">{t('playsheet.soType')}</div>
           <div className="grid2">
@@ -360,7 +397,7 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
         </>
       )}
 
-      {result === 'bb' && (
+      {result === 'bb' && !simple && (
         <>
           <div className="section-title" style={needsDir ? undefined : { marginTop: 0 }}>{t('playsheet.bbType')}</div>
           <div className="grid2">
@@ -375,7 +412,29 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
         </>
       )}
 
-      {needsDir && (
+      {simple && result === 'out' && (
+        <>
+          <div className="section-title">{t('playsheet.outKind')}</div>
+          <div className="simple-out">
+            {['ground', 'fly', 'liner'].map((k) => (
+              <button key={k} type="button" className={outType === k ? 'primary' : ''} onClick={() => setOutType(k)}>
+                {outLabel(k)}
+              </button>
+            ))}
+            {dpPossible && (
+              <button
+                type="button"
+                className={outType === 'dp' ? 'primary' : ''}
+                onClick={() => (outType === 'dp' ? setOutType('ground') : selectOutType('dp'))}
+              >
+                {outLabel('dp')}
+              </button>
+            )}
+          </div>
+        </>
+      )}
+
+      {needsDir && !simple && (
         <>
           <div className="section-title">{t('playsheet.battedBall')}</div>
           <BattedBallPad
@@ -444,7 +503,7 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
           好守側: 守備の勝利貢献はその打席の投手に全部付くので、野手には何も
           残らなかった。失策だけ残って好守は残らないのは片側だけの記録。
           出塁そのものが失策のとき(result='error')は失策側だけ隠す */}
-      {needsDir && (
+      {needsDir && !simple && (
         <div className="play-error mt12">
           <div className="flex">
             <span className="small dim grow">{t('playsheet.playDefense')}</span>

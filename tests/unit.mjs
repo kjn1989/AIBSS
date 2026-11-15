@@ -6292,3 +6292,20 @@ test('集計用データ: デモの試合から作った記録でも名前が漏
     assert.ok(!json.includes(dg.opponent));
   }
 });
+
+// ---------------- かんたん記録 ----------------
+// 1球ずつ付けるのは練習試合には重い。試合ごとに「かんたん/くわしく」を持つ
+test('newGame: 記録のしかたは既定でくわしく、かんたんも選べる', () => {
+  assert.equal(newGame({}).recordMode, 'detail');
+  assert.equal(newGame({ recordMode: 'simple' }).recordMode, 'simple');
+  assert.equal(newGame({ recordMode: 'xxx' }).recordMode, 'detail');
+});
+
+test('集計用データ: かんたん記録の試合だと分かる(球数が無い理由を区別する)', () => {
+  const g = datasetGame();
+  assert.equal(extractGameDataset(g).game.recordMode, 'detail');
+  g.recordMode = 'simple';
+  assert.equal(extractGameDataset(g).game.recordMode, 'simple');
+  delete g.recordMode;
+  assert.equal(extractGameDataset(g).game.recordMode, 'detail', 'この項目より前の試合はくわしく扱い');
+});

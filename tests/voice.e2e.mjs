@@ -102,6 +102,7 @@ try {
   // 試合を開始して常時リスニングを起動
   await page.click('nav button:has-text("スコア入力")');
   await page.waitForTimeout(400);
+  await page.click('button:has-text("くわしく")').catch(() => {}); // 既存のテストは1球ごとの記録が前提
   await page.fill('input[placeholder="対戦相手名"]', '音声テスト');
   await page.click('button:has-text("試合開始")');
   // 試合開始は「今日のメンバー」を必ず通る。登録選手が全員来るとは限らないので、

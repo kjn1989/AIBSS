@@ -121,6 +121,7 @@ try {
   }
   await page.click('nav button:has-text("スコア入力")');
   await page.waitForTimeout(400);
+  await page.click('button:has-text("くわしく")').catch(() => {}); // 既存のテストは1球ごとの記録が前提
   await page.fill('input[placeholder="対戦相手名"]', 'アプリ音声');
   await page.click('button:has-text("試合開始")');
   await page.waitForTimeout(500);

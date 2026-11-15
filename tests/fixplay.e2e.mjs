@@ -31,6 +31,7 @@ await p.goto(URL_,{waitUntil:'load'}); await p.waitForTimeout(900);
 await p.click('button[aria-label="設定"]'); await p.waitForTimeout(400);
 const d=p.locator('button:has-text("デモデータを投入")'); if(await d.count()){await d.click();await p.waitForTimeout(500);}
 await p.click('nav button:has-text("スコア入力")'); await p.waitForTimeout(400);
+await p.click('button:has-text("くわしく")').catch(() => {}); // 既存のテストは1球ごとの記録が前提
 await p.fill('input[placeholder="対戦相手名"]','記録修正');
 await p.click('button:has-text("試合開始")'); await p.waitForTimeout(700);
 const att=p.locator('.sheet').filter({hasText:'今日のメンバー'});

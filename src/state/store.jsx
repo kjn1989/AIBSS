@@ -619,6 +619,14 @@ export function reducer(state, action) {
       const list = (state.settings.scorers || []).filter((s) => s.id !== action.scorerId);
       return { ...state, settings: { ...state.settings, scorers: list } };
     }
+    // 記録のしかたを試合の途中で変える(かんたん ⇄ くわしく)。それまでの記録には触れない
+    case 'SET_RECORD_MODE': {
+      const g = deep(state.games[action.gameId]);
+      if (!g) return state;
+      g.recordMode = action.mode === 'simple' ? 'simple' : 'detail';
+      g.updatedAt = Date.now();
+      return { ...state, games: { ...state.games, [g.id]: g } };
+    }
     case 'SET_GAME_SCORER': {
       const g = deep(state.games[action.gameId]);
       if (!g) return state;
@@ -1339,12 +1347,16 @@ export function reducer(state, action) {
       // --- 投球記録を確定 ---
       let pitches = [...pending.pitches];
       const resultDef = RESULTS[p.result];
-      if (resultDef && (resultDef.hit || ['out', 'error', 'sacBunt', 'sacFly', 'interference'].includes(p.result))) {
+      // かんたん記録で1球も付けていない打席は、球数を補わない。
+      // 「打った1球」「三振の3球」だけを足すと、実際より少ない球数がもっともらしく残る。
+      // 付けていないものは 0(未記録)のままにして、球数の集計に混ざらないようにする
+      const noPitchRecord = g.recordMode === 'simple' && pitches.length === 0;
+      if (!noPitchRecord && resultDef && (resultDef.hit || ['out', 'error', 'sacBunt', 'sacFly', 'interference'].includes(p.result))) {
         pitches.push(newPitch('inplay')); // インプレーの1球を自動加算
         if (!myBatting && g.currentPitcherId) bumpPitches(g, g.currentPitcherId, +1);
         else if (myBatting && g.oppPitcherLetter) bumpOppPitches(g, g.oppPitcherLetter, +1);
       }
-      pitches = ensureMinimumPitches(pitches, p.result);
+      if (!noPitchRecord) pitches = ensureMinimumPitches(pitches, p.result);
       const balls = pitches.filter((pt) => pt.type === 'ball').length;
       const strikes = pitches.filter((pt) => pt.type === 'strike').length;
       const fouls = pitches.filter((pt) => pt.type === 'foul').length;

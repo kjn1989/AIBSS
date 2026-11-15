@@ -136,6 +136,7 @@ try {
   // ============================================================
   // 試合前に決める
   // ============================================================
+  await page.click('button:has-text("くわしく")').catch(() => {}); // 既存のテストは1球ごとの記録が前提
   await page.fill('input[placeholder="対戦相手名"]', 'ルール確認');
   const openBtn = page.locator('button:has-text("ルールを決める（タイブレーク等）")');
   check('入口の名前が3か所で共通', (await page.locator('button:has-text("ルールを決める")').count()) === 1);
