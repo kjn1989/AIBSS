@@ -4,6 +4,7 @@ import { currentYear, labelOfYear, DEFAULT_YEAR_START_MONTH } from '../lib/year.
 import { yearSummary } from '../lib/yearArchive.js';
 import { kindOf, kindPatch, DEFAULT_ADULT_TYPE } from '../lib/editionKind.js';
 import YearCloseView from './YearCloseView.jsx';
+import ProvisionalNames from './ProvisionalNames.jsx';
 
 // ホーム: 「いま何をすればいいか」が一目で分かる入口に徹する。
 // - 進行中の試合があれば最優先で「試合に戻る」
@@ -119,6 +120,9 @@ export default function HomeTab({ onNavigate }) {
           )}
         </div>
       )}
+
+      {/* 名前がまだの選手(登録なしで始めた・交代でその場で入れた)。入れ忘れを残さない */}
+      <ProvisionalNames game={live || null} />
 
       {/* 日本の既定のまま始めようとしている海外のチームに、1回だけ選ばせる。
           「設定を見に行け」ではなく、ここで押せば終わる形にする */}

@@ -224,7 +224,11 @@ export const HAND_LABEL = { R: '右', L: '左', S: '両', '': '—' };
 
 export function newPlayer(name, number = '', opts = {}) {
   return {
-    id: uid(), name, number, createdAt: Date.now(),
+    id: opts.id || uid(), name, number, createdAt: Date.now(),
+    // 仮の選手。登録なしで試合を始めたときや、交代で名簿に居ない人を入れたときに作る。
+    // 記録は選手IDに付くので、あとで名前を入れれば過去の記録ごとその名前になる。
+    // 名前を入れた時点で false にする(「名前がまだ」の一覧から外れる)
+    provisional: !!opts.provisional,
     throws: opts.throws || '', // 投げる手: 'R'|'L'|'' (捕手左投げ等の稀少ケースも許容)
     bats: opts.bats || '',     // 打つ側: 'R'|'L'|'S'|''
     // 守備位置。position=主(いつもの位置・1つ) / subPositions=任せられる位置(複数)。
@@ -596,3 +600,20 @@ export function formatIP(outs) {
 
 // その試合が「かんたん記録」か
 export const isSimpleGame = (game) => game?.recordMode === 'simple';
+
+// 仮の選手(名前がまだ)か
+export const isProvisional = (p) => !!p?.provisional;
+// 仮の名前。「選手1」「選手2」…。番号は今ある仮の選手の続きから振る
+export function nextProvisionalNames(players = [], n = 1, lang = 'ja') {
+  const base = lang === 'en' ? 'Player ' : '選手';
+  // いちばん大きい番号の続きから。名前を入れて空いた番号は使い回さない
+  // (「選手1」に名前を入れたあと、別の人がまた「選手1」になると取り違える)
+  let max = 0;
+  for (const p of players) {
+    const m = String(p.name || '').match(/^(?:選手|Player )(\d+)$/);
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  // 番号が空いていても、仮の選手を作った数より小さくはしない
+  max = Math.max(max, players.filter((p) => p.provisional).length);
+  return Array.from({ length: n }, (_, i) => `${base}${max + i + 1}`);
+}

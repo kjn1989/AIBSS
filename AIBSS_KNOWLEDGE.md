@@ -155,6 +155,17 @@ e2e は `tests/simple.e2e.mjs`。既存の e2e は「くわしく」を押して
 - e2e は `tests/baton.e2e.mjs`(2つのブラウザを模擬クラウドで中継。`window.__AIBSS_TEST_CLOUD__` が CloudSync の差し込み口)。
   **本物の Supabase での2台確認は未実施**
 
+### 仮の選手(選手登録なしで始める)
+
+選手を1人も登録していなくても試合を始められる。`START_WITH_PLACEHOLDERS` が「選手1〜9」を作り、
+打順・守備位置・先発投手を既定で埋める。仮の選手は**ふつうの Player に `provisional: true` が付いただけ**なので、
+オーダー・交代・成績はそのまま動き、名前を入れれば(`UPDATE_PLAYER` で `provisional:false`)過去の記録ごとその名前になる。
+- 名前を入れる口: 打者の横・オーダーの行(`NameButton`)、ホームと試合結果の「名前がまだの選手が N 人」(`ProvisionalNames`)
+- 登録済みの選手だった場合は `MERGE_PLAYERS` でまとめる(いまの試合に出ている人は候補から外す)
+- 交代のシートで「登録していない選手を入れる」(名前は空でもよい)
+- 仮の名前の番号は使い回さない(`nextProvisionalNames`)。e2e は `tests/provisional.e2e.mjs`
+- オーダーの行は押すと交代が開くので、行の中に置くボタンは `stopPropagation` が要る(portal のシートも React 上は子)
+
 ### 事後修正
 
 過去プレイの結果種別・方向・打点の編集/削除、回別スコアの手動増減(±)、投手成績の微調整、
