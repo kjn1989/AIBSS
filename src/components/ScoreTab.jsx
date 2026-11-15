@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useStore, useT, useCurrentGame, usePlayerName, isMyTeamBatting, currentBatter, currentOppBatter } from '../state/store.jsx';
 import GameTypeToggle from './GameTypeToggle.jsx';
+import { BatonLocked, BatonConflict, BatonMine } from './BatonPanel.jsx';
+import { lockedFor, recorderName, saveRecorderName } from '../lib/baton.js';
 import Scoreboard from './Scoreboard.jsx';
 import Diamond from './Diamond.jsx';
 import PitchCounter from './PitchCounter.jsx';
@@ -208,11 +210,13 @@ function GameSetup() {
   const [scorerId, setScorerId] = useState(state.settings.lastScorerId || null);
   // 相手との力の差。既定は互角で、そのときは何も変わらない
   const [teamGap, setTeamGap] = useState('even');
-  // 記録のしかた(かんたん/くわしく)。前回の選択を覚える。初めて試合を作るチームは
-  // かんたんから(1球ずつ付ける負担で最初の1試合が続かないのを避ける)
-  const hasGames = Object.values(state.games).some((g) => !g.id.startsWith('demo-'));
-  const [recordMode, setRecordMode] = useState(state.settings.lastRecordMode || (hasGames ? 'detail' : 'simple'));
+  // 記録のしかた(かんたん/くわしく)。前回の選択を覚える
+  // どちらが合うかはチームと試合で違うので、最初は決めつけずに選んでもらう(null = まだ選んでいない)
+  const [recordMode, setRecordMode] = useState(state.settings.lastRecordMode || null);
   const simple = recordMode === 'simple';
+  // クラウドでほかの端末とつながっているチームでは、記録係の名前が相手の画面に出る(lib/baton.js)
+  const cloudLinked = !!state.cloudStatus && state.cloudStatus !== 'off';
+  const [myName, setMyName] = useState(recorderName());
   const ongoing = Object.values(state.games).filter((g) => g.status === 'ongoing' && !g.id.startsWith('demo-'));
   // 既存試合で使われたシーズン名(サジェスト用)
   const knownSeasons = [...new Set(Object.values(state.games).map((g) => g.season).filter(Boolean))];
@@ -237,6 +241,7 @@ function GameSetup() {
   // 登録選手が全員来るわけではないので、居ない人を含んだまま打順を組むと
   // 自動セットにもAIスタメン提案にも欠席者が出てくる
   const startGame = (attendees) => {
+    saveRecorderName(myName); // CREATE_GAME がこの名前で最初の記録係を決める
     dispatch({
       type: 'CREATE_GAME',
       payload: {
@@ -258,11 +263,21 @@ function GameSetup() {
       <div className="card">
         <h2>{t('gamesetup.title')}</h2>
         <label className="small dim">{t('mode.label')}</label>
-        <div className="toggle-row" style={{ marginBottom: 6 }}>
-          <button className={simple ? 'active' : ''} aria-pressed={simple} onClick={() => setRecordMode('simple')}>{t('mode.simple')}</button>
-          <button className={!simple ? 'active' : ''} aria-pressed={!simple} onClick={() => setRecordMode('detail')}>{t('mode.detail')}</button>
+        <div className="mode-pick">
+          {['simple', 'detail'].map((m) => (
+            <button
+              key={m}
+              type="button"
+              className={`mode-opt${recordMode === m ? ' sel' : ''}`}
+              aria-pressed={recordMode === m}
+              onClick={() => setRecordMode(m)}
+            >
+              <b>{t(`mode.${m}`)}</b>
+              <span>{t(`mode.${m}Hint`)}</span>
+            </button>
+          ))}
         </div>
-        <p className="small dim" style={{ marginTop: 0 }}>{t(simple ? 'mode.simpleHint' : 'mode.detailHint')}</p>
+        <p className="small dim" style={{ marginTop: 0 }}>{t('mode.pickHint')}</p>
         <label className="small dim">{t('gamesetup.opponent')}</label>
         <input value={opponent} onChange={(e) => setOpponent(e.target.value)} placeholder={t('gamesetup.opponent.placeholder')} />
         {pastOpponents.length > 0 && !matched && (
@@ -311,12 +326,12 @@ function GameSetup() {
         <RulePicker
           presetId={presetId} custom={custom} edition={edition}
           onPresetChange={onPresetChange} setCustom={setCustom}
-          allowReentry={allowReentry} setAllowReentry={simple ? null : setAllowReentry}
+          allowReentry={allowReentry} setAllowReentry={recordMode === 'detail' ? setAllowReentry : null}
         />
 
         {/* かんたん記録では、決めなくても試合が成り立つものは出さない
             (タイブレーク等は試合中の「ルールを決める」からいつでも決められる) */}
-        {!simple && (
+        {recordMode === 'detail' && (
           <>
             <button className="mt8" style={{ width: '100%' }} onClick={() => setLiveOpen(true)}>
               {t('lr.open')}
@@ -331,9 +346,18 @@ function GameSetup() {
           </>
         )}
 
-        <button className="primary" style={{ width: '100%' }} onClick={() => setAtt(true)}>
+        {cloudLinked && (
+          <>
+            <label className="small dim mt12" style={{ display: 'block' }}>{t('baton.yourName')}</label>
+            <input value={myName} onChange={(e) => setMyName(e.target.value)} placeholder={t('baton.yourNamePh')} maxLength={20} />
+            <p className="small dim mt8">{t('baton.setupHint')}</p>
+          </>
+        )}
+
+        <button className="primary" style={{ width: '100%' }} onClick={() => setAtt(true)} disabled={!recordMode}>
           {t('gamesetup.start')}
         </button>
+        {!recordMode && <p className="small dim mt8" style={{ textAlign: 'center' }}>{t('mode.needPick')}</p>}
       </div>
 
       {liveOpen && (
@@ -745,6 +769,26 @@ export default function ScoreTab() {
     );
   }
 
+  // 別の端末が記録中(lib/baton.js)。入力は出さず、いまの状況と交代のボタンだけ出す
+  if (game && lockedFor(game)) {
+    return (
+      <div>
+        <Scoreboard game={game} />
+        <BatonConflict game={game} />
+        <BatonLocked game={game} />
+        <div className="card">
+          <h2>{t('restab.progress')}</h2>
+          {[...game.playLogs].filter((l) => l.kind !== 'run').slice(-10).reverse().map((l) => (
+            <div className="log-line" key={l.id}>
+              <b>{logInning(l)}</b> {renderPlayLog(game, l, { lang, t, nameOf, edition: state.settings.edition })}
+            </div>
+          ))}
+          {game.playLogs.length === 0 && <div className="dim small">{t('score.noPlays')}</div>}
+        </div>
+      </div>
+    );
+  }
+
   // 試合終了直後もハイライト/試合経過だけは表示し続ける(閉じたらGameSetupに戻る)
   if (!game || (game.status === 'finished' && sheet?.kind !== 'highlight' && !showProgress)) return <GameSetup />;
 
@@ -795,6 +839,8 @@ export default function ScoreTab() {
   return (
     <div className="scoretab">
       <Scoreboard game={game} />
+      <BatonConflict game={game} />
+      <BatonMine game={game} />
       <RuleBanners
         game={game}
         onFinish={() => {

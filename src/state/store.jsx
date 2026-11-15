@@ -24,6 +24,7 @@ import { rebuildBatters } from '../lib/battersRebuild.js';
 import { idbSave } from '../lib/durableStore.js';
 import { storedLang, saveLang } from '../lib/langStore.js';
 import { kindOf } from '../lib/editionKind.js';
+import { deviceId, newRecorder, lockedFor, chooseRemote } from '../lib/baton.js';
 import { saveGames, loadGames, pruneGames, gameIndex, stubGamesFromIndex } from '../lib/gameStore.js';
 import { translate, DEFAULT_LANG } from '../lib/i18n.js';
 import { getActiveProfileId, profileStorageKey, listProfiles, updateProfileMeta } from '../lib/profiles.js';
@@ -49,6 +50,8 @@ export const initialState = {
   // だけが消えた端末が新規扱いになり、IndexedDB に残っている試合を prune で失う。
   // 必ず一度読みに行き、空だと確認できてから true にする。
   gamesHydrated: false,
+  // バトンの衝突で上書きされた手元の試合 { [gameId]: Game }(lib/baton.js)
+  batonConflicts: {},
   settings: {
     teamName: 'マイチーム',
     lang: DEFAULT_LANG, // 表示言語 'ja' | 'en'。保存済みログは記録時の言語のまま残す。
@@ -84,7 +87,7 @@ export const initialState = {
 
 // localStorage に置く軽い状態。games はここに含めない(1試合100KBあり、50試合で上限に当たる)。
 // 試合そのものは IndexedDB に1件ずつ保存し、localStorage には索引だけを置く。
-const PERSIST_KEYS = ['players', 'members', 'currentGameId', 'settings', 'demoLoaded', 'pendingDeletes'];
+const PERSIST_KEYS = ['players', 'members', 'currentGameId', 'settings', 'demoLoaded', 'pendingDeletes', 'batonConflicts'];
 
 // トゥームストーンにidを追加(重複排除)
 function addTomb(pd, bucket, ids) {
@@ -467,7 +470,26 @@ function ensureMinimumPitches(pitches, result) {
 // ------------------------------------------------------------
 // Reducer
 // ------------------------------------------------------------
+// 記録のバトン(lib/baton.js): 進行中の試合は、バトンを持つ端末だけが変更できる。
+// 画面ごとに止めると漏れる(オーダー・試合結果・音声…どこからでも試合は変えられる)ので、
+// ここ1か所で止める。バトンの受け渡しと、クラウドからの反映だけは通す。
+const BATON_FREE = new Set(['TAKE_BATON', 'RESOLVE_BATON_CONFLICT', 'MERGE_REMOTE', 'SELECT_GAME']);
+const GAME_BY_ID = new Set(['FINISH_GAME', 'UPDATE_GAME_META', 'DELETE_GAME']);
+function targetGameId(state, action) {
+  if (action.gameId) return action.gameId;
+  if (GAME_BY_ID.has(action.type)) return action.id;
+  if (action.type === 'UNDO') return state.history[state.history.length - 1]?.gameId || null;
+  return null;
+}
 export function reducer(state, action) {
+  if (!BATON_FREE.has(action.type)) {
+    const gid = targetGameId(state, action);
+    if (gid && lockedFor(state.games[gid], deviceId())) return state;
+  }
+  return reduce(state, action);
+}
+
+function reduce(state, action) {
   switch (action.type) {
     // ===== 全体 =====
     case 'HYDRATE': {
@@ -509,6 +531,8 @@ export function reducer(state, action) {
       // (これが無いと、消した端末以外が持ち続け、次の起動で再アップロードして復活する)。
       const dead = (r) => !!(r && r.deleted);
       const games = { ...state.games };
+      let conflicts = state.batonConflicts || {};
+      let history = state.history;
       for (const g of action.games || []) {
         if (delG.has(g.id)) continue; // 削除待ちは無視
         const local = games[g.id];
@@ -517,7 +541,15 @@ export function reducer(state, action) {
           if (!local || (g.deletedAt || 0) >= (local.updatedAt || 0)) delete games[g.id];
           continue;
         }
-        if (!local || (g.updatedAt || 0) >= (local.updatedAt || 0)) games[g.id] = ensureOppFields(g);
+        // どちらを採るかはバトンで決める(lib/baton.js)。同じ持ち主の間は新しい方
+        const pick = chooseRemote(local, g, deviceId());
+        if (pick.take !== 'remote') continue;
+        // 電波の無い間に付けた記録が、引き継いだ相手の側に無い。黙って捨てずに取っておく
+        if (pick.conflict) conflicts = { ...conflicts, [g.id]: local };
+        // 別の端末の記録に置き換わったら、この試合の「元に戻す」は捨てる
+        // (古い状態へ戻すと、相手が付けた打席ごと消える)
+        if (local && (g.updatedAt || 0) > (local.updatedAt || 0)) history = history.filter((h) => h.gameId !== g.id);
+        games[g.id] = ensureOppFields(g);
       }
       const pmap = new Map(state.players.map((p) => [p.id, p]));
       for (const p of action.players || []) {
@@ -538,7 +570,7 @@ export function reducer(state, action) {
         members = [...mmap.values()].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
       }
       const currentGameId = state.currentGameId && !games[state.currentGameId] ? null : state.currentGameId;
-      return { ...state, games, players, members, currentGameId };
+      return { ...state, games, players, members, currentGameId, batonConflicts: conflicts, history };
     }
     // CloudSyncがクラウド削除に成功したらトゥームストーンから外す
     case 'CLEAR_PENDING_DELETE': {
@@ -618,6 +650,30 @@ export function reducer(state, action) {
       // (過去の試合の「誰が付けたか」を後から消すのは記録の書き換えになる)
       const list = (state.settings.scorers || []).filter((s) => s.id !== action.scorerId);
       return { ...state, settings: { ...state.settings, scorers: list } };
+    }
+    // ===== 記録のバトン =====
+    // この端末が記録係になる。at が新しい方が正なので、ほかの端末は届いた時点で見るだけになる
+    case 'TAKE_BATON': {
+      const g = deep(state.games[action.gameId]);
+      if (!g) return state;
+      g.recorder = newRecorder(action.name);
+      g.updatedAt = Date.now();
+      return { ...state, games: { ...state.games, [g.id]: g }, history: state.history.filter((h) => h.gameId !== g.id) };
+    }
+    // 電波の無い間に付けた記録と、その間に引き継いだ相手の記録がぶつかったときの決着。
+    // keep: 'mine' = 取っておいた自分の記録でバトンごと取り返す / 'theirs' = 自分の分を捨てる
+    case 'RESOLVE_BATON_CONFLICT': {
+      const all = { ...(state.batonConflicts || {}) };
+      const mine = all[action.gameId];
+      delete all[action.gameId];
+      if (action.keep !== 'mine' || !mine) return { ...state, batonConflicts: all };
+      const g = deep(mine);
+      g.recorder = newRecorder(action.name);
+      g.updatedAt = Date.now();
+      return {
+        ...state, batonConflicts: all, games: { ...state.games, [g.id]: g },
+        history: state.history.filter((h) => h.gameId !== g.id),
+      };
     }
     // 記録のしかたを試合の途中で変える(かんたん ⇄ くわしく)。それまでの記録には触れない
     case 'SET_RECORD_MODE': {
@@ -827,6 +883,8 @@ export function reducer(state, action) {
       const { oppRoster, ...rest } = action.payload || {};
       // 作った時点のエディションと区分を焼き込む(画面からは渡さない。設定が正)
       const g = newGame({ ...rest, edition: state.settings.edition || null, kind: kindOf(state.settings) });
+      // 作った端末が最初の記録係(lib/baton.js)
+      g.recorder = newRecorder();
       // 前回の対戦から相手の並びを引き継ぐ。名前を入れる手間が「次に当たるとき」に
       // 返ってくることが、相手選手名を入力し続けてもらえるかどうかの分かれ目になる。
       if (oppRoster) {
