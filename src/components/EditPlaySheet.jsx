@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useStore, useT } from '../state/store.jsx';
-import { RESULTS, DIRECTIONS, SO_TYPES, outTypeLabel, allowsFoul, infieldFlyPossible } from '../lib/model.js';
+import { RESULTS, DIRECTIONS, SO_TYPES, outTypeLabel, allowsFoul, infieldFlyPossible, isSimpleGame } from '../lib/model.js';
+import SimpleEditSheet from './SimpleEditSheet.jsx';
 import { depthBand, isFoul } from '../lib/battedBall.js';
 import FieldPad from './FieldPad.jsx';
 import BattedBallPad from './BattedBallPad.jsx';
@@ -11,7 +12,7 @@ import Sheet from './Sheet.jsx';
 // スコア・走者・投手成績はここでは変えず、必要なら手動修正機能を案内する。
 // draft を渡すと「まだ存在しない打席」を作るシートになる。
 // 保存するまで何も書き込まないので、閉じれば無かったことになる。
-export default function EditPlaySheet({ game, log, draft, onClose }) {
+function FullEditPlaySheet({ game, log, draft, onClose }) {
   const { state, dispatch } = useStore();
   const t = useT();
   const lang = state.settings.lang || 'ja';
@@ -193,4 +194,10 @@ export default function EditPlaySheet({ game, log, draft, onClose }) {
       </div>
     </Sheet>
   );
+}
+
+// かんたん記録の試合は、1画面で結果と守備位置だけ直せる短いシートで開く。
+// くわしい項目(打球の強さ・深さ・打点・打者の付け替え)は、くわしい試合でだけ出す
+export default function EditPlaySheet(props) {
+  return isSimpleGame(props.game) && !props.draft ? <SimpleEditSheet {...props} /> : <FullEditPlaySheet {...props} />;
 }

@@ -21,7 +21,7 @@ function PadButton({ k, onSelect, t }) {
   );
 }
 
-export default function ResultPad({ onSelect }) {
+export default function ResultPad({ onSelect, simple = false }) {
   const t = useT();
   return (
     <div>
@@ -36,11 +36,14 @@ export default function ResultPad({ onSelect }) {
           <PadButton key={k} k={k} onSelect={onSelect} t={t} />
         ))}
       </div>
-      <div className="result-pad result-pad-intf">
-        {INTERFERENCE_KEYS.map((k) => (
-          <PadButton key={k} k={k} onSelect={onSelect} t={t} />
-        ))}
-      </div>
+      {/* かんたん記録では、めったに使わない妨害3種は出さない(必要なときは「くわしく」へ切り替える) */}
+      {!simple && (
+        <div className="result-pad result-pad-intf">
+          {INTERFERENCE_KEYS.map((k) => (
+            <PadButton key={k} k={k} onSelect={onSelect} t={t} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

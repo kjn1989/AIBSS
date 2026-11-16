@@ -1654,6 +1654,95 @@ function reduce(state, action) {
       return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
     }
 
+    // ===== 「不明」で飛ばす(かんたん記録) =====
+    // 誰がどんな結果だったか分からないとき、止まらずに次の打者へ進める。
+    // 成績には数えず、アウトも得点も動かさない(分かったら FILL_SKIP で結果を入れる)。
+    case 'SKIP_BATTER': {
+      const g = deep(state.games[action.gameId]);
+      if (!g || g.status !== 'ongoing') return state;
+      const mine = isMyTeamBatting(g);
+      const b = mine ? currentBatter(g) : currentOppBatter(g);
+      if (!b) return state;
+      g.playLogs.push(newPlayLog({
+        gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'skip',
+        text: '不明(飛ばした打席)',
+        payload: {
+          mine, order: b.order, playerId: mine ? b.playerId : null, letter: mine ? null : b.letter,
+          pitcherId: mine ? null : (g.currentPitcherId || null),
+          snapshot: {
+            runners: { 1: !!g.runners[1], 2: !!g.runners[2], 3: !!g.runners[3] },
+            outs: g.outs, inning: g.inning, isTop: g.isTop, scoreDiff: g.myScore - g.oppScore,
+          },
+        },
+      }));
+      if (mine) g.batterIndex = (g.batterIndex + 1) % Math.max(1, g.lineup.length);
+      else g.oppBatterIndex = (g.oppBatterIndex + 1) % Math.max(1, g.oppLineup.length);
+      g.pending = null;
+      g.updatedAt = Date.now();
+      return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
+    }
+    // 飛ばした打席に、あとから結果を入れる。成績(打撃・被安打など)は付くが、
+    // アウト・走者・得点は飛ばした時点のまま動かさない(必要なら「得点を直す」で直す)
+    case 'FILL_SKIP': {
+      const g = deep(state.games[action.gameId]);
+      const i = g?.playLogs.findIndex((l) => l.id === action.logId && l.kind === 'skip');
+      if (!g || i < 0) return state;
+      const old = g.playLogs[i];
+      const sp = old.payload;
+      const result = RESULTS[action.result] ? action.result : 'out';
+      const def = RESULTS[result];
+      const direction = action.direction || null;
+      const outType = result === 'out' ? (action.outType || 'ground') : null;
+      const base = {
+        result, direction, outType, soType: null, intentional: false, contact: null, hitAngle: null, hitDepth: null,
+        playError: null, finePlay: null, rbi: 0, runs: 0, outsOnPlay: 0,
+        beforeRunners: sp.snapshot.runners, outsBefore: sp.snapshot.outs,
+        balls: 0, strikes: 0, fouls: 0, pitchCount: 0, moveLines: [],
+        scoreAfter: { my: g.myScore, opp: g.oppScore },
+      };
+      const label = `${DIRECTIONS[direction] || ''}${resultLabelOf({ result })}`;
+      if (sp.mine) {
+        const ab = newAtBat({ gameId: g.id, playerId: sp.playerId, order: sp.order, snapshot: sp.snapshot });
+        Object.assign(ab, { result, direction, outType, pitchCount: 0, rbi: 0, runsOnPlay: 0, outsOnPlay: 0 });
+        g.atBats.push(ab);
+        g.playLogs[i] = { ...old, kind: 'atbat', text: `${action.batterName || ''} ${label}`.trim(),
+          payload: { ...base, atBatId: ab.id, playerId: sp.playerId, order: sp.order, filledLater: true } };
+      } else {
+        g.playLogs[i] = { ...old, kind: 'defense', text: `相手打者${sp.letter}(${sp.order}番): ${label}`,
+          payload: { ...base, letter: sp.letter, order: sp.order, pitcherId: sp.pitcherId, batterHand: g.oppBatterHands?.[sp.letter] || null, filledLater: true } };
+        const pr = sp.pitcherId ? (g.pitchingRecords || []).find((r) => r.playerId === sp.pitcherId) : null;
+        if (pr) {
+          if (def.hit) pr.hitsAllowed += 1;
+          if (def.ab) pr.abFaced = (pr.abFaced || 0) + 1;
+          if (result === 'bb') pr.walks += 1;
+          if (result === 'hbp') pr.hitByPitch += 1;
+          if (result === 'so') pr.strikeouts += 1;
+        }
+      }
+      g.updatedAt = Date.now();
+      return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
+    }
+    // その回(半回)は打者ごとに付けず、得点だけ入れて次へ進む(かんたん記録)。
+    // 打者の順番は動かさない(誰が打ったか分からないため)
+    case 'SCORE_ONLY_HALF': {
+      const g = deep(state.games[action.gameId]);
+      if (!g || g.status !== 'ongoing') return state;
+      const runs = Math.max(0, Math.min(30, Math.round(Number(action.runs) || 0)));
+      const key = isMyTeamBatting(g) ? 'my' : 'opp';
+      const inn = String(g.inning);
+      if (!g.linescore) g.linescore = {};
+      if (!g.linescore[inn]) g.linescore[inn] = { my: 0, opp: 0 };
+      g.linescore[inn][key] += runs;
+      if (key === 'my') g.myScore += runs; else g.oppScore += runs;
+      g.playLogs.push(newPlayLog({
+        gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'scoreOnly',
+        text: `この回は得点だけ記録: ${runs}点`, payload: { runs, team: key },
+      }));
+      changeHalf(g);
+      g.updatedAt = Date.now();
+      return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
+    }
+
     // ===== 走者の手動配置/除去(修正用) =====
     case 'SET_RUNNER': {
       const g = deep(state.games[action.gameId]);
