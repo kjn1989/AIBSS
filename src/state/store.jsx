@@ -26,6 +26,8 @@ import { idbSave } from '../lib/durableStore.js';
 import { storedLang, saveLang } from '../lib/langStore.js';
 import { kindOf } from '../lib/editionKind.js';
 import { deviceId, newRecorder, lockedFor, chooseRemote } from '../lib/baton.js';
+import { lineupPositions } from '../lib/rosterPaste.js';
+import { normalizeName } from '../lib/matchup.js';
 import { saveGames, loadGames, pruneGames, gameIndex, stubGamesFromIndex } from '../lib/gameStore.js';
 import { translate, DEFAULT_LANG } from '../lib/i18n.js';
 import { getActiveProfileId, profileStorageKey, listProfiles, updateProfileMeta } from '../lib/profiles.js';
@@ -740,6 +742,35 @@ function reduce(state, action) {
         id: action.id || undefined, provisional: !!action.provisional && !String(action.name || '').trim(),
       });
       return { ...state, players: [...state.players, p] };
+    }
+    // 貼り付けた名簿から選手を登録する(lib/rosterPaste.js)。同じ名前の選手が居ればその人を使う。
+    // gameId があり、まだ打席の無い試合なら、その並びで打順と守備位置も組む
+    case 'IMPORT_ROSTER': {
+      const rows = (action.rows || []).filter((r) => r && String(r.name || '').trim());
+      if (!rows.length) return state;
+      const byName = new Map(state.players.filter((p) => !p.archivedAt).map((p) => [normalizeName(p.name), p]));
+      const players = [...state.players];
+      const ids = rows.map((r) => {
+        const hit = byName.get(normalizeName(r.name));
+        if (hit) return hit.id;
+        const p = newPlayer(String(r.name).trim(), r.number || '', { position: r.position && r.position !== 'DH' ? r.position : '' });
+        players.push(p);
+        byName.set(normalizeName(p.name), p);
+        return p.id;
+      });
+      let next = { ...state, players };
+      const g0 = action.gameId ? state.games[action.gameId] : null;
+      if (!g0 || (g0.atBats?.length || 0) > 0) return next;
+      const pos = lineupPositions(rows);
+      const lineup = ids.map((playerId, i) => ({ order: i + 1, playerId, position: pos[i] }));
+      if (Array.isArray(g0.attendees)) {
+        const g = deep(g0);
+        g.attendees = [...new Set([...g.attendees, ...ids])];
+        next = { ...next, games: { ...next.games, [g.id]: g } };
+      }
+      next = reduce(next, { type: 'SET_LINEUP', gameId: action.gameId, lineup });
+      const pitcher = lineup.find((l) => l.position === '投');
+      return pitcher ? reduce(next, { type: 'SET_PITCHER', gameId: action.gameId, playerId: pitcher.playerId, label: action.pitcherLabel }) : next;
     }
     // 選手登録なしで試合を始める。仮の選手を9人作り、打順と守備位置を既定で埋める。
     // 名前はあとから入れられる(記録は選手IDに付いているので、入れた時点で全部その名前になる)

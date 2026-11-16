@@ -3,6 +3,7 @@ import { useStore, useT, useCurrentGame, usePlayerName, isMyTeamBatting, current
 import GameTypeToggle from './GameTypeToggle.jsx';
 import { BatonLocked, BatonConflict, BatonMine } from './BatonPanel.jsx';
 import { NameButton } from './ProvisionalNames.jsx';
+import RosterPasteSheet from './RosterPasteSheet.jsx';
 import { lockedFor, recorderName, saveRecorderName } from '../lib/baton.js';
 import Scoreboard from './Scoreboard.jsx';
 import Diamond from './Diamond.jsx';
@@ -868,6 +869,9 @@ export default function ScoreTab() {
               {t('prov.start')}
             </button>
             <p className="small dim mt8">{t('prov.startHint')}</p>
+            <button style={{ width: '100%' }} onClick={() => setSheet({ kind: 'paste' })}>
+              {t('paste.openLineup')}
+            </button>
           </div>
         ) : (
           <div className="card sit-card">
@@ -1187,6 +1191,7 @@ export default function ScoreTab() {
           onOpenFlow={(n) => { setSheet(null); setFlowInn(n); }}
         />
       )}
+      {sheet?.kind === 'paste' && <RosterPasteSheet game={game} onClose={() => setSheet(null)} />}
       {sheet?.kind === 'note' && (
         <NoteSheet
           game={game}
