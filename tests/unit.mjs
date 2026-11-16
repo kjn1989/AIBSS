@@ -25,6 +25,7 @@ import { MESSAGES } from '../src/lib/i18n.js';
 import { positionListLabel, GAME_SCHEMA_VERSION, nextProvisionalNames, isProvisional } from '../src/lib/model.js';
 import { extractGameDataset, datasetEligibility, DATASET_VERSION } from '../src/lib/datasetExtract.js';
 import { generateDemoData } from '../src/lib/demo.js';
+import { parseRosterText, parseRosterLine, lineupPositions } from '../src/lib/rosterPaste.js';
 import { chooseRemote, lockedFor, holdsBaton, unsentLogs, deviceId } from '../src/lib/baton.js';
 import { computeHighlights } from '../src/lib/highlights.js';
 import { buildRunDists, buildWinModel, priorDist, remainingHalves, SCORE_PROB, MAX_RUNS } from '../src/lib/winExp.js';
@@ -6372,4 +6373,54 @@ test('仮の名前: 番号は続きから振り、名前を入れて空いた番
     { name: '選手3', provisional: true }, { name: '選手9', provisional: true },
   ];
   assert.deepEqual(nextProvisionalNames(players, 2), ['選手10', '選手11']);
+});
+
+// ---------------- 名簿の貼り付け ----------------
+// LINE などから貼った名簿は書き方が揺れる。決まった形を要求しない
+test('名簿: 打順・名前・守備位置を読む(利用者の実例)', () => {
+  const r = parseRosterText(`1 入交（遊）
+2 磯野（一）
+3 山城（捕）
+4 河合（三）
+5 中島（中）
+6 奥田（左）
+7 橘木（二）
+8 藤田（投）
+9 部長（右）`);
+  assert.equal(r.numbersAre, 'order');
+  assert.deepEqual(r.rows.map((x) => x.name), ['入交', '磯野', '山城', '河合', '中島', '奥田', '橘木', '藤田', '部長']);
+  assert.deepEqual(r.rows.map((x) => x.position), ['遊', '一', '捕', '三', '中', '左', '二', '投', '右']);
+  assert.ok(r.rows.every((x) => x.number === ''), '打順の数字を背番号にしない');
+});
+
+test('名簿: 書き方が揺れていても読む', () => {
+  const pos = (line) => { const x = parseRosterLine(line); return [x.name, x.position, x.lead]; };
+  assert.deepEqual(pos('①入交 ショート'), ['入交', '遊', 1]);
+  assert.deepEqual(pos('２．磯野(1B)'), ['磯野', '一', 2]);
+  assert.deepEqual(pos('3番 捕 山城'), ['山城', '捕', 3]);
+  assert.deepEqual(pos('・河合／サード'), ['河合', '三', null]);
+  assert.deepEqual(pos('5) 中島【センター】'), ['中島', '中', 5]);
+  assert.deepEqual(pos('6 奥田 (7)'), ['奥田', '左', 6], '守備番号 7 = 左翼');
+  assert.deepEqual(pos('ショート入交'), ['入交', '遊', null]);
+  assert.deepEqual(pos('藤田 P'), ['藤田', '投', null]);
+  assert.deepEqual(pos('部長（主将）'), ['部長', null, null], '位置でないかっこは捨てる');
+  // 名前の1文字目が位置の字でも、名前として残す
+  assert.deepEqual(pos('中島'), ['中島', null, null]);
+  assert.deepEqual(pos('右田 一'), ['右田', '一', null]);
+  assert.equal(parseRosterLine(''), null);
+  assert.equal(parseRosterLine('12'), null);
+});
+
+test('名簿: 先頭の数字が1から並んでいなければ背番号として読む', () => {
+  const r = parseRosterText('10 青木\n1 井上\n51 上田 #7');
+  assert.equal(r.numbersAre, 'uniform');
+  assert.deepEqual(r.rows.map((x) => x.number), ['10', '1', '7'], '明示された背番号(#7)を優先する');
+  assert.equal(parseRosterText('青木\n井上').numbersAre, 'none');
+  assert.equal(parseRosterText('青木\n青木\n井上').rows.length, 2, '同じ名前は1人');
+});
+
+test('名簿: 位置が書かれていない人には空いている位置を割り当てる', () => {
+  const rows = parseRosterText('1 A（遊）\n2 B\n3 C（投）\n4 D（遊）').rows;
+  // B は空いている先頭(捕)。D は遊が埋まっているので次の空き(一)
+  assert.deepEqual(lineupPositions(rows), ['遊', '捕', '投', '一']);
 });

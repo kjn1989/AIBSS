@@ -2659,3 +2659,7 @@ button.manage-open {
 /* ---- 仮の選手(名前がまだ) ---- */
 .name-btn { margin-left: 6px; border-color: var(--amber); color: var(--amber); white-space: nowrap; }
 .prov-card { border-color: var(--amber); }
+
+/* ---- 名簿の貼り付け ---- */
+.paste-area { width: 100%; font-size: 16px; line-height: 1.6; }
+.paste-preview { max-height: 38vh; overflow-y: auto; }

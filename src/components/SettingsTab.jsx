@@ -19,6 +19,7 @@ import { listProfiles, getActiveProfileId, addProfile, switchActiveProfile, dele
 import OfficialCloudCard from './OfficialCloudCard.jsx';
 import Sheet from './Sheet.jsx';
 import RosterManageSheet from './RosterManageSheet.jsx';
+import RosterPasteSheet from './RosterPasteSheet.jsx';
 
 // 同じ名前で二重登録された選手を検出して統合を促すカード。
 // 二重登録があると「同じ人」と判定できず、打順移動の表示や通算成績が分断される。
@@ -368,6 +369,7 @@ function DuplicatePlayersCard() {
 export default function SettingsTab() {
   const { state, dispatch } = useStore();
   const t = useT();
+  const [pasteOpen, setPasteOpen] = useState(false); // 名簿の貼り付け
   const [newName, setNewName] = useState('');
   const [newNumber, setNewNumber] = useState('');
   const [newThrows, setNewThrows] = useState('');
@@ -546,6 +548,11 @@ export default function SettingsTab() {
         {/* 追加フォームは1つの枠にまとめ、確定ボタンを最後に置く。
             以前は「追加」が1行目にあったので、下の 投/打/学年 がフォームの一部に
             見えず、一覧の絞り込みだと誤解されていた */}
+        {/* LINE などの名簿をそのまま貼って、まとめて登録する */}
+        <button className="primary" style={{ width: '100%', marginBottom: 10 }} onClick={() => setPasteOpen(true)}>
+          {t('paste.open')}
+        </button>
+        {pasteOpen && <RosterPasteSheet onClose={() => setPasteOpen(false)} />}
         <div className="add-form">
           <div className="add-form-title">{t('set.addPlayer')}</div>
           <div className="flex">
