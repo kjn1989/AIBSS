@@ -98,29 +98,24 @@ try {
   const before2 = await nameAt(2);
   check('打順に2人以上いる', !!before1 && !!before2, `${before1} / ${before2}`);
 
-  // ---- 打順を直すモード ----
-  const fixBtn = page.locator('button:has-text("打順の並びを直す")');
-  check('打順を直す口がある', await fixBtn.count() > 0);
-  await fixBtn.click();
-  await page.waitForTimeout(400);
-  check('交代とは別物だと書いてある',
-    (await page.locator('.card').first().innerText()).includes('交代を使って'),
-    (await page.locator('.card').first().innerText()).slice(0, 400));
-
-  // 1番の行の▼で、2番と入れ替える
+  // ---- ▲▼はいつでも出ていて、押すとその場で入れ替わる(確認の画面は出さない) ----
+  check('▲▼が最初から出ている', (await page.locator('.card .row').nth(0).locator('.ord-move button').count()) === 2);
   await page.locator('.card .row').nth(0).locator('.ord-move button:has-text("▼")').click();
   await page.waitForTimeout(500);
-  const ask = page.locator('.sheet').last();
-  const askTxt = await ask.innerText();
-  check('確認が出る', askTxt.includes('入れ替え'), askTxt.slice(0, 300));
-  check('何件の記録が動くか出ている', /\d+件/.test(askTxt), askTxt.slice(0, 300));
-  check('両方の名前が出ている', askTxt.includes(before1) && askTxt.includes(before2), askTxt.slice(0, 300));
-
-  await ask.locator('button:has-text("入れ替える")').click();
-  await page.waitForTimeout(700);
-
+  check('確認のシートは出ない', (await page.locator('.sheet').count()) === 0);
+  const toast = await page.locator('.quick-toast').first().innerText();
+  check('入れ替えたことと取り消すが出る', toast.includes('入れ替えました') && toast.includes('取り消す'), toast);
+  check('記録済みの打席が動いた件数が出る', /\d+ 打席/.test(toast), toast);
   check('1番と2番が入れ替わった', await nameAt(1) === before2 && await nameAt(2) === before1,
     `${await nameAt(1)} / ${await nameAt(2)}`);
+  // 取り消すと元に戻る
+  await page.locator('.quick-toast button:has-text("取り消す")').click();
+  await page.waitForTimeout(500);
+  check('取り消すと元の並びに戻る', await nameAt(1) === before1 && await nameAt(2) === before2,
+    `${await nameAt(1)} / ${await nameAt(2)}`);
+  await page.locator('.card .row').nth(0).locator('.ord-move button:has-text("▼")').click();
+  await page.waitForTimeout(700);
+  check('もう一度入れ替えるとまた入れ替わる', await nameAt(1) === before2 && await nameAt(2) === before1);
 
   // ---- 記録済みの打席も移っている ----
   await page.click('nav button:has-text("スコア入力")');
