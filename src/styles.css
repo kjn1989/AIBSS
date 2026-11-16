@@ -2719,3 +2719,7 @@ html[data-outdoor] .mode-opt.sel b { color: var(--accent); }
 html[data-outdoor] .outdoor-toggle.on { background: var(--accent); color: #fff; }
 html[data-outdoor] .card { border-width: 2px; }
 .outdoor-toggle { margin-right: 4px; }
+/* ロゴは暗い背景に光る表示(LED)として作ってあるので、屋外モードでもヘッダーは暗いままにする */
+html[data-outdoor] .app-header { background: #0d1117; border-bottom-color: #30363d; --text: #e6edf3; --text-dim: #aab4bf; --border: #30363d; }
+html[data-outdoor] .app-header .header-gear { background: #21262d; color: #e6edf3; border-color: #4a5560; }
+html[data-outdoor] .app-header .outdoor-toggle.on { background: #1f6feb; border-color: #1f6feb; }
