@@ -12,6 +12,7 @@ import HeadCoachView from './HeadCoachView.jsx';
 import AttendanceSheet from './AttendanceSheet.jsx';
 import { BatonLocked } from './BatonPanel.jsx';
 import { NameButton } from './ProvisionalNames.jsx';
+import RosterPasteSheet from './RosterPasteSheet.jsx';
 import { uid, nextProvisionalNames } from '../lib/model.js';
 
 // ---- 交代シート(代打・代走・守備交代) ----
@@ -137,6 +138,7 @@ export default function OrderTab() {
     swapTimer.current = setTimeout(() => setSwapMsg(null), 7000);
   };
   const [attOpen, setAttOpen] = useState(false); // 今日のメンバーを直す
+  const [pasteOpen, setPasteOpen] = useState(false); // 名簿を貼り付けて打順を組む
   const [oppSlot, setOppSlot] = useState(null); // 相手の交代シート
   const [team, setTeam] = useState('mine'); // 'mine' | 'opp'
   const [coachOpen, setCoachOpen] = useState(false);
@@ -173,6 +175,10 @@ export default function OrderTab() {
             </div>
           </div>
         )}
+        <button className="primary" style={{ width: '100%', marginBottom: 10 }} onClick={() => setPasteOpen(true)}>
+          {t('paste.openLineup')}
+        </button>
+        {pasteOpen && <RosterPasteSheet game={game} onClose={() => setPasteOpen(false)} />}
         <LineupWizard game={game} />
         {coachView}
       </div>
@@ -225,6 +231,13 @@ export default function OrderTab() {
         </div>
         {/* 参加メンバーは試合開始のときに決めるが、遅刻・早退があるので直せる必要がある。
             ここを直すと打順の自動セットとAIスタメン提案の対象も変わる */}
+        {/* まだ打席が無いうちは、名簿を貼り付けて打順ごと組み直せる */}
+        {!gameStarted && (
+          <button className="small att-edit" style={{ marginBottom: 6 }} onClick={() => setPasteOpen(true)}>
+            {t('paste.openLineup')}
+          </button>
+        )}
+        {pasteOpen && <RosterPasteSheet game={game} onClose={() => setPasteOpen(false)} />}
         <button className="small ghost att-edit" onClick={() => setAttOpen(true)}>
           {t('att.edit', { n: attendeesOf(game, state.players.filter((p) => !isArchived(p))).length })}
         </button>

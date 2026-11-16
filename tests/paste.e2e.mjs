@@ -71,6 +71,19 @@ try {
   await p.click('button[aria-label="設定"]'); await W(400);
   ok('選手は9人(二重登録なし)', (await main()).includes('選手登録 (9人)'), (await main()).slice(0, 200));
 
+  // ---- オーダータブから、空白で位置を書いた名簿(利用者の実例2)で組み直す ----
+  await p.click('nav button:has-text("オーダー")'); await W(500);
+  await p.click('button:has-text("名簿を貼り付けて打順を組む")'); await W(400);
+  await p.fill('.paste-area', '1 黒瀬　捕\n2 大槻　遊\n3 藤田　投\n4 川越　三\n5 芳賀 啓介　二\n6 吉元　一\n7 山浦　左\n8 星野　右\n9 中島　中');
+  await W(300);
+  ok('今の打順が置き換わると書いてある', (await p.locator('.sheet').innerText()).includes('置き換わります'));
+  await p.click('.sheet-actions button.primary'); await W(700);
+  const rows2 = await p.evaluate(() => [...document.querySelectorAll('.main .row')]
+    .map((r) => [r.querySelector('b')?.textContent, r.querySelector('select')?.value]).filter((x) => x[0] && x[1]));
+  ok('空白区切りの名簿でも打順と守備位置が組まれる',
+    JSON.stringify(rows2) === JSON.stringify([['黒瀬', '捕'], ['大槻', '遊'], ['藤田', '投'], ['川越', '三'], ['芳賀 啓介', '二'], ['吉元', '一'], ['山浦', '左'], ['星野', '右'], ['中島', '中']]),
+    JSON.stringify(rows2));
+
   // 「投」の藤田が先発投手になっている(守りに入ったとき、投手を選び直さなくてよい)
   await p.click('nav button:has-text("スコア入力")'); await W(400);
   for (let i = 0; i < 3; i++) { await p.click('.result-pad button:has-text("三振")'); await W(300); const o = p.locator('.sheet-actions button:has-text("確定")'); if (await o.count()) { await o.click(); await W(400); } }
