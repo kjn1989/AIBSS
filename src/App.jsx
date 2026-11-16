@@ -102,6 +102,12 @@ function useOfficialJoin(state, t) {
 export default function App() {
   const [tab, setTab] = useState('home');
   const { state, dispatch } = useStore();
+  // 屋外モード(明るい配色・大きい文字)。html に印を付けて CSS が切り替える
+  useEffect(() => {
+    document.documentElement.toggleAttribute('data-outdoor', !!state.settings.outdoor);
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', state.settings.outdoor ? '#ffffff' : '#0d1117');
+  }, [state.settings.outdoor]);
   const t = useT();
   const { invite, accept, dismiss } = useInvite(dispatch);
   const officialJoin = useOfficialJoin(state, t);
@@ -183,6 +189,15 @@ export default function App() {
             <div className="brand-team">{state.settings.teamName || t('app.teamFallback')}</div>
           </div>
         </div>
+        {/* 屋外モード: 日なたで見えないときに1タップで切り替える */}
+        <button
+          className={`ghost small header-gear outdoor-toggle${state.settings.outdoor ? ' on' : ''}`}
+          onClick={() => dispatch({ type: 'UPDATE_SETTINGS', patch: { outdoor: !state.settings.outdoor } })}
+          aria-pressed={!!state.settings.outdoor}
+          aria-label={t('outdoor.aria')}
+        >
+          ☀️
+        </button>
         <button className="ghost small header-gear" onClick={() => setTab('settings')} aria-label={t('tab.settings')}>
           ⚙️
         </button>

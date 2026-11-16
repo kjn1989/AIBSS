@@ -25,7 +25,7 @@ import { rebuildBatters } from '../lib/battersRebuild.js';
 import { idbSave } from '../lib/durableStore.js';
 import { storedLang, saveLang } from '../lib/langStore.js';
 import { kindOf } from '../lib/editionKind.js';
-import { deviceId, newRecorder, lockedFor, chooseRemote } from '../lib/baton.js';
+import { deviceId, newRecorder, lockedFor, chooseRemote, noteRecorder, nextRecorderFor } from '../lib/baton.js';
 import { lineupPositions } from '../lib/rosterPaste.js';
 import { normalizeName } from '../lib/matchup.js';
 import { saveGames, loadGames, pruneGames, gameIndex, stubGamesFromIndex } from '../lib/gameStore.js';
@@ -489,7 +489,21 @@ export function reducer(state, action) {
     const gid = targetGameId(state, action);
     if (gid && lockedFor(state.games[gid], deviceId())) return state;
   }
-  return reduce(state, action);
+  const next = reduce(state, action);
+  return handOff(state, next, action);
+}
+
+// 攻守交代で自動的にバトンを渡す(lib/baton.js の batonPlan)。半回が変わったときだけ
+function handOff(prev, next, action) {
+  if (next === prev || BATON_FREE.has(action.type)) return next;
+  const gid = targetGameId(prev, action);
+  const a = prev.games[gid];
+  const b = next.games[gid];
+  if (!a || !b || (a.inning === b.inning && a.isTop === b.isTop)) return next;
+  const target = nextRecorderFor(b, isMyTeamBatting(b), deviceId());
+  if (!target) return next;
+  const g = { ...b, recorder: { id: target.id, name: target.name || '', at: Date.now() }, updatedAt: Date.now() };
+  return { ...next, games: { ...next.games, [gid]: g }, history: next.history.filter((h) => h.gameId !== gid) };
 }
 
 function reduce(state, action) {
@@ -660,8 +674,17 @@ function reduce(state, action) {
       const g = deep(state.games[action.gameId]);
       if (!g) return state;
       g.recorder = newRecorder(action.name);
+      noteRecorder(g, g.recorder);
       g.updatedAt = Date.now();
       return { ...state, games: { ...state.games, [g.id]: g }, history: state.history.filter((h) => h.gameId !== g.id) };
+    }
+    // 攻守交代で自動的にバトンを渡す設定(任意)。記録係の端末だけが変えられる
+    case 'SET_BATON_PLAN': {
+      const g = deep(state.games[action.gameId]);
+      if (!g) return state;
+      g.batonPlan = action.plan && action.plan.on ? { on: true, offense: action.plan.offense || null, defense: action.plan.defense || null } : { on: false, offense: null, defense: null };
+      g.updatedAt = Date.now();
+      return { ...state, games: { ...state.games, [g.id]: g } };
     }
     // 電波の無い間に付けた記録と、その間に引き継いだ相手の記録がぶつかったときの決着。
     // keep: 'mine' = 取っておいた自分の記録でバトンごと取り返す / 'theirs' = 自分の分を捨てる
@@ -938,6 +961,7 @@ function reduce(state, action) {
       const g = newGame({ ...rest, edition: state.settings.edition || null, kind: kindOf(state.settings) });
       // 作った端末が最初の記録係(lib/baton.js)
       g.recorder = newRecorder();
+      noteRecorder(g, g.recorder);
       // 前回の対戦から相手の並びを引き継ぐ。名前を入れる手間が「次に当たるとき」に
       // 返ってくることが、相手選手名を入力し続けてもらえるかどうかの分かれ目になる。
       if (oppRoster) {

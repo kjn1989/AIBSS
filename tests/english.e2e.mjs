@@ -260,7 +260,7 @@ try {
     await g.waitForTimeout(900);
 
     // 既定のチーム名は「マイチーム」。英語では最初に変えるものなので、変えてから見る
-    const teamBox = g.locator('input').first();
+    const teamBox = g.locator('.card').filter({ hasText: 'Team Settings' }).locator('input').first();
     if (await teamBox.count()) { await teamBox.fill('Manila Stars'); await g.waitForTimeout(400); }
     await g.locator('.tabbar button').nth(1).click();
     await g.waitForTimeout(700);

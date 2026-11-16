@@ -4,6 +4,7 @@ import GameTypeToggle from './GameTypeToggle.jsx';
 import { BatonLocked, BatonConflict, BatonMine } from './BatonPanel.jsx';
 import { NameButton } from './ProvisionalNames.jsx';
 import RosterPasteSheet from './RosterPasteSheet.jsx';
+import Hint from './Hint.jsx';
 import SimpleExtras, { ScoreOnlySheet } from './SimpleExtras.jsx';
 import { proposeMoves } from '../lib/plays.js';
 import { lockedFor, recorderName, saveRecorderName } from '../lib/baton.js';
@@ -141,12 +142,11 @@ function RulePicker({ presetId, custom, edition, onPresetChange, setCustom, allo
     <>
       {setAllowReentry && (
         <>
-          <label className="small dim" style={{ display: 'block' }}>{t('score.reentry')}</label>
+          <label className="small dim" style={{ display: 'block' }}>{t('score.reentry')} <Hint>{t('score.reentryHint')}</Hint></label>
           <div className="toggle-row" style={{ marginBottom: 10 }}>
             <button className={!allowReentry ? 'active' : ''} onClick={() => setAllowReentry(false)}>{t('score.reentryOff')}</button>
             <button className={allowReentry ? 'active' : ''} onClick={() => setAllowReentry(true)}>{t('score.reentryOn')}</button>
           </div>
-          <p className="small dim" style={{ marginTop: -4 }}>{t('score.reentryHint')}</p>
         </>
       )}
       <label className="small dim" style={{ display: 'block' }}>{t('score.rules')}</label>
@@ -187,7 +187,7 @@ function RulePicker({ presetId, custom, edition, onPresetChange, setCustom, allo
       )}
       <p className="small dim mt8">
         {describeRules(resolveRulesFrom(presetId, custom), lang)}
-        {presetId !== 'none' && <><br />{t('score.rulesNote')}</>}
+        {presetId !== 'none' && <Hint>{t('score.rulesNote')}</Hint>}
       </p>
     </>
   );
@@ -358,7 +358,13 @@ function GameSetup() {
           </>
         )}
 
-        <button className="primary" style={{ width: '100%' }} onClick={() => setAtt(true)} disabled={!recordMode}>
+        <button
+          className="primary"
+          style={{ width: '100%' }}
+          // 選手が1人も登録されていなければ「今日のメンバー」を選ぶ意味が無いので、通さずに始める
+          onClick={() => (state.players.length > 0 ? setAtt(true) : startGame(null))}
+          disabled={!recordMode}
+        >
           {t('gamesetup.start')}
         </button>
         {!recordMode && <p className="small dim mt8" style={{ textAlign: 'center' }}>{t('mode.needPick')}</p>}
@@ -851,6 +857,22 @@ export default function ScoreTab() {
 
   // 今日来ているメンバーから組む。登録順に 投捕一二三遊左中右 を当てていた頃は、
   // 誰がどこを守れるかを見ていなかったので位置がばらばらになっていた
+  // 前回の打順と守備位置のままで始める(いちばん多い使い方)。出席していない人は外して詰める
+  const lastLineupGame = Object.values(state.games)
+    .filter((g) => g.id !== game.id && !g.id.startsWith('demo-') && (g.startingLineup || g.lineup)?.length >= 1)
+    .sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0))[0];
+  const here = new Set(attendeesOf(game, state.players).map((x) => (typeof x === 'string' ? x : x.id)));
+  const lastLineupIds = lastLineupGame
+    ? (lastLineupGame.startingLineup || lastLineupGame.lineup).filter((l) => here.has(l.playerId) && state.players.some((p) => p.id === l.playerId))
+    : [];
+  const sameAsLast = () => {
+    const lineup = [...lastLineupIds]
+      .sort((a, b) => a.order - b.order)
+      .map((l, i) => ({ order: i + 1, playerId: l.playerId, position: l.position || '控' }));
+    dispatch({ type: 'SET_LINEUP', gameId: game.id, lineup });
+    const pid = lineup.find((l) => l.position === '投')?.playerId;
+    if (pid) dispatch({ type: 'SET_PITCHER', gameId: game.id, playerId: pid, label: t('pt.starterLog', { name: nameOf(pid) }) });
+  };
   const quickLineup = () => {
     const active = state.players.filter((p) => !p.id.startsWith('demo-'));
     const here = attendeesOf(game, active.length ? active : state.players);
@@ -882,6 +904,11 @@ export default function ScoreTab() {
             {state.players.length > 0 && (
               <button className="primary" style={{ width: '100%' }} onClick={quickLineup}>
                 {t('score.autoLineup')}
+              </button>
+            )}
+            {lastLineupGame && lastLineupIds.length > 0 && (
+              <button className="primary" style={{ width: '100%', marginTop: 8 }} onClick={sameAsLast}>
+                {t('score.sameLineup', { n: lastLineupIds.length })}
               </button>
             )}
             {/* 選手を登録していなくても始められる。名前は試合中でも試合後でも入れられる */}

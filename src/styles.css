@@ -2674,3 +2674,48 @@ button.manage-open {
 .score-only-step { display: flex; align-items: center; justify-content: center; gap: 28px; margin: 18px 0; }
 .score-only-step button { width: 64px; height: 64px; font-size: 30px; }
 .score-only-step b { font-size: 56px; min-width: 70px; text-align: center; }
+
+.adv-settings { margin: 12px 0; }
+.adv-settings > summary { cursor: pointer; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; font-weight: 700; list-style: none; }
+.adv-settings[open] > summary { margin-bottom: 12px; }
+
+.hint { display: inline; }
+.hint-btn { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; min-height: 0; padding: 0; margin-left: 4px; border-radius: 50%; font-size: 12px; line-height: 1; vertical-align: middle; }
+.hint-body { display: block; margin-top: 6px; line-height: 1.6; font-weight: 400; }
+
+/* ============================================================
+   屋外モード: 直射日光の下で読めるように、明るい配色・濃い文字・大きいボタンにする。
+   エディションの色(data-edition)より後に効かせるため、属性を持つ要素にも掛ける
+   (シートは body 直下に出るので、html だけでは継がれない)。
+   ============================================================ */
+html[data-outdoor], html[data-outdoor] [data-edition] {
+  --bg: #ffffff;
+  --bg-2: #f1f3f6;
+  --bg-3: #e1e6ed;
+  --border: #7d8896;
+  --text: #05080c;
+  --text-dim: #2f3a47;
+  --accent: #0a4fc4;
+  --accent-2: #0a4fc4;
+  --green: #0b6b22;
+  --red: #b1201a;
+  --amber: #7a4d00;
+  --gold: #7a5800;
+  --purple: #5a22b8;
+  color-scheme: light;
+}
+html[data-outdoor] body { font-size: 17px; }
+html[data-outdoor] button { min-height: 50px; font-size: 16px; font-weight: 700; border-width: 2px; }
+html[data-outdoor] .tabbar button { min-height: 0; font-size: 11px; font-weight: 600; border-width: 0; }
+html[data-outdoor] button.small { min-height: 42px; font-size: 15px; }
+html[data-outdoor] .result-pad button { min-height: 56px; font-size: 14px; padding-left: 0; padding-right: 0; min-width: 0; letter-spacing: -.03em; }
+html[data-outdoor] .name-btn { min-height: 36px; font-size: 13px; padding: 0 8px; }
+html[data-outdoor] .header-gear { min-height: 40px; padding: 0 8px; }
+html[data-outdoor] input, html[data-outdoor] select, html[data-outdoor] textarea { font-size: 18px; border-width: 2px; min-height: 48px; }
+html[data-outdoor] .dim, html[data-outdoor] .small.dim { color: var(--text-dim); }
+html[data-outdoor] .small { font-size: 14px; }
+html[data-outdoor] .primary, html[data-outdoor] button.primary { color: #fff; }
+html[data-outdoor] .mode-opt.sel b { color: var(--accent); }
+html[data-outdoor] .outdoor-toggle.on { background: var(--accent); color: #fff; }
+html[data-outdoor] .card { border-width: 2px; }
+.outdoor-toggle { margin-right: 4px; }

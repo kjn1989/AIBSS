@@ -1,5 +1,6 @@
 import React from 'react';
 import { useT } from '../state/store.jsx';
+import Hint from './Hint.jsx';
 
 // 試合の種別(公式戦/練習試合)。任意で、既定は未指定(null)。
 //
@@ -11,7 +12,7 @@ export default function GameTypeToggle({ value, onChange }) {
   const pick = (v) => onChange(value === v ? null : v);
   return (
     <>
-      <label className="small dim mt8" style={{ display: 'block' }}>{t('gametype.label')}</label>
+      <label className="small dim mt8" style={{ display: 'block' }}>{t('gametype.label')} <Hint>{t('gametype.hint')}</Hint></label>
       <div className="toggle-row">
         <button className={value === 'official' ? 'active' : ''} aria-pressed={value === 'official'} onClick={() => pick('official')}>
           {t('gametype.official')}
@@ -20,7 +21,6 @@ export default function GameTypeToggle({ value, onChange }) {
           {t('gametype.practice')}
         </button>
       </div>
-      <p className="small dim" style={{ marginTop: 4 }}>{t('gametype.hint')}</p>
     </>
   );
 }
