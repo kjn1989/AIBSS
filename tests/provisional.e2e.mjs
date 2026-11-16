@@ -70,14 +70,14 @@ try {
   ok('オーダーの1番が「青木」になる', (await main()).includes('青木'));
 
   // ---- 交代: 名簿に居ない人を、名前なしで入れる ----
-  await p.locator('button:has-text("交代")').nth(2).click(); await W(500);
+  await p.locator('.main .row .grow b').nth(2).click(); await W(500);
   const sel = p.locator('.sheet select').first();
   await sel.selectOption('__new__'); await W(200);
   await p.locator('.sheet-actions button.primary').click(); await W(600);
   let body = await main();
   ok('名前なしで交代でき、仮の名前で入る', /選手1[0-9]?/.test(body) && body.includes('選手10'), body.slice(0, 400));
   // 名前を付けて入れる
-  await p.locator('button:has-text("交代")').nth(3).click(); await W(500);
+  await p.locator('.main .row .grow b').nth(3).click(); await W(500);
   await p.locator('.sheet select').first().selectOption('__new__'); await W(200);
   await p.locator('.sheet input').first().fill('代打の田中');
   await p.locator('.sheet-actions button.primary').click(); await W(600);
