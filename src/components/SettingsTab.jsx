@@ -442,108 +442,6 @@ export default function SettingsTab() {
       <TeamSwitcherCard />
 
       <div className="card">
-        {/* 日本語表示のときだけ英語を併記する。アプリの既定が日本語なので、
-            英語話者がこのカードを見つけられる必要がある。英語表示では
-            併記すると「Language / Language」になるので出さない */}
-        <h2>🌐 {t('settings.language')}{lang === 'ja' ? ' / Language' : ''}</h2>
-        <div className="toggle-row">
-          <button
-            className={(state.settings.lang || 'ja') === 'ja' ? 'active' : ''}
-            onClick={() => dispatch({ type: 'UPDATE_SETTINGS', patch: { lang: 'ja' } })}
-          >
-            日本語
-          </button>
-          <button
-            className={state.settings.lang === 'en' ? 'active' : ''}
-            onClick={() => dispatch({ type: 'UPDATE_SETTINGS', patch: { lang: 'en' } })}
-          >
-            English
-          </button>
-        </div>
-        <p className="small dim">{t('settings.language.hint')}</p>
-      </div>
-
-      <div className="card">
-        <h2>{t('set.teamTitle')}</h2>
-        <label className="small dim">{t('set.teamName')}</label>
-        <input
-          value={state.settings.teamName}
-          onChange={(e) => dispatch({ type: 'UPDATE_SETTINGS', patch: { teamName: e.target.value } })}
-          placeholder={t('app.teamFallback')}
-        />
-        <label className="small dim mt8" style={{ display: 'block' }}>{t('set.edition')}</label>
-        {gradeOn && (
-          <div className="mt12">
-            {/* 代の切り替わり月。夏の大会の時期は地域やチームで前後するので選べるようにする */}
-            <label className="small dim" style={{ display: 'block', margin: '12px 0 4px' }}>{t('season.start')}</label>
-            <select
-              value={startMonth}
-              onChange={(e) => dispatch({ type: 'UPDATE_SETTINGS', patch: { yearStartMonth: Number(e.target.value) } })}
-            >
-              {SEASON_START_MONTHS.map((m) => (
-                <option key={m} value={m}>
-                  {m === 4 ? t('season.aprilNote') : m === 1 ? t('season.janNote') : t('season.month', { n: m })}
-                </option>
-              ))}
-            </select>
-            <p className="small dim" style={{ marginTop: 4 }}>
-              {t('season.startHint')}
-              {' '}
-              <span style={{ color: 'var(--accent)' }}>
-                {labelOfYear(thisYear - (startMonth >= 7 ? 1 : 0), state.settings)}
-              </span>
-            </p>
-            <SeasonNames />
-          </div>
-        )}
-        <div className="toggle-row editions">
-          {EDITIONS.map((ed) => (
-            <button
-              key={ed}
-              className={state.settings.edition === ed ? 'active' : ''}
-              onClick={() => dispatch({ type: 'UPDATE_SETTINGS', patch: { edition: ed } })}
-            >
-              <EditionText edition={ed} />
-            </button>
-          ))}
-        </div>
-        {/* ブカツは中学・高校・大学で回数もコールドも球数制限も違う。
-            ここで決めると、試合開始時のルールの既定とAI記事の言い方に効く。
-            学年設定にある同じ選択と同じ値(settings.schoolType)を書き換えるので、
-            二重に持たない */}
-        {kindChoices.length > 1 && (
-          <>
-            <label className="small dim mt12" style={{ display: 'block' }}>
-              {t(gradeOn ? 'set.schoolLevel' : 'set.adultKind')}
-            </label>
-            <div className="toggle-row">
-              {kindChoices.map((k) => (
-                <button
-                  key={k}
-                  className={curKind === k ? 'active' : ''}
-                  onClick={() => dispatch({
-                    type: 'UPDATE_SETTINGS',
-                    patch: {
-                      ...kindPatch(state.settings.edition, k),
-                      // 中学・高校は夏の大会で代が替わる。代の開始月も合わせる
-                      ...(gradeOn ? { yearStartMonth: defaultYearStartMonth(state.settings.edition, k) } : {}),
-                    },
-                  })}
-                >
-                  {t(kindLabelKey(k))}
-                </button>
-              ))}
-            </div>
-            <p className="small dim mt8">{t(gradeOn ? 'set.schoolLevelNote' : 'set.adultKindNote')}</p>
-            {gradeOn && <p className="small dim">{t('grade.schoolHint')}</p>}
-          </>
-        )}
-        <p className="small dim mt8">
-          {t('set.editionNote')}
-        </p>
-      </div>
-
-      <div className="card">
         <h2>{t('set.players', { n: state.players.filter((p) => !isArchived(p)).length })}</h2>
         {/* 追加フォームは1つの枠にまとめ、確定ボタンを最後に置く。
             以前は「追加」が1行目にあったので、下の 投/打/学年 がフォームの一部に
@@ -714,10 +612,114 @@ export default function SettingsTab() {
         </div>
       </div>
 
+      <div className="card">
+        {/* 日本語表示のときだけ英語を併記する。アプリの既定が日本語なので、
+            英語話者がこのカードを見つけられる必要がある。英語表示では
+            併記すると「Language / Language」になるので出さない */}
+        <h2>🌐 {t('settings.language')}{lang === 'ja' ? ' / Language' : ''}</h2>
+        <div className="toggle-row">
+          <button
+            className={(state.settings.lang || 'ja') === 'ja' ? 'active' : ''}
+            onClick={() => dispatch({ type: 'UPDATE_SETTINGS', patch: { lang: 'ja' } })}
+          >
+            日本語
+          </button>
+          <button
+            className={state.settings.lang === 'en' ? 'active' : ''}
+            onClick={() => dispatch({ type: 'UPDATE_SETTINGS', patch: { lang: 'en' } })}
+          >
+            English
+          </button>
+        </div>
+        <p className="small dim">{t('settings.language.hint')}</p>
+      </div>
+
+      <div className="card">
+        <h2>{t('set.teamTitle')}</h2>
+        <label className="small dim">{t('set.teamName')}</label>
+        <input
+          value={state.settings.teamName}
+          onChange={(e) => dispatch({ type: 'UPDATE_SETTINGS', patch: { teamName: e.target.value } })}
+          placeholder={t('app.teamFallback')}
+        />
+        <label className="small dim mt8" style={{ display: 'block' }}>{t('set.edition')}</label>
+        {gradeOn && (
+          <div className="mt12">
+            {/* 代の切り替わり月。夏の大会の時期は地域やチームで前後するので選べるようにする */}
+            <label className="small dim" style={{ display: 'block', margin: '12px 0 4px' }}>{t('season.start')}</label>
+            <select
+              value={startMonth}
+              onChange={(e) => dispatch({ type: 'UPDATE_SETTINGS', patch: { yearStartMonth: Number(e.target.value) } })}
+            >
+              {SEASON_START_MONTHS.map((m) => (
+                <option key={m} value={m}>
+                  {m === 4 ? t('season.aprilNote') : m === 1 ? t('season.janNote') : t('season.month', { n: m })}
+                </option>
+              ))}
+            </select>
+            <p className="small dim" style={{ marginTop: 4 }}>
+              {t('season.startHint')}
+              {' '}
+              <span style={{ color: 'var(--accent)' }}>
+                {labelOfYear(thisYear - (startMonth >= 7 ? 1 : 0), state.settings)}
+              </span>
+            </p>
+            <SeasonNames />
+          </div>
+        )}
+        <div className="toggle-row editions">
+          {EDITIONS.map((ed) => (
+            <button
+              key={ed}
+              className={state.settings.edition === ed ? 'active' : ''}
+              onClick={() => dispatch({ type: 'UPDATE_SETTINGS', patch: { edition: ed } })}
+            >
+              <EditionText edition={ed} />
+            </button>
+          ))}
+        </div>
+        {/* ブカツは中学・高校・大学で回数もコールドも球数制限も違う。
+            ここで決めると、試合開始時のルールの既定とAI記事の言い方に効く。
+            学年設定にある同じ選択と同じ値(settings.schoolType)を書き換えるので、
+            二重に持たない */}
+        {kindChoices.length > 1 && (
+          <>
+            <label className="small dim mt12" style={{ display: 'block' }}>
+              {t(gradeOn ? 'set.schoolLevel' : 'set.adultKind')}
+            </label>
+            <div className="toggle-row">
+              {kindChoices.map((k) => (
+                <button
+                  key={k}
+                  className={curKind === k ? 'active' : ''}
+                  onClick={() => dispatch({
+                    type: 'UPDATE_SETTINGS',
+                    patch: {
+                      ...kindPatch(state.settings.edition, k),
+                      // 中学・高校は夏の大会で代が替わる。代の開始月も合わせる
+                      ...(gradeOn ? { yearStartMonth: defaultYearStartMonth(state.settings.edition, k) } : {}),
+                    },
+                  })}
+                >
+                  {t(kindLabelKey(k))}
+                </button>
+              ))}
+            </div>
+            <p className="small dim mt8">{t(gradeOn ? 'set.schoolLevelNote' : 'set.adultKindNote')}</p>
+            {gradeOn && <p className="small dim">{t('grade.schoolHint')}</p>}
+          </>
+        )}
+        <p className="small dim mt8">
+          {t('set.editionNote')}
+        </p>
+      </div>
+
+
       <DuplicatePlayersCard />
 
       <PadHintCard />
 
+      {/* ふだんは触らない設定は畳む。選手登録を一番上に置いたので、最初に見えるのは使うものだけ */}
       <div className="card">
         <h2>{t('set.demoTitle')}</h2>
         <p className="small dim" style={{ marginBottom: 10 }}>
@@ -729,6 +731,9 @@ export default function SettingsTab() {
           <button className="primary" onClick={() => dispatch({ type: 'LOAD_DEMO' })}>{t('set.demoLoad')}</button>
         )}
       </div>
+
+      <details className="adv-settings">
+        <summary>{t('set.advanced')}</summary>
 
       <div className="card">
         <h2>{t('set.aiTitle')}</h2>
@@ -784,6 +789,8 @@ export default function SettingsTab() {
           {t('set.dataMgmtDesc')}
         </p>
       </div>
+
+      </details>
 
       <BuildInfoCard />
     </div>

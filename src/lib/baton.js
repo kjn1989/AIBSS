@@ -81,3 +81,27 @@ export function chooseRemote(local, remote, myId = deviceId()) {
   // 同じ持ち主の間は、これまでどおり新しい方
   return { take: (remote.updatedAt || 0) >= (local.updatedAt || 0) ? 'remote' : 'local', conflict: false };
 }
+
+// ---- 攻守交代で自動的に渡す(任意) ----
+// game.batonPlan = { on, offense: {id,name}, defense: {id,name} }。
+// 自チームが攻撃のときの記録係と、守備のときの記録係を決めておく。
+// 半回が変わった時点で、記録している端末がバトンを渡す(渡した端末は見るだけに変わる)。
+// 初期は無効で、使うかどうかは記録している人が選ぶ。
+export function knownRecorders(game) {
+  const out = new Map();
+  for (const r of game?.recorders || []) if (r?.id) out.set(r.id, r.name || '');
+  if (game?.recorder?.id) out.set(game.recorder.id, game.recorder.name || out.get(game.recorder.id) || '');
+  return [...out.entries()].map(([id, name]) => ({ id, name }));
+}
+export function noteRecorder(game, rec) {
+  if (!rec?.id) return;
+  const list = (game.recorders || []).filter((r) => r.id !== rec.id);
+  game.recorders = [...list, { id: rec.id, name: rec.name || '' }];
+}
+// この半回の記録係に渡すべき相手(渡す必要が無ければ null)
+export function nextRecorderFor(game, myTeamBatting, myId = deviceId()) {
+  const plan = game?.batonPlan;
+  if (!plan?.on || game.status !== 'ongoing' || !holdsBaton(game, myId)) return null;
+  const target = myTeamBatting ? plan.offense : plan.defense;
+  return target?.id && target.id !== myId ? target : null;
+}

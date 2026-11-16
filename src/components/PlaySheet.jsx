@@ -647,8 +647,8 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
       <div className="confirm-card mt16" style={{ marginBottom: 0, padding: 12 }}>
         {needsDir && !direction ? (
           <button type="button" className="need-dir" onClick={goToDir}>
-            <span>{t('playsheet.needDirection')}</span>
-            <span className="need-dir-go">{t('playsheet.goToField')}</span>
+            <span>{t(simple ? 'playsheet.needPosition' : 'playsheet.needDirection')}</span>
+            {!simple && <span className="need-dir-go">{t('playsheet.goToField')}</span>}
           </button>
         ) : (
           <div className="q" style={{ fontSize: 16, marginBottom: 0 }}>

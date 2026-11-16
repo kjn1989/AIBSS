@@ -39,7 +39,6 @@ try {
   await p.click('.mode-opt:has-text("かんたん")');
   await p.fill('input[placeholder="対戦相手名"]', '止まらない');
   await p.click('button:has-text("試合開始")'); await W(600);
-  await p.click('.sheet-actions button.primary'); await W(600);
   await p.click('button:has-text("選手登録なしで始める")'); await W(600);
   const outs = () => p.locator('.out-dot.on').count();
   const batter = () => p.locator('.sit-main .nm').innerText();

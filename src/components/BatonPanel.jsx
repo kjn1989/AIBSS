@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useStore, useT } from '../state/store.jsx';
-import { lockedFor, holdsBaton, recorderName, saveRecorderName, unsentLogs } from '../lib/baton.js';
+import { lockedFor, holdsBaton, recorderName, saveRecorderName, unsentLogs, knownRecorders } from '../lib/baton.js';
+import Sheet from './Sheet.jsx';
 
 // 記録のバトン(lib/baton.js)の画面側。
 // 進行中の試合を記録できるのは1台だけ。ほかの端末には「いま誰が記録中か」と
@@ -73,10 +74,63 @@ export function BatonConflict({ game }) {
   );
 }
 
+// 攻守交代で自動的にバトンを渡す設定(任意・初期は無効)
+function BatonPlanSheet({ game, onClose }) {
+  const { dispatch } = useStore();
+  const t = useT();
+  const people = knownRecorders(game);
+  const plan = game.batonPlan || { on: false };
+  const [on, setOn] = useState(!!plan.on);
+  const [off, setOff] = useState(plan.offense?.id || game.recorder?.id || '');
+  const [def, setDef] = useState(plan.defense?.id || people.find((p) => p.id !== game.recorder?.id)?.id || '');
+  const pick = (id) => people.find((p) => p.id === id) || null;
+  const label = (p) => p.name || t('baton.otherDevice');
+  const save = () => {
+    dispatch({ type: 'SET_BATON_PLAN', gameId: game.id, plan: on ? { on: true, offense: pick(off), defense: pick(def) } : { on: false } });
+    onClose();
+  };
+  return (
+    <Sheet title={t('baton.planTitle')} onClose={onClose}>
+      <p className="small dim" style={{ marginTop: 0 }}>{t('baton.planNote')}</p>
+      <div className="toggle-row">
+        <button className={!on ? 'active' : ''} onClick={() => setOn(false)}>{t('baton.planOff')}</button>
+        <button className={on ? 'active' : ''} onClick={() => setOn(true)} disabled={people.length < 2}>{t('baton.planOn')}</button>
+      </div>
+      {people.length < 2 && <p className="small dim">{t('baton.planNeedTwo')}</p>}
+      {on && people.length >= 2 && (
+        <>
+          <label className="small dim mt8" style={{ display: 'block' }}>{t('baton.planOffense')}</label>
+          <select value={off} onChange={(e) => setOff(e.target.value)}>
+            {people.map((p) => <option key={p.id} value={p.id}>{label(p)}</option>)}
+          </select>
+          <label className="small dim mt8" style={{ display: 'block' }}>{t('baton.planDefense')}</label>
+          <select value={def} onChange={(e) => setDef(e.target.value)}>
+            {people.map((p) => <option key={p.id} value={p.id}>{label(p)}</option>)}
+          </select>
+          <p className="small dim mt8">{t('baton.planWarn')}</p>
+        </>
+      )}
+      <div className="sheet-actions">
+        <button className="ghost" onClick={onClose}>{t('action.cancel')}</button>
+        <button className="primary" onClick={save}>{t('action.save')}</button>
+      </div>
+    </Sheet>
+  );
+}
+
 // 自分が記録係のとき(クラウドでほかの端末とつながっているチームだけに出す)
 export function BatonMine({ game }) {
   const { state } = useStore();
   const t = useT();
+  const [open, setOpen] = useState(false);
   if (!cloudOn(state) || !holdsBaton(game) || game.status !== 'ongoing') return null;
-  return <div className="baton-mine small">{t('baton.mine')}</div>;
+  return (
+    <div className="baton-mine small">
+      {t('baton.mine')}
+      <button className="small" style={{ marginLeft: 8 }} onClick={() => setOpen(true)}>
+        {t(game.batonPlan?.on ? 'baton.planBtnOn' : 'baton.planBtn')}
+      </button>
+      {open && <BatonPlanSheet game={game} onClose={() => setOpen(false)} />}
+    </div>
+  );
 }

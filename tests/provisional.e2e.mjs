@@ -41,7 +41,7 @@ try {
   await p.click('.mode-opt:has-text("かんたん")');
   await p.fill('input[placeholder="対戦相手名"]', '登録なし練習');
   await p.click('button:has-text("試合開始")'); await W(600);
-  await p.click('.sheet-actions button.primary'); await W(600);
+  // 選手を登録していなければ「今日のメンバー」は出ない(通さずにそのまま始まる)
   ok('「選手登録なしで始める」が出る', (await p.locator('button:has-text("選手登録なしで始める")').count()) === 1, (await main()).slice(0, 300));
   await p.click('button:has-text("選手登録なしで始める")'); await W(600);
   ok('1番打者が「選手1」で始まる', (await p.locator('.sit-main .nm').innerText()) === '選手1');
