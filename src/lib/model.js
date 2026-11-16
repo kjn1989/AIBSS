@@ -617,3 +617,11 @@ export function nextProvisionalNames(players = [], n = 1, lang = 'ja') {
   max = Math.max(max, players.filter((p) => p.provisional).length);
   return Array.from({ length: n }, (_, i) => `${base}${max + i + 1}`);
 }
+
+// 打球方向を聞く結果(それ以外は方向が無い)
+export const NEEDS_DIRECTION = ['single', 'double', 'triple', 'hr', 'out', 'error', 'sacBunt', 'sacFly'];
+// かんたん記録の打球方向の並び(グラウンドに近い3段)
+export const SIMPLE_DIR_ROWS = [['LF', 'CF', 'RF'], ['3B', 'SS', '2B', '1B'], ['P', 'C']];
+export const OUTFIELD_DIRS = ['LF', 'CF', 'RF'];
+// かんたん記録のパッドに出す主な結果
+export const SIMPLE_RESULTS = ['single', 'double', 'triple', 'hr', 'out', 'so', 'bb', 'hbp', 'error', 'sacBunt', 'sacFly'];

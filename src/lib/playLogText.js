@@ -91,6 +91,10 @@ export function renderPlayLog(game, log, ctx = {}) {
       return t('log.run');
     case 'change':
       return t('log.change');
+    case 'skip':
+      return t('log.skip');
+    case 'scoreOnly':
+      return t('log.scoreOnly', { n: p.runs ?? 0 });
     case 'flow':
       return t(p.dir === 'down' ? 'log.flowDown' : 'log.flowUp');
     case 'note':

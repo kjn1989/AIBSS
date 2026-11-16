@@ -1,20 +1,16 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import Sheet from './Sheet.jsx';
 import { useStore, useT, usePlayerName, isMyTeamBatting } from '../state/store.jsx';
-import { RESULTS, DIRECTIONS, SO_TYPES, outTypeLabel, allowsFoul , infieldFlyPossible, FIELD_POSITIONS, DIR_TO_POSITION, ERROR_KINDS, playErrorOf, finePlayOf, positionLabel, isSimpleGame } from '../lib/model.js';
+import { RESULTS, DIRECTIONS, SO_TYPES, outTypeLabel, allowsFoul , infieldFlyPossible, FIELD_POSITIONS, DIR_TO_POSITION, ERROR_KINDS, playErrorOf, finePlayOf, positionLabel, isSimpleGame, NEEDS_DIRECTION, SIMPLE_DIR_ROWS, OUTFIELD_DIRS } from '../lib/model.js';
 import { proposeMoves, batterDestOptions, runnerDestOptions, judgeAdvance } from '../lib/plays.js';
 import FieldPad from './FieldPad.jsx';
 import BattedBallPad from './BattedBallPad.jsx';
 import { depthBand, isFoul } from '../lib/battedBall.js';
 
-const NEEDS_DIRECTION = ['single', 'double', 'triple', 'hr', 'out', 'error', 'sacBunt', 'sacFly'];
 // 打球の強さ(弱い/平凡/強い)の呼び名を持つのはこの3つだけ
 const TRAJECTORY_TYPES = ['ground', 'liner', 'fly'];
 
 // プレイ確定シート: 方向・走者進塁・打点をまとめて確認して1タップ確定
-// かんたん記録の打球方向。グラウンドの並びに近い3段(外野 / 内野 / バッテリー)
-const SIMPLE_DIR_ROWS = [['LF', 'CF', 'RF'], ['3B', 'SS', '2B', '1B'], ['P', 'C']];
-const OUTFIELD_DIRS = ['LF', 'CF', 'RF'];
 
 export default function PlaySheet({ game, initial, batterName, onClose }) {
   const { state, dispatch } = useStore();

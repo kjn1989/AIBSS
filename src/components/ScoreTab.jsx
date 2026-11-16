@@ -4,6 +4,8 @@ import GameTypeToggle from './GameTypeToggle.jsx';
 import { BatonLocked, BatonConflict, BatonMine } from './BatonPanel.jsx';
 import { NameButton } from './ProvisionalNames.jsx';
 import RosterPasteSheet from './RosterPasteSheet.jsx';
+import SimpleExtras, { ScoreOnlySheet } from './SimpleExtras.jsx';
+import { proposeMoves } from '../lib/plays.js';
 import { lockedFor, recorderName, saveRecorderName } from '../lib/baton.js';
 import Scoreboard from './Scoreboard.jsx';
 import Diamond from './Diamond.jsx';
@@ -713,6 +715,9 @@ export default function ScoreTab() {
   const game = useCurrentGame();
   const nameOf = usePlayerName();
   const [sheet, setSheet] = useState(null); // {kind:'play',result} | {kind:'runner',base} | {kind:'batter'}
+  // かんたん記録で1タップ確定した直後の「取り消す」(数秒だけ出す)
+  const [quick, setQuick] = useState(null);
+  const quickTimer = useRef(null);
   const [showProgress, setShowProgress] = useState(false);
   const [flowMsg, setFlowMsg] = useState(null); // 流れタグを押した直後の手応え表示
   const [flowInn, setFlowInn] = useState(null); // 回の流れ(打席・交代を直す)
@@ -807,6 +812,25 @@ export default function ScoreTab() {
   // 守備側(攻撃中は相手投手/守備中は自軍投手)が未設定だと球数が記録されない。
   // 選ぶまで投球・結果入力をロックして、球数の記録漏れを防ぐ。
   const simple = isSimpleGame(game);
+  // かんたん記録: 確認することが無い打席(三振・四球・死球で、誰も生還しない)は押した時点で記録する。
+  // 間違えたらすぐ取り消せる。走者が還るときは、誰の失点かの確認があるので従来のシートで開く
+  const quickConfirm = (result) => {
+    if (!simple || !['so', 'bb', 'hbp'].includes(result)) return false;
+    if (game.runners && game.status !== 'ongoing') return false;
+    const runnersOn = { 1: !!game.runners[1], 2: !!game.runners[2], 3: !!game.runners[3] };
+    const proposal = result === 'so' ? { moves: [], batterTo: 'out' } : proposeMoves(result, runnersOn);
+    if (proposal.moves.some((m) => m.to === 4)) return false;
+    dispatch({
+      type: 'CONFIRM_PLAY', gameId: game.id, batterName: myBatting && batter ? nameOf(batter.playerId) : '',
+      payload: { result, direction: null, moves: proposal.moves, batterTo: proposal.batterTo,
+        ...(result === 'so' ? {} : { intentional: false }) },
+    });
+    const who = myBatting && batter ? nameOf(batter.playerId) : t('playsheet.oppBatter');
+    setQuick(`${who} ${t(`result.${result}`)}`);
+    clearTimeout(quickTimer.current);
+    quickTimer.current = setTimeout(() => setQuick(null), 6000);
+    return true;
+  };
   const needsPitcher = !noLineup && ((myBatting && !game.oppPitcherLetter) || (!myBatting && !game.currentPitcherId));
 
   // 画面の打者と記録がずれていないか。ずれていればその場で直せるようにする
@@ -970,8 +994,20 @@ export default function ScoreTab() {
         {(!myBatting || !noLineup) && (
           <div className="card rp-card">
             <h2>{myBatting ? t('score.battingResult') : t('score.oppResult')}</h2>
-            <ResultPad onSelect={(result) => setSheet({ kind: 'play', result })} />
+            <ResultPad
+              onSelect={(result) => (quickConfirm(result) ? null : setSheet({ kind: 'play', result }))}
+              simple={simple}
+            />
+            {quick && (
+              <div className="quick-toast">
+                <span>{t('simple.recorded', { text: quick })}</span>
+                <button className="small" onClick={() => { dispatch({ type: 'UNDO' }); setQuick(null); }}>{t('simple.undo')}</button>
+              </div>
+            )}
           </div>
+        )}
+        {simple && !noLineup && game.status === 'ongoing' && (
+          <SimpleExtras game={game} onScoreOnly={() => setSheet({ kind: 'scoreOnly' })} />
         )}
       </div>
 
@@ -1191,6 +1227,7 @@ export default function ScoreTab() {
           onOpenFlow={(n) => { setSheet(null); setFlowInn(n); }}
         />
       )}
+      {sheet?.kind === 'scoreOnly' && <ScoreOnlySheet game={game} onClose={() => setSheet(null)} />}
       {sheet?.kind === 'paste' && <RosterPasteSheet game={game} onClose={() => setSheet(null)} />}
       {sheet?.kind === 'note' && (
         <NoteSheet

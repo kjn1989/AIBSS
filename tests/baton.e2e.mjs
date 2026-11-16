@@ -99,7 +99,10 @@ try {
   const play = async (p, label, pos) => {
     await p.click(`.result-pad button:has-text("${label}")`); await p.waitForTimeout(350);
     if (pos) { await p.click(`.simple-dir button:has-text("${pos}")`); await p.waitForTimeout(200); }
-    await p.click('.sheet-actions button:has-text("確定")'); await p.waitForTimeout(450);
+    // 三振・四球は確認なしで記録される(かんたん記録)。シートが出たときだけ確定する
+    const ok2 = p.locator('.sheet-actions button:has-text("確定")');
+    if (await ok2.count()) await ok2.click();
+    await p.waitForTimeout(450);
   };
   const logCount = (p) => p.locator('.log-line').count();
   const cloudGame = () => [...cloud.game.values()][0];
@@ -165,8 +168,7 @@ try {
 
   // ---- 電波が切れた B が記録を続け、その間に A が引き継ぐ ----
   await goOffline(B);
-  await p.click('.result-pad button:has-text("四球")').catch(() => {}); await p.waitForTimeout(350);
-  await p.click('.sheet-actions button:has-text("確定")'); await p.waitForTimeout(600);
+  await p.click('.result-pad button:has-text("四球")').catch(() => {}); await p.waitForTimeout(700);
   // A は B の最新(四球)を知らないまま引き継いで、別の記録を付ける
   await a.click('button:has-text("記録を引き継ぐ")'); await W(300);
   await a.click('.baton-take button:has-text("引き継ぐ")'); await W(600);

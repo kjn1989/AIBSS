@@ -86,11 +86,9 @@ try {
   ok('内野ならゴロ', await p.locator('.simple-out button.primary').innerText() === 'ゴロ');
   await p.click('.sheet-actions button:has-text("確定")'); await W(500);
 
-  // 三振: 内訳を聞かない
-  await p.click('.result-pad button:has-text("三振")'); await W(400);
-  const kSheet = await p.locator('.sheet').last().innerText();
-  ok('三振の空振り/見逃しを聞かない', !kSheet.includes('空振り') && !kSheet.includes('見逃し'), kSheet.slice(0, 200));
-  await p.click('.sheet-actions button:has-text("確定")'); await W(500);
+  // 三振: 確認も内訳も聞かず、押した時点で記録される
+  await p.click('.result-pad button:has-text("三振")'); await W(500);
+  ok('三振は確認シートなしで記録される', (await p.locator('.sheet').count()) === 0);
   ok('アウトが2つ', (await p.locator('.out-dot.on').count()) === 2);
 
   await W(1500);

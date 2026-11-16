@@ -2663,3 +2663,14 @@ button.manage-open {
 /* ---- 名簿の貼り付け ---- */
 .paste-area { width: 100%; font-size: 16px; line-height: 1.6; }
 .paste-preview { max-height: 38vh; overflow-y: auto; }
+
+/* ---- かんたん記録: 止まらないための道具 ---- */
+.simple-extras { margin: 8px 0; }
+.skip-btn { min-height: 52px; font-weight: 700; border-style: dashed; }
+.last-fix { display: flex; align-items: center; gap: 8px; width: 100%; margin-top: 8px; padding: 12px 14px; min-height: 52px; text-align: left; }
+.last-fix b { font-size: 16px; }
+.last-fix .grow { flex: 1; }
+.quick-toast { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; padding: 8px 12px; border-radius: 10px; background: rgba(63,185,80,.14); border: 1px solid var(--green); }
+.score-only-step { display: flex; align-items: center; justify-content: center; gap: 28px; margin: 18px 0; }
+.score-only-step button { width: 64px; height: 64px; font-size: 30px; }
+.score-only-step b { font-size: 56px; min-width: 70px; text-align: center; }
