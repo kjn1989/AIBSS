@@ -124,13 +124,17 @@ export default function OrderTab() {
   const game = useCurrentGame();
   const nameOf = usePlayerName();
   const [subSlot, setSubSlot] = useState(null);
-  // 打順を直すモードと、その確認。すでに記録した打席も動くので、
-  // 何件動くかを見せてから押してもらう
-  const [fixOrder, setFixOrder] = useState(false);
-  const [swapAsk, setSwapAsk] = useState(null); // { a, b, plan }
-  const askSwap = (a, b) => {
+  // 打順は▲▼でその場で入れ替える(確認の画面は出さない)。すでに記録した打席も動くので、
+  // 何件動いたかを知らせて「取り消す」を数秒出す
+  const [swapMsg, setSwapMsg] = useState(null);
+  const swapTimer = React.useRef(null);
+  const swapNow = (a, b) => {
     const plan = swapOrderPlan(game, a, b);
-    if (plan) setSwapAsk({ a, b, plan });
+    if (!plan) return;
+    dispatch({ type: 'SWAP_ORDER', gameId: game.id, a, b });
+    setSwapMsg({ a, b, moved: plan.reassign.length });
+    clearTimeout(swapTimer.current);
+    swapTimer.current = setTimeout(() => setSwapMsg(null), 7000);
   };
   const [attOpen, setAttOpen] = useState(false); // 今日のメンバーを直す
   const [oppSlot, setOppSlot] = useState(null); // 相手の交代シート
@@ -248,43 +252,36 @@ export default function OrderTab() {
         {game.lineup.map((slot, i) => (
           <div className="row" key={slot.order}>
             <span className="rank-badge">{slot.order}</span>
-            <div className="grow" onClick={() => (fixOrder ? null : setSubSlot(slot))} role="button">
+            <div className="grow" onClick={() => setSubSlot(slot)} role="button">
               <b>{nameOf(slot.playerId)}</b>
               <NameButton playerId={slot.playerId} game={game} className="pill" />
               {i === game.batterIndex && <span className="pill blue" style={{ marginLeft: 6 }}>{t('order.nextBatter')}</span>}
               {game.retiredPlayerIds.includes(slot.playerId) && <span className="pill amber" style={{ marginLeft: 6 }}>{t('order.reentry')}</span>}
             </div>
-            {fixOrder ? (
-              /* 打順を直すモード: 隣と入れ替える。離れた枠へ動かすと間の枠が全部
-                 ずれるので、隣どうしだけにする(繰り返せば同じところへ届く) */
-              <div className="ord-move">
-                <button className="small" disabled={i === 0} onClick={() => askSwap(slot.order, slot.order - 1)}>▲</button>
-                <button className="small" disabled={i === game.lineup.length - 1} onClick={() => askSwap(slot.order, slot.order + 1)}>▼</button>
-              </div>
-            ) : (
-              <>
-                <select
-                  className="small"
-                  style={{ width: 84 }}
-                  value={slot.position}
-                  onChange={(e) => dispatch({ type: 'SET_POSITION', gameId: game.id, order: slot.order, position: e.target.value })}
-                >
-                  {POSITIONS.map((pos) => (
-                    <option key={pos} value={pos}>{positionLabel(pos, lang)}</option>
-                  ))}
-                </select>
-                <button className="small" onClick={() => setSubSlot(slot)}>{t('order.change')}</button>
-              </>
-            )}
+            {/* 隣と入れ替える。離れた枠へ動かすと間の枠が全部ずれるので、隣どうしだけ(繰り返せば届く) */}
+            <div className="ord-move">
+              <button className="small" disabled={i === 0} aria-label={t('order.up')} onClick={() => swapNow(slot.order, slot.order - 1)}>▲</button>
+              <button className="small" disabled={i === game.lineup.length - 1} aria-label={t('order.down')} onClick={() => swapNow(slot.order, slot.order + 1)}>▼</button>
+            </div>
+            <select
+              className="small"
+              style={{ width: 72 }}
+              value={slot.position}
+              onChange={(e) => dispatch({ type: 'SET_POSITION', gameId: game.id, order: slot.order, position: e.target.value })}
+            >
+              {POSITIONS.map((pos) => (
+                <option key={pos} value={pos}>{positionLabel(pos, lang)}</option>
+              ))}
+            </select>
           </div>
         ))}
         <p className="small dim mt8">{t('order.rowHint')}</p>
-        {/* 「最初から並びが違っていた」を直す口。交代とは別物なので分けて置く。
-            交代では直せない(同じ選手が2枠を占める途中の状態を作れない) */}
-        <button className={`small mt8 ${fixOrder ? 'primary' : ''}`} style={{ width: '100%' }} onClick={() => setFixOrder(!fixOrder)}>
-          {fixOrder ? t('order.fixDone') : t('order.fixOpen')}
-        </button>
-        {fixOrder && <p className="small dim mt8">{t('order.fixHint')}</p>}
+        {swapMsg && (
+          <div className="quick-toast" style={{ marginTop: 10 }}>
+            <span>{t(swapMsg.moved ? 'order.swapped.moved' : 'order.swapped', { a: swapMsg.a, b: swapMsg.b, n: swapMsg.moved })}</span>
+            <button className="small" onClick={() => { dispatch({ type: 'UNDO' }); setSwapMsg(null); }}>{t('simple.undo')}</button>
+          </div>
+        )}
       </div>
 
       {game.retiredPlayerIds.length > 0 && (
@@ -298,37 +295,6 @@ export default function OrderTab() {
         </div>
       )}
 
-      {swapAsk && (
-        <Sheet title={t('order.fixTitle')} onClose={() => setSwapAsk(null)}>
-          <p className="small">
-            {t('order.fixConfirm', {
-              a: swapAsk.a,
-              b: swapAsk.b,
-              na: nameOf(game.lineup.find((l) => l.order === swapAsk.a)?.playerId),
-              nb: nameOf(game.lineup.find((l) => l.order === swapAsk.b)?.playerId),
-            })}
-          </p>
-          {/* 記録済みの打席が動くかどうかは、押す前に分かっていないといけない */}
-          <div className={`${swapAsk.plan.reassign.length ? 'warn-box' : 'small dim'} mt8`}>
-            {swapAsk.plan.reassign.length
-              ? t('order.fixMoves', { n: swapAsk.plan.reassign.length })
-              : t('order.fixNoMoves')}
-          </div>
-          <p className="small dim mt8">{t('order.fixNotSub')}</p>
-          <div className="sheet-actions">
-            <button className="ghost" onClick={() => setSwapAsk(null)}>{t('action.cancel')}</button>
-            <button
-              className="primary"
-              onClick={() => {
-                dispatch({ type: 'SWAP_ORDER', gameId: game.id, a: swapAsk.a, b: swapAsk.b });
-                setSwapAsk(null);
-              }}
-            >
-              {t('order.fixDo')}
-            </button>
-          </div>
-        </Sheet>
-      )}
       {subSlot && <SubstituteSheet game={game} slot={subSlot} onClose={() => setSubSlot(null)} />}
       {coachView}
     </div>
