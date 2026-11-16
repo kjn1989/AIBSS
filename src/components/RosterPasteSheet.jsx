@@ -70,6 +70,7 @@ export default function RosterPasteSheet({ game = null, onClose }) {
             ))}
           </div>
           <p className="small dim mt8">{t(asLineup ? 'paste.lineupNote' : 'paste.registerNote', { n: newCount })}</p>
+          {asLineup && game.lineup.length > 0 && <div className="warn-box mt8">{t('paste.replaceNote')}</div>}
         </>
       )}
       <div className="sheet-actions">

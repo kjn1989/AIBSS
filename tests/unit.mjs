@@ -6424,3 +6424,26 @@ test('名簿: 位置が書かれていない人には空いている位置を割
   // B は空いている先頭(捕)。D は遊が埋まっているので次の空き(一)
   assert.deepEqual(lineupPositions(rows), ['遊', '捕', '投', '一']);
 });
+
+test('名簿: 名前のあとに空白で位置を書いた形(利用者の実例2)と、区切り記号の揺れ', () => {
+  const r = parseRosterText(`1 黒瀬　捕
+2 大槻　遊
+3 藤田　投
+4 川越　三
+5 芳賀 啓介　二
+6 吉元　一
+7 山浦　左
+8 星野　右
+9 中島　中`);
+  assert.deepEqual(r.rows.map((x) => [x.name, x.position]), [
+    ['黒瀬', '捕'], ['大槻', '遊'], ['藤田', '投'], ['川越', '三'], ['芳賀 啓介', '二'],
+    ['吉元', '一'], ['山浦', '左'], ['星野', '右'], ['中島', '中']]);
+  const one = (l) => { const x = parseRosterLine(l); return [x.name, x.position]; };
+  assert.deepEqual(one('１．黒瀬：捕手'), ['黒瀬', '捕']);
+  assert.deepEqual(one('黒瀬 ー 捕'), ['黒瀬', '捕']);
+  assert.deepEqual(one('黒瀬 - 捕'), ['黒瀬', '捕']);
+  assert.deepEqual(one('黒瀬→捕'), ['黒瀬', '捕']);
+  assert.deepEqual(one('黒瀬 / 捕 / 背番7'), ['黒瀬', '捕']);
+  assert.equal(parseRosterLine('黒瀬 / 捕 / 背番7').number, '7');
+  assert.deepEqual(one('ジョージ 二'), ['ジョージ', '二'], '名前の中の「ー」は残す');
+});

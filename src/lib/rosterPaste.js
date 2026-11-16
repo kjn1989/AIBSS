@@ -55,7 +55,7 @@ export function parseRosterLine(raw) {
   if (m && s.length > m[0].length) { lead = Number(m[1]); s = s.slice(m[0].length); }
 
   let number = null;
-  s = s.replace(/(?:#|＃|No\.?|背番号)\s*(\d{1,3})/i, (_, d) => { number = d; return ' '; });
+  s = s.replace(/(?:#|＃|No\.?|背番号|背番)\s*(\d{1,3})/i, (_, d) => { number = d; return ' '; });
 
   let position = null;
   // かっこの中。守備位置として読めたら位置、読めなければ(「主将」など)捨てる
@@ -65,7 +65,10 @@ export function parseRosterLine(raw) {
     return ' ';
   });
   // かっこ無し: 「遊 入交」「入交 ショート」「入交/遊」
-  const parts = s.split(/[\s/／、,]+/).filter(Boolean);
+  // 区切りに使われる記号(「黒瀬：捕」「黒瀬 - 捕」「黒瀬→捕」)。名前の中の「ー」(ジョージ)は
+  // 区切りとは限らないので、前後が空白のときだけ(単独の語として)落とす
+  s = s.replace(/[:：|｜→＝=]/g, ' ');
+  const parts = s.split(/[\s/／、,]+/).filter((w) => w && !/^[\-–—ー−・]+$/.test(w));
   if (!position && parts.length > 1) {
     const first = asPosition(parts[0]);
     const last = asPosition(parts[parts.length - 1]);
