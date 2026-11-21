@@ -201,6 +201,9 @@ const writtenAt = new Map();
 let lastGameCount = -1; // 試合が減ったときだけ prune を走らせるための目印
 
 export function persist(state) {
+  // ライブ観戦ページ(?live=)は読み取り専用。この端末に自分のチームのデータがあっても、
+  // 観戦で受け取った試合や選手を書き込んで混ぜない
+  if (typeof window !== 'undefined' && window.__AIBSS_NO_PERSIST__) return;
   let json;
   let key;
   try {
@@ -2423,7 +2426,8 @@ export function StoreProvider({ children }) {
   // チーム切り替えリストの表示名/エディション/クラウド接続を、設定変更のたびレジストリ側にも同期する
   useEffect(() => {
     const id = getActiveProfileId();
-    if (id) {
+    // ライブ観戦ページ(?live=)では、見ているチームの名前でこの端末のチーム登録を書き換えない
+    if (id && !(typeof window !== 'undefined' && window.__AIBSS_NO_PERSIST__)) {
       updateProfileMeta(id, {
         name: state.settings.teamName,
         edition: state.settings.edition,

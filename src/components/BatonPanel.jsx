@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useStore, useT } from '../state/store.jsx';
 import { lockedFor, holdsBaton, recorderName, saveRecorderName, unsentLogs, knownRecorders } from '../lib/baton.js';
 import Sheet from './Sheet.jsx';
+import { LiveLinkSheet } from './LiveLinkPanel.jsx';
 
 // 記録のバトン(lib/baton.js)の画面側。
 // 進行中の試合を記録できるのは1台だけ。ほかの端末には「いま誰が記録中か」と
@@ -123,10 +124,16 @@ export function BatonMine({ game }) {
   const { state } = useStore();
   const t = useT();
   const [open, setOpen] = useState(false);
+  const [liveOpen, setLiveOpen] = useState(false);
   if (!cloudOn(state) || !holdsBaton(game) || game.status !== 'ongoing') return null;
   return (
     <div className="baton-mine small">
       {t('baton.mine')}
+      {/* ログイン不要のライブ観戦リンク。試合中に思いついたときすぐ配れるように、ここにも置く */}
+      {state.settings.officialTeamId && (
+        <button className="small" style={{ marginLeft: 8 }} onClick={() => setLiveOpen(true)}>{t('livelink.btn')}</button>
+      )}
+      {liveOpen && <LiveLinkSheet teamId={state.settings.officialTeamId} onClose={() => setLiveOpen(false)} />}
       <button className="small" style={{ marginLeft: 8 }} onClick={() => setOpen(true)}>
         {t(game.batonPlan?.on ? 'baton.planBtnOn' : 'baton.planBtn')}
       </button>

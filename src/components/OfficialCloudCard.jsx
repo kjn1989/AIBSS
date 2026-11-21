@@ -8,6 +8,7 @@ import {
 } from '../lib/officialCloud.js';
 import { getActiveProfileId, findProfileByOfficialTeamId, addProfile, switchActiveProfile } from '../lib/profiles.js';
 import QRCode from './QRCode.jsx';
+import LiveLinkPanel from './LiveLinkPanel.jsx';
 
 const ROLE_KEYS = ['owner', 'scorer', 'viewer'];
 
@@ -284,6 +285,13 @@ export default function OfficialCloudCard() {
                   )}
                 </div>
               )}
+            </>
+          )}
+
+          {(myRole === 'owner' || myRole === 'scorer') && (
+            <>
+              <div className="section-title">{t('livelink.title')}</div>
+              <LiveLinkPanel teamId={teamId} />
             </>
           )}
 

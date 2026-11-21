@@ -52,6 +52,7 @@ export default function CloudSync() {
     // 本物のクラウドの代わりにそれへつなぐ(2台の端末の受け渡しを本番と同じ経路で確かめるため)
     const testCloud = typeof window !== 'undefined' ? window.__AIBSS_TEST_CLOUD__ : null;
     if (testCloud) {
+      if (testCloud.settings) dispatch({ type: 'UPDATE_SETTINGS', patch: testCloud.settings });
       const conn = testCloud.connect({
         onStatus: (status) => dispatch({ type: 'SET_CLOUD_STATUS', status }),
         onGames: (games) => {

@@ -150,6 +150,21 @@ e2e は `tests/simple.e2e.mjs`。既存の e2e は「くわしく」を押して
   スコア入力画面から1タップで開ける
 - e2e は `tests/keepgoing.e2e.mjs`
 
+### ライブ観戦リンク(ログイン不要・読み取り専用)
+
+チームごとに1つ、推測できない長いトークンを作り、`?live=<トークン>` を開いた人が**ログインなしで**スコアと打席を見られる。
+- **サーバー側**: `supabase/live_share.sql`(`schema.sql` にも同じ内容を追記済み)。SQL Editor に貼って Run が要る。
+  `live_shares` テーブルは RLS 有効・ポリシー無しで、関数だけが触る。`live_share_create/get/revoke` は owner/scorer(get はメンバー)、
+  `live_view(token, game, last, since)` だけが anon から呼べる。返すのは試合JSONと選手の**名前・背番号のみ**
+  (スカウト寸評・写真・メール・メンバーは返さない)。同じ試合で更新が無ければ本体を返さない(数秒おきに呼ばれるため)。
+  **実 Postgres 16(auth.uid() と anon/authenticated を模した)で、権限・漏洩・止める動作を確認済み**
+- **クライアント**: `officialCloud.js` の `liveShare*` / `fetchLive`、観戦ページ `LiveWatch.jsx`(4秒ごとのポーリング。
+  anon は Realtime を購読できないため)、作る口 `LiveLinkPanel.jsx`(クラウドのカードと、スコア入力の「📺 観戦リンク」)
+- **観戦ページは何も保存しない**: `main.jsx` が `?live=` のとき `window.__AIBSS_NO_PERSIST__` を立て、`persist()` と
+  チーム登録の書き換えを止める(この端末に自分のチームがあっても混ぜない)
+- リンクは1チーム1本で、そのチームの全試合(最新20件)が見える。止めると即無効。作り直せば別のリンク
+- e2e は `tests/live.e2e.mjs`(`window.__AIBSS_TEST_LIVE__` が差し込み口)。**本物の Supabase 経由は未確認**
+
 ### 画面の整理と屋外モード
 
 - **屋外モード**: ヘッダーの ☀️ で切り替え(`settings.outdoor`)。`<html data-outdoor>` が付き、CSS(styles.css 末尾)が
