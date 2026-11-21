@@ -117,6 +117,7 @@ try {
   await a.click('button:has-text("観戦リンクを作る")'); await W(500);
   const url = await a.locator('.sheet input[readonly]').inputValue();
   ok('リンクは ?live=トークン の形', /[?&]live=tok/.test(url) && !url.includes('team='), url);
+  ok('QRが最初から出ている', (await a.locator('.sheet .live-qr img').count()) === 1);
   ok('ログイン不要で見られると説明がある', (await a.locator('.sheet').innerText()).includes('ログインなし'));
   ok('誰でも見られる注意がある', (await a.locator('.sheet').innerText()).includes('誰でも見られます'));
   await a.click('.sheet-actions button:has-text("閉じる")'); await W(300);
