@@ -2723,3 +2723,7 @@ html[data-outdoor] .card { border-width: 2px; }
 html[data-outdoor] .app-header { background: #0d1117; border-bottom-color: #30363d; --text: #e6edf3; --text-dim: #aab4bf; --border: #30363d; }
 html[data-outdoor] .app-header .header-gear { background: #21262d; color: #e6edf3; border-color: #4a5560; }
 html[data-outdoor] .app-header .outdoor-toggle.on { background: #1f6feb; border-color: #1f6feb; }
+
+.live-game-row { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; margin-top: 8px; padding: 10px 12px; }
+.live-game-row .grow { flex: 1; min-width: 0; }
+.live-score { font-weight: 800; font-variant-numeric: tabular-nums; }

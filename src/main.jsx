@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App.jsx';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
 import WatchView from './components/WatchView.jsx';
+import LiveWatch from './components/LiveWatch.jsx';
 import { StoreProvider } from './state/store.jsx';
 import { recoverIfNeeded, requestPersistentStorage } from './lib/durableStore.js';
 import { ensureRegistry, getActiveProfileId, profileStorageKey, LEGACY_DATA_KEY } from './lib/profiles.js';
@@ -14,6 +15,10 @@ import './styles.css';
 
 // ?watch=1 が付いたリンクは観戦専用ページ(読み取り専用)を表示する
 const isWatchMode = new URLSearchParams(window.location.search).get('watch') === '1';
+// ?live=<トークン> は、ログイン不要のライブ観戦ページ(読み取り専用)。
+// この端末に自分のチームのデータがあっても書き換えないよう、保存を止めてから始める
+const liveToken = new URLSearchParams(window.location.search).get('live');
+if (liveToken) window.__AIBSS_NO_PERSIST__ = true;
 
 // 表示言語を決めて保存し、文書側(lang/title/manifest)へ反映する。
 // 判断の順番は lib/langStore.js に書いてある。プロフィールの settings.lang を
@@ -40,7 +45,7 @@ function mount() {
           タブ単位の境界では受けきれないので、ここでも受ける */}
       <ErrorBoundary>
         <StoreProvider>
-          {isWatchMode ? <WatchView /> : <App />}
+          {liveToken ? <LiveWatch token={liveToken} /> : isWatchMode ? <WatchView /> : <App />}
         </StoreProvider>
       </ErrorBoundary>
     </React.StrictMode>

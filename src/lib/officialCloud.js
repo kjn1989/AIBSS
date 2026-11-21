@@ -375,3 +375,64 @@ export function connectOfficial({ teamId, onGames, onPlayers, onCrew, onStatus }
     },
   };
 }
+
+// ---------------- ライブ観戦リンク(ログイン不要・読み取り専用) ----------------
+// supabase/live_share.sql の関数を呼ぶ。トークンを知っている人は、ログインなしで
+// そのチームの試合のスコアと打席だけ読める(テーブルは直接読めないまま)。
+// テスト用の差し込み口: window.__AIBSS_TEST_LIVE__ があれば、本物の代わりにそれを使う
+const testLive = () => (typeof window !== 'undefined' ? window.__AIBSS_TEST_LIVE__ : null);
+
+// SQLを流し込む前は関数が無い。原因が分かる文にして返す
+function liveError(error) {
+  const m = error?.message || String(error || '');
+  if (/could not find the function|live_share|live_view|schema cache/i.test(m)) return new Error(tc('cloud.liveNotReady'));
+  if (/not allowed/i.test(m)) return new Error(tc('cloud.liveNotAllowed'));
+  return new Error(m);
+}
+
+export async function liveShareGet(teamId) {
+  const t = testLive();
+  if (t) return t.get(teamId);
+  const sb = ensureClient();
+  if (!sb) throw new Error(tc('cloud.notConfigured'));
+  const { data, error } = await sb.rpc('live_share_get', { p_team: teamId });
+  if (error) throw liveError(error);
+  return data || null;
+}
+
+export async function liveShareCreate(teamId) {
+  const t = testLive();
+  if (t) return t.create(teamId);
+  const sb = ensureClient();
+  if (!sb) throw new Error(tc('cloud.notConfigured'));
+  const { data, error } = await sb.rpc('live_share_create', { p_team: teamId });
+  if (error) throw liveError(error);
+  return data;
+}
+
+export async function liveShareRevoke(teamId) {
+  const t = testLive();
+  if (t) return t.revoke(teamId);
+  const sb = ensureClient();
+  if (!sb) throw new Error(tc('cloud.notConfigured'));
+  const { error } = await sb.rpc('live_share_revoke', { p_team: teamId });
+  if (error) throw liveError(error);
+}
+
+export function liveUrl(token, lang) {
+  const url = new URL(window.location.origin + window.location.pathname);
+  url.searchParams.set('live', token);
+  if (lang) url.searchParams.set('lang', lang);
+  return url.toString();
+}
+
+// 観戦ページが数秒おきに呼ぶ。ログインは要らない
+export async function fetchLive(token, { game = null, last = null, since = 0 } = {}) {
+  const t = testLive();
+  if (t) return t.view(token, { game, last, since });
+  const sb = ensureClient();
+  if (!sb) throw new Error(tc('cloud.notConfigured'));
+  const { data, error } = await sb.rpc('live_view', { p_token: token, p_game: game, p_last: last, p_since: since });
+  if (error) throw liveError(error);
+  return data;
+}
