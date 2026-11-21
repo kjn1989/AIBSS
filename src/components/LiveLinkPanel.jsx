@@ -13,7 +13,8 @@ export default function LiveLinkPanel({ teamId }) {
   const [token, setToken] = useState(undefined); // undefined = 確認中 / null = まだ無い
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  const [showQr, setShowQr] = useState(false);
+  // QRは最初から出す。その場で読み込んでもらえば、LINEを待たずにみんなが開ける
+  const [showQr, setShowQr] = useState(true);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -44,6 +45,13 @@ export default function LiveLinkPanel({ teamId }) {
       )}
       {token && (
         <>
+          {showQr && (
+            <div className="qr-box live-qr">
+              <QRCode text={url} size={260} />
+              <b>{t('livelink.qrScan')}</b>
+              <span className="small dim">{t('livelink.qrHint')}</span>
+            </div>
+          )}
           <input readOnly value={url} onFocus={(e) => e.target.select()} aria-label={t('livelink.title')} />
           <div className="grid2 mt8">
             <button className="primary" onClick={copy}>{copied ? t('livelink.copied') : t('livelink.copy')}</button>
@@ -52,12 +60,11 @@ export default function LiveLinkPanel({ teamId }) {
               : <button onClick={() => setShowQr(!showQr)}>{showQr ? t('occ.hideQr') : t('occ.showQr')}</button>}
           </div>
           {navigator.share && <button className="small mt8" onClick={() => setShowQr(!showQr)}>{showQr ? t('occ.hideQr') : t('occ.showQr')}</button>}
-          {showQr && <div className="qr-box"><QRCode text={url} /><span className="small dim">{t('livelink.qrHint')}</span></div>}
           <div className="warn-box mt8">{t('livelink.warn')}</div>
           <button
             className="small ghost danger mt8"
             disabled={busy}
-            onClick={() => window.confirm(t('livelink.stopConfirm')) && run(async () => { await liveShareRevoke(teamId); setToken(null); setShowQr(false); })}
+            onClick={() => window.confirm(t('livelink.stopConfirm')) && run(async () => { await liveShareRevoke(teamId); setToken(null); setShowQr(true); })}
           >
             {t('livelink.stop')}
           </button>
