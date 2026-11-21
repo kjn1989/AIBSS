@@ -175,7 +175,7 @@ e2e は `tests/simple.e2e.mjs`。既存の e2e は「くわしく」を押して
   テストで `input.first()` のような位置指定をしないこと(順序が変わる)
 - **前回と同じ打順で始める**(`sameAsLast`): 直近の試合の先発(`startingLineup`)から、今日の出席者だけを詰めて組む
 - 選手が1人も登録されていなければ「今日のメンバー」は通さずに始める
-- **攻守交代で自動的にバトンを渡す(任意)**: `game.batonPlan`。`reducer` の `handOff` が、半回が変わった直後に
+- **記録係を自動で回す(任意)**: `game.batonPlan`。`mode:'rotate'` は2〜3人が `every` イニングずつ順番に(1回=A、2回=B、3回=C…)、`mode:'sides'` は攻め・守りで分ける。判定は `plannedRecorder`(baton.js)。`reducer` の `handOff` が、半回が変わった直後に
   記録係の端末から相手へ `recorder` を移す。`SET_BATON_PLAN` は記録係だけ。e2e は `tests/batonauto.e2e.mjs`
 
 ### 記録のバトン(`src/lib/baton.js`)— 複数の端末で交代しながら記録する

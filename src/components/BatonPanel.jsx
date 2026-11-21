@@ -82,14 +82,34 @@ function BatonPlanSheet({ game, onClose }) {
   const people = knownRecorders(game);
   const plan = game.batonPlan || { on: false };
   const [on, setOn] = useState(!!plan.on);
+  const [mode, setMode] = useState(plan.mode === 'sides' ? 'sides' : 'rotate');
   const [off, setOff] = useState(plan.offense?.id || game.recorder?.id || '');
   const [def, setDef] = useState(plan.defense?.id || people.find((p) => p.id !== game.recorder?.id)?.id || '');
+  // 順番に回すとき: 1人目は今の記録係。2人目・3人目は選ぶ(3人目は空でもよい)
+  const initRot = (plan.rotation || []).map((r) => r.id);
+  const [r1, setR1] = useState(initRot[0] || game.recorder?.id || '');
+  const [r2, setR2] = useState(initRot[1] || people.find((p) => p.id !== (initRot[0] || game.recorder?.id))?.id || '');
+  const [r3, setR3] = useState(initRot[2] || '');
+  const [every, setEvery] = useState(String(plan.every || 1));
   const pick = (id) => people.find((p) => p.id === id) || null;
   const label = (p) => p.name || t('baton.otherDevice');
+  const rotation = [r1, r2, r3].filter(Boolean).filter((id, i, a) => a.indexOf(id) === i).map(pick).filter(Boolean);
+  const valid = !on || (mode === 'sides' ? !!off && !!def : rotation.length >= 2);
   const save = () => {
-    dispatch({ type: 'SET_BATON_PLAN', gameId: game.id, plan: on ? { on: true, offense: pick(off), defense: pick(def) } : { on: false } });
+    dispatch({
+      type: 'SET_BATON_PLAN', gameId: game.id,
+      plan: !on ? { on: false }
+        : mode === 'sides' ? { on: true, mode: 'sides', offense: pick(off), defense: pick(def) }
+          : { on: true, mode: 'rotate', rotation, every: Number(every) },
+    });
     onClose();
   };
+  const select = (value, set, { optional = false } = {}) => (
+    <select value={value} onChange={(e) => set(e.target.value)}>
+      {optional && <option value="">{t('baton.planNone')}</option>}
+      {people.map((p) => <option key={p.id} value={p.id}>{label(p)}</option>)}
+    </select>
+  );
   return (
     <Sheet title={t('baton.planTitle')} onClose={onClose}>
       <p className="small dim" style={{ marginTop: 0 }}>{t('baton.planNote')}</p>
@@ -100,20 +120,42 @@ function BatonPlanSheet({ game, onClose }) {
       {people.length < 2 && <p className="small dim">{t('baton.planNeedTwo')}</p>}
       {on && people.length >= 2 && (
         <>
-          <label className="small dim mt8" style={{ display: 'block' }}>{t('baton.planOffense')}</label>
-          <select value={off} onChange={(e) => setOff(e.target.value)}>
-            {people.map((p) => <option key={p.id} value={p.id}>{label(p)}</option>)}
-          </select>
-          <label className="small dim mt8" style={{ display: 'block' }}>{t('baton.planDefense')}</label>
-          <select value={def} onChange={(e) => setDef(e.target.value)}>
-            {people.map((p) => <option key={p.id} value={p.id}>{label(p)}</option>)}
-          </select>
+          <label className="small dim mt8" style={{ display: 'block' }}>{t('baton.planMode')}</label>
+          <div className="toggle-row">
+            <button className={mode === 'rotate' ? 'active' : ''} onClick={() => setMode('rotate')}>{t('baton.planRotate')}</button>
+            <button className={mode === 'sides' ? 'active' : ''} onClick={() => setMode('sides')}>{t('baton.planSides')}</button>
+          </div>
+          {mode === 'rotate' ? (
+            <>
+              <label className="small dim mt8" style={{ display: 'block' }}>{t('baton.planFirst')}</label>
+              {select(r1, setR1)}
+              <label className="small dim mt8" style={{ display: 'block' }}>{t('baton.planSecond')}</label>
+              {select(r2, setR2)}
+              <label className="small dim mt8" style={{ display: 'block' }}>{t('baton.planThird')}</label>
+              {select(r3, setR3, { optional: true })}
+              <label className="small dim mt8" style={{ display: 'block' }}>{t('baton.planEvery')}</label>
+              <select value={every} onChange={(e) => setEvery(e.target.value)}>
+                {[1, 2, 3].map((n) => <option key={n} value={n}>{t('baton.planEveryN', { n })}</option>)}
+              </select>
+              {rotation.length >= 2 && (
+                <p className="small mt8">{t('baton.planPreview', { order: rotation.map(label).join(' → '), n: every })}</p>
+              )}
+              {rotation.length < 2 && <p className="small dim mt8">{t('baton.planNeedTwoPick')}</p>}
+            </>
+          ) : (
+            <>
+              <label className="small dim mt8" style={{ display: 'block' }}>{t('baton.planOffense')}</label>
+              {select(off, setOff)}
+              <label className="small dim mt8" style={{ display: 'block' }}>{t('baton.planDefense')}</label>
+              {select(def, setDef)}
+            </>
+          )}
           <p className="small dim mt8">{t('baton.planWarn')}</p>
         </>
       )}
       <div className="sheet-actions">
         <button className="ghost" onClick={onClose}>{t('action.cancel')}</button>
-        <button className="primary" onClick={save}>{t('action.save')}</button>
+        <button className="primary" onClick={save} disabled={!valid}>{t('action.save')}</button>
       </div>
     </Sheet>
   );

@@ -685,7 +685,12 @@ function reduce(state, action) {
     case 'SET_BATON_PLAN': {
       const g = deep(state.games[action.gameId]);
       if (!g) return state;
-      g.batonPlan = action.plan && action.plan.on ? { on: true, offense: action.plan.offense || null, defense: action.plan.defense || null } : { on: false, offense: null, defense: null };
+      const pl = action.plan;
+      g.batonPlan = pl && pl.on
+        ? (pl.mode === 'rotate'
+          ? { on: true, mode: 'rotate', rotation: (pl.rotation || []).filter((r) => r?.id).slice(0, 3), every: Math.max(1, Math.min(9, Math.round(Number(pl.every) || 1))) }
+          : { on: true, mode: 'sides', offense: pl.offense || null, defense: pl.defense || null })
+        : { on: false };
       g.updatedAt = Date.now();
       return { ...state, games: { ...state.games, [g.id]: g } };
     }

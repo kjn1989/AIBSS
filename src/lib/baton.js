@@ -99,9 +99,23 @@ export function noteRecorder(game, rec) {
   game.recorders = [...list, { id: rec.id, name: rec.name || '' }];
 }
 // この半回の記録係に渡すべき相手(渡す必要が無ければ null)
-export function nextRecorderFor(game, myTeamBatting, myId = deviceId()) {
+// 計画から見た、いまの回の記録係。
+//   mode 'sides'(既定): 自チームが攻撃のときの人と、守備のときの人
+//   mode 'rotate'     : 2〜3人が every イニングずつ順番に回す(1回=A、2回=B、3回=C、4回=A…)
+export function plannedRecorder(game, myTeamBatting) {
   const plan = game?.batonPlan;
-  if (!plan?.on || game.status !== 'ongoing' || !holdsBaton(game, myId)) return null;
-  const target = myTeamBatting ? plan.offense : plan.defense;
+  if (!plan?.on) return null;
+  if (plan.mode === 'rotate') {
+    const list = (plan.rotation || []).filter((r) => r?.id);
+    if (list.length < 2) return null;
+    const every = Math.max(1, Math.round(Number(plan.every) || 1));
+    const inning = Math.max(1, Number(game.inning) || 1);
+    return list[Math.floor((inning - 1) / every) % list.length];
+  }
+  return myTeamBatting ? plan.offense : plan.defense;
+}
+export function nextRecorderFor(game, myTeamBatting, myId = deviceId()) {
+  if (!game || game.status !== 'ongoing' || !holdsBaton(game, myId)) return null;
+  const target = plannedRecorder(game, myTeamBatting);
   return target?.id && target.id !== myId ? target : null;
 }

@@ -1033,10 +1033,12 @@ export default function ScoreTab() {
             )}
           </div>
         )}
-        {simple && !noLineup && game.status === 'ongoing' && (
-          <SimpleExtras game={game} onScoreOnly={() => setSheet({ kind: 'scoreOnly' })} />
-        )}
       </div>
+      {/* 「不明」「得点だけ」は投手が未選択でも使える(相手の回を得点だけで済ませたいときに、
+          投手を選ばないと押せないのでは意味が無い) */}
+      {simple && !noLineup && game.status === 'ongoing' && (
+        <SimpleExtras game={game} onScoreOnly={() => setSheet({ kind: 'scoreOnly' })} />
+      )}
 
       {/* 打席を直したり消したりすると、次の打者のポインタが記録とずれる。
           ずれたまま進むと「実際の打者とアプリの打者が1人違う」事故になるので、
