@@ -26,7 +26,7 @@ import { positionListLabel, GAME_SCHEMA_VERSION, nextProvisionalNames, isProvisi
 import { extractGameDataset, datasetEligibility, DATASET_VERSION } from '../src/lib/datasetExtract.js';
 import { generateDemoData } from '../src/lib/demo.js';
 import { parseRosterText, parseRosterLine, lineupPositions } from '../src/lib/rosterPaste.js';
-import { chooseRemote, lockedFor, holdsBaton, unsentLogs, deviceId } from '../src/lib/baton.js';
+import { chooseRemote, lockedFor, holdsBaton, unsentLogs, deviceId, plannedRecorder, nextRecorderFor } from '../src/lib/baton.js';
 import { computeHighlights } from '../src/lib/highlights.js';
 import { buildRunDists, buildWinModel, priorDist, remainingHalves, SCORE_PROB, MAX_RUNS } from '../src/lib/winExp.js';
 import { TEAM_GAPS, buildGapModel, gapTables, gapOf, scaleDist, scaleDists, S_EXP } from '../src/lib/teamGap.js';
@@ -6446,4 +6446,23 @@ test('名簿: 名前のあとに空白で位置を書いた形(利用者の実�
   assert.deepEqual(one('黒瀬 / 捕 / 背番7'), ['黒瀬', '捕']);
   assert.equal(parseRosterLine('黒瀬 / 捕 / 背番7').number, '7');
   assert.deepEqual(one('ジョージ 二'), ['ジョージ', '二'], '名前の中の「ー」は残す');
+});
+
+test('バトン: 順番に回す(3人・1イニングずつ)', () => {
+  const A = { id: 'a', name: 'A' }, B = { id: 'b', name: 'B' }, C = { id: 'c', name: 'C' };
+  const g = (inning, o = {}) => ({ status: 'ongoing', inning, recorder: { id: 'a', at: 1 }, batonPlan: { on: true, mode: 'rotate', rotation: [A, B, C], every: 1 }, ...o });
+  assert.deepEqual([1, 2, 3, 4, 5, 7].map((i) => plannedRecorder(g(i), true).id), ['a', 'b', 'c', 'a', 'b', 'a']);
+  // 2イニングずつ
+  const g2 = (inning) => g(inning, { batonPlan: { on: true, mode: 'rotate', rotation: [A, B], every: 2 } });
+  assert.deepEqual([1, 2, 3, 4, 5].map((i) => plannedRecorder(g2(i), false).id), ['a', 'a', 'b', 'b', 'a']);
+  // 表→裏(同じイニング)では渡さない。次のイニングで次の人へ
+  assert.equal(nextRecorderFor(g(1), false, 'a'), null);
+  assert.equal(nextRecorderFor(g(2), true, 'a').id, 'b');
+  // 記録係でない端末は渡せない / 1人しか居ない計画は何もしない
+  assert.equal(nextRecorderFor(g(2), true, 'b'), null);
+  assert.equal(plannedRecorder(g(2, { batonPlan: { on: true, mode: 'rotate', rotation: [A], every: 1 } }), true), null);
+  // 従来の「攻め・守りで分ける」も動く
+  const sides = { status: 'ongoing', inning: 1, recorder: { id: 'a', at: 1 }, batonPlan: { on: true, offense: A, defense: B } };
+  assert.equal(plannedRecorder(sides, true).id, 'a');
+  assert.equal(plannedRecorder(sides, false).id, 'b');
 });

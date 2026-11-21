@@ -122,8 +122,9 @@ try {
 
   // 初期は使わない設定。B(記録係)が「攻めはけんた・守りはさくら」と決める
   ok('自動交代は初期では使わない設定', !cloudGame().batonPlan?.on);
-  await p.click('button:has-text("攻守交代で自動交代")'); await p.waitForTimeout(400);
+  await p.click('button:has-text("記録係を自動で回す")'); await p.waitForTimeout(400);
   await p.click('.sheet .toggle-row button:has-text("使う")'); await p.waitForTimeout(200);
+  await p.locator('.sheet button:has-text("攻め・守りで分ける")').click(); await p.waitForTimeout(200);
   const selects = p.locator('.sheet select');
   await selects.nth(0).selectOption({ label: 'けんた' });
   await selects.nth(1).selectOption({ label: 'さくら' });
@@ -136,6 +137,24 @@ try {
   ok('攻守交代でクラウドの記録係が さくら になる', cloudGame().recorder?.name === 'さくら', JSON.stringify(cloudGame().recorder));
   ok('B は見るだけになる', (await p.locator('.result-pad').count()) === 0 && (await p.locator('.main').innerText()).includes('いま さくら が記録しています'));
   ok('A に入力ボタンが出る(守りの回)', (await a.locator('.result-pad button').count()) > 0 && (await a.locator('.main').innerText()).includes('1回裏'));
+
+  // ---- 順番に回す(2人・1イニングずつ)。いまは A(さくら)が記録係(守りの回) ----
+  await a.click('.baton-mine button:has-text("自動で回す")'); await W(400);
+  await a.click('.sheet .toggle-row button:has-text("使う")'); await W(200);
+  ok('回し方に「順番に回す」がある', (await a.locator('.sheet button:has-text("順番に回す")').count()) === 1);
+  await a.locator('.sheet button:has-text("順番に回す")').click(); await W(200);
+  const sel = a.locator('.sheet select');
+  await sel.nth(0).selectOption({ label: 'さくら' });
+  await sel.nth(1).selectOption({ label: 'けんた' });
+  ok('順番の確認文が出る', (await a.locator('.sheet').innerText()).includes('さくら → けんた'));
+  await a.click('.sheet-actions button:has-text("保存")'); await W(1500);
+  ok('設定が rotate でクラウドに残る', cloudGame().batonPlan?.mode === 'rotate' && cloudGame().batonPlan.rotation.length === 2, JSON.stringify(cloudGame().batonPlan));
+  // 1回裏は同じイニング。相手の回を「得点だけ」で終えると2回表 → 2人目(けんた)へ
+  await a.click('button:has-text("相手の回は得点だけ")'); await W(400);
+  await a.click('.sheet-actions button.primary'); await W(1800);
+  ok('2回になると けんた へ渡る', cloudGame().recorder?.name === 'けんた' && cloudGame().inning === 2, JSON.stringify([cloudGame().recorder, cloudGame().inning]));
+  ok('B に入力ボタンが出る', (await p.locator('.result-pad button').count()) > 0);
+  ok('A は見るだけになる', (await a.locator('.result-pad').count()) === 0);
 } catch (e) {
   console.log('ERROR:', e.message); fail++;
 } finally {
