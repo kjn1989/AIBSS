@@ -42,7 +42,7 @@ export function BatterStats({ game, playerId, season = true }) {
   );
 }
 
-// 自チームの守備中の投手の、今日の投球内容(投球回・球数・被安打・奪三振・四死球・失点)。
+// 自チームの守備中の投手の、今日の投球内容(投球回・球数・被安打・奪三振・四死球・失点・自責点)。
 // かんたん記録の試合は球数を数えていないので、球数は出さない(0球と誤解されるため)
 export function PitcherStats({ game, playerId, showName = false }) {
   const t = useT();
@@ -58,6 +58,7 @@ export function PitcherStats({ game, playerId, showName = false }) {
       <span className="bs-chip"><i>{t('cb.k')}</i><b>{s?.strikeouts || 0}</b></span>
       <span className="bs-chip"><i>{t('cb.bb')}</i><b>{(s?.walks || 0) + (s?.hitByPitch || 0)}</b></span>
       <span className="bs-chip"><i>{t('cb.runsAllowed')}</i><b>{s?.runs || 0}</b></span>
+      <span className="bs-chip"><i>{t('cb.er')}</i><b>{s?.earnedRuns || 0}</b></span>
     </div>
   );
 }
