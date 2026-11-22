@@ -9,6 +9,7 @@ import {
 import { getActiveProfileId, findProfileByOfficialTeamId, addProfile, switchActiveProfile } from '../lib/profiles.js';
 import QRCode from './QRCode.jsx';
 import LiveLinkPanel from './LiveLinkPanel.jsx';
+import { recorderName, saveRecorderName } from '../lib/baton.js';
 
 const ROLE_KEYS = ['owner', 'scorer', 'viewer'];
 
@@ -18,6 +19,7 @@ export default function OfficialCloudCard() {
   const { state, dispatch } = useStore();
   const t = useT();
   const roleLabel = (k) => t(`occ.role.${k}`);
+  const [myName, setMyName] = useState(recorderName());
   const [user, setUser] = useState(undefined); // undefined=確認中 / null=未ログイン
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -265,6 +267,20 @@ export default function OfficialCloudCard() {
             </span>
             <button className="small ghost" onClick={run(logout)}>{t('occ.logout')}</button>
           </div>
+
+          {(myRole === 'owner' || myRole === 'scorer') && (
+            <div className="mt8" style={{ marginBottom: 8 }}>
+              <label className="small"><b>{t('occ.myNameTitle')}</b></label>
+              <input
+                value={myName}
+                maxLength={20}
+                placeholder={t('occ.myNamePh')}
+                onChange={(e) => { setMyName(e.target.value); saveRecorderName(e.target.value); }}
+                style={!myName.trim() ? { borderColor: 'var(--accent, #e67e22)' } : undefined}
+              />
+              <p className="small dim">{t('occ.myNameHint')}</p>
+            </div>
+          )}
 
           {(myRole === 'owner') && (
             <>
