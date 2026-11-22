@@ -144,6 +144,13 @@ try {
   text = await v.locator('body').innerText();
   ok('次の打席(三振)が数秒で届く', text.includes('井上'), text.slice(0, 400));
 
+  // ---- 観戦ページからスコアシートが見られる(読み取り専用) ----
+  await v.click('button:has-text("スコアシートを見る")'); await v.waitForTimeout(800);
+  const sheetTxt = await v.locator('.scoresheet-root').innerText();
+  ok('スコアシートが開き、記録した打者が出る', sheetTxt.includes('青木'), sheetTxt.slice(0, 200));
+  ok('スコアシートに「修正する」が出ない', (await v.locator('button:has-text("修正する")').count()) === 0);
+  await v.click('.fullscreen-header button:has-text("戻る")'); await v.waitForTimeout(400);
+
   // ---- 観戦ページは何も保存しない ----
   const stored = await v.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('bbscorer.v1.profile.')).map((k) => localStorage.getItem(k).includes('バンコクFC')));
   ok('観戦で受け取った試合を端末に保存していない', stored.every((x) => x === false), JSON.stringify(stored));

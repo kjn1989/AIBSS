@@ -16,7 +16,8 @@ import LiveRulesSheet from './LiveRulesSheet.jsx';
 // 打席結果の超短縮表記(スコアシートのセル用): 例「中安」「遊ゴ」「左本」「四球」/ 英語は "LF1B" 等。
 // editionが少年野球のときは 併殺→ゲ, エラー→エ の親しみ表記。
 // 印刷用スコアシート: 打順×イニングのマトリクス + 線分スコア + 投手成績
-export default function ScoreSheetView({ game, onClose }) {
+// readOnly: ライブ観戦ページから開くとき。修正のボタンを出さず、どの編集の入口にも入れない
+export default function ScoreSheetView({ game, onClose, readOnly = false }) {
   const { state } = useStore();
   const t = useT();
   const lang = state.settings.lang || 'ja';
@@ -185,10 +186,12 @@ export default function ScoreSheetView({ game, onClose }) {
         <button className="ghost small" onClick={onClose}>{t('action.back')}</button>
         <h2>{t('ss.title')}</h2>
         <button className="ghost small" onClick={() => window.print()}>{t('ss.print')}</button>
-        <button
-          className={`small ss-editbtn${editing ? ' on' : ''}`}
-          onClick={() => setEditing((v) => !v)}
-        >{editing ? t('ss.editDone') : t('ss.editStart')}</button>
+        {!readOnly && (
+          <button
+            className={`small ss-editbtn${editing ? ' on' : ''}`}
+            onClick={() => setEditing((v) => !v)}
+          >{editing ? t('ss.editDone') : t('ss.editStart')}</button>
+        )}
       </header>
       {editing && (
         <div className="ss-edithint no-print">

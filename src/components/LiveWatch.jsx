@@ -3,6 +3,7 @@ import { useStore, useT, usePlayerName } from '../state/store.jsx';
 import { fetchLive } from '../lib/officialCloud.js';
 import Scoreboard from './Scoreboard.jsx';
 import Diamond from './Diamond.jsx';
+import ScoreSheetView from './ScoreSheetView.jsx';
 import { renderPlayLog } from '../lib/playLogText.js';
 
 // ログイン不要のライブ観戦ページ(?live=<トークン>)。読み取り専用。
@@ -19,6 +20,7 @@ export default function LiveWatch({ token }) {
   const [pick, setPick] = useState(null); // 見たい試合のid。null = 自動(進行中の最新)
   const [status, setStatus] = useState('connecting'); // connecting | on | error | stopped
   const [at, setAt] = useState(null);
+  const [sheetOpen, setSheetOpen] = useState(false); // スコアシート(読み取り専用)
   const last = useRef({ gameId: null, since: 0 });
   const pickRef = useRef(null);
   pickRef.current = pick;
@@ -94,6 +96,7 @@ export default function LiveWatch({ token }) {
         <>
           <Scoreboard game={game} />
           <Diamond game={game} onBaseTap={() => {}} />
+          <button className="live-sheet-btn" onClick={() => setSheetOpen(true)}>{t('live.scoresheet')}</button>
           <div className="card">
             <h2>{t('watch.playLog')}</h2>
             {[...game.playLogs].filter((l) => l.kind !== 'run').slice(-15).reverse().map((l) => (
@@ -106,6 +109,8 @@ export default function LiveWatch({ token }) {
           </div>
         </>
       )}
+
+      {sheetOpen && game && <ScoreSheetView game={game} readOnly onClose={() => setSheetOpen(false)} />}
 
       {others.length > 0 && (
         <div className="card">
