@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useStore, useT } from './state/store.jsx';
+import { recorderName, saveRecorderName } from './lib/baton.js';
 import ErrorBoundary, { CrashProbe } from './components/ErrorBoundary.jsx';
 import HomeTab from './components/HomeTab.jsx';
 import ScoreTab from './components/ScoreTab.jsx';
@@ -62,6 +63,7 @@ function useOfficialJoin(state, t) {
   const [needLogin, setNeedLogin] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [name, setName] = useState(recorderName());
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -84,6 +86,7 @@ function useOfficialJoin(state, t) {
         }
         await loginWithPassword(email.trim(), password);
       }
+      if (name.trim()) saveRecorderName(name); // 共有アカウントでも、スマホごとに誰か分かるように
       const meta = await joinByInvite(token);
       // 参加したクラウドチーム専用のローカルプロフィールを作って切り替える。
       // 招待のロール(観戦/記録係)も即時に保存し、観戦URL参加直後から正しく権限が効くようにする。
@@ -96,7 +99,7 @@ function useOfficialJoin(state, t) {
       setBusy(false);
     }
   };
-  return { token, busy, error, join, needLogin, email, setEmail, password, setPassword, dismiss: () => setToken(null) };
+  return { token, busy, error, join, needLogin, email, setEmail, password, setPassword, name, setName, dismiss: () => setToken(null) };
 }
 
 export default function App() {
@@ -149,6 +152,12 @@ export default function App() {
                 />
               </>
             )}
+            {officialJoin.needLogin && <p className="small dim mt8">{t('join.sharedHint')}</p>}
+            <input
+              className="mt8" maxLength={20} placeholder={t('join.namePh')}
+              value={officialJoin.name} onChange={(e) => officialJoin.setName(e.target.value)}
+            />
+            <p className="small dim">{t('join.nameHint')}</p>
             {officialJoin.error && <div className="warn-box mt8">⚠️ {officialJoin.error}</div>}
             <div className="sheet-actions">
               <button className="ghost" onClick={officialJoin.dismiss} disabled={officialJoin.busy}>{t('join.notNow')}</button>
