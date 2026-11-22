@@ -13,6 +13,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// かんたん記録でも打球方向はフィールドの図から選ぶ。最初の打席の説明は閉じてから押す
+const pickPos = async (page, name) => {
+  const sum = page.locator('.dir-summary');
+  if (await sum.count()) { await sum.click(); await page.waitForTimeout(200); }
+  const coach = page.locator('.pad-coach button');
+  if (await coach.count()) { await coach.click(); await page.waitForTimeout(150); }
+  await page.locator(`.field-pad button.field-pos:has-text("${name}")`).first().click();
+  await page.waitForTimeout(700); // 押したあと図が畳まれるまで
+};
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 function resolveChromium() {
   const base = '/opt/pw-browsers';
@@ -98,7 +108,7 @@ try {
   const W = (ms) => a.waitForTimeout(ms);
   const play = async (p, label, pos) => {
     await p.click(`.result-pad button:has-text("${label}")`); await p.waitForTimeout(350);
-    if (pos) { await p.click(`.simple-dir button:has-text("${pos}")`); await p.waitForTimeout(200); }
+    if (pos) { await pickPos(p, pos); await p.waitForTimeout(200); }
     // 三振・四球は確認なしで記録される(かんたん記録)。シートが出たときだけ確定する
     const ok2 = p.locator('.sheet-actions button:has-text("確定")');
     if (await ok2.count()) await ok2.click();

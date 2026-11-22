@@ -10,6 +10,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// かんたん記録でも打球方向はフィールドの図から選ぶ。最初の打席の説明は閉じてから押す
+const pickPos = async (page, name) => {
+  const sum = page.locator('.dir-summary');
+  if (await sum.count()) { await sum.click(); await page.waitForTimeout(200); }
+  const coach = page.locator('.pad-coach button');
+  if (await coach.count()) { await coach.click(); await page.waitForTimeout(150); }
+  await page.locator(`.field-pad button.field-pos:has-text("${name}")`).first().click();
+  await page.waitForTimeout(700); // 押したあと図が畳まれるまで
+};
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 function resolveChromium() {
   const base = '/opt/pw-browsers';
@@ -70,19 +80,19 @@ try {
 
   // ヒット: 守備位置を1つ押して確定
   await p.click('.result-pad button:has-text("ヒット")'); await W(400);
-  ok('フィールドの図は出ない(守備位置のボタンだけ)', (await p.locator('.field-pad').count()) === 0 && (await p.locator('.simple-dir button').count()) === 9);
+  ok('かんたんでもフィールドの図から選ぶ', (await p.locator('.field-pad').count()) === 1 && (await p.locator('.simple-dir').count()) === 0);
   const sheet = await p.locator('.sheet').last().innerText();
   ok('打球の強さ・守備の出来を聞かない', !sheet.includes('強い') && !sheet.includes('ファインプレー'), sheet.slice(0, 300));
   ok('方向を押すまで確定できない', await p.locator('.sheet-actions button:has-text("確定")').isDisabled());
-  await p.click('.simple-dir button:has-text("中堅")'); await W(200);
+  await pickPos(p, '中堅'); await W(200);
   await p.click('.sheet-actions button:has-text("確定")'); await W(500);
   ok('走者が一塁に出る', (await p.locator('.base.b1.occupied').count()) === 1);
 
   // 凡打: 位置からアウトの種類が決まる(遊撃=ゴロ、中堅=フライ)
   await p.click('.result-pad button:has-text("凡打")'); await W(400);
-  await p.click('.simple-dir button:has-text("中堅")'); await W(200);
+  await pickPos(p, '中堅'); await W(200);
   ok('外野ならフライ', await p.locator('.simple-out button.primary').innerText() === 'フライ');
-  await p.click('.simple-dir button:has-text("遊撃")'); await W(200);
+  await pickPos(p, '遊撃'); await W(200);
   ok('内野ならゴロ', await p.locator('.simple-out button.primary').innerText() === 'ゴロ');
   await p.click('.sheet-actions button:has-text("確定")'); await W(500);
 

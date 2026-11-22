@@ -10,6 +10,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// かんたん記録でも打球方向はフィールドの図から選ぶ。最初の打席の説明は閉じてから押す
+const pickPos = async (page, name) => {
+  const sum = page.locator('.dir-summary');
+  if (await sum.count()) { await sum.click(); await page.waitForTimeout(200); }
+  const coach = page.locator('.pad-coach button');
+  if (await coach.count()) { await coach.click(); await page.waitForTimeout(150); }
+  await page.locator(`.field-pad button.field-pos:has-text("${name}")`).first().click();
+  await page.waitForTimeout(700); // 押したあと図が畳まれるまで
+};
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 function resolveChromium() {
   const base = '/opt/pw-browsers';
@@ -48,7 +58,7 @@ try {
 
   // そのまま1打席
   await p.click('.result-pad button:has-text("ヒット")'); await W(350);
-  await p.click('.simple-dir button:has-text("中堅")'); await W(200);
+  await pickPos(p, '中堅'); await W(200);
   await p.click('.sheet-actions button:has-text("確定")'); await W(500);
   ok('登録なしのまま1打席が付く', (await p.locator('.base.b1.occupied').count()) === 1);
 
