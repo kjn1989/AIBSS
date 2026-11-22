@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import Sheet from './Sheet.jsx';
 import { useStore, useT, usePlayerName, isMyTeamBatting } from '../state/store.jsx';
-import { RESULTS, DIRECTIONS, SO_TYPES, outTypeLabel, allowsFoul , infieldFlyPossible, FIELD_POSITIONS, DIR_TO_POSITION, ERROR_KINDS, playErrorOf, finePlayOf, positionLabel, isSimpleGame, NEEDS_DIRECTION, SIMPLE_DIR_ROWS, OUTFIELD_DIRS } from '../lib/model.js';
+import { RESULTS, DIRECTIONS, SO_TYPES, outTypeLabel, allowsFoul , infieldFlyPossible, FIELD_POSITIONS, DIR_TO_POSITION, ERROR_KINDS, playErrorOf, finePlayOf, positionLabel, isSimpleGame, NEEDS_DIRECTION, OUTFIELD_DIRS } from '../lib/model.js';
 import { proposeMoves, batterDestOptions, runnerDestOptions, judgeAdvance } from '../lib/plays.js';
 import FieldPad from './FieldPad.jsx';
 import BattedBallPad from './BattedBallPad.jsx';
@@ -299,8 +299,9 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
         // 軌道はヒットのときも残す(これまで捨てていた)。併殺はアウトのときだけ
         outType: outType === 'dp' && result !== 'out' ? null : outType,
         contact: needsDir ? contact : null,
-        hitAngle: needsDir && point ? point.angle : null,
-        hitDepth: needsDir && point ? point.depth : null,
+        // かんたん記録は方向だけ残す。雑に押した位置を、深さの記録として数えない
+        hitAngle: needsDir && point && !simple ? point.angle : null,
+        hitDepth: needsDir && point && !simple ? point.depth : null,
         soType: result === 'so' ? soType : undefined,
         playError: isErr ? { pos: defPos || DIR_TO_POSITION[direction] || null, kind: defKind } : null,
         finePlay: isFine ? { pos: defPos || DIR_TO_POSITION[direction] || null } : null,
@@ -324,37 +325,7 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
 
   return (
     <Sheet title={`${batterName ? batterName + ': ' : t('playsheet.oppBatter')}${resultLabel}`} onClose={onClose}>
-      {needsDir && simple && (
-        <div ref={dirRef}>
-          <div className="section-title" style={{ marginTop: 0 }}>{t('playsheet.direction')}</div>
-          <div className="simple-dir">
-            {SIMPLE_DIR_ROWS.map((row, i) => (
-              <div key={i} className="simple-dir-row">
-                {row.filter((k) => result !== 'hr' || OUTFIELD_DIRS.includes(k)).map((k) => (
-                  <button
-                    key={k}
-                    type="button"
-                    className={direction === k ? 'primary' : ''}
-                    aria-pressed={direction === k}
-                    onClick={() => {
-                      setDirection(k);
-                      setPoint(null);
-                      // アウトの種類は位置から決める(内野=ゴロ、外野=フライ)。違えば下で直せる
-                      if (result === 'out' && outType !== 'dp' && outType !== 'ifly') {
-                        setOutType(OUTFIELD_DIRS.includes(k) ? 'fly' : 'ground');
-                      }
-                    }}
-                  >
-                    {lang === 'ja' ? DIRECTIONS[k] : t(`dir.${k}`)}
-                  </button>
-                ))}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {needsDir && !simple && (
+      {needsDir && (
         <div ref={dirRef}>
           <div className="section-title" style={{ marginTop: 0 }}>{t('playsheet.direction')}</div>
           {dirOpen ? (
@@ -363,7 +334,13 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
               point={point}
               outfieldOnly={result === 'hr'}
               allowFoul={allowsFoul(result)}
-              onChange={(key, pt) => { setDirection(key); setPoint(pt); }}
+              onChange={(key, pt) => {
+                setDirection(key); setPoint(pt);
+                // かんたん記録では、アウトの種類は位置から決める(内野=ゴロ、外野=フライ)。違えば下で直せる
+                if (simple && result === 'out' && outType !== 'dp' && outType !== 'ifly') {
+                  setOutType(OUTFIELD_DIRS.includes(key) ? 'fly' : 'ground');
+                }
+              }}
               onDone={() => setDirOpen(false)}
               gameId={game.id}
             />
@@ -372,7 +349,7 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
               <span className="dir-label">
                 {lang === 'ja' ? DIRECTIONS[direction] : t(`dir.${direction}`)}
                 {point && isFoul(point.angle) && <span className="depth-pill foul">{t('dir.foul')}</span>}
-                {point && <span className="depth-pill">{t(`depth.${depthBand(point.depth)}`)}</span>}
+                {point && !simple && <span className="depth-pill">{t(`depth.${depthBand(point.depth)}`)}</span>}
               </span>
               <span className="change">{t('playsheet.change')}</span>
             </button>
@@ -647,8 +624,8 @@ export default function PlaySheet({ game, initial, batterName, onClose }) {
       <div className="confirm-card mt16" style={{ marginBottom: 0, padding: 12 }}>
         {needsDir && !direction ? (
           <button type="button" className="need-dir" onClick={goToDir}>
-            <span>{t(simple ? 'playsheet.needPosition' : 'playsheet.needDirection')}</span>
-            {!simple && <span className="need-dir-go">{t('playsheet.goToField')}</span>}
+            <span>{t('playsheet.needDirection')}</span>
+            {<span className="need-dir-go">{t('playsheet.goToField')}</span>}
           </button>
         ) : (
           <div className="q" style={{ fontSize: 16, marginBottom: 0 }}>
