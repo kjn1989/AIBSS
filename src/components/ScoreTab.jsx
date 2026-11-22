@@ -11,6 +11,7 @@ import { lockedFor, recorderName, saveRecorderName } from '../lib/baton.js';
 import Scoreboard from './Scoreboard.jsx';
 import Diamond from './Diamond.jsx';
 import LockedView from './LockedView.jsx';
+import { BatterStats } from './CurrentBatter.jsx';
 import PitchCounter from './PitchCounter.jsx';
 import ResultPad from './ResultPad.jsx';
 import PlaySheet from './PlaySheet.jsx';
@@ -922,6 +923,7 @@ export default function ScoreTab() {
               </div>
               <button className="pill blue sit-changebtn" onClick={() => setSheet({ kind: 'batter' })}>{t('score.changeBatter')}</button>
             </div>
+            <BatterStats game={game} playerId={batter.playerId} />
             <AtBatHistory items={game.atBats.filter((ab) => ab.playerId === batter.playerId)} edition={state.settings.edition} lang={lang} />
             <div className="sit-pitcher">
               <span className="small dim">{t('score.oppPitcher')}</span>

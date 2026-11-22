@@ -3,6 +3,7 @@ import { useStore, useT, usePlayerName } from '../state/store.jsx';
 import Scoreboard from './Scoreboard.jsx';
 import Diamond from './Diamond.jsx';
 import ScoreSheetView from './ScoreSheetView.jsx';
+import CurrentBatter from './CurrentBatter.jsx';
 import { BatonConflict, BatonLocked } from './BatonPanel.jsx';
 import { renderPlayLog } from '../lib/playLogText.js';
 
@@ -36,6 +37,7 @@ export default function LockedView({ game }) {
       {watch && (
         <>
           <Diamond game={game} onBaseTap={() => {}} />
+          <CurrentBatter game={game} />
           <button className="live-sheet-btn" onClick={() => setSheetOpen(true)}>{t('live.scoresheet')}</button>
         </>
       )}

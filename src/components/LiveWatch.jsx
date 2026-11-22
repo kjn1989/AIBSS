@@ -3,6 +3,7 @@ import { useStore, useT, usePlayerName } from '../state/store.jsx';
 import { fetchLive } from '../lib/officialCloud.js';
 import Scoreboard from './Scoreboard.jsx';
 import Diamond from './Diamond.jsx';
+import CurrentBatter from './CurrentBatter.jsx';
 import ScoreSheetView from './ScoreSheetView.jsx';
 import { renderPlayLog } from '../lib/playLogText.js';
 
@@ -96,6 +97,7 @@ export default function LiveWatch({ token }) {
         <>
           <Scoreboard game={game} />
           <Diamond game={game} onBaseTap={() => {}} />
+          <CurrentBatter game={game} />
           <button className="live-sheet-btn" onClick={() => setSheetOpen(true)}>{t('live.scoresheet')}</button>
           <div className="card">
             <h2>{t('watch.playLog')}</h2>
