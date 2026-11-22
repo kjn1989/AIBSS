@@ -1,7 +1,7 @@
 import React from 'react';
 import { useStore, useT, usePlayerName, isMyTeamBatting, currentBatter, currentOppBatter } from '../state/store.jsx';
-import { aggregateBatting, fmtAvg } from '../lib/stats.js';
-import { resultCategory, multiOutLabel, positionLabel } from '../lib/model.js';
+import { aggregateBatting, aggregatePitching, fmtAvg } from '../lib/stats.js';
+import { resultCategory, multiOutLabel, positionLabel, formatIP, isSimpleGame } from '../lib/model.js';
 import { playLabel } from '../lib/voiceParser.js';
 import { oppNameOf, oppPositionOf } from '../lib/oppBox.js';
 
@@ -38,6 +38,26 @@ export function BatterStats({ game, playerId, season = true }) {
       {today.hr > 0 && <span className="bs-chip"><i>{t('cb.hr')}</i><b>{today.hr}</b></span>}
       {today.sb > 0 && <span className="bs-chip"><i>{t('cb.sb')}</i><b>{today.sb}</b></span>}
       {career !== null && <span className="bs-chip career"><i>{t('cb.career')}</i><b>{fmtAvg(career)}</b></span>}
+    </div>
+  );
+}
+
+// 自チームの守備中の投手の、今日の投球内容(投球回・球数・被安打・奪三振・四死球・失点)。
+// かんたん記録の試合は球数を数えていないので、球数は出さない(0球と誤解されるため)
+export function PitcherStats({ game, playerId, showName = false }) {
+  const t = useT();
+  const nameOf = usePlayerName();
+  if (!playerId) return null;
+  const s = aggregatePitching([game])[playerId];
+  const simple = isSimpleGame(game);
+  return (
+    <div className="bs-line ps-line">
+      <span className="bs-main"><b>{showName ? `${t('cb.pitcher')} ${nameOf(playerId)}` : t('cb.pitcherToday')}</b>{' '}{t('cb.ip', { ip: formatIP(s?.outsRecorded || 0) })}</span>
+      {!simple && <span className="bs-chip"><i>{t('cb.pitches')}</i><b>{s?.pitches || 0}</b></span>}
+      <span className="bs-chip"><i>{t('cb.hitsAllowed')}</i><b>{s?.hitsAllowed || 0}</b></span>
+      <span className="bs-chip"><i>{t('cb.k')}</i><b>{s?.strikeouts || 0}</b></span>
+      <span className="bs-chip"><i>{t('cb.bb')}</i><b>{(s?.walks || 0) + (s?.hitByPitch || 0)}</b></span>
+      <span className="bs-chip"><i>{t('cb.runsAllowed')}</i><b>{s?.runs || 0}</b></span>
     </div>
   );
 }
@@ -99,6 +119,7 @@ export default function CurrentBatter({ game }) {
         edition={edition}
         lang={lang}
       />
+      <PitcherStats game={game} playerId={game.currentPitcherId} showName />
     </div>
   );
 }
