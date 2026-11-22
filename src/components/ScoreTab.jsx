@@ -10,6 +10,7 @@ import { proposeMoves } from '../lib/plays.js';
 import { lockedFor, recorderName, saveRecorderName } from '../lib/baton.js';
 import Scoreboard from './Scoreboard.jsx';
 import Diamond from './Diamond.jsx';
+import LockedView from './LockedView.jsx';
 import PitchCounter from './PitchCounter.jsx';
 import ResultPad from './ResultPad.jsx';
 import PlaySheet from './PlaySheet.jsx';
@@ -783,24 +784,7 @@ export default function ScoreTab() {
   }
 
   // 別の端末が記録中(lib/baton.js)。入力は出さず、いまの状況と交代のボタンだけ出す
-  if (game && lockedFor(game)) {
-    return (
-      <div>
-        <Scoreboard game={game} />
-        <BatonConflict game={game} />
-        <BatonLocked game={game} />
-        <div className="card">
-          <h2>{t('restab.progress')}</h2>
-          {[...game.playLogs].filter((l) => l.kind !== 'run').slice(-10).reverse().map((l) => (
-            <div className="log-line" key={l.id}>
-              <b>{logInning(l)}</b> {renderPlayLog(game, l, { lang, t, nameOf, edition: state.settings.edition })}
-            </div>
-          ))}
-          {game.playLogs.length === 0 && <div className="dim small">{t('score.noPlays')}</div>}
-        </div>
-      </div>
-    );
-  }
+  if (game && lockedFor(game)) return <LockedView game={game} />;
 
   // 試合終了直後もハイライト/試合経過だけは表示し続ける(閉じたらGameSetupに戻る)
   if (!game || (game.status === 'finished' && sheet?.kind !== 'highlight' && !showProgress)) return <GameSetup />;
