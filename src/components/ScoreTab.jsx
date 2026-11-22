@@ -11,7 +11,7 @@ import { lockedFor, recorderName, saveRecorderName } from '../lib/baton.js';
 import Scoreboard from './Scoreboard.jsx';
 import Diamond from './Diamond.jsx';
 import LockedView from './LockedView.jsx';
-import { BatterStats } from './CurrentBatter.jsx';
+import { BatterStats, PitcherStats } from './CurrentBatter.jsx';
 import PitchCounter from './PitchCounter.jsx';
 import ResultPad from './ResultPad.jsx';
 import PlaySheet from './PlaySheet.jsx';
@@ -988,6 +988,7 @@ export default function ScoreTab() {
             </select>
             <span className="sit-voice-slot" id="scoretab-voice-slot" />
           </div>
+          <PitcherStats game={game} playerId={game.currentPitcherId} />
         </div>
       )}
 
