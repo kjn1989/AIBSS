@@ -17,6 +17,7 @@ import { kindsFor, kindOf, kindPatch, kindLabelKey } from '../lib/editionKind.js
 import EditionText from './EditionText.jsx';
 import { listProfiles, getActiveProfileId, addProfile, switchActiveProfile, deleteProfile, listOrphanedProfiles, restoreProfile } from '../lib/profiles.js';
 import OfficialCloudCard from './OfficialCloudCard.jsx';
+import { BatonPlanCard } from './BatonPanel.jsx';
 import Sheet from './Sheet.jsx';
 import RosterManageSheet from './RosterManageSheet.jsx';
 import RosterPasteSheet from './RosterPasteSheet.jsx';
@@ -440,6 +441,7 @@ export default function SettingsTab() {
   return (
     <div>
       <TeamSwitcherCard />
+      <BatonPlanCard />
 
       <div className="card">
         <h2>{t('set.players', { n: state.players.filter((p) => !isArchived(p)).length })}</h2>

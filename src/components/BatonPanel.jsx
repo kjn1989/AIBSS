@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useStore, useT } from '../state/store.jsx';
 import { lockedFor, holdsBaton, recorderName, saveRecorderName, unsentLogs, knownRecorders } from '../lib/baton.js';
 import Sheet from './Sheet.jsx';
-import { LiveLinkSheet } from './LiveLinkPanel.jsx';
+import { LiveLinkSheet, ScorerInviteSheet } from './LiveLinkPanel.jsx';
 
 // 記録のバトン(lib/baton.js)の画面側。
 // 進行中の試合を記録できるのは1台だけ。ほかの端末には「いま誰が記録中か」と
@@ -165,8 +165,8 @@ function BatonPlanSheet({ game, onClose }) {
 export function BatonMine({ game }) {
   const { state } = useStore();
   const t = useT();
-  const [open, setOpen] = useState(false);
   const [liveOpen, setLiveOpen] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
   if (!cloudOn(state) || !holdsBaton(game) || game.status !== 'ongoing') return null;
   return (
     <div className="baton-mine small">
@@ -176,7 +176,29 @@ export function BatonMine({ game }) {
         <button className="small" style={{ marginLeft: 8 }} onClick={() => setLiveOpen(true)}>{t('livelink.btn')}</button>
       )}
       {liveOpen && <LiveLinkSheet teamId={state.settings.officialTeamId} onClose={() => setLiveOpen(false)} />}
-      <button className="small" style={{ marginLeft: 8 }} onClick={() => setOpen(true)}>
+      {/* 記録係の招待リンク。作れるのはオーナーだけなので、オーナーの端末にだけ出す */}
+      {state.settings.officialTeamId && state.settings.officialRole === 'owner' && (
+        <button className="small" style={{ marginLeft: 8 }} onClick={() => setInviteOpen(true)}>{t('scorerlink.btn')}</button>
+      )}
+      {inviteOpen && <ScorerInviteSheet teamId={state.settings.officialTeamId} onClose={() => setInviteOpen(false)} />}
+      {/* 記録係を自動で回す設定は、設定の画面(BatonPlanCard)に置く。入力画面はボタンを減らす */}
+    </div>
+  );
+}
+
+// 設定の画面に置く「記録係を自動で回す」。進行中の試合で、この端末が記録係のときだけ出す
+// (設定を変えられるのは記録している端末だけ)
+export function BatonPlanCard() {
+  const { state } = useStore();
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const game = state.currentGameId ? state.games[state.currentGameId] : null;
+  if (!game || !cloudOn(state) || !holdsBaton(game) || game.status !== 'ongoing') return null;
+  return (
+    <div className="card">
+      <h2>{t('baton.planCardTitle')}</h2>
+      <p className="small dim" style={{ marginTop: 0 }}>{t('baton.planCardDesc', { opp: game.opponent || '—' })}</p>
+      <button style={{ width: '100%' }} onClick={() => setOpen(true)}>
         {t(game.batonPlan?.on ? 'baton.planBtnOn' : 'baton.planBtn')}
       </button>
       {open && <BatonPlanSheet game={game} onClose={() => setOpen(false)} />}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useStore, useT } from '../state/store.jsx';
-import { liveShareGet, liveShareCreate, liveShareRevoke, liveUrl } from '../lib/officialCloud.js';
+import { liveShareGet, liveShareCreate, liveShareRevoke, liveUrl, createInvite, inviteUrl } from '../lib/officialCloud.js';
 import QRCode from './QRCode.jsx';
 import Sheet from './Sheet.jsx';
 
@@ -81,6 +81,50 @@ export function LiveLinkSheet({ teamId, onClose }) {
   return (
     <Sheet title={t('livelink.title')} onClose={onClose}>
       <LiveLinkPanel teamId={teamId} />
+      <div className="sheet-actions"><button className="primary" onClick={onClose}>{t('action.close')}</button></div>
+    </Sheet>
+  );
+}
+
+// 記録係の招待リンク(QR付き)。スコア入力画面から、その場で記録係を増やすためのシート。
+// 招待を作れるのはチームのオーナーだけ(supabase/schema.sql の invites_insert)
+export function ScorerInviteSheet({ teamId, onClose }) {
+  const { state } = useStore();
+  const t = useT();
+  const lang = state.settings.lang || 'ja';
+  const [url, setUrl] = useState('');
+  const [err, setErr] = useState('');
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    createInvite(teamId, 'scorer').then((tk) => alive && setUrl(inviteUrl(tk, lang)), (e) => alive && setErr(e.message || String(e)));
+    return () => { alive = false; };
+  }, [teamId, lang]);
+  const copy = () => {
+    const done = () => { setCopied(true); setTimeout(() => setCopied(false), 1800); };
+    if (navigator.clipboard?.writeText) navigator.clipboard.writeText(url).then(done, () => {});
+  };
+  const share = () => navigator.share?.({ title: t('scorerlink.title'), text: t('scorerlink.shareText'), url }).catch(() => {});
+  return (
+    <Sheet title={t('scorerlink.title')} onClose={onClose}>
+      <p className="small dim" style={{ marginTop: 0 }}>{t('scorerlink.desc')}</p>
+      {!url && !err && <p className="small dim">{t('occ.busy')}</p>}
+      {url && (
+        <>
+          <div className="qr-box live-qr">
+            <QRCode text={url} size={260} />
+            <b>{t('scorerlink.qrScan')}</b>
+            <span className="small dim">{t('scorerlink.qrHint')}</span>
+          </div>
+          <input readOnly value={url} onFocus={(e) => e.target.select()} aria-label={t('scorerlink.title')} />
+          <div className="grid2 mt8">
+            <button className="primary" onClick={copy}>{copied ? t('livelink.copied') : t('livelink.copy')}</button>
+            {navigator.share && <button onClick={share}>{t('livelink.share')}</button>}
+          </div>
+          <div className="warn-box mt8">{t('scorerlink.warn')}</div>
+        </>
+      )}
+      {err && <div className="warn-box mt8">{err}</div>}
       <div className="sheet-actions"><button className="primary" onClick={onClose}>{t('action.close')}</button></div>
     </Sheet>
   );
