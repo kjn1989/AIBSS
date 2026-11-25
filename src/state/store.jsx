@@ -2437,9 +2437,10 @@ export function StoreProvider({ children }) {
         name: state.settings.teamName,
         edition: state.settings.edition,
         officialTeamId: state.settings.officialTeamId || null,
+        officialRole: state.settings.officialRole || null, // 管理者だけがチームを外せるように(設定の所属チーム)
       });
     }
-  }, [state.settings.teamName, state.settings.edition, state.settings.officialTeamId]);
+  }, [state.settings.teamName, state.settings.edition, state.settings.officialTeamId, state.settings.officialRole]);
 
   return <StoreContext.Provider value={{ state, dispatch }}>{children}</StoreContext.Provider>;
 }

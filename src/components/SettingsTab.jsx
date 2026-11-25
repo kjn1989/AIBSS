@@ -641,6 +641,7 @@ export default function SettingsTab() {
         <label className="small dim">{t('set.teamName')}</label>
         <input
           value={state.settings.teamName}
+          autoComplete="off" name="team-name"
           onChange={(e) => dispatch({ type: 'UPDATE_SETTINGS', patch: { teamName: e.target.value } })}
           placeholder={t('app.teamFallback')}
         />
@@ -783,7 +784,8 @@ export default function SettingsTab() {
       <CloudCard />
       <ExportCard />
       <BackupCard />
-      <DangerZoneCard />
+      {/* 全試合の削除・初期化はクラウドにも届く。クラウドのチームでは管理者(オーナー)だけ */}
+      {(!state.settings.officialTeamId || state.settings.officialRole === 'owner') && <DangerZoneCard />}
 
       <div className="card">
         <h2>{t('set.dataMgmt')}</h2>
@@ -923,9 +925,11 @@ function TeamSwitcherCard() {
     window.location.reload();
   };
 
-  const remove = (id, name) => {
+  // 管理者だけが外せる。クラウドに無いチーム(この端末だけのチーム)は、この端末の持ち主のもの
+  const canRemove = (p) => !p.officialTeamId || p.officialRole === 'owner';
+  const remove = (id, name, cloud) => {
     if (profiles.length <= 1) { window.alert(t('set.lastTeamAlert')); return; }
-    if (!window.confirm(t('set.deleteTeamConfirm', { name }))) return;
+    if (!window.confirm(t(cloud ? 'set.removeCloudTeamConfirm' : 'set.deleteTeamConfirm', { name }))) return;
     deleteProfile(id);
     setProfiles(listProfiles());
   };
@@ -944,8 +948,9 @@ function TeamSwitcherCard() {
             </b>
             <span className="pill" style={{ marginLeft: 6 }}>{lang === 'en' ? t(`edition.${p.edition}`) : editionLabel(p.edition)}</span>
           </div>
-          {p.id !== activeId && (
-            <button className="small ghost" style={{ color: 'var(--red)' }} onClick={() => remove(p.id, p.name)}>{t('action.delete')}</button>
+          {/* クラウドのチームは、管理者(オーナー)の端末でだけ外せる。記録係・観戦の端末では出さない */}
+          {p.id !== activeId && canRemove(p) && (
+            <button className="small ghost" style={{ color: 'var(--red)' }} onClick={() => remove(p.id, p.name, !!p.officialTeamId)}>{t('action.delete')}</button>
           )}
         </div>
       ))}
@@ -969,7 +974,7 @@ function TeamSwitcherCard() {
       {adding ? (
         <div className="mt12">
           <label className="small dim">{t('set.teamName')}</label>
-          <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={t('set.teamNamePlaceholder')} />
+          <input value={newName} autoComplete="off" name="new-team-name" onChange={(e) => setNewName(e.target.value)} placeholder={t('set.teamNamePlaceholder')} />
           <label className="small dim mt8" style={{ display: 'block' }}>{t('set.edition')}</label>
           <div className="toggle-row editions">
             {EDITIONS.map((ed) => (
