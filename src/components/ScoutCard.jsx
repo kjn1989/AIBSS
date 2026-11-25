@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { SalaryBadge } from './SalaryRanking.jsx';
 import { useStore, useT } from '../state/store.jsx';
 import { generateScoutReport } from '../lib/gemini.js';
 import { buildStatsSummary } from '../lib/stats.js';
@@ -296,6 +297,7 @@ export default function ScoutCard({ player, batting, pitching, battingM, pitchin
             </label>
             <div className="scout-catch">{catchphrase}</div>
             <div className="scout-name">{name}{player?.number ? ` #${player.number}` : ''}</div>
+            {player?.id && <SalaryBadge playerId={player.id} />}
           </div>
 
           <div className="scout-mid">

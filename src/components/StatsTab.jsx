@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import SalaryRanking from './SalaryRanking.jsx';
 import { useStore, usePlayerName, useT } from '../state/store.jsx';
 import { aggregateBatting, aggregatePitching, aggregateFielding, rankFielding, pitchingMetrics, DETAIL_METRICS, detailRanking, battingMetrics, fmtAvg, mLabel, defaultInningBasis } from '../lib/stats.js';
 import { formatIP } from '../lib/model.js';
@@ -135,6 +136,7 @@ export default function StatsTab() {
       <MatchupCard games={games} onOpenPlayer={setPlayerId} />
       <BatteryCard games={games} />
       <OffenseCard games={games} />
+      <SalaryRanking nameOf={nameOf} onOpenPlayer={setPlayerId} />
       <p className="small dim" style={{ textAlign: 'center', marginBottom: 12 }}>
         {t('stats.tapHint')}
       </p>
