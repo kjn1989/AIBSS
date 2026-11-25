@@ -7,6 +7,9 @@ import { POSITIONS, uncoveredPositions, attendeesOf, positionListLabel, position
 import FullscreenView from './FullscreenView.jsx';
 
 // AIヘッドコーチ: 今季の打撃成績をもとにGeminiが打順・守備位置を提案する(参考・おまけ機能)
+// これより少ない打席の成績は、たまたまの可能性が大きい(AIにも画面にもそう伝える)
+const FEW_PA = 10;
+
 export default function HeadCoachView({ game, canApply, onClose }) {
   const { state, dispatch } = useStore();
   const nameOf = usePlayerName();
@@ -33,14 +36,21 @@ export default function HeadCoachView({ game, canApply, onClose }) {
         ops: m.ops === null ? '-' : m.ops.toFixed(3), rbi: s.rbi, hr: s.hr,
       })
       : t('hc.statsThin');
+    const pa = s ? s.pa : 0;
     return {
       name: p.name,
-      statsLine,
+      // 打席数を先頭に付ける。数打席の「10割」を、AIが実力として言い切らないように
+      statsLine: `${t('hc.paCount', { pa })} ${statsLine}`,
+      pa,
+      fewPa: pa < FEW_PA,
       // 守備位置を渡さないと、AIは誰がどこを守れるか知らないまま9枠を埋める
       mainPos: p.position || '',
       subPos: p.subPositions || [],
     };
   });
+
+  // 提案に出た名前 → 今季の打席数(AIが名前を少し変えて返しても、見つからなければ出さない)
+  const paOf = (name) => players.find((x) => x.name === name)?.pa ?? null;
 
   // 誰も守れない位置があるなら、AIに投げる前に言う(投げても埋まらない)
   const holes = useMemo(() => uncoveredPositions(here), [here]);
@@ -138,6 +148,11 @@ export default function HeadCoachView({ game, canApply, onClose }) {
                     {/* 主の位置か、可で回ってもらった位置か。理由を読む前に分かる */}
                     {item.fit === 'sub' && <span className="pill amber" style={{ marginLeft: 4 }}>{t('pos.fitSub')}</span>}
                     {item.fit === 'main' && <span className="pill" style={{ marginLeft: 4 }}>{t('pos.fitMain')}</span>}
+                    {paOf(item.name) != null && (
+                      <span className={`small ${paOf(item.name) < FEW_PA ? 'amber-text' : 'dim'}`} style={{ marginLeft: 6 }}>
+                        {t(paOf(item.name) < FEW_PA ? 'hc.paFew' : 'hc.paCount', { pa: paOf(item.name) })}
+                      </span>
+                    )}
                     {item.reason && <div className="small dim">{item.reason}</div>}
                   </div>
                 </div>
