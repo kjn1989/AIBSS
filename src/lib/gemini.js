@@ -72,15 +72,67 @@ async function callModel(model, apiKey, prompt, maxOutputTokens, temperature) {
 
 // 低レベル共通呼び出し。プロンプトを投げてJSONを1つ取り出す。
 // 戻り値: 成功 { data: <parsed> } / 失敗 { error: <表示用文字列> } / 未設定・オフライン null
+// このAPIキーで今使えるモデルを、Google に聞いて決める。
+// モデルは数か月ごとに新しくなり、古いものは廃止される(廃止されると 404)。
+// 名前をアプリに書き込んでおくだけだと、廃止のたびに「使えるモデルが1つも無い」になるので、
+// 一覧から「文章を作れる flash 系」を選び、書き込んだ候補はその後ろの予備にする。
+const LIST_CACHE_KEY = 'bbscorer.gemini.models';
+const LIST_TTL = 12 * 3600 * 1000;
+let listed = null; // { at, models }
+
+// 一覧(models.list の結果)から、使う順に並べたモデル名を返す。純関数(テスト用に公開)
+export function pickFlashModels(list = []) {
+  const ver = (n) => { const m = n.match(/gemini-(\d+(?:\.\d+)?)/); return m ? Number(m[1]) : 0; };
+  return list
+    .filter((m) => (m.supportedGenerationMethods || []).includes('generateContent'))
+    .map((m) => String(m.name || '').replace(/^models\//, ''))
+    .filter((n) => /^gemini-/.test(n) && /flash/.test(n))
+    // 画像・音声・読み上げ・リアルタイム用などは文章のJSONを返さないので除く
+    .filter((n) => !/image|tts|audio|live|embedding|exp|thinking|robotics|computer|native/.test(n))
+    .sort((a, b) => {
+      const pa = /preview/.test(a), pb = /preview/.test(b);
+      if (pa !== pb) return pa ? 1 : -1; // 正式版を先に
+      const la = /lite/.test(a), lb = /lite/.test(b);
+      if (la !== lb) return la ? 1 : -1; // 通常版を先に、軽量版は予備
+      return ver(b) - ver(a); // 新しい版を先に
+    });
+}
+
+async function availableModels(apiKey) {
+  if (listed && Date.now() - listed.at < LIST_TTL) return listed.models;
+  try {
+    const c = JSON.parse(localStorage.getItem(LIST_CACHE_KEY) || 'null');
+    if (c && Date.now() - c.at < LIST_TTL && Array.isArray(c.models) && c.models.length) { listed = c; return c.models; }
+  } catch { /* 無ければ取りに行く */ }
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key=${encodeURIComponent(apiKey)}`);
+    if (!res.ok) return [];
+    const models = pickFlashModels((await res.json())?.models || []);
+    if (models.length) {
+      listed = { at: Date.now(), models };
+      try { localStorage.setItem(LIST_CACHE_KEY, JSON.stringify(listed)); } catch { /* 覚えられなくても動く */ }
+    }
+    return models;
+  } catch {
+    return [];
+  }
+}
+
+// 失敗が重なったとき、どれを見せるか。404(そのモデルは無い)は他が全部ダメだったときだけ。
+// 以前は最後に試したモデルの理由を出していたので、混雑で失敗したのに「モデルが使えない」と出ていた
+const errRank = (st) => (st === 429 ? 4 : st >= 500 ? 3 : st === 404 ? 1 : 2);
+
 async function callGeminiJSON(apiKey, prompt, { maxOutputTokens = 1024, temperature = 0.9 } = {}) {
   if (!apiKey || !navigator.onLine) return null;
 
-  const order = preferredModel
-    ? [preferredModel, ...MODEL_CANDIDATES.filter((m) => m !== preferredModel)]
-    : MODEL_CANDIDATES;
-  let last = null;
-  let lastStatus = 0;
+  const found = await availableModels(apiKey);
+  const base = [...found, ...MODEL_CANDIDATES.filter((m) => !found.includes(m))];
+  const order = preferredModel ? [preferredModel, ...base.filter((m) => m !== preferredModel)] : base;
+  let worst = null; // { status, error } 見せる理由
+  let tried = 0;
   for (const model of order) {
+    if (tried >= 5) break; // 全部を順に試すと待ち時間が長くなりすぎる
+    tried += 1;
     try {
       let r = await callModel(model, apiKey, prompt, maxOutputTokens, temperature);
       // 混雑(5xx)は数秒で解けることが多い。同じモデルで1回だけ待って再試行する
@@ -89,19 +141,23 @@ async function callGeminiJSON(apiKey, prompt, { maxOutputTokens = 1024, temperat
         r = await callModel(model, apiKey, prompt, maxOutputTokens, temperature);
       }
       if (r.data) { preferredModel = model; return { data: r.data }; }
-      last = r.error;
-      lastStatus = r.status;
-      // 上限(429)・混雑や障害(5xx)・そのキーで使えない(404)は、別モデルなら通ることがあるので次を試す。
-      // 以前は5xxで即座に諦めていたため、いちばん混むモデルが混んでいるだけで毎回失敗していた
-      if (transient(r.status) || r.status === 404) { if (preferredModel === model) preferredModel = null; continue; }
+      if (!worst || errRank(r.status) > errRank(worst.status)) worst = { status: r.status, error: r.error };
+      // 上限(429)・混雑や障害(5xx)・そのキーで使えない/廃止(404)は、別モデルなら通ることがあるので次を試す
+      if (transient(r.status) || r.status === 404) {
+        if (preferredModel === model) preferredModel = null;
+        if (r.status === 404) tried -= 1; // 存在しないモデルは待ち時間が無いので数えない
+        continue;
+      }
       return { error: r.error }; // キー不正など、モデルを変えても直らないものは即返す
     } catch {
-      last = 'AIに接続できませんでした（通信エラー）';
+      if (!worst) worst = { status: 0, error: 'AIに接続できませんでした（通信エラー）' };
     }
   }
+  if (!worst) return { error: 'AIに接続できませんでした（通信エラー）' };
   // すべてのモデルが混雑していた場合は、時間をおけば通ることを伝える
-  if (lastStatus >= 500) return { error: `${last}。すべてのAIモデルが混雑していました。少し時間をおいて、もう一度押してください` };
-  return { error: last || 'AIに接続できませんでした（通信エラー）' };
+  if (worst.status >= 500) return { error: `${worst.error}。すべてのAIモデルが混雑していました。少し時間をおいて、もう一度押してください` };
+  if (worst.status === 404) return { error: `${worst.error}。このAPIキーで使えるモデルが見つかりませんでした。設定のAPIキーを確認してください` };
+  return { error: worst.error };
 }
 
 // 送信前のプライバシー保護: テキスト内の登録選手名を「選手」に置換する。
