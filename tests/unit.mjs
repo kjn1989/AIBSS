@@ -6,7 +6,7 @@ import { proposeMoves, judgeAdvance, batterDestOptions } from '../src/lib/plays.
 import { gameEndCheck, initialPresetIdFor, defaultPresetIdForEdition, presetById, describeRules, rulesAtInning, currentRules, fieldCountAt, isTiebreakInning, diffLiveRules, describeRulePatch, runnersPlaced, placedRunsScored, halfKeyOf, DEFAULT_TIEBREAK, ALL_BAT_MAX, TIEBREAK_RUNNERS, allBatSize, lineupSlotsFor } from '../src/lib/rules.js';
 import { aggregateFielding, rankFielding, aggregateBatting, aggregatePitching, battingMetrics, pitchingMetrics, titleLeaders, DETAIL_METRICS, detailRanking, defaultInningBasis, teamHighlights } from '../src/lib/stats.js';
 import { translate } from '../src/lib/i18n.js';
-import { newspaperPrompt, editionForPrompt, interpretUtterance } from '../src/lib/gemini.js';
+import { newspaperPrompt, editionForPrompt, interpretUtterance, pickFlashModels } from '../src/lib/gemini.js';
 import { kindsFor, kindOf, kindPatch, defaultKindFor } from '../src/lib/editionKind.js';
 import { swapOrderPlan, canSwapOrder } from '../src/lib/lineupOrder.js';
 import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, needsComplexConfirm, parseDirectionOnly, parseContact, playLabel } from '../src/lib/voiceParser.js';
@@ -6475,7 +6475,8 @@ test('Gemini: 1つのモデルが混雑(503)でも、待って再試行し、別
   Object.defineProperty(globalThis, 'navigator', { value: { onLine: true }, configurable: true });
   const ok = { kind: 'play', result: 'single', confidence: 0.9 };
   globalThis.fetch = async (url) => {
-    const model = String(url).match(/models\/([^:]+):/)[1];
+    const model = (String(url).match(/models\/([^:?]+):/) || [])[1];
+    if (!/:generateContent/.test(String(url))) return new Response('{}', { status: 403 }); // 一覧は取れない場合
     calls.push(model);
     if (model === 'gemini-2.5-flash') return new Response(JSON.stringify({ error: { message: 'The model is overloaded.' } }), { status: 503 });
     return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(ok) }] } }] }), { status: 200 });
@@ -6489,4 +6490,19 @@ test('Gemini: 1つのモデルが混雑(503)でも、待って再試行し、別
     globalThis.fetch = realFetch;
     if (realNav) Object.defineProperty(globalThis, 'navigator', realNav); else delete globalThis.navigator;
   }
+});
+
+test('Gemini: 使えるモデル一覧から、文章用の flash 系を新しい正式版から順に選ぶ', () => {
+  const gen = ['generateContent'];
+  const list = [
+    { name: 'models/gemini-2.0-flash', supportedGenerationMethods: gen },
+    { name: 'models/gemini-3.0-flash', supportedGenerationMethods: gen },
+    { name: 'models/gemini-3.0-flash-lite', supportedGenerationMethods: gen },
+    { name: 'models/gemini-3.5-flash-preview', supportedGenerationMethods: gen },
+    { name: 'models/gemini-3.0-flash-image', supportedGenerationMethods: gen },
+    { name: 'models/gemini-3.0-pro', supportedGenerationMethods: gen },
+    { name: 'models/text-embedding-004', supportedGenerationMethods: ['embedContent'] },
+    { name: 'models/gemini-3.0-flash-tts', supportedGenerationMethods: gen },
+  ];
+  assert.deepEqual(pickFlashModels(list), ['gemini-3.0-flash', 'gemini-2.0-flash', 'gemini-3.0-flash-lite', 'gemini-3.5-flash-preview']);
 });
