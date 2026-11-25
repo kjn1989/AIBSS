@@ -2747,3 +2747,9 @@ html[data-outdoor] .app-header .outdoor-toggle.on { background: #1f6feb; border-
 
 /* 打席が少ない注意(AIヘッドコーチ) */
 .amber-text { color: var(--amber, #e3b341); }
+
+/* 推定年俸(components/SalaryRanking.jsx) */
+.scout-salary { display: inline-block; margin-top: 8px; padding: 4px 12px; border-radius: 999px; font-size: 13px; color: #ffe9a8; background: rgba(0, 0, 0, .45); border: 1px solid rgba(227, 179, 65, .6); }
+.scout-salary b { font-size: 17px; font-weight: 900; margin-left: 4px; }
+.salary-card summary { cursor: pointer; list-style: revert; }
+.salary-card table { width: 100%; }

@@ -6506,3 +6506,18 @@ test('Gemini: 使えるモデル一覧から、文章用の flash 系を新し�
   ];
   assert.deepEqual(pickFlashModels(list), ['gemini-3.0-flash', 'gemini-2.0-flash', 'gemini-3.0-flash-lite', 'gemini-3.5-flash-preview']);
 });
+
+test('推定年俸: 1位が最高額、順位ごとに0.8倍、記録なしは最高額の1%、上限100億', async () => {
+  const { teamSalaries, formatSalary, clampTop, salaryPoints } = await import('../src/lib/salary.js');
+  const players = [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }];
+  const bat = { a: { tb: 10, rbi: 5 }, b: { tb: 6 }, c: { tb: 6 } };
+  const rows = teamSalaries(players, bat, {}, 5);
+  assert.deepEqual(rows.map((r) => [r.playerId, r.rank, r.man]), [['a', 1, 50000], ['b', 2, 40000], ['c', 2, 40000], ['d', 4, 500]]);
+  assert.equal(formatSalary(50000), '5億円');
+  assert.equal(formatSalary(32000), '3億2,000万円');
+  assert.equal(formatSalary(500), '500万円');
+  assert.equal(clampTop(500), 100);
+  assert.equal(clampTop(0), 5);
+  // 投手の点はマイナスにならない
+  assert.equal(salaryPoints(null, { outsRecorded: 0, earnedRuns: 10 }), 0);
+});
