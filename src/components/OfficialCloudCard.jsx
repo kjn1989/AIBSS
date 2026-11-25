@@ -413,7 +413,12 @@ export default function OfficialCloudCard() {
       {/* アカウント削除。接続の有無にかかわらず、ログイン中は常に出す
           (ストアの要件は「アプリ内から辿り着けること」なので、チーム未接続の
           状態で埋もれてはいけない) */}
-      {user && (
+      {/* チームに記録係・観戦で接続しているときは出さない。記録係はチームで1つのアカウントを
+          共有していることがあり、1人が消すと全員が入れなくなる。チームから外れれば(未接続なら)出る */}
+      {user && teamId && myRole && myRole !== 'owner' && (
+        <p className="small dim mt12">{t('occ.delAccountMemberNote')}</p>
+      )}
+      {user && !(teamId && myRole !== 'owner') && (
         <details className="mt12" onToggle={(e) => { if (!e.currentTarget.open) setDelText(''); }}>
           <summary className="small" style={{ color: 'var(--red)' }}>{t('occ.delAccountTitle')}</summary>
           <p className="small dim" style={{ whiteSpace: 'pre-line', margin: '6px 0 8px' }}>

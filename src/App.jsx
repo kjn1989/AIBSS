@@ -13,7 +13,7 @@ import PersistWarning from './components/PersistWarning.jsx';
 import UndoSnackbar from './components/UndoSnackbar.jsx';
 import { decodeConfig } from './components/WatchView.jsx';
 import { officialAvailable, currentUserAsync, loginWithPassword, joinByInvite } from './lib/officialCloud.js';
-import { addProfile, switchActiveProfile } from './lib/profiles.js';
+import { addProfile, switchActiveProfile, findProfileByOfficialTeamId, updateProfileMeta } from './lib/profiles.js';
 import { persist } from './state/store.jsx';
 import { DiamondIcon, LedWordmark } from './components/BrandMark.jsx';
 import EditionText from './components/EditionText.jsx';
@@ -91,7 +91,10 @@ function useOfficialJoin(state, t) {
       // 参加したクラウドチーム専用のローカルプロフィールを作って切り替える。
       // 招待のロール(観戦/記録係)も即時に保存し、観戦URL参加直後から正しく権限が効くようにする。
       persist(state); // 現在のチームを保存してから
-      const p = addProfile(meta.name, meta.edition, { officialTeamId: meta.teamId, officialRole: meta.role || null });
+      // 同じチームにもう一度参加したときは、この端末にある同じチームを使う(重複を作らない)
+      const existing = findProfileByOfficialTeamId(meta.teamId);
+      const p = existing || addProfile(meta.name, meta.edition, { officialTeamId: meta.teamId, officialRole: meta.role || null });
+      if (existing) updateProfileMeta(existing.id, { officialRole: meta.role || existing.officialRole || null });
       switchActiveProfile(p.id);
       window.location.reload();
     } catch (e) {
