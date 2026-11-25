@@ -10,7 +10,12 @@
 // エイリアス(-latest)は上限の厳しいプレビュー系を指すことがあり、ほとんど使って
 // いなくても 429 になることがある。そこで安定版から順に試し、429(上限)や
 // 404(そのキーで使えない)なら次の候補へ回す。廃止によるロックインも避けられる。
-const MODEL_CANDIDATES = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest'];
+// 混雑(503)はモデルごとに起きる。特定のモデルだけが混んでいるときに、そこで諦めて
+// しまうと「毎回このエラー」になるので、軽いモデルと最新版のエイリアスも候補に入れる。
+const MODEL_CANDIDATES = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-flash-latest', 'gemini-2.0-flash'];
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// 一時的な失敗(混雑・内部エラー・タイムアウト)。少し待てば、または別のモデルなら通る
+const transient = (status) => status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
 let preferredModel = null; // 一度成功したモデルは次回から先に試す(無駄な失敗を減らす)
 
 // Geminiのエラーは英語で返るため、記録係がそのまま読んで対処できる日本語にする。
@@ -74,18 +79,28 @@ async function callGeminiJSON(apiKey, prompt, { maxOutputTokens = 1024, temperat
     ? [preferredModel, ...MODEL_CANDIDATES.filter((m) => m !== preferredModel)]
     : MODEL_CANDIDATES;
   let last = null;
+  let lastStatus = 0;
   for (const model of order) {
     try {
-      const r = await callModel(model, apiKey, prompt, maxOutputTokens, temperature);
+      let r = await callModel(model, apiKey, prompt, maxOutputTokens, temperature);
+      // 混雑(5xx)は数秒で解けることが多い。同じモデルで1回だけ待って再試行する
+      if (!r.data && r.status >= 500) {
+        await sleep(1500);
+        r = await callModel(model, apiKey, prompt, maxOutputTokens, temperature);
+      }
       if (r.data) { preferredModel = model; return { data: r.data }; }
       last = r.error;
-      // 上限(429)・そのキーで使えない(404)は、別モデルなら通ることがあるので次を試す
-      if (r.status === 429 || r.status === 404) { if (preferredModel === model) preferredModel = null; continue; }
+      lastStatus = r.status;
+      // 上限(429)・混雑や障害(5xx)・そのキーで使えない(404)は、別モデルなら通ることがあるので次を試す。
+      // 以前は5xxで即座に諦めていたため、いちばん混むモデルが混んでいるだけで毎回失敗していた
+      if (transient(r.status) || r.status === 404) { if (preferredModel === model) preferredModel = null; continue; }
       return { error: r.error }; // キー不正など、モデルを変えても直らないものは即返す
     } catch {
       last = 'AIに接続できませんでした（通信エラー）';
     }
   }
+  // すべてのモデルが混雑していた場合は、時間をおけば通ることを伝える
+  if (lastStatus >= 500) return { error: `${last}。すべてのAIモデルが混雑していました。少し時間をおいて、もう一度押してください` };
   return { error: last || 'AIに接続できませんでした（通信エラー）' };
 }
 

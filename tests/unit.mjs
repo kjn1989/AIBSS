@@ -6,7 +6,7 @@ import { proposeMoves, judgeAdvance, batterDestOptions } from '../src/lib/plays.
 import { gameEndCheck, initialPresetIdFor, defaultPresetIdForEdition, presetById, describeRules, rulesAtInning, currentRules, fieldCountAt, isTiebreakInning, diffLiveRules, describeRulePatch, runnersPlaced, placedRunsScored, halfKeyOf, DEFAULT_TIEBREAK, ALL_BAT_MAX, TIEBREAK_RUNNERS, allBatSize, lineupSlotsFor } from '../src/lib/rules.js';
 import { aggregateFielding, rankFielding, aggregateBatting, aggregatePitching, battingMetrics, pitchingMetrics, titleLeaders, DETAIL_METRICS, detailRanking, defaultInningBasis, teamHighlights } from '../src/lib/stats.js';
 import { translate } from '../src/lib/i18n.js';
-import { newspaperPrompt, editionForPrompt } from '../src/lib/gemini.js';
+import { newspaperPrompt, editionForPrompt, interpretUtterance } from '../src/lib/gemini.js';
 import { kindsFor, kindOf, kindPatch, defaultKindFor } from '../src/lib/editionKind.js';
 import { swapOrderPlan, canSwapOrder } from '../src/lib/lineupOrder.js';
 import { parseUtterance, prettifyTranscript, parseRunnerAdjust, needsRunnerConfirm, needsComplexConfirm, parseDirectionOnly, parseContact, playLabel } from '../src/lib/voiceParser.js';
@@ -6465,4 +6465,28 @@ test('バトン: 順番に回す(3人・1イニングずつ)', () => {
   const sides = { status: 'ongoing', inning: 1, recorder: { id: 'a', at: 1 }, batonPlan: { on: true, offense: A, defense: B } };
   assert.equal(plannedRecorder(sides, true).id, 'a');
   assert.equal(plannedRecorder(sides, false).id, 'b');
+});
+
+test('Gemini: 1つのモデルが混雑(503)でも、待って再試行し、別のモデルへ回る', async () => {
+  const calls = [];
+  const realFetch = globalThis.fetch;
+  // Node の navigator には onLine が無い(オフライン扱いになって呼ばれない)
+  const realNav = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  Object.defineProperty(globalThis, 'navigator', { value: { onLine: true }, configurable: true });
+  const ok = { kind: 'play', result: 'single', confidence: 0.9 };
+  globalThis.fetch = async (url) => {
+    const model = String(url).match(/models\/([^:]+):/)[1];
+    calls.push(model);
+    if (model === 'gemini-2.5-flash') return new Response(JSON.stringify({ error: { message: 'The model is overloaded.' } }), { status: 503 });
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(ok) }] } }] }), { status: 200 });
+  };
+  try {
+    const r = await interpretUtterance('ヒット', 'k');
+    assert.equal(r?.result, 'single');
+    // 混んでいるモデルを1回だけ再試行し、そのあと次のモデルで通る
+    assert.deepEqual(calls, ['gemini-2.5-flash', 'gemini-2.5-flash', 'gemini-2.5-flash-lite']);
+  } finally {
+    globalThis.fetch = realFetch;
+    if (realNav) Object.defineProperty(globalThis, 'navigator', realNav); else delete globalThis.navigator;
+  }
 });
