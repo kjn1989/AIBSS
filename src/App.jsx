@@ -154,11 +154,11 @@ export default function App() {
             {officialJoin.needLogin && (
               <>
                 <input
-                  type="email" placeholder={t('join.email')}
+                  type="email" autoComplete="username" name="email" placeholder={t('join.email')}
                   value={officialJoin.email} onChange={(e) => officialJoin.setEmail(e.target.value)}
                 />
                 <input
-                  type="password" placeholder={t('join.password')} className="mt8"
+                  type="password" autoComplete="current-password" name="password" placeholder={t('join.password')} className="mt8"
                   value={officialJoin.password} onChange={(e) => officialJoin.setPassword(e.target.value)}
                 />
               </>

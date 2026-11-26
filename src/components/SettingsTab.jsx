@@ -642,7 +642,9 @@ export default function SettingsTab() {
         <input
           value={state.settings.teamName}
           autoComplete="off" name="team-name"
-          onChange={(e) => dispatch({ type: 'UPDATE_SETTINGS', patch: { teamName: e.target.value } })}
+          // iPhone はログインのメールアドレスを、この欄に自動入力してしまうことがある。
+          // チーム名がまるごとメールアドレスになる変更は受け付けない
+          onChange={(e) => !looksLikeEmail(e.target.value) && dispatch({ type: 'UPDATE_SETTINGS', patch: { teamName: e.target.value } })}
           placeholder={t('app.teamFallback')}
         />
         <label className="small dim mt8" style={{ display: 'block' }}>{t('set.edition')}</label>
@@ -886,6 +888,9 @@ function GeminiKeyHelpSheet({ onClose }) {
 }
 
 // ---- 所属チームの追加・切り替え(草野球チームと部活チーム等、複数チームに所属する場合) ----
+// メールアドレスまるごと(自動入力の取り違え)か
+const looksLikeEmail = (v) => /^\S+@\S+\.\S+$/.test(String(v || '').trim());
+
 function TeamSwitcherCard() {
   const { state } = useStore();
   const t = useT();
@@ -974,7 +979,7 @@ function TeamSwitcherCard() {
       {adding ? (
         <div className="mt12">
           <label className="small dim">{t('set.teamName')}</label>
-          <input value={newName} autoComplete="off" name="new-team-name" onChange={(e) => setNewName(e.target.value)} placeholder={t('set.teamNamePlaceholder')} />
+          <input value={newName} autoComplete="off" name="new-team-name" onChange={(e) => !looksLikeEmail(e.target.value) && setNewName(e.target.value)} placeholder={t('set.teamNamePlaceholder')} />
           <label className="small dim mt8" style={{ display: 'block' }}>{t('set.edition')}</label>
           <div className="toggle-row editions">
             {EDITIONS.map((ed) => (
