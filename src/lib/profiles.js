@@ -125,6 +125,18 @@ export function deleteProfile(id) {
   return reg.activeId;
 }
 
+// この端末に保存されている、そのチームの選手数・試合数(消す前の確認に出す)
+export function profileStats(id) {
+  try {
+    const b = JSON.parse(localStorage.getItem(profileStorageKey(id)) || 'null');
+    if (!b) return { players: 0, games: 0 };
+    const games = Array.isArray(b.gameIndex) ? b.gameIndex.length : Object.keys(b.games || {}).length;
+    return { players: (b.players || []).length, games };
+  } catch {
+    return { players: 0, games: 0 };
+  }
+}
+
 export function switchActiveProfile(id) {
   const reg = loadRegistry();
   if (!reg) return;

@@ -15,7 +15,7 @@ import {
 } from '../lib/year.js';
 import { kindsFor, kindOf, kindPatch, kindLabelKey } from '../lib/editionKind.js';
 import EditionText from './EditionText.jsx';
-import { listProfiles, getActiveProfileId, addProfile, switchActiveProfile, deleteProfile, listOrphanedProfiles, restoreProfile } from '../lib/profiles.js';
+import { listProfiles, getActiveProfileId, addProfile, switchActiveProfile, deleteProfile, profileStats, listOrphanedProfiles, restoreProfile } from '../lib/profiles.js';
 import OfficialCloudCard from './OfficialCloudCard.jsx';
 import { BatonPlanCard } from './BatonPanel.jsx';
 import Sheet from './Sheet.jsx';
@@ -930,11 +930,21 @@ function TeamSwitcherCard() {
     window.location.reload();
   };
 
+  // 同じクラウドのチームが、この端末に2つ以上ある(招待リンクで入り直したときの重複)。
+  // 重複は誰でも外せる(同じチームがもう1つ残るので、何も失わない)
+  const isDup = (p) => !!p.officialTeamId && profiles.some((q) => q.id !== p.id && q.officialTeamId === p.officialTeamId);
   // 管理者だけが外せる。クラウドに無いチーム(この端末だけのチーム)は、この端末の持ち主のもの
-  const canRemove = (p) => !p.officialTeamId || p.officialRole === 'owner';
+  const canRemove = (p) => !p.officialTeamId || p.officialRole === 'owner' || isDup(p);
   const remove = (id, name, cloud) => {
     if (profiles.length <= 1) { window.alert(t('set.lastTeamAlert')); return; }
-    if (!window.confirm(t(cloud ? 'set.removeCloudTeamConfirm' : 'set.deleteTeamConfirm', { name }))) return;
+    const p = profiles.find((x) => x.id === id);
+    const st = profileStats(id);
+    // 何が消えるかを数で言う。空のチームなら、怖い文言は出さない
+    const msg = p && isDup(p) ? t('set.removeDupConfirm', { name })
+      : cloud ? t('set.removeCloudTeamConfirm', { name })
+        : (st.players + st.games === 0) ? t('set.deleteEmptyTeamConfirm', { name })
+          : t('set.deleteTeamConfirmN', { name, players: st.players, games: st.games });
+    if (!window.confirm(msg)) return;
     deleteProfile(id);
     setProfiles(listProfiles());
   };
