@@ -12,7 +12,7 @@ import CloudSync from './components/CloudSync.jsx';
 import PersistWarning from './components/PersistWarning.jsx';
 import UndoSnackbar from './components/UndoSnackbar.jsx';
 import { decodeConfig } from './components/WatchView.jsx';
-import { officialAvailable, currentUserAsync, loginWithPassword, joinByInvite } from './lib/officialCloud.js';
+import { officialAvailable, currentUserAsync, loginWithPassword, joinByInvite, logout } from './lib/officialCloud.js';
 import { addProfile, switchActiveProfile, findProfileByOfficialTeamId, updateProfileMeta } from './lib/profiles.js';
 import { persist } from './state/store.jsx';
 import { DiamondIcon, LedWordmark } from './components/BrandMark.jsx';
@@ -61,6 +61,7 @@ function useOfficialJoin(state, t) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [needLogin, setNeedLogin] = useState(false);
+  const [signedAs, setSignedAs] = useState(''); // すでにログインしているアカウント(別のアカウントで参加したいとき用)
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState(recorderName());
@@ -73,7 +74,7 @@ function useOfficialJoin(state, t) {
     const clean = new URL(window.location.href);
     clean.search = '';
     window.history.replaceState({}, '', clean.toString());
-    if (officialAvailable()) currentUserAsync().then((u) => setNeedLogin(!u));
+    if (officialAvailable()) currentUserAsync().then((u) => { setNeedLogin(!u); setSignedAs(u?.email || ''); });
   }, []);
 
   const join = async () => {
@@ -102,7 +103,14 @@ function useOfficialJoin(state, t) {
       setBusy(false);
     }
   };
-  return { token, busy, error, join, needLogin, email, setEmail, password, setPassword, name, setName, dismiss: () => setToken(null) };
+  // 一度ログインした端末で、チーム専用の別アカウントとして参加し直す
+  const switchAccount = async () => {
+    setBusy(true);
+    setError('');
+    try { await logout(); setNeedLogin(true); setSignedAs(''); } catch (e) { setError(e?.message || String(e)); }
+    setBusy(false);
+  };
+  return { token, busy, error, join, needLogin, signedAs, switchAccount, email, setEmail, password, setPassword, name, setName, dismiss: () => setToken(null) };
 }
 
 export default function App() {
@@ -154,6 +162,12 @@ export default function App() {
                   value={officialJoin.password} onChange={(e) => officialJoin.setPassword(e.target.value)}
                 />
               </>
+            )}
+            {!officialJoin.needLogin && officialJoin.signedAs && (
+              <div className="mt8">
+                <p className="small">{t('join.signedAs', { email: officialJoin.signedAs })}</p>
+                <button className="small" disabled={officialJoin.busy} onClick={officialJoin.switchAccount}>{t('join.otherAccount')}</button>
+              </div>
             )}
             {officialJoin.needLogin && <p className="small dim mt8">{t('join.sharedHint')}</p>}
             <input
