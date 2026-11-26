@@ -74,17 +74,6 @@ export default function CloudSync() {
         dispatch({ type: 'SET_CLOUD_STATUS', status: 'off' });
         return;
       }
-      // 自分のロール(owner/scorer/viewer)とチーム名を取得。
-      // クラウド接続中のプロフィールでは、クラウド側のチーム名が正(オーナーが設定した名前)。
-      // ヘッダー表示が「マイチーム」等のままにならないよう、接続先チーム名へ同期する。
-      listMyTeams().then((teams) => {
-        const mine = teams.find((t) => t.teamId === officialTeamId);
-        const role = mine?.role || null;
-        const patch = {};
-        if (role !== state.settings.officialRole) patch.officialRole = role;
-        if (mine?.teamName && mine.teamName !== state.settings.teamName) patch.teamName = mine.teamName;
-        if (Object.keys(patch).length) dispatch({ type: 'UPDATE_SETTINGS', patch });
-      }).catch(() => {});
       const conn = connectOfficial({
         teamId: officialTeamId,
         onStatus: (status) => dispatch({ type: 'SET_CLOUD_STATUS', status }),
@@ -126,6 +115,24 @@ export default function CloudSync() {
     connRef.current = conn;
     return teardown;
   }, [useOfficial, officialUser, officialTeamId, cloudEnabled, firebaseConfigText, teamCode]);
+
+  // 自分のロール(owner/scorer/viewer)とチーム名を、クラウドとつながるたびに取り直す。
+  // クラウド接続中のプロフィールでは、クラウド側のチーム名が正(オーナーが設定した名前)。
+  // 起動時だけ取りに行っていた頃は、電波の無いところで開くと取れず、あとでつながっても
+  // ヘッダーが古い名前(自動入力で入ったメールアドレス等)のままだった
+  const cloudOnline = state.cloudStatus === 'on';
+  useEffect(() => {
+    if (!useOfficial || !officialUser || !officialTeamId || !cloudOnline) return;
+    listMyTeams().then((teams) => {
+      const mine = teams.find((t) => t.teamId === officialTeamId);
+      const role = mine?.role || null;
+      const patch = {};
+      if (role !== state.settings.officialRole) patch.officialRole = role;
+      if (mine?.teamName && mine.teamName !== state.settings.teamName) patch.teamName = mine.teamName;
+      if (Object.keys(patch).length) dispatch({ type: 'UPDATE_SETTINGS', patch });
+    }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [useOfficial, officialUser, officialTeamId, cloudOnline]);
 
   // 削除のクラウド伝播: ローカルで削除した項目(pendingDeletes)をクラウドからも消す。
   // 成功したらトゥームストーンを外す。これが無いと全取得で削除項目が復活する。
