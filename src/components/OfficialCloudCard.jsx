@@ -177,9 +177,9 @@ export default function OfficialCloudCard() {
           <p className="small dim" style={{ marginBottom: 10 }}>
             {t('occ.loginDesc')}
           </p>
-          <input type="email" placeholder={t('occ.email')} value={email} onChange={(e) => setEmail(e.target.value)} />
+          <input type="email" autoComplete="username" name="email" placeholder={t('occ.email')} value={email} onChange={(e) => setEmail(e.target.value)} />
           <input
-            type="password" placeholder={t('occ.password')} className="mt8"
+            type="password" autoComplete="current-password" name="password" placeholder={t('occ.password')} className="mt8"
             value={password} onChange={(e) => setPassword(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && email.includes('@') && password.length >= 6 && run(() => loginWithPassword(email.trim(), password))()}
           />
