@@ -318,8 +318,9 @@ export default function OfficialCloudCard() {
                   そのアカウントが退会するとチームごと消える。区別が付かないと危ない */}
               {ownerUid && <p className="small dim" style={{ marginBottom: 8 }}>{t('occ.ownerExplain')}</p>}
               {members.map((m) => (
-                <div className="row" key={m.uid}>
-                  <div className="grow">
+                // 長いメールアドレスに役割の選択やボタンが重なっていたので、操作は名前の下の行に回す
+                <div className="row member-row" key={m.uid} style={{ flexWrap: 'wrap', gap: 6 }}>
+                  <div className="grow" style={{ flex: '1 1 100%', minWidth: 0, overflowWrap: 'anywhere' }}>
                     <b>{m.name || m.email}</b>
                     {m.uid === ownerUid && <span className="owner-chip">{t('occ.ownerChip')}</span>}
                     <div className="dim small">{m.email}</div>
