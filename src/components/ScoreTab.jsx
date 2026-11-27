@@ -1095,6 +1095,10 @@ export default function ScoreTab() {
             {t('flowtag.down')}<span>{t('flowtag.downSub')}</span>
           </button>
         </div>
+        {/* 押したらすぐ確かめられるよう、流れタグのボタンのすぐ下に置く */}
+        <button className="flow-view-btn" onClick={() => setSheet({ kind: 'flowView' })}>
+          📈 {t('fv.open')}
+        </button>
         {flowMsg && <div className={`ft-flash ${flowMsg}`}>{t(`flowtag.saved.${flowMsg}`, { sit: flowSit })}</div>}
         {flowCount > 0 && <div className="small dim mt8">{t('flowtag.count', { n: flowCount })}</div>}
         {/* 押しているのが誰かは、押している場所で決められないと後から埋まらない。
@@ -1108,9 +1112,6 @@ export default function ScoreTab() {
           />
           {!game.scorerId && <p className="small dim mt8">{t('scorer.unsetHint')}</p>}
         </div>
-        <button className="small mt8" style={{ width: '100%' }} onClick={() => setSheet({ kind: 'flowView' })}>
-          {t('fv.open')}
-        </button>
       </div>}
       {/* 観戦の人から届いた応援。記録の操作(スコア・結果・流れ)より下に置き、入力の邪魔をしない */}
       <CheerStrip game={game} />
