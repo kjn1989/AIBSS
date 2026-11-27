@@ -63,6 +63,34 @@ export default function RunnerEventSheet({ game, base, onClose, onPinchRunner, o
   }
 
   const name = runner.playerId ? nameOf(runner.playerId) : runner.letter || t('runner.fallback');
+
+  // 盗塁死＋ほかの走者の進塁・生還。この走者より前に走者がいるときだけ出す。
+  //   前の走者がみんな1つ進む(三塁走者は生還)形と、三塁走者だけが生還する形
+  const whoAt = (b) => {
+    const r = game.runners[b];
+    return r ? (r.playerId ? nameOf(r.playerId) : r.letter || t('runner.fallback')) : '';
+  };
+  const ahead = [3, 2, 1].filter((b) => b > base && game.runners[b]);
+  const csCombos = [];
+  if (ahead.length && base < 3) {
+    const all = [...ahead.map((b) => ({ from: b, to: b + 1 >= 4 ? 4 : b + 1 })), { from: base, to: 'out' }];
+    const scoreOnly = game.runners[3] ? [{ from: 3, to: 4 }, { from: base, to: 'out' }] : null;
+    if (scoreOnly) {
+      csCombos.push({
+        key: 'score3', moves: scoreOnly,
+        title: t('runner.csScore', { name }),
+        sub: t('runner.csScoreSub', { r3: whoAt(3) }),
+      });
+    }
+    // 前の走者が全員1つ進む形(三塁走者だけの場合は上と同じなので出さない)
+    if (!scoreOnly || ahead.length > 1) {
+      csCombos.push({
+        key: 'all', moves: all,
+        title: t('runner.csAdvance', { name }),
+        sub: ahead.map((b) => t(b === 3 ? 'runner.csSubScore' : 'runner.csSubAdv', { who: whoAt(b), base: t(`base.${b + 1}`) })).join('・'),
+      });
+    }
+  }
   // 代走: この走者の打順スロット(自チーム攻撃時) / 相手打順スロット(相手チーム攻撃時)
   const runnerSlot = runner.playerId ? game.lineup.find((l) => l.playerId === runner.playerId) : null;
   const oppRunnerSlot = runner.letter ? game.oppLineup?.find((l) => l.letter === runner.letter) : null;
@@ -115,6 +143,19 @@ export default function RunnerEventSheet({ game, base, onClose, onPinchRunner, o
         >
           {t('runner.oppPinch', { name })}
         </button>
+      )}
+      {/* 盗塁死の間に、前の走者が進む・生還する(一三塁で一塁走者が挟まれ、その間に三塁走者が生還 など)。
+          よくある形をそのまま1つのボタンにする。押すと「盗塁死」と「その間の生還/進塁」が一度に入る */}
+      {csCombos.length > 0 && (
+        <div className="cs-combos">
+          {csCombos.map((c) => (
+            <button key={c.key} className="cs-combo" onClick={() => fire('cs', c.moves)}>
+              <b>{c.title}</b>
+              <span>{c.sub}</span>
+            </button>
+          ))}
+          {game.outs === 2 && <p className="small dim" style={{ margin: '4px 2px 0' }}>{t('runner.csComboTwoOuts')}</p>}
+        </div>
       )}
       <div className="grid2">
         <button className="primary" onClick={() => fire('sb', sbMoves)}>

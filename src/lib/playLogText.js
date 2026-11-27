@@ -25,6 +25,7 @@ const STORED_LANG = 'ja';
 // 走者イベントの text は内部キーそのもの。読み替え表だけ持つ
 const RUNNER_KEY = {
   盗塁死: 'cs', 暴投: 'wp', 捕逸: 'pb', 牽制死: 'pickoff', 牽制: 'pickoffSafe', ボーク: 'balk',
+  盗塁死の間に生還: 'csScore', 盗塁死の間に進塁: 'csAdvance',
 };
 const SB_DOUBLE = '盗塁(重盗)';
 const COURTESY = /^臨時代走:/;

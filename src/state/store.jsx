@@ -1460,6 +1460,25 @@ function reduce(state, action) {
             payload: { moves: caught, ...whoOf(caught[0].from), outs: outsDelta },
           }));
         }
+      } else if (action.event === 'cs' && (action.moves || []).some((mv) => mv.to !== 'out')) {
+        // 盗塁死の間に、ほかの走者が進んだ・生還した(一三塁で一塁走者が挟まれ、その間に三塁走者が生還 など)。
+        // 盗塁死は刺された走者のもの、進塁・生還は別のログに分ける。1つにすると、盗塁死が
+        // 先頭の走者(生還した三塁走者)に付いてしまう。生還した走者に盗塁は付けない
+        // (重盗で一人が刺されたら、ほかの走者に盗塁は記録しない: 公認野球規則 9.07(e))
+        const caught = action.moves.filter((mv) => mv.to === 'out');
+        const others = action.moves.filter((mv) => mv.to !== 'out');
+        if (caught.length) {
+          g.playLogs.push(newPlayLog({
+            gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'runner',
+            text: labels.cs,
+            payload: { moves: caught, ...whoOf(caught[0].from), outs: outsDelta },
+          }));
+        }
+        g.playLogs.push(newPlayLog({
+          gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'runner',
+          text: others.some((mv) => mv.to === 4) ? '盗塁死の間に生還' : '盗塁死の間に進塁',
+          payload: { moves: others, ...whoOf(others[0].from), outs: 0 },
+        }));
       } else {
         g.playLogs.push(newPlayLog({
           gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'runner',
