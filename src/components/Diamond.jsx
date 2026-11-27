@@ -17,7 +17,18 @@ export default function Diamond({ game, onBaseTap, mini = false }) {
   };
 
   return (
-    <div className={`field-diamond-crop${mini ? ' mini' : ''}`}>
+    <div
+      className={`field-diamond-crop${mini ? ' mini' : ''}`}
+      // 小さいダイヤは塁そのものが指より小さい。図全体を3つに分けて、
+      // 左=三塁 / 真ん中=二塁 / 右=一塁 として押せるようにする(見た目と大きさは変えない)
+      onClick={mini ? (e) => {
+        const r = e.currentTarget.getBoundingClientRect();
+        const x = (e.clientX - r.left) / r.width;
+        onBaseTap?.(x < 0.36 ? 3 : x > 0.64 ? 1 : 2);
+      } : undefined}
+      role={mini ? 'button' : undefined}
+      aria-label={mini ? t('runner.diamondTap') : undefined}
+    >
       <div className="field-diamond bf">
         <div className="bf-dirtfan" />
         <div className="bf-mound" />
@@ -28,7 +39,7 @@ export default function Diamond({ game, onBaseTap, mini = false }) {
           <div
             key={b}
             className={`base b${b}${game.runners[b] ? ' occupied' : ''}`}
-            onClick={(e) => { e.stopPropagation(); onBaseTap?.(b); }}
+            onClick={mini ? undefined : (e) => { e.stopPropagation(); onBaseTap?.(b); }}
             role="button"
           >
             <span>{label(b)}</span>

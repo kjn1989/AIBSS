@@ -445,7 +445,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .scoretab .led-pcpair { margin-top: 3px; padding-top: 3px; }
 .scoretab .led-inn { margin: 0 2px 2px; }
 /* 小型ダイヤをもう一回り小さく */
-.scoretab .field-diamond-crop.mini { width: 58px; }
+.scoretab .field-diamond-crop.mini { width: 66px; } /* 交代ボタンと同じくらいの高さまで。行の高さは変えずに押しやすく */
 
 /* ---- 投球カウンター ---- */
 .pc-caprow { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
@@ -2800,10 +2800,8 @@ html[data-outdoor] .app-header .outdoor-toggle.on { background: #1f6feb; border-
 /* 流れタグのすぐ下の「試合の流れを見る」。押せると分かる大きさと色にする */
 .flow-view-btn { width: 100%; margin-top: 10px; padding: 12px; font-size: 15px; font-weight: 800; border-radius: 12px; color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
 
-/* 走者がいるときだけ出す大きな走者ボタン(ScoreTab の RunnerChips) */
-.runner-chips { display: flex; gap: 6px; margin-top: 8px; }
-.runner-chip { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 7px 10px; margin: 0; border-radius: 12px; text-align: left; background: rgba(227, 179, 65, .10); border: 1px solid rgba(227, 179, 65, .55); }
-.runner-chip .rc-base { font-size: 10.5px; font-weight: 800; color: var(--gold, #e3b341); }
-.runner-chip .rc-name { font-size: 15px; font-weight: 900; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.runner-chip .rc-hint { font-size: 10.5px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-[data-outdoor] .runner-chip { background: rgba(169, 118, 10, .10); }
+/* 小さいダイヤは図全体が押せる(左=三塁/真ん中=二塁/右=一塁)。走者がいる塁は脈打って、押せると分かるように */
+.field-diamond-crop.mini { cursor: pointer; }
+.field-diamond-crop.mini .base.occupied { animation: base-pulse 1.8s ease-in-out infinite; }
+@keyframes base-pulse { 0%, 100% { box-shadow: 0 0 0 2px rgba(227, 179, 65, .26), 0 2px 6px rgba(0, 0, 0, .35); } 50% { box-shadow: 0 0 0 5px rgba(227, 179, 65, .42), 0 2px 6px rgba(0, 0, 0, .35); } }
+@media (prefers-reduced-motion: reduce) { .field-diamond-crop.mini .base.occupied { animation: none; } }
