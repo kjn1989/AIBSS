@@ -879,7 +879,6 @@ export default function ScoreTab() {
       <BatonConflict game={game} />
       <BatonMine game={game} />
       <ShareStatus game={game} />
-      <CheerStrip game={game} />
       <RuleBanners
         game={game}
         onFinish={() => {
@@ -1113,6 +1112,8 @@ export default function ScoreTab() {
           {t('fv.open')}
         </button>
       </div>}
+      {/* 観戦の人から届いた応援。記録の操作(スコア・結果・流れ)より下に置き、入力の邪魔をしない */}
+      <CheerStrip game={game} />
 
       <div className="card">
         <h2>{t('score.gameOps')}</h2>
