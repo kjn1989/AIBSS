@@ -53,28 +53,6 @@ function pitcherFont(name) {
 }
 
 // ---- 直近の打席結果を「1. 左翼単打 2. 見逃し三振」のように並べる小さな履歴表示 ----
-// 塁に走者がいるときだけ出す、大きな走者ボタン。
-// 打者カードの小さなダイヤは指で押しにくいので、押す場所を別に用意する
-// (ダイヤを大きくすると打者カードの並びが崩れる)。走者がいなければ何も出さないので、場所も取らない
-function RunnerChips({ game, onTap }) {
-  const t = useT();
-  const nameOf = usePlayerName();
-  const bases = [1, 2, 3].filter((b) => game.runners?.[b]);
-  if (!bases.length) return null;
-  const who = (r) => (r.playerId ? nameOf(r.playerId) : r.letter ? oppNameOf(game, r.letter) : t('runner.fallback'));
-  return (
-    <div className="runner-chips">
-      {bases.map((b) => (
-        <button key={b} type="button" className="runner-chip" onClick={() => onTap(b)}>
-          <span className="rc-base">{t(`base.${b}`)}</span>
-          <b className="rc-name">{who(game.runners[b])}</b>
-          <span className="rc-hint">{t('runner.chipHint')}</span>
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function AtBatHistory({ items, edition, lang }) {
   if (!items || items.length === 0) return null;
   return (
@@ -950,7 +928,6 @@ export default function ScoreTab() {
               </div>
               <button className="pill blue sit-changebtn" onClick={() => setSheet({ kind: 'batter' })}>{t('score.changeBatter')}</button>
             </div>
-            <RunnerChips game={game} onTap={(b) => setSheet({ kind: 'runner', base: b })} />
             <BatterStats game={game} playerId={batter.playerId} />
             <AtBatHistory items={game.atBats.filter((ab) => ab.playerId === batter.playerId)} edition={state.settings.edition} lang={lang} />
             <div className="sit-pitcher">
@@ -992,7 +969,6 @@ export default function ScoreTab() {
             {oppBatter && <OppHandToggle game={game} which="batter" letter={oppBatter.letter} allowSwitch compact />}
             {oppBatter && <button className="pill blue sit-changebtn" onClick={() => setSheet({ kind: 'oppBatter' })}>{t('score.oppChange')}</button>}
           </div>
-          <RunnerChips game={game} onTap={(b) => setSheet({ kind: 'runner', base: b })} />
           {oppBatter && (
             <AtBatHistory
               items={game.playLogs
