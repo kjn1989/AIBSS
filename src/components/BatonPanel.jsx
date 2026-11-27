@@ -170,16 +170,19 @@ export function BatonMine({ game }) {
   if (!cloudOn(state) || !holdsBaton(game) || game.status !== 'ongoing') return null;
   return (
     <div className="baton-mine small">
-      {t('baton.mine')}
-      {/* ログイン不要のライブ観戦リンク。試合中に思いついたときすぐ配れるように、ここにも置く */}
+      <div>{t('baton.mine')}</div>
+      {/* 観戦リンクと記録員リンクは横一列に並べて、入力画面の縦の場所を取らない */}
       {state.settings.officialTeamId && (
-        <button className="small" style={{ marginLeft: 8 }} onClick={() => setLiveOpen(true)}>{t('livelink.btn')}</button>
+        <div className="baton-links">
+          {/* ログイン不要のライブ観戦リンク。試合中に思いついたときすぐ配れるように、ここにも置く */}
+          <button className="small" onClick={() => setLiveOpen(true)}>{t('livelink.btn')}</button>
+          {/* 記録係の招待リンク。作れるのはオーナーだけなので、オーナーの端末にだけ出す */}
+          {state.settings.officialRole === 'owner' && (
+            <button className="small" onClick={() => setInviteOpen(true)}>{t('scorerlink.btn')}</button>
+          )}
+        </div>
       )}
       {liveOpen && <LiveLinkSheet teamId={state.settings.officialTeamId} onClose={() => setLiveOpen(false)} />}
-      {/* 記録係の招待リンク。作れるのはオーナーだけなので、オーナーの端末にだけ出す */}
-      {state.settings.officialTeamId && state.settings.officialRole === 'owner' && (
-        <button className="small" style={{ marginLeft: 8 }} onClick={() => setInviteOpen(true)}>{t('scorerlink.btn')}</button>
-      )}
       {inviteOpen && <ScorerInviteSheet teamId={state.settings.officialTeamId} onClose={() => setInviteOpen(false)} />}
       {/* 記録係を自動で回す設定は、設定の画面(BatonPlanCard)に置く。入力画面はボタンを減らす */}
     </div>

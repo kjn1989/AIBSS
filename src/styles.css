@@ -2753,3 +2753,7 @@ html[data-outdoor] .app-header .outdoor-toggle.on { background: #1f6feb; border-
 .scout-salary b { font-size: 17px; font-weight: 900; margin-left: 4px; }
 .salary-card summary { cursor: pointer; list-style: revert; }
 .salary-card table { width: 100%; }
+
+/* 「あなたが記録係です」の下の、観戦リンク・記録員リンク(横一列) */
+.baton-links { display: flex; gap: 8px; margin-top: 6px; }
+.baton-links button { flex: 1 1 0; min-width: 0; white-space: nowrap; }
