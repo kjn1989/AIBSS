@@ -112,14 +112,22 @@ export async function loginWithPassword(email, password) {
   const { error } = await sb.auth.signInWithPassword({ email, password });
   if (!error) return;
   if (/Invalid login credentials/i.test(error.message)) {
+    // 新規登録を試す。すでにあるアカウントのパスワードは、ここでは決して変わらない
+    // (Supabase の signUp は既存のアカウントを上書きしない)
     const { data, error: e2 } = await sb.auth.signUp({ email, password });
-    if (e2) throw new Error(authError(e2));
+    if (e2) {
+      if (/already registered|already exists/i.test(e2.message)) throw new Error(tc('cloud.wrongPassword'));
+      throw new Error(authError(e2));
+    }
     if (!data.session) {
       // 確認メール設定がONでも、DB側でauto-confirm(トリガ)している場合は即ログインできる。
-      // 一度だけsign inを試し、成功すればメール確認なしで完了。失敗時のみメール案内を出す。
+      // 一度だけsign inを試し、成功すればメール確認なしで完了。
       const { error: e3 } = await sb.auth.signInWithPassword({ email, password });
       if (!e3) return;
-      throw new Error(tc('cloud.confirmSent'));
+      // まだ確認されていない新しいアカウントだけが「確認メール」。それ以外は、既存のアカウントに
+      // 違うパスワードを入れた場合(以前はここで「確認メールを送信しました」と出て紛らわしかった)
+      if (/not confirmed/i.test(e3.message)) throw new Error(tc('cloud.confirmSent'));
+      throw new Error(tc('cloud.wrongPassword'));
     }
     return; // 新規登録+即ログイン成功
   }
