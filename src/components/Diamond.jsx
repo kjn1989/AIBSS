@@ -19,12 +19,27 @@ export default function Diamond({ game, onBaseTap, mini = false }) {
   return (
     <div
       className={`field-diamond-crop${mini ? ' mini' : ''}`}
-      // 小さいダイヤは塁そのものが指より小さい。図全体を3つに分けて、
-      // 左=三塁 / 真ん中=二塁 / 右=一塁 として押せるようにする(見た目と大きさは変えない)
+      // 小さいダイヤは塁そのものが指より小さい。図のどこを押しても走者に届くようにする
+      // (見た目と大きさは変えない):
+      //   ・走者がいる塁のマスを押したら、その塁
+      //   ・それ以外の場所なら、押した位置にいちばん近い「走者がいる塁」。走者が1人ならどこでもその走者
+      //   ・走者がいなければ、左=三塁 / 真ん中=二塁 / 右=一塁
       onClick={mini ? (e) => {
+        const hit = e.target.closest?.('.base');
+        const exact = hit && [1, 2, 3].find((b) => hit.classList.contains(`b${b}`));
+        // 走者がいる塁のマスを押したらその塁。空いている塁のマスは、走者が誰もいないときだけ
+        // (走者がいるのに空いた塁が開くと「押したのに走者が出ない」になる)
+        if (exact && (game.runners[exact] || ![1, 2, 3].some((b) => game.runners[b]))) { onBaseTap?.(exact); return; }
         const r = e.currentTarget.getBoundingClientRect();
         const x = (e.clientX - r.left) / r.width;
-        onBaseTap?.(x < 0.36 ? 3 : x > 0.64 ? 1 : 2);
+        const occupied = [1, 2, 3].filter((b) => game.runners[b]);
+        const POS_X = { 1: 0.82, 2: 0.5, 3: 0.18 };
+        if (occupied.length) {
+          const near = occupied.reduce((a, b) => (Math.abs(POS_X[b] - x) < Math.abs(POS_X[a] - x) ? b : a));
+          onBaseTap?.(near);
+        } else {
+          onBaseTap?.(x < 0.36 ? 3 : x > 0.64 ? 1 : 2);
+        }
       } : undefined}
       role={mini ? 'button' : undefined}
       aria-label={mini ? t('runner.diamondTap') : undefined}
