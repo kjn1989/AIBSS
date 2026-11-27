@@ -2069,18 +2069,31 @@ button.manage-open {
 }
 .cpad-rowhead svg { display: block; }
 .cpad-cell {
-  display: flex; align-items: center; justify-content: center; text-align: center;
-  min-height: 52px; padding: 6px 3px; margin: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; text-align: center;
+  min-height: 58px; padding: 6px 3px; margin: 0;
   font-size: 12.5px; line-height: 1.25; font-weight: 700; color: var(--text);
   background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px;
+  border-bottom-width: 3px;
 }
-/* 右にいくほど明るくして、迷ったときに位置で選べるようにする */
-.cpad-cell[data-s="normal"] { background: #1b222b; }
-.cpad-cell[data-s="hard"] { background: #202a35; border-color: #3a4552; }
+/* 強さは色で: 弱い=青 / 平凡=黄 / 強い=赤(列見出しの三角と同じ色)。
+   軌道の図も同じ色で、右へいくほど長く太くなる */
+.cpad-cell[data-s="weak"] { --s: #4dabf7; background: rgba(77, 171, 247, .08); }
+.cpad-cell[data-s="normal"] { --s: #fcc419; background: rgba(252, 196, 25, .08); }
+.cpad-cell[data-s="hard"] { --s: #ff6b6b; background: rgba(255, 107, 107, .10); }
+.cpad-cell { border-bottom-color: var(--s, var(--border)); }
+.cpad-glyph { color: var(--s, currentColor); display: block; }
 .cpad-cell.sel {
-  background: var(--accent-2); border-color: var(--accent); color: #fff;
-  box-shadow: 0 0 0 3px rgba(31, 111, 235, .28);
+  background: var(--s, var(--accent-2)); border-color: var(--s, var(--accent)); color: #111;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--s, #1f6feb) 35%, transparent);
 }
+.cpad-cell.sel .cpad-glyph { color: #111; }
+/* 列見出し: 右肩上がりの三角(青→黄→赤) */
+.cpad-wedge { grid-column: 2 / 5; display: flex; flex-direction: column; gap: 2px; padding-bottom: 2px; }
+.cpad-wedge svg { width: 100%; height: 18px; display: block; }
+.cpad-wedge-labels { display: grid; grid-template-columns: 1fr 1fr 1fr; text-align: center; font-size: 10.5px; font-weight: 800; letter-spacing: .04em; }
+.cpad-wedge-labels [data-s="weak"] { color: #4dabf7; }
+.cpad-wedge-labels [data-s="normal"] { color: #e0a800; }
+.cpad-wedge-labels [data-s="hard"] { color: #ff6b6b; }
 /* 深さから出した候補。点線なのは「まだ記録されていない」ことを示すため */
 .cpad-cell.cand { border-color: var(--accent); border-style: dashed; }
 .cpad-foot { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
