@@ -106,32 +106,35 @@ export function currentUserAsync() {
 }
 
 // ログイン。未登録なら自動で新規登録も試す(確認メール設定がONの場合はメール確認を促す)
+// ログインだけをする。アカウントは作らない。
+// 以前は、ログインに失敗すると黙って新規登録を試していたので、メールアドレスを打ち間違えると
+// 知らないうちに別のアカウントが作られていた。登録は signUpWithPassword で、本人が選んだときだけ
 export async function loginWithPassword(email, password) {
   const sb = ensureClient();
   if (!sb) throw new Error(tc('cloud.notConfigured'));
   const { error } = await sb.auth.signInWithPassword({ email, password });
   if (!error) return;
-  if (/Invalid login credentials/i.test(error.message)) {
-    // 新規登録を試す。すでにあるアカウントのパスワードは、ここでは決して変わらない
-    // (Supabase の signUp は既存のアカウントを上書きしない)
-    const { data, error: e2 } = await sb.auth.signUp({ email, password });
-    if (e2) {
-      if (/already registered|already exists/i.test(e2.message)) throw new Error(tc('cloud.wrongPassword'));
-      throw new Error(authError(e2));
-    }
-    if (!data.session) {
-      // 確認メール設定がONでも、DB側でauto-confirm(トリガ)している場合は即ログインできる。
-      // 一度だけsign inを試し、成功すればメール確認なしで完了。
-      const { error: e3 } = await sb.auth.signInWithPassword({ email, password });
-      if (!e3) return;
-      // まだ確認されていない新しいアカウントだけが「確認メール」。それ以外は、既存のアカウントに
-      // 違うパスワードを入れた場合(以前はここで「確認メールを送信しました」と出て紛らわしかった)
-      if (/not confirmed/i.test(e3.message)) throw new Error(tc('cloud.confirmSent'));
-      throw new Error(tc('cloud.wrongPassword'));
-    }
-    return; // 新規登録+即ログイン成功
-  }
+  if (/Invalid login credentials/i.test(error.message)) throw new Error(tc('cloud.wrongLogin'));
+  if (/not confirmed/i.test(error.message)) throw new Error(tc('cloud.confirmSent'));
   throw new Error(authError(error));
+}
+
+// 新しくアカウントを作る(本人が「新規登録」を選んだときだけ)。すでにあるアカウントは上書きしない
+export async function signUpWithPassword(email, password) {
+  const sb = ensureClient();
+  if (!sb) throw new Error(tc('cloud.notConfigured'));
+  const { data, error } = await sb.auth.signUp({ email, password });
+  if (error) {
+    if (/already registered|already exists/i.test(error.message)) throw new Error(tc('cloud.alreadyRegistered'));
+    throw new Error(authError(error));
+  }
+  if (data.session) return;
+  // 確認メール設定がONでも、DB側でauto-confirm(トリガ)している場合は即ログインできる
+  const { error: e2 } = await sb.auth.signInWithPassword({ email, password });
+  if (!e2) return;
+  if (/not confirmed/i.test(e2.message)) throw new Error(tc('cloud.confirmSent'));
+  // 既存のアカウントのメールアドレスだった(重複を隠す設定のときは、エラーにならずここに来る)
+  throw new Error(tc('cloud.alreadyRegistered'));
 }
 
 // マジックリンク(パスワード不要)。Supabase既定のメール送信は頻度制限があるため補助扱い
