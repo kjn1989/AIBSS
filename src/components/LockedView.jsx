@@ -4,7 +4,7 @@ import Scoreboard from './Scoreboard.jsx';
 import Diamond from './Diamond.jsx';
 import ScoreSheetView from './ScoreSheetView.jsx';
 import CurrentBatter from './CurrentBatter.jsx';
-import { CheerStrip } from './Cheer.jsx';
+import { CheerStrip, CheerCounts, useCheerByLog } from './Cheer.jsx';
 import { BatonConflict, BatonLocked } from './BatonPanel.jsx';
 import { renderPlayLog } from '../lib/playLogText.js';
 
@@ -21,6 +21,7 @@ export default function LockedView({ game }) {
   const lang = state.settings.lang || 'ja';
   const [mode, setMode] = useState(read);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const cheerByLog = useCheerByLog(game.id);
   const pick = (m) => { setMode(m); try { localStorage.setItem(KEY, m); } catch { /* 覚えられなくても動く */ } };
   const watch = mode === 'watch';
   const logs = [...game.playLogs].filter((l) => l.kind !== 'run').slice(watch ? -15 : -10).reverse();
@@ -48,6 +49,7 @@ export default function LockedView({ game }) {
         {logs.map((l) => (
           <div className="log-line" key={l.id}>
             <b>{inn(l)}</b> {renderPlayLog(game, l, { lang, t, nameOf, edition: state.settings.edition })}
+            <CheerCounts m={cheerByLog?.[l.id]} />
           </div>
         ))}
         {game.playLogs.length === 0 && <div className="dim small">{t('score.noPlays')}</div>}

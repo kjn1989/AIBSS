@@ -2791,3 +2791,8 @@ html[data-outdoor] .app-header .outdoor-toggle.on { background: #1f6feb; border-
 .cheer-buttons button.off { opacity: .35; }
 .cheer-wallet { margin-top: 6px; text-align: center; }
 .cheer-coins { color: #e3b341; white-space: nowrap; }
+.cheer-float { display: flex; flex-direction: column; align-items: center; }
+.cheer-float-to { font-size: 11px; font-weight: 800; padding: 1px 6px; border-radius: 999px; background: rgba(0, 0, 0, .55); color: #ffe9a8; white-space: nowrap; }
+.cheer-ticker { display: flex; gap: 10px; margin: 0 2px 6px; overflow: hidden; white-space: nowrap; mask-image: linear-gradient(90deg, #000 85%, transparent); }
+.cheer-ticker span { display: inline-flex; align-items: center; gap: 3px; }
+.cheer-ticker b { font-size: 11px; color: #e3b341; }

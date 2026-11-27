@@ -12,7 +12,7 @@ import Scoreboard from './Scoreboard.jsx';
 import Diamond from './Diamond.jsx';
 import LockedView from './LockedView.jsx';
 import ShareStatus from './ShareStatus.jsx';
-import { CheerStrip } from './Cheer.jsx';
+import { CheerStrip, CheerCounts, useCheerByLog } from './Cheer.jsx';
 import { BatterStats, PitcherStats } from './CurrentBatter.jsx';
 import PitchCounter from './PitchCounter.jsx';
 import ResultPad from './ResultPad.jsx';
@@ -724,6 +724,8 @@ export default function ScoreTab() {
   const lang = state.settings.lang || 'ja';
   const game = useCurrentGame();
   const nameOf = usePlayerName();
+  // 観戦の人から届いた応援(CheerStrip が取りに行ったもの)を、試合経過の行にも出す
+  const cheerByLog = useCheerByLog(game?.id);
   const [sheet, setSheet] = useState(null); // {kind:'play',result} | {kind:'runner',base} | {kind:'batter'}
   // かんたん記録で1タップ確定した直後の「取り消す」(数秒だけ出す)
   const [quick, setQuick] = useState(null);
@@ -1163,6 +1165,7 @@ export default function ScoreTab() {
         {[...game.playLogs].filter((l) => l.kind !== 'run').slice(-3).reverse().map((l) => (
           <div className="log-line" key={l.id}>
             <b>{logInning(l)}</b> {renderPlayLog(game, l, { lang, t, nameOf, edition: state.settings.edition })}
+            <CheerCounts m={cheerByLog?.[l.id]} />
           </div>
         ))}
         {game.playLogs.length === 0 && <div className="dim small">{t('score.noPlays')}</div>}

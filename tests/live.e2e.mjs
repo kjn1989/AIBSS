@@ -230,6 +230,8 @@ try {
   await a.waitForTimeout(4800);
   const sTxt = await a.locator('.cheer-strip').innerText().catch(() => '');
   ok('記録係の画面にも観戦の人数と応援と応援王が出る', sTxt.includes('1人が観戦中') && sTxt.includes('応援 47') && sTxt.includes('応援王 井上'), sTxt);
+  ok('記録係の画面に、届いた応援が並ぶ', (await a.locator('.cheer-ticker span').count()) >= 1);
+  ok('記録係の試合経過の行にも応援の数が出る', ((await a.locator('.log-line .cheer-counts').allInnerTexts()).join(' ')).includes('👏42'), (await a.locator('.log-line').allInnerTexts()).join(' | '));
 
   // ---- 止めると、観戦ページは見られなくなる ----
   await a.click('button:has-text("📺 観戦リンク")'); await W(400);
