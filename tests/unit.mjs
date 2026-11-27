@@ -6543,3 +6543,9 @@ test('推定年俸: 出場イニング・守備機会(打球が飛んだ位置�
   assert.equal(x.b.chances, 1);
   assert.equal(salaryPoints(null, null, x.a), Math.round((2 * 0.3 + 2 * 0.5 + 1 * 2) * 10) / 10);
 });
+
+test('推定年俸: 観戦ページで贈られた応援コインがボーナスになる(1枚0.2点)', async () => {
+  const { salaryPoints } = await import('../src/lib/salary.js');
+  assert.equal(salaryPoints(null, null, { fan: 50 }), 10);
+  assert.equal(salaryPoints(null, null, { fan: 0 }), 0);
+});

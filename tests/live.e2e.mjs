@@ -60,8 +60,9 @@ const liveView = (token, { game, last, since }) => {
 };
 // supabase/live_cheer.sql と同じ振る舞い(観戦中の人数・応援スタンプ)
 const viewers = new Map(); // viewer -> seen
-const cheers = []; // { game, log, stamp, viewer, at }
-const summary = (game, since) => {
+const cheers = []; // { game, log, stamp, viewer, at, player, coins }
+const COST = { clap: 0, wow: 0, fire: 1, ball: 3, mvp: 10 };
+const summary = (game, since, viewer = null) => {
   const now = Date.now();
   const by = new Map();
   for (const c of cheers.filter((x) => x.game === game)) { const k = `${c.log}|${c.stamp}`; by.set(k, (by.get(k) || 0) + 1); }
@@ -70,6 +71,9 @@ const summary = (game, since) => {
     cheers: [...by.entries()].map(([k, n]) => ({ log: k.split('|')[0], stamp: k.split('|')[1], n })),
     recent: cheers.filter((x) => x.game === game && x.at > (since || 0)).map((x) => ({ stamp: x.stamp, at: x.at, viewer: x.viewer })),
     total: cheers.filter((x) => x.game === game).length, now,
+    players: Object.entries(cheers.filter((x) => x.game === game && x.player).reduce((m, c) => { (m[c.player] ||= { coins: 0, n: 0 }); m[c.player].coins += c.coins; m[c.player].n += 1; return m; }, {}))
+      .map(([player, v]) => ({ player, ...v })).sort((a, b) => b.coins - a.coins),
+    wallet: viewer ? 50 - cheers.filter((x) => x.game === game && x.viewer === viewer).reduce((a, c) => a + c.coins, 0) : null,
   };
 };
 let viewCalls = 0;
@@ -83,11 +87,15 @@ async function makeDevice(browser, label, { scorer }) {
   await ctx.exposeFunction('__livePresence', (token, viewer, game, since) => {
     if (!cloud.token || token !== cloud.token) return { error: 'not_found' };
     viewers.set(viewer, Date.now());
-    return game ? summary(game, since) : { viewers: 0, cheers: [], recent: [], total: 0 };
+    return game ? summary(game, since, viewer) : { viewers: 0, cheers: [], recent: [], total: 0 };
   });
-  await ctx.exposeFunction('__liveCheerSend', (token, viewer, game, log, stamp) => {
+  await ctx.exposeFunction('__liveCheerSend', (token, viewer, game, log, stamp, player) => {
     if (!cloud.token || token !== cloud.token) return { error: 'not_found' };
-    cheers.push({ game, log, stamp, viewer, at: Date.now() });
+    const coins = COST[stamp];
+    if (coins == null) return { error: 'bad_stamp' };
+    const spent = cheers.filter((x) => x.game === game && x.viewer === viewer).reduce((a, c) => a + c.coins, 0);
+    if (spent + coins > 50) return { error: 'no_coins' };
+    cheers.push({ game, log, stamp, viewer, at: Date.now(), player, coins });
     return { ok: true };
   });
   await ctx.exposeFunction('__liveStats', (team, game, since) => summary(game, since));
@@ -101,7 +109,7 @@ async function makeDevice(browser, label, { scorer }) {
       get: () => window.__liveGet(), create: () => window.__liveCreate(), revoke: () => window.__liveRevoke(),
       view: (t, o) => window.__liveView(t, o),
       presence: (t, v, g, since) => window.__livePresence(t, v, g, since),
-      cheer: (t, v, g, l, st) => window.__liveCheerSend(t, v, g, l, st),
+      cheer: (t, v, g, l, st, pl) => window.__liveCheerSend(t, v, g, l, st, pl),
       stats: (team, g, since) => window.__liveStats(team, g, since),
     };
     if (!isScorer) return;
@@ -202,17 +210,26 @@ try {
   text = await v.locator('body').innerText();
   ok('観戦ページに「1人が観戦中」が出る', text.includes('1人が観戦中'), text.slice(0, 200));
   ok('応援スタンプのボタンが出る', (await v.locator('.cheer-buttons button').count()) === 5);
-  ok('応援の相手は直前のプレー', (await v.locator('.cheer-target').innerText()).includes('三振'));
-  await v.locator('.cheer-buttons button').first().click(); await v.waitForTimeout(200);
+  ok('応援の相手は直前のプレーの選手', (await v.locator('.cheer-target').innerText()).includes('井上 へ'), await v.locator('.cheer-target').innerText());
+  ok('残りコインが出る', (await v.locator('.cheer-wallet').innerText()).includes('50/50'));
+  await v.locator('.cheer-buttons button').first().click(); await v.waitForTimeout(200); // 👏 無料
   await v.locator('.cheer-buttons button').first().click(); await v.waitForTimeout(200);
   ok('押すとスタンプが画面を流れる', (await v.locator('.cheer-float').count()) >= 1);
-  ok('スタンプは直前の打席に付く', cheers.length === 2 && cheers.every((c) => c.stamp === 'clap'), JSON.stringify(cheers));
+  await v.locator('.cheer-buttons button').nth(4).click(); await v.waitForTimeout(300); // 🏆 10コイン
+  ok('コインのスタンプで残りが減る', (await v.locator('.cheer-wallet').innerText()).includes('40/50'), await v.locator('.cheer-wallet').innerText());
+  ok('スタンプは直前の打席とその選手に付く', cheers.length === 3 && cheers.every((c) => c.player) && cheers[2].coins === 10, JSON.stringify(cheers));
+  for (let i = 0; i < 5; i++) { await v.locator('.cheer-buttons button').nth(4).click(); await v.waitForTimeout(150); }
+  ok('コインが足りなくなると贈れない', cheers.filter((c) => c.coins).length === 5, String(cheers.filter((c) => c.coins).length));
+  for (let i = 0; i < 40; i++) await v.locator('.cheer-buttons button').first().click();
+  await v.waitForTimeout(300);
+  ok('👏は何度でも送れる(上限なし)', cheers.filter((c) => c.stamp === 'clap').length === 42, String(cheers.filter((c) => c.stamp === 'clap').length));
   await v.waitForTimeout(4800);
-  ok('試合経過の行に数が出る', (await v.locator('.log-line .cheer-counts').first().innerText()).includes('👏2'));
+  ok('試合経過の行に数が出る', (await v.locator('.log-line .cheer-counts').first().innerText()).includes('👏42'));
   ok('応援が集まったプレーが出る', (await v.locator('.cheer-top').innerText()).includes('三振'));
+  ok('応援コインランキングに選手が出る', (await v.locator('.cheer-players').innerText()).includes('井上') && (await v.locator('.cheer-players').innerText()).includes('50'));
   await a.waitForTimeout(4800);
   const sTxt = await a.locator('.cheer-strip').innerText().catch(() => '');
-  ok('記録係の画面にも観戦の人数と応援が出る', sTxt.includes('1人が観戦中') && sTxt.includes('応援 2'), sTxt);
+  ok('記録係の画面にも観戦の人数と応援と応援王が出る', sTxt.includes('1人が観戦中') && sTxt.includes('応援 47') && sTxt.includes('応援王 井上'), sTxt);
 
   // ---- 止めると、観戦ページは見られなくなる ----
   await a.click('button:has-text("📺 観戦リンク")'); await W(400);

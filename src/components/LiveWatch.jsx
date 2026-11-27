@@ -4,7 +4,7 @@ import { fetchLive } from '../lib/officialCloud.js';
 import Scoreboard from './Scoreboard.jsx';
 import Diamond from './Diamond.jsx';
 import CurrentBatter from './CurrentBatter.jsx';
-import { useViewerCheer, CheerBar, CheerOverlay, CheerCounts, CheerTop, ViewerCount } from './Cheer.jsx';
+import { useViewerCheer, CheerBar, CheerOverlay, CheerCounts, CheerTop, CheerPlayers, ViewerCount } from './Cheer.jsx';
 import ScoreSheetView from './ScoreSheetView.jsx';
 import { renderPlayLog } from '../lib/playLogText.js';
 
@@ -118,8 +118,11 @@ export default function LiveWatch({ token }) {
         </>
       )}
 
+      {game && <CheerPlayers players={cheer.feed?.players} />}
       {game && <CheerTop game={game} top={cheer.feed?.top} />}
-      {game && cheer.feed && ongoing && <CheerBar token={token} game={game} onSent={(s) => cheer.pushFloats([s])} />}
+      {game && cheer.feed && ongoing && (
+        <CheerBar token={token} game={game} wallet={cheer.feed.wallet} onSent={(s, cost) => { cheer.pushFloats([s]); if (cost) cheer.spend(cost); }} />
+      )}
       <CheerOverlay floats={cheer.floats} hype={cheer.hype} />
 
       {sheetOpen && game && <ScoreSheetView game={game} readOnly onClose={() => setSheetOpen(false)} />}

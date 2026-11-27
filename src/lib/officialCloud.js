@@ -451,10 +451,14 @@ export async function fetchLive(token, { game = null, last = null, since = 0 } =
 // ---------------- 観戦中の人数と応援スタンプ(supabase/live_cheer.sql) ----------------
 // SQLをまだ流していないチームでは関数が無い。そのときは null を返し、画面は何も出さない
 // (人数やスタンプが無くても、観戦そのものは今までどおり動く)
-const cheerMissing = (error) => /could not find the function|schema cache|live_presence|live_cheer|team_live_stats/i.test(error?.message || '');
+const cheerMissing = (error) => /could not find the function|schema cache|live_presence|live_cheer|team_live_stats|team_cheer_totals/i.test(error?.message || '');
 
-export const CHEER_STAMPS = ['clap', 'fire', 'ball', 'muscle', 'wow'];
-export const CHEER_EMOJI = { clap: '👏', fire: '🔥', ball: '⚾', muscle: '💪', wow: '😱' };
+// 👏😱 は無料で何度でも。🔥⚾🏆 は応援コイン(1試合50枚)を使って、そのプレーの選手に贈る。
+// お金は動かない(アプリの中だけの点数)。supabase/live_cheer.sql の live_stamp_cost と同じ値
+export const CHEER_STAMPS = ['clap', 'wow', 'fire', 'ball', 'mvp'];
+export const CHEER_EMOJI = { clap: '👏', wow: '😱', fire: '🔥', ball: '⚾', mvp: '🏆', muscle: '💪' };
+export const CHEER_COST = { clap: 0, wow: 0, fire: 1, ball: 3, mvp: 10 };
+export const CHEER_WALLET = 50;
 
 // 観戦ページが数秒おきに呼ぶ。「見ています」を知らせ、人数とスタンプを受け取る
 export async function livePresence(token, viewer, game, since = 0) {
@@ -468,12 +472,12 @@ export async function livePresence(token, viewer, game, since = 0) {
 }
 
 // 応援スタンプを送る。そのとき最新の打席(logId)に付く
-export async function liveCheer(token, viewer, game, logId, stamp) {
+export async function liveCheer(token, viewer, game, logId, stamp, playerId = null) {
   const t = testLive();
-  if (t) return t.cheer ? t.cheer(token, viewer, game, logId, stamp) : null;
+  if (t) return t.cheer ? t.cheer(token, viewer, game, logId, stamp, playerId) : null;
   const sb = ensureClient();
   if (!sb) return null;
-  const { data, error } = await sb.rpc('live_cheer', { p_token: token, p_viewer: viewer, p_game: game, p_log: logId, p_stamp: stamp });
+  const { data, error } = await sb.rpc('live_cheer', { p_token: token, p_viewer: viewer, p_game: game, p_log: logId, p_stamp: stamp, p_player: playerId });
   if (error) { if (cheerMissing(error)) return null; throw error; }
   return data;
 }
@@ -487,4 +491,15 @@ export async function teamLiveStats(teamId, game, since = 0) {
   const { data, error } = await sb.rpc('team_live_stats', { p_team: teamId, p_game: game, p_since: since });
   if (error) { if (cheerMissing(error)) return null; throw error; }
   return data;
+}
+
+// 選手ごとの通算の応援コイン { playerId: coins }(推定年俸のボーナス)。チームのメンバーだけ
+export async function teamCheerTotals(teamId) {
+  const t = testLive();
+  if (t) return t.totals ? t.totals(teamId) : null;
+  const sb = ensureClient();
+  if (!sb) return null;
+  const { data, error } = await sb.rpc('team_cheer_totals', { p_team: teamId });
+  if (error) { if (cheerMissing(error)) return null; throw error; }
+  return data || {};
 }
