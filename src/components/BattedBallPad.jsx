@@ -24,6 +24,64 @@ const GLYPH = {
   fly: 'M2,15 Q14,-6 26,15',
 };
 
+// マスごとの小さな軌道。形=軌道(行)、長さ・太さ・色=強さ(列)。
+// 文字を読む前に「どんな当たりか」が目に入るようにする。
+//   弱い: 短く細い青 / 平凡: 中くらいの黄 / 強い: 長く太い赤
+const CELL_GLYPH = {
+  ground: {
+    weak: 'M3,16 Q6,12 9,16 Q11,14 13,16',
+    normal: 'M3,16 Q8,9 13,16 Q17,11 21,16 Q24,13 27,16',
+    hard: 'M3,16 Q10,7 17,16 Q24,9 31,16 Q35,12 38,16',
+  },
+  liner: {
+    weak: 'M3,13 Q9,9 15,15',
+    normal: 'M3,15 L26,8',
+    hard: 'M3,16 L38,5',
+  },
+  fly: {
+    weak: 'M3,17 Q9,7 15,17',
+    normal: 'M3,17 Q15,1 27,17',
+    hard: 'M3,17 Q21,-7 38,13',
+  },
+};
+const END = {
+  ground: { weak: [13, 16], normal: [27, 16], hard: [38, 16] },
+  liner: { weak: [15, 15], normal: [26, 8], hard: [38, 5] },
+  fly: { weak: [15, 17], normal: [27, 17], hard: [38, 13] },
+};
+const STROKE = { weak: 1.5, normal: 2, hard: 2.7 };
+
+function CellGlyph({ tr, c }) {
+  const [x, y] = END[tr][c];
+  return (
+    <svg className="cpad-glyph" width="40" height="20" viewBox="0 0 40 20" aria-hidden="true">
+      <path d={CELL_GLYPH[tr][c]} fill="none" stroke="currentColor" strokeWidth={STROKE[c]} strokeLinecap="round" />
+      <circle cx={x} cy={y} r={c === 'hard' ? 2.6 : c === 'normal' ? 2.1 : 1.7} fill="currentColor" />
+    </svg>
+  );
+}
+
+// 列の見出し: 左が小さく右肩上がりに大きくなる三角。青→黄→赤のグラデーション
+function StrengthWedge({ t }) {
+  return (
+    <div className="cpad-wedge">
+      <svg viewBox="0 0 300 26" preserveAspectRatio="none" aria-hidden="true">
+        <defs>
+          <linearGradient id="cpad-wedge-g" x1="0" x2="1" y1="0" y2="0">
+            <stop offset="0" stopColor="#4dabf7" />
+            <stop offset="0.5" stopColor="#fcc419" />
+            <stop offset="1" stopColor="#ff6b6b" />
+          </linearGradient>
+        </defs>
+        <polygon points="0,20 300,1 300,24 0,24" fill="url(#cpad-wedge-g)" />
+      </svg>
+      <div className="cpad-wedge-labels">
+        {CONTACTS.map((c) => <span key={c} data-s={c}>{t(`contact.${c}`)}</span>)}
+      </div>
+    </div>
+  );
+}
+
 export default function BattedBallPad({ trajectory, contact, depth, onChange, dp, onDp, dpDisabled, ifly, onIfly, iflyDisabled }) {
   const t = useT();
   const cand = contactCandidate(trajectory, depth);
@@ -38,9 +96,7 @@ export default function BattedBallPad({ trajectory, contact, depth, onChange, dp
     <>
       <div className="cpad">
         <div />
-        {CONTACTS.map((c) => (
-          <div key={c} className="cpad-colhead">{t(`contact.${c}`)}</div>
-        ))}
+        <StrengthWedge t={t} />
         {TRAJECTORIES.map((tr) => (
           <React.Fragment key={tr}>
             <div className="cpad-rowhead">
@@ -61,7 +117,8 @@ export default function BattedBallPad({ trajectory, contact, depth, onChange, dp
                   aria-pressed={on}
                   onClick={() => pick(tr, c)}
                 >
-                  {t(`battedBall.${tr}.${c}`)}
+                  <CellGlyph tr={tr} c={c} />
+                  <span>{t(`battedBall.${tr}.${c}`)}</span>
                 </button>
               );
             })}
