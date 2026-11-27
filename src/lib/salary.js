@@ -2,14 +2,14 @@
 // 推定年俸(お遊び)。チームの中での成績の順位で決める。
 //
 // 1. 成績をポイントにする(数え方は下の salaryPoints。根拠はすべて画面に書く)
-//    出場試合数と守備機会も入れる(打てなくても毎試合出て守っている選手を、ちゃんと評価する)
+//    出場イニング数・守備機会・ファインプレーも入れる(打てなくても出て守っている選手を、ちゃんと評価する)
 // 2. ポイントの多い順に並べる(同点は同じ順位)
 // 3. 1位 = チーム最高額(設定。初期5億円・上限100億円)。順位が1つ下がるごとに RATE 倍
 // 4. 記録が無い選手は最低額(最高額の1%)
 // 実在の年俸の計算方法ではない。チームの中で「誰が上か」を楽しむための数字。
 // ============================================================
 
-import { DIR_TO_POSITION } from './model.js';
+import { DIR_TO_POSITION, finePlayOf } from './model.js';
 import { resolveStarters, alignmentByInning } from './lineupBox.js';
 
 export const SALARY_TOP_DEFAULT = 5; // 億円
@@ -27,46 +27,47 @@ export const clampTop = (v) => {
 // 成績のポイント。
 //   打者: 塁打 + 四死球 + 盗塁 + 得点 + 打点
 //   投手: 投球回×1.5 + 奪三振×0.5 − 自責点 − 与四死球×0.3 (0未満は0)
-//   出場: 出場試合数×2 / 守備: 守備機会×0.5 (打球が飛んだ位置を守っていた回数)
+//   出場: 出場イニング×0.3 / 守備: 守備機会×0.5 + ファインプレー×2
 // 投手の1試合(7回・3奪三振・3自責点)が、打者のよく打った1試合(2安打・1得点・1打点)の2倍くらいになる重み
-export const APP_WEIGHT = 2;
+export const INNING_WEIGHT = 0.3; // 7回フル出場で約2点
 export const CHANCE_WEIGHT = 0.5;
+export const FINE_WEIGHT = 2;
 export function salaryPoints(b, p, x = null) {
   const bat = b ? (b.tb || 0) + (b.bb || 0) + (b.hbp || 0) + (b.sb || 0) + (b.runs || 0) + (b.rbi || 0) : 0;
   const pit = p
     ? Math.max(0, ((p.outsRecorded || 0) / 3) * 1.5 + (p.strikeouts || 0) * 0.5 - (p.earnedRuns || 0) - ((p.walks || 0) + (p.hitByPitch || 0)) * 0.3)
     : 0;
-  const more = x ? (x.apps || 0) * APP_WEIGHT + (x.chances || 0) * CHANCE_WEIGHT : 0;
+  const more = x ? (x.innings || 0) * INNING_WEIGHT + (x.chances || 0) * CHANCE_WEIGHT + (x.fine || 0) * FINE_WEIGHT : 0;
   return Math.round((bat + pit + more) * 10) / 10;
 }
 
-// 出場試合数と守備機会(選手ごと)。
-//   出場: 先発・途中出場(代打・代走・守備)・打席のどれかがあった試合の数
+// 出場イニング数・守備機会・ファインプレー(選手ごと)。
+//   出場イニング: 守備についていた回(回ごとの守備陣)と、打席に立った回を合わせた回の数
 //   守備機会: 相手の打球(凡打・安打・失策・犠打・犠飛)が飛んだ守備位置を、そのとき守っていた回数。
 //             その回の守備陣は lineupBox の alignmentByInning で引く(途中で代わっても正しい人に付く)
+//   ファインプレー: 記録したときにその位置を守っていた選手(stats.js の守備成績と同じ数え方)
 export function participation(games = []) {
   const out = {};
-  const get = (id) => (out[id] ||= { apps: 0, chances: 0 });
+  const get = (id) => (out[id] ||= { innings: 0, chances: 0, fine: 0 });
   for (const g of games) {
     if (!g || g.importedBatting?.length) continue;
-    const ids = new Set();
-    for (const s of resolveStarters(g)) if (s.playerId) ids.add(s.playerId);
-    for (const l of g.lineup || []) if (l.playerId) ids.add(l.playerId);
-    for (const ab of g.atBats || []) if (ab.playerId) ids.add(ab.playerId);
-    for (const l of g.playLogs || []) if (l.kind === 'sub' && l.payload?.in) ids.add(l.payload.in);
-    if (!ids.size) continue;
-    for (const id of ids) get(id).apps += 1;
-    let align = null;
+    const align = alignmentByInning(g);
+    const played = new Map(); // playerId -> Set(回)
+    const mark = (id, inn) => { if (!id || !inn) return; if (!played.has(id)) played.set(id, new Set()); played.get(id).add(inn); };
+    for (const [inn, arr] of align) for (const x of arr) mark(x.playerId, Number(inn));
     for (const l of g.playLogs || []) {
-      if (l.kind !== 'defense') continue;
       const p = l.payload || {};
+      if (l.kind === 'atbat') mark(p.playerId, Number(l.inning));
+      if (l.kind !== 'defense') continue;
+      const fine = finePlayOf(p);
+      if (fine?.playerId) get(fine.playerId).fine += 1;
       if (!FIELDED.has(p.result)) continue;
       const pos = DIR_TO_POSITION[p.direction];
       if (!pos) continue;
-      align ||= alignmentByInning(g);
       const who = (align.get(Number(l.inning)) || []).find((x) => x.position === pos);
       if (who?.playerId) get(who.playerId).chances += 1;
     }
+    for (const [id, set] of played) get(id).innings += set.size;
   }
   return out;
 }
