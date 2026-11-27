@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { useStore, useT } from '../state/store.jsx';
 import { aggregateBatting, aggregatePitching } from '../lib/stats.js';
 import { isArchived } from '../lib/year.js';
-import { teamSalaries, formatSalary, clampTop, SALARY_TOP_DEFAULT, SALARY_TOP_MAX } from '../lib/salary.js';
+import { teamSalaries, participation, formatSalary, clampTop, SALARY_TOP_DEFAULT, SALARY_TOP_MAX } from '../lib/salary.js';
 
 // 推定年俸は、そのチームの全試合の成績から出す(名鑑とランキングで同じ数字にするため)
 export function useTeamSalaries() {
@@ -10,9 +10,10 @@ export function useTeamSalaries() {
   const games = useMemo(() => Object.values(state.games), [state.games]);
   const batting = useMemo(() => aggregateBatting(games), [games]);
   const pitching = useMemo(() => aggregatePitching(games), [games]);
+  const extra = useMemo(() => participation(games), [games]);
   const top = clampTop(state.settings.salaryTopOku ?? SALARY_TOP_DEFAULT);
   const players = useMemo(() => state.players.filter((p) => !isArchived(p)), [state.players]);
-  return { rows: useMemo(() => teamSalaries(players, batting, pitching, top), [players, batting, pitching, top]), top };
+  return { rows: useMemo(() => teamSalaries(players, batting, pitching, top, extra), [players, batting, pitching, top, extra]), top };
 }
 
 const PRESETS = [1, 3, 5, 10, 30, 100];

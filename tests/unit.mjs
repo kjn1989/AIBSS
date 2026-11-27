@@ -6521,3 +6521,24 @@ test('推定年俸: 1位が最高額、順位ごとに0.8倍、記録なしは�
   // 投手の点はマイナスにならない
   assert.equal(salaryPoints(null, { outsRecorded: 0, earnedRuns: 10 }), 0);
 });
+
+test('推定年俸: 出場試合数と守備機会(打球が飛んだ位置を守っていた人)も数える', async () => {
+  const { participation, salaryPoints } = await import('../src/lib/salary.js');
+  const g = {
+    id: 'g1', status: 'finished', atBats: [{ playerId: 'a', result: 'single' }],
+    lineup: [{ order: 1, playerId: 'a', position: '遊' }, { order: 2, playerId: 'b', position: '中' }],
+    startingLineup: [{ order: 1, playerId: 'a', position: '遊' }, { order: 2, playerId: 'b', position: '中' }],
+    playLogs: [
+      { kind: 'defense', inning: 1, isTop: true, payload: { result: 'out', direction: 'SS' } },
+      { kind: 'defense', inning: 1, isTop: true, payload: { result: 'single', direction: 'CF' } },
+      { kind: 'defense', inning: 1, isTop: true, payload: { result: 'so', direction: null } },
+      { kind: 'defense', inning: 2, isTop: true, payload: { result: 'out', direction: 'SS' } },
+    ],
+  };
+  const x = participation([g]);
+  assert.equal(x.a.apps, 1);
+  assert.equal(x.b.apps, 1);
+  assert.equal(x.a.chances, 2); // 遊撃への打球2つ(三振は数えない)
+  assert.equal(x.b.chances, 1);
+  assert.equal(salaryPoints(null, null, x.a), 1 * 2 + 2 * 0.5);
+});
