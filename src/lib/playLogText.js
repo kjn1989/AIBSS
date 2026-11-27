@@ -26,6 +26,7 @@ const STORED_LANG = 'ja';
 const RUNNER_KEY = {
   盗塁死: 'cs', 暴投: 'wp', 捕逸: 'pb', 牽制死: 'pickoff', 牽制: 'pickoffSafe', ボーク: 'balk',
   盗塁死の間に生還: 'csScore', 盗塁死の間に進塁: 'csAdvance',
+  牽制死の間に生還: 'poScore', 牽制死の間に進塁: 'poAdvance', 進塁: 'adv', 悪送球で進塁: 'errAdv',
 };
 const SB_DOUBLE = '盗塁(重盗)';
 const COURTESY = /^臨時代走:/;

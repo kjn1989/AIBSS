@@ -28,10 +28,14 @@ export function computeBoxScore(game) {
   // 進んだぶんは失策になるので、1つのプレイに安打と失策が同時に付く。
   // 守備側(kind='defense')の失策は自チーム、打席側(atBats)の失策は相手。
   const errOn = (p) => (p?.result === 'error' ? 1 : 0) + (playErrorOf(p) ? 1 : 0);
-  const myE = game.playLogs
+  const myE0 = game.playLogs
     .filter((l) => l.kind === 'defense')
     .reduce((n, l) => n + errOn(l.payload), 0);
-  const oppE = game.atBats.reduce((n, ab) => n + errOn(ab), 0);
+  const oppE0 = game.atBats.reduce((n, ab) => n + errOn(ab), 0);
+  // 打席の外の失策(盗塁・牽制の悪送球で走者が進んだ)。そのとき守っていた側に付ける
+  const runnerErr = (l) => l.kind === 'runner' && playErrorOf(l.payload);
+  const myE = myE0 + game.playLogs.filter((l) => runnerErr(l) && l.payload.myFielding).length;
+  const oppE = oppE0 + game.playLogs.filter((l) => runnerErr(l) && !l.payload.myFielding).length;
 
   return {
     innings,

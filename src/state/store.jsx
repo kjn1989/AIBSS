@@ -1437,7 +1437,21 @@ function reduce(state, action) {
       if (!isMyTeamBatting(g) && g.currentPitcherId && g.outs > outsBefore) {
         ensurePitchingRecord(g, g.currentPitcherId).outsRecorded += g.outs - outsBefore;
       }
-      const labels = { sb: '盗塁', cs: '盗塁死', wp: '暴投', pb: '捕逸', pickoff: '牽制死', pickoffThrow: '牽制', balk: 'ボーク' };
+      const labels = {
+        sb: '盗塁', cs: '盗塁死', wp: '暴投', pb: '捕逸', pickoff: '牽制死', pickoffThrow: '牽制', balk: 'ボーク',
+        // 打席と関係なく走者が進んだ(記録の修正・説明の付かない進塁)。以前は「暴投」として記録していた
+        adv: '進塁',
+        // 送球・牽制の悪送球など、守備の失策で進んだ
+        error: '悪送球で進塁',
+      };
+      // 失策で進んだとき、守備についている自チームの選手を引く(守備成績の失策に付ける)。
+      // 相手チームの失策は位置だけ残す(相手の選手名は持っていないので)
+      const myFielding = !isMyTeamBatting(g);
+      const errOf = (pos, kind = 'throw') => {
+        if (!pos) return null;
+        const pid = myFielding ? ((g.lineup || []).find((l) => l.position === pos)?.playerId || null) : null;
+        return { pos, kind, playerId: pid };
+      };
       // このイベントで増えたアウト数。後から投手成績を再集計しても投球回が失われないよう、
       // ライブ加算(上)だけで終わらせずログにも残す。
       const outsDelta = g.outs - outsBefore;
@@ -1460,23 +1474,42 @@ function reduce(state, action) {
             payload: { moves: caught, ...whoOf(caught[0].from), outs: outsDelta },
           }));
         }
-      } else if (action.event === 'cs' && (action.moves || []).some((mv) => mv.to !== 'out')) {
+      } else if (action.event === 'sbErr') {
+        // 盗塁成功＋送球の失策でもう1つ進んだ。盗塁は1つ分だけ、残りは失策で進んだ分
+        const mv = action.moves?.[0];
+        if (mv) {
+          g.playLogs.push(newPlayLog({
+            gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'sb', text: '盗塁',
+            payload: { moves: [{ from: mv.from, to: mv.from + 1 }], ...whoOf(mv.from) },
+          }));
+          g.playLogs.push(newPlayLog({
+            gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'runner', text: labels.error,
+            payload: { moves: [{ from: mv.from + 1, to: mv.to }], ...whoOf(mv.from), outs: 0, playError: errOf(action.errorPos || '捕'), myFielding },
+          }));
+        }
+      } else if (action.event === 'error') {
+        g.playLogs.push(newPlayLog({
+          gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'runner', text: labels.error,
+          payload: { moves: action.moves, ...whoOf(action.moves?.[0]?.from), outs: outsDelta, playError: errOf(action.errorPos || '投'), myFielding },
+        }));
+      } else if ((action.event === 'cs' || action.event === 'pickoff') && (action.moves || []).some((mv) => mv.to !== 'out')
+        && (action.moves || []).some((mv) => mv.to === 'out')) {
         // 盗塁死の間に、ほかの走者が進んだ・生還した(一三塁で一塁走者が挟まれ、その間に三塁走者が生還 など)。
         // 盗塁死は刺された走者のもの、進塁・生還は別のログに分ける。1つにすると、盗塁死が
         // 先頭の走者(生還した三塁走者)に付いてしまう。生還した走者に盗塁は付けない
         // (重盗で一人が刺されたら、ほかの走者に盗塁は記録しない: 公認野球規則 9.07(e))
+        // 牽制死(挟殺)の間に生還、も同じ形
         const caught = action.moves.filter((mv) => mv.to === 'out');
         const others = action.moves.filter((mv) => mv.to !== 'out');
-        if (caught.length) {
-          g.playLogs.push(newPlayLog({
-            gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'runner',
-            text: labels.cs,
-            payload: { moves: caught, ...whoOf(caught[0].from), outs: outsDelta },
-          }));
-        }
+        const lab = labels[action.event];
         g.playLogs.push(newPlayLog({
           gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'runner',
-          text: others.some((mv) => mv.to === 4) ? '盗塁死の間に生還' : '盗塁死の間に進塁',
+          text: lab,
+          payload: { moves: caught, ...whoOf(caught[0].from), outs: outsDelta },
+        }));
+        g.playLogs.push(newPlayLog({
+          gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'runner',
+          text: `${lab}の間に${others.some((mv) => mv.to === 4) ? '生還' : '進塁'}`,
           payload: { moves: others, ...whoOf(others[0].from), outs: 0 },
         }));
       } else {

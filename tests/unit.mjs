@@ -6549,3 +6549,15 @@ test('推定年俸: 観戦ページで贈られた応援コインがボーナス
   assert.equal(salaryPoints(null, null, { fan: 50 }), 10);
   assert.equal(salaryPoints(null, null, { fan: 0 }), 0);
 });
+
+test('ボックススコア: 盗塁・牽制の悪送球(打席の外の失策)も E に数える。守っていた側に付く', async () => {
+  const { computeBoxScore } = await import('../src/lib/boxscore.js');
+  const g = { linescore: {}, inning: 1, atBats: [], myScore: 0, oppScore: 0, playLogs: [
+    { kind: 'runner', text: '悪送球で進塁', payload: { playError: { pos: '捕', kind: 'throw' }, myFielding: false } },
+    { kind: 'runner', text: '悪送球で進塁', payload: { playError: { pos: '投', kind: 'throw' }, myFielding: true } },
+    { kind: 'runner', text: '暴投', payload: {} },
+  ] };
+  const box = computeBoxScore(g);
+  assert.equal(box.opp.e, 1);
+  assert.equal(box.my.e, 1);
+});

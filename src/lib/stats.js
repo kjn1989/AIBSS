@@ -148,6 +148,12 @@ export function aggregateFielding(games = []) {
   };
   for (const g of games || []) {
     for (const log of g.playLogs || []) {
+      // 盗塁・牽制の悪送球(打席の外の失策)も、自チームが守っていたときは守備成績の失策に入れる
+      if (log.kind === 'runner' && log.payload?.myFielding) {
+        const e = playErrorOf(log.payload);
+        if (e?.playerId) { const s = get(e.playerId); s.errors += 1; s.games.add(g.id); }
+        continue;
+      }
       if (log.kind !== 'defense') continue;
       const fine = finePlayOf(log.payload);
       const err = playErrorOf(log.payload);
