@@ -53,6 +53,22 @@ function pitcherFont(name) {
 }
 
 // ---- 直近の打席結果を「1. 左翼単打 2. 見逃し三振」のように並べる小さな履歴表示 ----
+// 打者カードの小さなダイヤを押すと開く「どの塁？」。
+// 小さいダイヤの塁は指より小さいので、大きな図で塁を選び直してもらう(打者カードの大きさは変えない)
+function BasePickSheet({ game, onPick, onClose }) {
+  const t = useT();
+  const any = [1, 2, 3].some((b) => game.runners?.[b]);
+  return (
+    <Sheet title={t('basePick.title')} onClose={onClose}>
+      <p className="small dim" style={{ marginTop: 0 }}>{t(any ? 'basePick.hint' : 'basePick.hintEmpty')}</p>
+      <div className="base-pick">
+        <Diamond game={game} onBaseTap={(b) => onPick(b)} />
+      </div>
+      <div className="sheet-actions"><button onClick={onClose}>{t('action.close')}</button></div>
+    </Sheet>
+  );
+}
+
 function AtBatHistory({ items, edition, lang }) {
   if (!items || items.length === 0) return null;
   return (
@@ -917,7 +933,7 @@ export default function ScoreTab() {
         ) : (
           <div className="card sit-card">
             <div className="sit-row">
-              <Diamond game={game} mini onBaseTap={(b) => setSheet({ kind: 'runner', base: b })} />
+              <Diamond game={game} mini onBaseTap={() => setSheet({ kind: 'basePick' })} />
               <span className="rank-badge">{batter.order}</span>
               <div className="sit-batter">
                 <div className="sit-main">
@@ -954,7 +970,7 @@ export default function ScoreTab() {
       ) : (
         <div className="card sit-card">
           <div className="sit-row">
-            <Diamond game={game} mini onBaseTap={(b) => setSheet({ kind: 'runner', base: b })} />
+            <Diamond game={game} mini onBaseTap={() => setSheet({ kind: 'basePick' })} />
             {oppBatter ? <span className="rank-badge">{oppBatter.order}</span> : null}
             <div className="sit-batter">
               {oppBatter
@@ -1207,6 +1223,9 @@ export default function ScoreTab() {
           onClose={() => setSheet(null)}
           onFurinige={(soType) => setSheet({ kind: 'play', result: 'so', soType, batterTo: 1 })}
         />
+      )}
+      {sheet?.kind === 'basePick' && (
+        <BasePickSheet game={game} onPick={(b) => setSheet({ kind: 'runner', base: b })} onClose={() => setSheet(null)} />
       )}
       {sheet?.kind === 'runner' && (
         <RunnerEventSheet

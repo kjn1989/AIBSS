@@ -177,6 +177,10 @@ try {
   // --- 4. 盗塁(単独) 一塁→二塁 ---
   await page.click('.base.b1');
   await page.waitForTimeout(350);
+  // 小さいダイヤを押すと大きな図が開く。そこで一塁を選ぶ
+  check('ダイヤを押すと「どの塁の走者？」が開く', (await page.locator('.sheet .base-pick').count()) === 1);
+  await page.click('.sheet .base-pick .base.b1');
+  await page.waitForTimeout(350);
   await page.click('.sheet button:has-text("盗塁成功")');
   await page.waitForTimeout(450);
   check('盗塁後: 二塁に走者・一塁は空く', (await baseOn(2)) === 1 && (await baseOn(1)) === 0);
@@ -188,6 +192,8 @@ try {
 
   // --- 6. 重盗 → 二・三塁(2人目の盗塁記録の再発防止) ---
   await page.click('.base.b1');
+  await page.waitForTimeout(350);
+  await page.click('.sheet .base-pick .base.b1');
   await page.waitForTimeout(350);
   await page.click('.sheet button:has-text("盗塁成功")'); // 重盗表示のボタン
   await page.waitForTimeout(450);
