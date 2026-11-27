@@ -2808,3 +2808,10 @@ html[data-outdoor] .app-header .outdoor-toggle.on { background: #1f6feb; border-
 .field-diamond-crop.mini .base.occupied { animation: base-pulse 1.8s ease-in-out infinite; }
 @keyframes base-pulse { 0%, 100% { box-shadow: 0 0 0 2px rgba(227, 179, 65, .26), 0 2px 6px rgba(0, 0, 0, .35); } 50% { box-shadow: 0 0 0 5px rgba(227, 179, 65, .42), 0 2px 6px rgba(0, 0, 0, .35); } }
 @media (prefers-reduced-motion: reduce) { .field-diamond-crop.mini .base.occupied { animation: none; } }
+
+/* 「どの塁？」の大きな図。走者のいる塁は光って脈打つ */
+.base-pick .field-diamond-crop { margin: 4px 0 8px; }
+.base-pick .base { cursor: pointer; }
+.base-pick .base.occupied { animation: base-pulse-lg 1.6s ease-in-out infinite; }
+@keyframes base-pulse-lg { 0%, 100% { box-shadow: 0 0 0 3px rgba(227, 179, 65, .35), 0 4px 12px rgba(0, 0, 0, .35); } 50% { box-shadow: 0 0 0 10px rgba(227, 179, 65, .25), 0 4px 12px rgba(0, 0, 0, .35); } }
+@media (prefers-reduced-motion: reduce) { .base-pick .base.occupied { animation: none; } }
