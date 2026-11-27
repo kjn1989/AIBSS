@@ -58,6 +58,20 @@ const liveView = (token, { game, last, since }) => {
     players: send ? [...cloud.player.values()].map((p) => ({ id: p.id, name: p.name, number: p.number })) : null,
   };
 };
+// supabase/live_cheer.sql と同じ振る舞い(観戦中の人数・応援スタンプ)
+const viewers = new Map(); // viewer -> seen
+const cheers = []; // { game, log, stamp, viewer, at }
+const summary = (game, since) => {
+  const now = Date.now();
+  const by = new Map();
+  for (const c of cheers.filter((x) => x.game === game)) { const k = `${c.log}|${c.stamp}`; by.set(k, (by.get(k) || 0) + 1); }
+  return {
+    viewers: [...viewers.values()].filter((t) => t > now - 20000).length,
+    cheers: [...by.entries()].map(([k, n]) => ({ log: k.split('|')[0], stamp: k.split('|')[1], n })),
+    recent: cheers.filter((x) => x.game === game && x.at > (since || 0)).map((x) => ({ stamp: x.stamp, at: x.at, viewer: x.viewer })),
+    total: cheers.filter((x) => x.game === game).length, now,
+  };
+};
 let viewCalls = 0;
 async function makeDevice(browser, label, { scorer }) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'ja-JP' });
@@ -66,6 +80,17 @@ async function makeDevice(browser, label, { scorer }) {
   await ctx.exposeFunction('__liveCreate', () => { cloud.token = cloud.token || 'tok' + 'x'.repeat(40); return cloud.token; });
   await ctx.exposeFunction('__liveRevoke', () => { cloud.token = null; });
   await ctx.exposeFunction('__liveView', (token, opts) => { viewCalls += 1; return liveView(token, opts); });
+  await ctx.exposeFunction('__livePresence', (token, viewer, game, since) => {
+    if (!cloud.token || token !== cloud.token) return { error: 'not_found' };
+    viewers.set(viewer, Date.now());
+    return game ? summary(game, since) : { viewers: 0, cheers: [], recent: [], total: 0 };
+  });
+  await ctx.exposeFunction('__liveCheerSend', (token, viewer, game, log, stamp) => {
+    if (!cloud.token || token !== cloud.token) return { error: 'not_found' };
+    cheers.push({ game, log, stamp, viewer, at: Date.now() });
+    return { ok: true };
+  });
+  await ctx.exposeFunction('__liveStats', (team, game, since) => summary(game, since));
   await ctx.exposeFunction('__cloudLoad', () => JSON.stringify({ games: [...cloud.game.values()], players: [...cloud.player.values()] }));
   await ctx.exposeFunction('__cloudPush', async (kind, json) => {
     const obj = JSON.parse(json);
@@ -75,6 +100,9 @@ async function makeDevice(browser, label, { scorer }) {
     window.__AIBSS_TEST_LIVE__ = {
       get: () => window.__liveGet(), create: () => window.__liveCreate(), revoke: () => window.__liveRevoke(),
       view: (t, o) => window.__liveView(t, o),
+      presence: (t, v, g, since) => window.__livePresence(t, v, g, since),
+      cheer: (t, v, g, l, st) => window.__liveCheerSend(t, v, g, l, st),
+      stats: (team, g, since) => window.__liveStats(team, g, since),
     };
     if (!isScorer) return;
     window.__AIBSS_TEST_CLOUD__ = {
@@ -169,6 +197,22 @@ try {
   const before = viewCalls;
   await v.waitForTimeout(4500);
   ok('数秒おきに確認している', viewCalls > before);
+
+  // ---- 観戦中の人数と応援スタンプ ----
+  text = await v.locator('body').innerText();
+  ok('観戦ページに「1人が観戦中」が出る', text.includes('1人が観戦中'), text.slice(0, 200));
+  ok('応援スタンプのボタンが出る', (await v.locator('.cheer-buttons button').count()) === 5);
+  ok('応援の相手は直前のプレー', (await v.locator('.cheer-target').innerText()).includes('三振'));
+  await v.locator('.cheer-buttons button').first().click(); await v.waitForTimeout(200);
+  await v.locator('.cheer-buttons button').first().click(); await v.waitForTimeout(200);
+  ok('押すとスタンプが画面を流れる', (await v.locator('.cheer-float').count()) >= 1);
+  ok('スタンプは直前の打席に付く', cheers.length === 2 && cheers.every((c) => c.stamp === 'clap'), JSON.stringify(cheers));
+  await v.waitForTimeout(4800);
+  ok('試合経過の行に数が出る', (await v.locator('.log-line .cheer-counts').first().innerText()).includes('👏2'));
+  ok('応援が集まったプレーが出る', (await v.locator('.cheer-top').innerText()).includes('三振'));
+  await a.waitForTimeout(4800);
+  const sTxt = await a.locator('.cheer-strip').innerText().catch(() => '');
+  ok('記録係の画面にも観戦の人数と応援が出る', sTxt.includes('1人が観戦中') && sTxt.includes('応援 2'), sTxt);
 
   // ---- 止めると、観戦ページは見られなくなる ----
   await a.click('button:has-text("📺 観戦リンク")'); await W(400);

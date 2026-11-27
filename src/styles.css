@@ -2757,3 +2757,19 @@ html[data-outdoor] .app-header .outdoor-toggle.on { background: #1f6feb; border-
 /* 「あなたが記録係です」の下の、観戦リンク・記録員リンク(横一列) */
 .baton-links { display: flex; gap: 8px; margin-top: 6px; }
 .baton-links button { flex: 1 1 0; min-width: 0; white-space: nowrap; }
+
+/* ===== 観戦中の人数と応援スタンプ(components/Cheer.jsx) ===== */
+.viewer-count { font-size: 12px; font-weight: 800; padding: 3px 9px; border-radius: 999px; background: rgba(255, 255, 255, .08); white-space: nowrap; }
+.cheer-counts { display: inline-flex; gap: 6px; margin-left: 8px; font-size: 12px; font-weight: 800; white-space: nowrap; }
+.cheer-strip { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; margin: 6px 2px; }
+.cheer-bar { position: sticky; bottom: 8px; z-index: 5; margin: 12px 0; padding: 10px 12px; border-radius: 16px; background: var(--card, #161b22); border: 1px solid var(--line, rgba(255,255,255,.12)); box-shadow: 0 8px 24px rgba(0,0,0,.35); }
+.cheer-target { margin-bottom: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cheer-buttons { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.cheer-buttons button { font-size: 26px; padding: 8px 0; border-radius: 14px; line-height: 1; touch-action: manipulation; }
+.cheer-buttons button:active { transform: scale(.88); }
+.cheer-floats { position: fixed; inset: 0; pointer-events: none; z-index: 50; overflow: hidden; }
+.cheer-float { position: absolute; bottom: 90px; font-size: 32px; animation: cheer-up 2.4s ease-out forwards; opacity: 0; }
+@keyframes cheer-up { 0% { transform: translateY(0) scale(.6); opacity: 0; } 12% { opacity: 1; transform: translateY(-20px) scale(1.15); } 100% { transform: translateY(-62vh) scale(1); opacity: 0; } }
+.cheer-hype { position: fixed; left: 50%; top: 18%; transform: translateX(-50%); z-index: 51; pointer-events: none; padding: 12px 20px; border-radius: 999px; font-weight: 900; font-size: 18px; color: #fff; background: linear-gradient(90deg, #e8590c, #e03131); box-shadow: 0 10px 30px rgba(224, 49, 49, .45); animation: cheer-hype 3.4s ease-out forwards; white-space: nowrap; }
+@keyframes cheer-hype { 0% { opacity: 0; transform: translate(-50%, 10px) scale(.9); } 10% { opacity: 1; transform: translate(-50%, 0) scale(1.05); } 80% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .cheer-float { animation-duration: .01s; } .cheer-hype { animation: none; } }

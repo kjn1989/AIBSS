@@ -12,6 +12,7 @@ import Scoreboard from './Scoreboard.jsx';
 import Diamond from './Diamond.jsx';
 import LockedView from './LockedView.jsx';
 import ShareStatus from './ShareStatus.jsx';
+import { CheerStrip } from './Cheer.jsx';
 import { BatterStats, PitcherStats } from './CurrentBatter.jsx';
 import PitchCounter from './PitchCounter.jsx';
 import ResultPad from './ResultPad.jsx';
@@ -876,6 +877,7 @@ export default function ScoreTab() {
       <BatonConflict game={game} />
       <BatonMine game={game} />
       <ShareStatus game={game} />
+      <CheerStrip game={game} />
       <RuleBanners
         game={game}
         onFinish={() => {

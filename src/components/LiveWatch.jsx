@@ -4,6 +4,7 @@ import { fetchLive } from '../lib/officialCloud.js';
 import Scoreboard from './Scoreboard.jsx';
 import Diamond from './Diamond.jsx';
 import CurrentBatter from './CurrentBatter.jsx';
+import { useViewerCheer, CheerBar, CheerOverlay, CheerCounts, CheerTop, ViewerCount } from './Cheer.jsx';
 import ScoreSheetView from './ScoreSheetView.jsx';
 import { renderPlayLog } from '../lib/playLogText.js';
 
@@ -68,6 +69,9 @@ export default function LiveWatch({ token }) {
     } catch { /* 次の周期で再試行される */ }
   };
 
+  const liveGame = info?.gameId ? state.games[info.gameId] : null;
+  const cheer = useViewerCheer(status === 'stopped' ? null : token, liveGame);
+
   if (status === 'stopped') {
     return (
       <div className="watch-view">
@@ -87,6 +91,7 @@ export default function LiveWatch({ token }) {
         <span className={`pill ${status === 'on' ? (ongoing ? 'green' : '') : 'amber'}`}>
           {status !== 'on' ? t(status === 'error' ? 'live.reconnecting' : 'watch.connecting') : ongoing ? t('watch.live') : t('live.finished')}
         </span>
+        <ViewerCount n={cheer.feed?.viewers} />
       </header>
 
       {!game && (
@@ -105,12 +110,17 @@ export default function LiveWatch({ token }) {
               <div className="log-line" key={l.id}>
                 <b>{t('score.logInning', { inning: l.inning, half: t(l.isTop ? 'half.top' : 'half.bottom') })}</b>{' '}
                 {renderPlayLog(game, l, { lang, t, nameOf, edition: state.settings.edition })}
+                <CheerCounts m={cheer.feed?.byLog[l.id]} />
               </div>
             ))}
             {game.playLogs.length === 0 && <div className="dim small">{t('score.noPlays')}</div>}
           </div>
         </>
       )}
+
+      {game && <CheerTop game={game} top={cheer.feed?.top} />}
+      {game && cheer.feed && ongoing && <CheerBar token={token} game={game} onSent={(s) => cheer.pushFloats([s])} />}
+      <CheerOverlay floats={cheer.floats} hype={cheer.hype} />
 
       {sheetOpen && game && <ScoreSheetView game={game} readOnly onClose={() => setSheetOpen(false)} />}
 
