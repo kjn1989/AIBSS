@@ -75,6 +75,37 @@ try {
   await p.locator('button.undo-op').first().click();
   await W(500);
   ok('取り消すと一三塁に戻る', (await on(1)) === 1 && (await on(3)) === 1);
+
+  // ---- 細かく指定: 暴投で三塁走者だけ生還、一塁走者はそのまま ----
+  const outsA = await outs();
+  const rA = await runs1();
+  await p.locator('.sit-card .field-diamond-crop.mini').first().click(); await W(400);
+  await p.click('.sheet .base-pick .base.b3'); await W(400);
+  await p.click('.sheet button:has-text("細かく指定")'); await W(300);
+  await p.click('.custom-runner .cr-chips button:has-text("暴投")'); await W(150);
+  // 三塁走者は最初から「生還」が選ばれている。一塁走者は「そのまま」
+  const rows = p.locator('.custom-runner .cr-row');
+  ok('細かく指定に走者が2人並ぶ', (await rows.count()) === 2);
+  await rows.nth(0).locator('button:has-text("生還")').click();
+  await rows.nth(1).locator('button:has-text("そのまま")').click();
+  await p.click('.custom-runner button:has-text("この内容で記録する")'); await W(600);
+  ok('暴投で三塁走者だけ生還(1点・一塁はそのまま・アウトは増えない)', (await runs1()) === rA + 1 && (await on(1)) === 1 && (await on(3)) === 0 && (await outs()) === outsA,
+    `runs ${rA}→${await runs1()} b1=${await on(1)} b3=${await on(3)} outs ${outsA}→${await outs()}`);
+  ok('試合経過に「暴投」と出る', (await p.locator('.log-line').first().innerText()).includes('暴投'), await p.locator('.log-line').first().innerText());
+
+  // ---- 盗塁＋悪送球で三塁へ(一塁走者だけのとき) ----
+  await p.locator('.sit-card .field-diamond-crop.mini').first().click(); await W(400);
+  await p.click('.sheet .base-pick .base.b1'); await W(400);
+  await p.click('.sheet button:has-text("盗塁＋悪送球で三塁へ")'); await W(600);
+  ok('盗塁＋悪送球で三塁へ進む', (await on(3)) === 1 && (await on(1)) === 0);
+  const ll = (await p.locator('.log-line').allInnerTexts()).slice(0, 3).join(' | ');
+  ok('盗塁と「悪送球で進塁」が別々に残る', ll.includes('悪送球で進塁') && ll.includes('盗塁'), ll);
+
+  // ---- 「この走者が得点」は暴投ではなく「進塁」として残る ----
+  await p.locator('.sit-card .field-diamond-crop.mini').first().click(); await W(400);
+  await p.click('.sheet .base-pick .base.b3'); await W(400);
+  await p.click('.sheet button:has-text("この走者が得点")'); await W(600);
+  ok('「この走者が得点」は暴投と記録されない', !(await p.locator('.log-line').first().innerText()).includes('暴投'), await p.locator('.log-line').first().innerText());
 } catch (e) {
   console.log('ERROR:', e.message); fail++;
 } finally {
