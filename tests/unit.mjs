@@ -6522,7 +6522,7 @@ test('推定年俸: 1位が最高額、順位ごとに0.8倍、記録なしは�
   assert.equal(salaryPoints(null, { outsRecorded: 0, earnedRuns: 10 }), 0);
 });
 
-test('推定年俸: 出場試合数と守備機会(打球が飛んだ位置を守っていた人)も数える', async () => {
+test('推定年俸: 出場イニング・守備機会(打球が飛んだ位置を守っていた人)・ファインプレーも数える', async () => {
   const { participation, salaryPoints } = await import('../src/lib/salary.js');
   const g = {
     id: 'g1', status: 'finished', atBats: [{ playerId: 'a', result: 'single' }],
@@ -6532,13 +6532,14 @@ test('推定年俸: 出場試合数と守備機会(打球が飛んだ位置を�
       { kind: 'defense', inning: 1, isTop: true, payload: { result: 'out', direction: 'SS' } },
       { kind: 'defense', inning: 1, isTop: true, payload: { result: 'single', direction: 'CF' } },
       { kind: 'defense', inning: 1, isTop: true, payload: { result: 'so', direction: null } },
-      { kind: 'defense', inning: 2, isTop: true, payload: { result: 'out', direction: 'SS' } },
+      { kind: 'defense', inning: 2, isTop: true, payload: { result: 'out', direction: 'SS', finePlay: { pos: '遊', playerId: 'a' } } },
     ],
   };
   const x = participation([g]);
-  assert.equal(x.a.apps, 1);
-  assert.equal(x.b.apps, 1);
+  assert.equal(x.a.innings, 2); // 1回・2回とも守っていた
+  assert.equal(x.b.innings, 2);
+  assert.equal(x.a.fine, 1);
   assert.equal(x.a.chances, 2); // 遊撃への打球2つ(三振は数えない)
   assert.equal(x.b.chances, 1);
-  assert.equal(salaryPoints(null, null, x.a), 1 * 2 + 2 * 0.5);
+  assert.equal(salaryPoints(null, null, x.a), Math.round((2 * 0.3 + 2 * 0.5 + 1 * 2) * 10) / 10);
 });
