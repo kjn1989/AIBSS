@@ -17,6 +17,23 @@ import { renderPlayLog } from '../lib/playLogText.js';
 // ============================================================
 
 const POLL_MS = 4000;
+
+// 記録係の画面で、取りに行った応援を「試合経過」の行にも出すための小さな置き場。
+// CheerStrip が取りに行き、ほかの場所(試合経過の行)は読むだけ。取りに行くのは1か所だけにする
+const feedStore = { byGame: new Map(), subs: new Set() };
+function publishFeed(gameId, feed) {
+  feedStore.byGame.set(gameId, feed);
+  feedStore.subs.forEach((f) => f());
+}
+export function useCheerByLog(gameId) {
+  const [, force] = useState(0);
+  useEffect(() => {
+    const f = () => force((n) => n + 1);
+    feedStore.subs.add(f);
+    return () => { feedStore.subs.delete(f); };
+  }, []);
+  return feedStore.byGame.get(gameId)?.byLog || null;
+}
 const HYPE_MIN = 8; // 1回の取得(約4秒)でこれ以上の新しいスタンプが来たら「沸いた」
 
 // 打席の記録だけ(スタンプを付ける相手)
@@ -54,10 +71,15 @@ export function useCheerFeed(fetcher, key, myViewer = null) {
   const fRef = useRef(fetcher);
   fRef.current = fetcher;
 
+  const [ticker, setTicker] = useState([]); // 最近のスタンプ(新しい順・最大8)
+  // stamps: 'clap' か { s, label }(コインのスタンプは贈った相手の名前を添える)
   const pushFloats = (stamps) => {
     if (!stamps.length) return;
     const now = Date.now();
-    const add = stamps.slice(-14).map((s, i) => ({ id: `${now}-${i}-${Math.random()}`, s, x: 8 + Math.random() * 84, d: i * 120 }));
+    const add = stamps.slice(-14).map((x, i) => {
+      const o = typeof x === 'string' ? { s: x } : x;
+      return { id: `${now}-${i}-${Math.random()}`, s: o.s, player: o.player || null, x: 8 + Math.random() * 78, d: i * 120 };
+    });
     setFloats((f) => [...f, ...add].slice(-30));
     setTimeout(() => setFloats((f) => f.filter((x) => !add.includes(x))), 2600 + add.length * 120);
   };
@@ -87,8 +109,11 @@ export function useCheerFeed(fetcher, key, myViewer = null) {
           const recent = (r.recent || []).filter((x) => !myViewer || x.viewer !== myViewer);
           if (r.now) since.current = Number(r.now);
           // 開いた直後に過去のスタンプをまとめて流さない
+          if (recent.length) {
+            setTicker((tk) => [...recent.map((x) => ({ s: x.stamp, player: x.player || null, at: x.at })).reverse(), ...tk].slice(0, 8));
+          }
           if (!first) {
-            pushFloats(recent.map((x) => x.stamp));
+            pushFloats(recent.map((x) => ({ s: x.stamp, player: x.player || null })));
             if (recent.length >= HYPE_MIN) { setHype(true); setTimeout(() => setHype(false), 3500); }
           }
           first = false;
@@ -103,17 +128,22 @@ export function useCheerFeed(fetcher, key, myViewer = null) {
 
   // 送った直後に残りコインを画面だけ先に減らす(次の取得で正しい値に戻る)
   const spend = (n) => setFeed((f) => (f && f.wallet != null ? { ...f, wallet: Math.max(0, f.wallet - n) } : f));
-  return { feed, floats, hype, pushFloats, spend };
+  return { feed, floats, hype, pushFloats, spend, ticker };
 }
 
 // 流れていくスタンプと「沸いた」の帯
 export function CheerOverlay({ floats, hype }) {
   const t = useT();
+  const nameOf = usePlayerName();
   return (
     <>
       <div className="cheer-floats" aria-hidden="true">
         {floats.map((f) => (
-          <span key={f.id} className="cheer-float" style={{ left: `${f.x}%`, animationDelay: `${f.d}ms` }}>{CHEER_EMOJI[f.s] || '👏'}</span>
+          <span key={f.id} className="cheer-float" style={{ left: `${f.x}%`, animationDelay: `${f.d}ms` }}>
+            {CHEER_EMOJI[f.s] || '👏'}
+            {/* コインのスタンプは、誰に贈られたかを添える */}
+            {f.player && CHEER_COST[f.s] > 0 && <small className="cheer-float-to">{nameOf(f.player)}</small>}
+          </span>
         ))}
       </div>
       {hype && <div className="cheer-hype" role="status">{t('cheer.hype')}</div>}
@@ -240,10 +270,11 @@ export function CheerStrip({ game }) {
   const nameOf = usePlayerName();
   const teamId = state.settings.officialTeamId;
   const on = !!teamId && game?.status === 'ongoing' && state.cloudStatus === 'on';
-  const { feed, floats, hype } = useCheerFeed(
+  const { feed, floats, hype, ticker } = useCheerFeed(
     (since) => teamLiveStats(teamId, game.id, since),
     on ? `${teamId}:${game.id}` : null,
   );
+  useEffect(() => { if (feed && game?.id) publishFeed(game.id, feed); }, [feed, game?.id]);
   if (!on || !feed) return null;
   const last = lastPlayOf(game);
   const lastM = last ? feed.byLog[last.id] : null;
@@ -255,6 +286,17 @@ export function CheerStrip({ game }) {
         {lastM && <span className="dim">{t('cheer.lastPlay')}<CheerCounts m={lastM} /></span>}
         {feed.players?.[0]?.coins > 0 && <span className="dim">{t('cheer.king', { name: nameOf(feed.players[0].id), n: feed.players[0].coins })}</span>}
       </div>
+      {/* 届いたばかりの応援(新しい順)。記録しながらでも、横目で見られる1行だけ */}
+      {ticker.length > 0 && (
+        <div className="cheer-ticker small" aria-live="polite">
+          {ticker.map((x, i) => (
+            <span key={`${x.at}-${i}`}>
+              {CHEER_EMOJI[x.s] || '👏'}
+              {x.player && CHEER_COST[x.s] > 0 && <b>{nameOf(x.player)}</b>}
+            </span>
+          ))}
+        </div>
+      )}
       <CheerOverlay floats={floats} hype={hype} />
     </>
   );
