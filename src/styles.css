@@ -2799,3 +2799,11 @@ html[data-outdoor] .app-header .outdoor-toggle.on { background: #1f6feb; border-
 
 /* 流れタグのすぐ下の「試合の流れを見る」。押せると分かる大きさと色にする */
 .flow-view-btn { width: 100%; margin-top: 10px; padding: 12px; font-size: 15px; font-weight: 800; border-radius: 12px; color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+
+/* 走者がいるときだけ出す大きな走者ボタン(ScoreTab の RunnerChips) */
+.runner-chips { display: flex; gap: 6px; margin-top: 8px; }
+.runner-chip { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 7px 10px; margin: 0; border-radius: 12px; text-align: left; background: rgba(227, 179, 65, .10); border: 1px solid rgba(227, 179, 65, .55); }
+.runner-chip .rc-base { font-size: 10.5px; font-weight: 800; color: var(--gold, #e3b341); }
+.runner-chip .rc-name { font-size: 15px; font-weight: 900; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.runner-chip .rc-hint { font-size: 10.5px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+[data-outdoor] .runner-chip { background: rgba(169, 118, 10, .10); }
