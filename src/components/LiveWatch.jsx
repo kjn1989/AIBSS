@@ -88,10 +88,13 @@ export default function LiveWatch({ token }) {
     <div className="watch-view">
       <header className="watch-header">
         <h1>{info?.teamName ? `${info.teamName}${game?.opponent ? ` vs ${game.opponent}` : ''}` : t('live.title')}</h1>
-        <span className={`pill ${status === 'on' ? (ongoing ? 'green' : '') : 'amber'}`}>
-          {status !== 'on' ? t(status === 'error' ? 'live.reconnecting' : 'watch.connecting') : ongoing ? t('watch.live') : t('live.finished')}
-        </span>
-        <ViewerCount n={cheer.feed?.viewers} />
+        {/* 「ライブ」と観戦中の人数は縦に積む。横に並べると、チーム名が長いときに「ラ/イブ」と折れていた */}
+        <div className="watch-badges">
+          <span className={`pill ${status === 'on' ? (ongoing ? 'green' : '') : 'amber'}`}>
+            {status !== 'on' ? t(status === 'error' ? 'live.reconnecting' : 'watch.connecting') : ongoing ? t('watch.live') : t('live.finished')}
+          </span>
+          <ViewerCount n={cheer.feed?.viewers} />
+        </div>
       </header>
 
       {!game && (
