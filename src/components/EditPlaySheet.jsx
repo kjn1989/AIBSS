@@ -199,5 +199,7 @@ function FullEditPlaySheet({ game, log, draft, onClose }) {
 // かんたん記録の試合は、1画面で結果と守備位置だけ直せる短いシートで開く。
 // くわしい項目(打球の強さ・深さ・打点・打者の付け替え)は、くわしい試合でだけ出す
 export default function EditPlaySheet(props) {
-  return isSimpleGame(props.game) && !props.draft ? <SimpleEditSheet {...props} /> : <FullEditPlaySheet {...props} />;
+  // 飛ばした打席(kind=skip)に結果を入れるのは、くわしく記録の試合でも短いシート(FILL_SKIP)で行う
+  const short = !props.draft && (isSimpleGame(props.game) || props.log?.kind === 'skip');
+  return short ? <SimpleEditSheet {...props} /> : <FullEditPlaySheet {...props} />;
 }

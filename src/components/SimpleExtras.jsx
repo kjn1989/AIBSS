@@ -8,7 +8,8 @@ import EditPlaySheet from './EditPlaySheet.jsx';
 //  - 「不明」: 誰がどんな結果か分からないとき、飛ばして先へ進む(あとで入れられる)
 //  - 「この回は得点だけ」: 打者ごとに付けず、その回の得点だけ入れて次へ
 //  - 「直前の打席を直す」: 結果と守備位置だけを1画面で直す
-export default function SimpleExtras({ game, onScoreOnly }) {
+// detail: くわしく記録の試合。「直前の打席を直す」は既存の「記録を直す」があるので出さない
+export default function SimpleExtras({ game, onScoreOnly, detail = false }) {
   const { state, dispatch } = useStore();
   const t = useT();
   const nameOf = usePlayerName();
@@ -31,7 +32,7 @@ export default function SimpleExtras({ game, onScoreOnly }) {
         </button>
       </div>
       <p className="small dim" style={{ margin: '6px 2px 0' }}>{t('simple.skipHint')}</p>
-      {last && (
+      {last && !detail && (
         <button className="last-fix" onClick={() => setEdit(last)}>
           <span className="dim small">{t('simple.last')}</span>
           <b>{lastWho}</b>
