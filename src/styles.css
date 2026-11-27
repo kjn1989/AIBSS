@@ -2796,3 +2796,6 @@ html[data-outdoor] .app-header .outdoor-toggle.on { background: #1f6feb; border-
 .cheer-ticker { display: flex; gap: 10px; margin: 0 2px 6px; overflow: hidden; white-space: nowrap; mask-image: linear-gradient(90deg, #000 85%, transparent); }
 .cheer-ticker span { display: inline-flex; align-items: center; gap: 3px; }
 .cheer-ticker b { font-size: 11px; color: #e3b341; }
+
+/* 流れタグのすぐ下の「試合の流れを見る」。押せると分かる大きさと色にする */
+.flow-view-btn { width: 100%; margin-top: 10px; padding: 12px; font-size: 15px; font-weight: 800; border-radius: 12px; color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
