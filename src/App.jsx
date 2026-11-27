@@ -12,7 +12,7 @@ import CloudSync from './components/CloudSync.jsx';
 import PersistWarning from './components/PersistWarning.jsx';
 import UndoSnackbar from './components/UndoSnackbar.jsx';
 import { decodeConfig } from './components/WatchView.jsx';
-import { officialAvailable, currentUserAsync, loginWithPassword, joinByInvite, logout } from './lib/officialCloud.js';
+import { officialAvailable, currentUserAsync, loginWithPassword, signUpWithPassword, joinByInvite, logout } from './lib/officialCloud.js';
 import { addProfile, switchActiveProfile, findProfileByOfficialTeamId, updateProfileMeta } from './lib/profiles.js';
 import { persist } from './state/store.jsx';
 import { DiamondIcon, LedWordmark } from './components/BrandMark.jsx';
@@ -64,6 +64,8 @@ function useOfficialJoin(state, t) {
   const [signedAs, setSignedAs] = useState(''); // すでにログインしているアカウント(別のアカウントで参加したいとき用)
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [signup, setSignup] = useState(false); // 新規登録は本人が選んだときだけ
+  const [password2, setPassword2] = useState('');
   const [name, setName] = useState(recorderName());
 
   useEffect(() => {
@@ -85,7 +87,8 @@ function useOfficialJoin(state, t) {
         if (!email.includes('@') || password.length < 6) {
           throw new Error(t('join.errFields'));
         }
-        await loginWithPassword(email.trim(), password);
+        if (signup && password2 !== password) throw new Error(t('auth.mismatch'));
+        await (signup ? signUpWithPassword : loginWithPassword)(email.trim(), password);
       }
       if (name.trim()) saveRecorderName(name); // 共有アカウントでも、スマホごとに誰か分かるように
       const meta = await joinByInvite(token);
@@ -110,7 +113,7 @@ function useOfficialJoin(state, t) {
     try { await logout(); setNeedLogin(true); setSignedAs(''); } catch (e) { setError(e?.message || String(e)); }
     setBusy(false);
   };
-  return { token, busy, error, join, needLogin, signedAs, switchAccount, email, setEmail, password, setPassword, name, setName, dismiss: () => setToken(null) };
+  return { token, busy, error, join, needLogin, signedAs, switchAccount, signup, setSignup, password2, setPassword2, email, setEmail, password, setPassword, name, setName, dismiss: () => setToken(null) };
 }
 
 export default function App() {
@@ -158,9 +161,18 @@ export default function App() {
                   value={officialJoin.email} onChange={(e) => officialJoin.setEmail(e.target.value)}
                 />
                 <input
-                  type="password" autoComplete="current-password" name="password" placeholder={t('join.password')} className="mt8"
+                  type="password" autoComplete={officialJoin.signup ? 'new-password' : 'current-password'} name="password" placeholder={t('join.password')} className="mt8"
                   value={officialJoin.password} onChange={(e) => officialJoin.setPassword(e.target.value)}
                 />
+                {officialJoin.signup && (
+                  <input
+                    type="password" autoComplete="new-password" name="password2" placeholder={t('auth.password2')} className="mt8"
+                    value={officialJoin.password2} onChange={(e) => officialJoin.setPassword2(e.target.value)}
+                  />
+                )}
+                <button className="small ghost mt8" onClick={() => { officialJoin.setSignup(!officialJoin.signup); officialJoin.setPassword2(''); }}>
+                  {t(officialJoin.signup ? 'auth.toLogin' : 'auth.toSignup')}
+                </button>
               </>
             )}
             {!officialJoin.needLogin && officialJoin.signedAs && (
@@ -179,7 +191,7 @@ export default function App() {
             <div className="sheet-actions">
               <button className="ghost" onClick={officialJoin.dismiss} disabled={officialJoin.busy}>{t('join.notNow')}</button>
               <button className="primary" onClick={officialJoin.join} disabled={officialJoin.busy}>
-                {officialJoin.busy ? t('join.joining') : officialJoin.needLogin ? t('join.signInAndJoin') : t('join.join')}
+                {officialJoin.busy ? t('join.joining') : officialJoin.needLogin ? t(officialJoin.signup ? 'auth.signupAndJoin' : 'join.signInAndJoin') : t('join.join')}
               </button>
             </div>
           </div>

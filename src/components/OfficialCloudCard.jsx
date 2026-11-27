@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useStore, useT, persist } from '../state/store.jsx';
 import {
-  officialAvailable, watchAuth, loginWithPassword, logout,
+  officialAvailable, watchAuth, loginWithPassword, signUpWithPassword, logout,
   createCloudTeam, createInvite, inviteUrl, listMyTeams, listMembers, setMemberRole, removeMember, deleteCloudTeam,
   sendLoginLink, transferOwnership, teamOwnerUid,
   deleteMyAccount,
@@ -23,6 +23,8 @@ export default function OfficialCloudCard() {
   const [user, setUser] = useState(undefined); // undefined=確認中 / null=未ログイン
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [signup, setSignup] = useState(false); // 新規登録は本人が選んだときだけ
+  const [password2, setPassword2] = useState('');
   const [linkSent, setLinkSent] = useState(false);
   const [ownerUid, setOwnerUid] = useState(null); // 退会でチームが消えるアカウント
   const [busy, setBusy] = useState(false);
@@ -177,18 +179,29 @@ export default function OfficialCloudCard() {
           <p className="small dim" style={{ marginBottom: 10 }}>
             {t('occ.loginDesc')}
           </p>
+          {signup && <p className="small" style={{ marginBottom: 6 }}><b>{t('auth.signupTitle')}</b></p>}
           <input type="email" autoComplete="username" name="email" placeholder={t('occ.email')} value={email} onChange={(e) => setEmail(e.target.value)} />
           <input
-            type="password" autoComplete="current-password" name="password" placeholder={t('occ.password')} className="mt8"
+            type="password" autoComplete={signup ? 'new-password' : 'current-password'} name="password" placeholder={t('occ.password')} className="mt8"
             value={password} onChange={(e) => setPassword(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && email.includes('@') && password.length >= 6 && run(() => loginWithPassword(email.trim(), password))()}
+            onKeyDown={(e) => e.key === 'Enter' && !signup && email.includes('@') && password.length >= 6 && run(() => loginWithPassword(email.trim(), password))()}
           />
+          {signup && (
+            <input
+              type="password" autoComplete="new-password" name="password2" placeholder={t('auth.password2')} className="mt8"
+              value={password2} onChange={(e) => setPassword2(e.target.value)}
+            />
+          )}
+          {signup && password2 && password2 !== password && <p className="small" style={{ color: 'var(--red)' }}>{t('auth.mismatch')}</p>}
           <button
             className="primary mt8" style={{ width: '100%' }}
-            disabled={busy || !email.includes('@') || password.length < 6}
-            onClick={run(() => loginWithPassword(email.trim(), password))}
+            disabled={busy || !email.includes('@') || password.length < 6 || (signup && password2 !== password)}
+            onClick={run(() => (signup ? signUpWithPassword(email.trim(), password) : loginWithPassword(email.trim(), password)))}
           >
-            {busy ? t('occ.busy') : t('occ.loginBtn')}
+            {busy ? t('occ.busy') : t(signup ? 'auth.signupBtn' : 'occ.loginBtn')}
+          </button>
+          <button className="small ghost mt8" style={{ width: '100%' }} onClick={() => { setSignup(!signup); setPassword2(''); setErr(''); }}>
+            {t(signup ? 'auth.toLogin' : 'auth.toSignup')}
           </button>
           <details className="forgot-help mt8">
             <summary>{t('occ.forgotSummary')}</summary>
