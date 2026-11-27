@@ -962,6 +962,8 @@ function TeamSwitcherCard() {
               {p.id === activeId ? '✅ ' : ''}{p.name}
             </b>
             <span className="pill" style={{ marginLeft: 6 }}>{lang === 'en' ? t(`edition.${p.edition}`) : editionLabel(p.edition)}</span>
+            {/* 同じ名前のチームが並んでも、クラウドで共有しているものか、この端末だけのものかが分かるように */}
+            <span className={`pill ${p.officialTeamId ? 'blue' : ''}`} style={{ marginLeft: 4 }}>{t(p.officialTeamId ? 'set.teamCloud' : 'set.teamLocal')}</span>
           </div>
           {/* クラウドのチームは、管理者(オーナー)の端末でだけ外せる。記録係・観戦の端末では出さない */}
           {p.id !== activeId && canRemove(p) && (
