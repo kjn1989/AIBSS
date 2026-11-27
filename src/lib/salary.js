@@ -28,16 +28,18 @@ export const clampTop = (v) => {
 //   打者: 塁打 + 四死球 + 盗塁 + 得点 + 打点
 //   投手: 投球回×1.5 + 奪三振×0.5 − 自責点 − 与四死球×0.3 (0未満は0)
 //   出場: 出場イニング×0.3 / 守備: 守備機会×0.5 + ファインプレー×2
+//   ファン: 観戦ページで贈られた応援コイン×0.2(クラウドで観戦リンクを使っているチームだけ)
 // 投手の1試合(7回・3奪三振・3自責点)が、打者のよく打った1試合(2安打・1得点・1打点)の2倍くらいになる重み
 export const INNING_WEIGHT = 0.3; // 7回フル出場で約2点
 export const CHANCE_WEIGHT = 0.5;
 export const FINE_WEIGHT = 2;
+export const FAN_WEIGHT = 0.2; // 観戦者から贈られた応援コイン1枚あたり(1人が1試合で贈れるのは50枚 = 10点)
 export function salaryPoints(b, p, x = null) {
   const bat = b ? (b.tb || 0) + (b.bb || 0) + (b.hbp || 0) + (b.sb || 0) + (b.runs || 0) + (b.rbi || 0) : 0;
   const pit = p
     ? Math.max(0, ((p.outsRecorded || 0) / 3) * 1.5 + (p.strikeouts || 0) * 0.5 - (p.earnedRuns || 0) - ((p.walks || 0) + (p.hitByPitch || 0)) * 0.3)
     : 0;
-  const more = x ? (x.innings || 0) * INNING_WEIGHT + (x.chances || 0) * CHANCE_WEIGHT + (x.fine || 0) * FINE_WEIGHT : 0;
+  const more = x ? (x.innings || 0) * INNING_WEIGHT + (x.chances || 0) * CHANCE_WEIGHT + (x.fine || 0) * FINE_WEIGHT + (x.fan || 0) * FAN_WEIGHT : 0;
   return Math.round((bat + pit + more) * 10) / 10;
 }
 

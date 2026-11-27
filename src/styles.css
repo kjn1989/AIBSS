@@ -2786,3 +2786,8 @@ html[data-outdoor] .app-header .outdoor-toggle.on { background: #1f6feb; border-
 .cheer-hype { position: fixed; left: 50%; top: 18%; transform: translateX(-50%); z-index: 51; pointer-events: none; padding: 12px 20px; border-radius: 999px; font-weight: 900; font-size: 18px; color: #fff; background: linear-gradient(90deg, #e8590c, #e03131); box-shadow: 0 10px 30px rgba(224, 49, 49, .45); animation: cheer-hype 3.4s ease-out forwards; white-space: nowrap; }
 @keyframes cheer-hype { 0% { opacity: 0; transform: translate(-50%, 10px) scale(.9); } 10% { opacity: 1; transform: translate(-50%, 0) scale(1.05); } 80% { opacity: 1; } 100% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .cheer-float { animation-duration: .01s; } .cheer-hype { animation: none; } }
+.cheer-buttons button { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.cheer-buttons .cb-cost { font-size: 10.5px; font-weight: 800; opacity: .8; }
+.cheer-buttons button.off { opacity: .35; }
+.cheer-wallet { margin-top: 6px; text-align: center; }
+.cheer-coins { color: #e3b341; white-space: nowrap; }

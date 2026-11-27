@@ -1,4 +1,5 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { teamCheerTotals } from '../lib/officialCloud.js';
 import { useStore, useT } from '../state/store.jsx';
 import { aggregateBatting, aggregatePitching } from '../lib/stats.js';
 import { isArchived } from '../lib/year.js';
@@ -10,10 +11,37 @@ export function useTeamSalaries() {
   const games = useMemo(() => Object.values(state.games), [state.games]);
   const batting = useMemo(() => aggregateBatting(games), [games]);
   const pitching = useMemo(() => aggregatePitching(games), [games]);
-  const extra = useMemo(() => participation(games), [games]);
+  const fan = useFanCoins(state);
+  const extra = useMemo(() => {
+    const x = participation(games);
+    for (const [id, coins] of Object.entries(fan || {})) (x[id] ||= { innings: 0, chances: 0, fine: 0 }).fan = Number(coins) || 0;
+    return x;
+  }, [games, fan]);
   const top = clampTop(state.settings.salaryTopOku ?? SALARY_TOP_DEFAULT);
   const players = useMemo(() => state.players.filter((p) => !isArchived(p)), [state.players]);
   return { rows: useMemo(() => teamSalaries(players, batting, pitching, top, extra), [players, batting, pitching, top, extra]), top };
+}
+
+// 観戦ページで贈られた応援コイン(選手ごとの通算)。名鑑とランキングで何度も取りに行かないよう、
+// チームごとに1分だけ覚えておく
+const fanCache = new Map(); // teamId -> { at, data }
+function useFanCoins(state) {
+  const teamId = state.settings.officialTeamId;
+  const on = !!teamId && state.cloudStatus === 'on';
+  const [data, setData] = useState(() => (teamId && fanCache.get(teamId)?.data) || null);
+  useEffect(() => {
+    if (!on) return undefined;
+    let alive = true;
+    const c = fanCache.get(teamId);
+    if (c && Date.now() - c.at < 60000) { setData(c.data); return undefined; }
+    teamCheerTotals(teamId).then((d) => {
+      if (!alive || !d) return;
+      fanCache.set(teamId, { at: Date.now(), data: d });
+      setData(d);
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [on, teamId]);
+  return on ? data : null;
 }
 
 const PRESETS = [1, 3, 5, 10, 30, 100];
