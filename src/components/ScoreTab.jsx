@@ -11,6 +11,7 @@ import { lockedFor, recorderName, saveRecorderName } from '../lib/baton.js';
 import Scoreboard from './Scoreboard.jsx';
 import Diamond from './Diamond.jsx';
 import LockedView from './LockedView.jsx';
+import ShareStatus from './ShareStatus.jsx';
 import { BatterStats, PitcherStats } from './CurrentBatter.jsx';
 import PitchCounter from './PitchCounter.jsx';
 import ResultPad from './ResultPad.jsx';
@@ -874,6 +875,7 @@ export default function ScoreTab() {
       <Scoreboard game={game} />
       <BatonConflict game={game} />
       <BatonMine game={game} />
+      <ShareStatus game={game} />
       <RuleBanners
         game={game}
         onFinish={() => {

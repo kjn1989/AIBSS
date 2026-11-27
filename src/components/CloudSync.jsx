@@ -209,7 +209,8 @@ export default function CloudSync() {
       }
     }, 800);
     return () => clearTimeout(t);
-  }, [state.games, state.players, state.members]);
+  // ロールが確定した・つながった時点でも送る(それまでの変更が、次の入力まで送られずに残らないように)
+  }, [state.games, state.players, state.members, state.settings.officialRole, state.cloudStatus]);
 
   return null;
 }
