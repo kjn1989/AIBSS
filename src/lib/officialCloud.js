@@ -447,3 +447,44 @@ export async function fetchLive(token, { game = null, last = null, since = 0 } =
   if (error) throw liveError(error);
   return data;
 }
+
+// ---------------- 観戦中の人数と応援スタンプ(supabase/live_cheer.sql) ----------------
+// SQLをまだ流していないチームでは関数が無い。そのときは null を返し、画面は何も出さない
+// (人数やスタンプが無くても、観戦そのものは今までどおり動く)
+const cheerMissing = (error) => /could not find the function|schema cache|live_presence|live_cheer|team_live_stats/i.test(error?.message || '');
+
+export const CHEER_STAMPS = ['clap', 'fire', 'ball', 'muscle', 'wow'];
+export const CHEER_EMOJI = { clap: '👏', fire: '🔥', ball: '⚾', muscle: '💪', wow: '😱' };
+
+// 観戦ページが数秒おきに呼ぶ。「見ています」を知らせ、人数とスタンプを受け取る
+export async function livePresence(token, viewer, game, since = 0) {
+  const t = testLive();
+  if (t) return t.presence ? t.presence(token, viewer, game, since) : null;
+  const sb = ensureClient();
+  if (!sb) return null;
+  const { data, error } = await sb.rpc('live_presence', { p_token: token, p_viewer: viewer, p_game: game, p_since: since });
+  if (error) { if (cheerMissing(error)) return null; throw error; }
+  return data;
+}
+
+// 応援スタンプを送る。そのとき最新の打席(logId)に付く
+export async function liveCheer(token, viewer, game, logId, stamp) {
+  const t = testLive();
+  if (t) return t.cheer ? t.cheer(token, viewer, game, logId, stamp) : null;
+  const sb = ensureClient();
+  if (!sb) return null;
+  const { data, error } = await sb.rpc('live_cheer', { p_token: token, p_viewer: viewer, p_game: game, p_log: logId, p_stamp: stamp });
+  if (error) { if (cheerMissing(error)) return null; throw error; }
+  return data;
+}
+
+// 記録係の画面用。チームのメンバーだけが読める
+export async function teamLiveStats(teamId, game, since = 0) {
+  const t = testLive();
+  if (t) return t.stats ? t.stats(teamId, game, since) : null;
+  const sb = ensureClient();
+  if (!sb) return null;
+  const { data, error } = await sb.rpc('team_live_stats', { p_team: teamId, p_game: game, p_since: since });
+  if (error) { if (cheerMissing(error)) return null; throw error; }
+  return data;
+}

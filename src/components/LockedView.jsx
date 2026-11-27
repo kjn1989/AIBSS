@@ -4,6 +4,7 @@ import Scoreboard from './Scoreboard.jsx';
 import Diamond from './Diamond.jsx';
 import ScoreSheetView from './ScoreSheetView.jsx';
 import CurrentBatter from './CurrentBatter.jsx';
+import { CheerStrip } from './Cheer.jsx';
 import { BatonConflict, BatonLocked } from './BatonPanel.jsx';
 import { renderPlayLog } from '../lib/playLogText.js';
 
@@ -34,6 +35,7 @@ export default function LockedView({ game }) {
       <Scoreboard game={game} />
       <BatonConflict game={game} />
       <BatonLocked game={game} compact={watch} />
+      <CheerStrip game={game} />
       {watch && (
         <>
           <Diamond game={game} onBaseTap={() => {}} />
