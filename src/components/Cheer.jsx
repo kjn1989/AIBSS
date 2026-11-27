@@ -232,7 +232,8 @@ export function CheerBar({ token, game, wallet, onSent }) {
           return (
             <button key={s} type="button" className={off ? 'off' : ''} onClick={() => send(s)} aria-label={t(`cheer.s.${s}`)}>
               <span className="cb-emoji">{CHEER_EMOJI[s]}</span>
-              <span className="cb-cost">{cost ? `🪙${cost}` : t('cheer.free')}</span>
+              {/* コインのスタンプは「あと何回送れるか」を出す。👏😱 は回数に制限が無い */}
+              <span className="cb-cost">{cost ? t('cheer.left', { n: Math.floor(left / cost) }) : t('cheer.unlimited')}</span>
             </button>
           );
         })}

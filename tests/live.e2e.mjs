@@ -217,6 +217,7 @@ try {
   ok('押すとスタンプが画面を流れる', (await v.locator('.cheer-float').count()) >= 1);
   await v.locator('.cheer-buttons button').nth(4).click(); await v.waitForTimeout(300); // 🏆 10コイン
   ok('コインのスタンプで残りが減る', (await v.locator('.cheer-wallet').innerText()).includes('40/50'), await v.locator('.cheer-wallet').innerText());
+  ok('ボタンに「無制限」と「あと何回」が出る', (await v.locator('.cheer-buttons').innerText()).includes('無制限') && (await v.locator('.cheer-buttons').innerText()).includes('あと4回'), await v.locator('.cheer-buttons').innerText());
   ok('スタンプは直前の打席とその選手に付く', cheers.length === 3 && cheers.every((c) => c.player) && cheers[2].coins === 10, JSON.stringify(cheers));
   for (let i = 0; i < 5; i++) { await v.locator('.cheer-buttons button').nth(4).click(); await v.waitForTimeout(150); }
   ok('コインが足りなくなると贈れない', cheers.filter((c) => c.coins).length === 5, String(cheers.filter((c) => c.coins).length));
