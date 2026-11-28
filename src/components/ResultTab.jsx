@@ -13,6 +13,8 @@ import ScoreSheetView from './ScoreSheetView.jsx';
 import FlowView from './FlowView.jsx';
 import NewspaperView from './NewspaperView.jsx';
 import ImportCsvView from './ImportCsvView.jsx';
+import TournamentSummary from './TournamentSummary.jsx';
+import { tournamentOf } from '../lib/tournament.js';
 
 // 過去試合のCSV取り込み(ホームから移設): 紙のスコアブック等を成績に取り込む入口
 function ImportCard() {
@@ -221,6 +223,20 @@ export default function ResultTab() {
           {t('ss.openFlow')}
         </button>
       </div>
+
+      {/* この試合の大会(「AABC2026 第2戦」なら AABC2026)に2試合以上あれば、大会のまとめを出す */}
+      {(() => {
+        const name = tournamentOf(game.season);
+        const list = name ? games.filter((g) => tournamentOf(g.season) === name)
+          .sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.startedAt || 0) - (b.startedAt || 0)) : [];
+        if (list.length < 2) return null;
+        return (
+          <div className="card">
+            <TournamentSummary games={list} title={name} onPick={setGameId} currentId={game.id} />
+            <p className="small dim" style={{ margin: '8px 0 0' }}>{t('tour.statsHint')}</p>
+          </div>
+        );
+      })()}
 
       <div className="section-title">{t('restab.report')}</div>
       <HighlightCard game={game} />
