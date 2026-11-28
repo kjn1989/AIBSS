@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { teamCheerTotals } from '../lib/officialCloud.js';
-import { useStore, useT } from '../state/store.jsx';
+import { useStore, useT, playerAliasMap } from '../state/store.jsx';
 import { aggregateBatting, aggregatePitching } from '../lib/stats.js';
 import { isArchived } from '../lib/year.js';
 import { teamSalaries, participation, formatSalary, clampTop, SALARY_TOP_DEFAULT, SALARY_TOP_MAX } from '../lib/salary.js';
@@ -14,9 +14,14 @@ export function useTeamSalaries() {
   const fan = useFanCoins(state);
   const extra = useMemo(() => {
     const x = participation(games);
-    for (const [id, coins] of Object.entries(fan || {})) (x[id] ||= { innings: 0, chances: 0, fine: 0 }).fan = Number(coins) || 0;
+    // 統合で消えた選手に贈られたコインは、残した選手に足す
+    const alias = playerAliasMap(state.players);
+    for (const [id0, coins] of Object.entries(fan || {})) {
+      const e = (x[alias.get(id0) || id0] ||= { innings: 0, chances: 0, fine: 0 });
+      e.fan = (e.fan || 0) + (Number(coins) || 0);
+    }
     return x;
-  }, [games, fan]);
+  }, [games, fan, state.players]);
   const top = clampTop(state.settings.salaryTopOku ?? SALARY_TOP_DEFAULT);
   const players = useMemo(() => state.players.filter((p) => !isArchived(p)), [state.players]);
   return { rows: useMemo(() => teamSalaries(players, batting, pitching, top, extra), [players, batting, pitching, top, extra]), top };

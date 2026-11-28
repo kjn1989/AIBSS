@@ -241,6 +241,21 @@ try {
   text = await v.locator('body').innerText();
   ok('止めたリンクは「止められています」になる', text.includes('止められています'), text.slice(0, 200));
   ok('止めたあとは新しく作り直せる', (await a.locator('button:has-text("観戦リンクを作る")').count()) === 1);
+
+  // ---- 試合が終わると、観戦の応援が試合結果に残る ----
+  const ov0 = a.locator('.sheet-overlay');
+  if (await ov0.count()) { await ov0.first().click({ position: { x: 5, y: 5 } }); await W(400); }
+  await a.click('nav button:has-text("スコア入力")'); await W(400);
+  await a.locator('button:has-text("試合終了")').last().click(); await W(800);
+  const ov = a.locator('.sheet-overlay');
+  if (await ov.count()) { await ov.first().click({ position: { x: 5, y: 5 } }); await W(400); }
+  await a.click('nav button:has-text("試合結果")'); await W(1500);
+  const cr = await a.locator('.cheer-result').innerText().catch(() => '');
+  ok('試合結果に「観戦の応援」が出る(スタンプの数・コインのランキング・集まったプレー)', cr.includes('応援スタンプ 47') && cr.includes('井上') && cr.includes('🪙 50') && cr.includes('三振'), cr);
+  await W(1500);
+  const saved = [...cloud.game.values()].find((g) => g.status === 'finished');
+  ok('応援の要約が試合に残り、クラウドにも同期される', saved?.cheers?.total === 47 && saved.cheers.players?.[0]?.coins === 50, JSON.stringify(saved?.cheers || null).slice(0, 200));
+
 } catch (e) {
   console.log('ERROR:', e.message); fail++;
 } finally {

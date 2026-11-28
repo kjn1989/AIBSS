@@ -2,6 +2,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useStore, useT, usePlayerName } from '../state/store.jsx';
 import { livePresence, liveCheer, teamLiveStats, CHEER_STAMPS, CHEER_EMOJI, CHEER_COST, CHEER_WALLET } from '../lib/officialCloud.js';
 import { renderPlayLog } from '../lib/playLogText.js';
+import { cheerSummary } from '../lib/cheerSummary.js';
+
+export { cheerSummary };
 
 // ============================================================
 // 観戦中の人数と応援スタンプ(supabase/live_cheer.sql)
@@ -95,17 +98,8 @@ export function useCheerFeed(fetcher, key, myViewer = null) {
         const r = await fRef.current(since.current);
         if (!alive) return;
         if (r && !r.error) {
-          const byLog = {};
-          for (const c of r.cheers || []) {
-            (byLog[c.log || ''] ||= {})[c.stamp] = Number(c.n) || 0;
-          }
-          const top = Object.entries(byLog)
-            .filter(([log]) => log)
-            .map(([log, m]) => ({ log, m, n: Object.values(m).reduce((a, b) => a + b, 0) }))
-            .sort((a, b) => b.n - a.n)
-            .slice(0, 3);
-          const players = (r.players || []).map((x) => ({ id: x.player, coins: Number(x.coins) || 0, n: Number(x.n) || 0 }));
-          setFeed({ viewers: Number(r.viewers) || 0, total: Number(r.total) || 0, byLog, top, players, wallet: r.wallet == null ? null : Number(r.wallet) });
+          const { byLog, top, players, total } = cheerSummary(r);
+          setFeed({ viewers: Number(r.viewers) || 0, total, byLog, top, players, wallet: r.wallet == null ? null : Number(r.wallet) });
           const recent = (r.recent || []).filter((x) => !myViewer || x.viewer !== myViewer);
           if (r.now) since.current = Number(r.now);
           // 開いた直後に過去のスタンプをまとめて流さない
