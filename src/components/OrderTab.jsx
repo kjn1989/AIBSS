@@ -6,6 +6,7 @@ import { canWriteCloud } from '../lib/officialCloud.js';
 import { allBatSize } from '../lib/rules.js';
 import { swapOrderPlan } from '../lib/lineupOrder.js';
 import Sheet from './Sheet.jsx';
+import LineupChangeSheet from './LineupChangeSheet.jsx';
 import LineupWizard from './LineupWizard.jsx';
 import OppOrderCard, { OppSubstituteSheet } from './OppOrderCard.jsx';
 import HeadCoachView from './HeadCoachView.jsx';
@@ -275,6 +276,8 @@ export default function OrderTab() {
   const game = useCurrentGame();
   const nameOf = usePlayerName();
   const [subSlot, setSubSlot] = useState(null);
+  // 選手交代(まとめて)。行を押したときは、その打順の控えを広げて開く
+  const [change, setChange] = useState(null); // { focus: 打順 | null }
   // 打順は▲▼でその場で入れ替える(確認の画面は出さない)。すでに記録した打席も動くので、
   // 何件動いたかを知らせて「取り消す」を数秒出す
   const [swapMsg, setSwapMsg] = useState(null);
@@ -388,6 +391,9 @@ export default function OrderTab() {
           </button>
         )}
         {pasteOpen && <RosterPasteSheet game={game} onClose={() => setPasteOpen(false)} />}
+        <button className="primary lc-open" onClick={() => setChange({ focus: null })}>
+          {t('lc.open')}<span className="small">{t('lc.openSub')}</span>
+        </button>
         <button className="small ghost att-edit" onClick={() => setAttOpen(true)}>
           {t('att.edit', { n: attendeesOf(game, state.players.filter((p) => !isArchived(p))).length })}
         </button>
@@ -415,7 +421,7 @@ export default function OrderTab() {
         {game.lineup.map((slot, i) => (
           <div className="row" key={slot.order}>
             <span className="rank-badge">{slot.order}</span>
-            <div className="grow" onClick={() => setSubSlot(slot)} role="button">
+            <div className="grow" onClick={() => setChange({ focus: slot.order })} role="button">
               <b>{nameOf(slot.playerId)}</b>
               <NameButton playerId={slot.playerId} game={game} className="pill" />
               {i === game.batterIndex && <span className="pill blue" style={{ marginLeft: 6 }}>{t('order.nextBatter')}</span>}
@@ -461,6 +467,7 @@ export default function OrderTab() {
       )}
 
       {subSlot && <SubstituteSheet game={game} slot={subSlot} onClose={() => setSubSlot(null)} />}
+      {change && <LineupChangeSheet game={game} focusOrder={change.focus} onClose={() => setChange(null)} />}
       {coachView}
     </div>
   );
