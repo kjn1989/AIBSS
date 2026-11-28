@@ -988,6 +988,14 @@ function reduce(state, action) {
       g.updatedAt = Date.now();
       return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
     }
+    // 守備につくときの守備位置の確認が済んだ(この回の表裏)。試合に持たせて同期するので、
+    // 記録係が交代しても、同じ回でもう一度聞かない。取り消しの対象にはしない
+    case 'MARK_DEFENSE_CONFIRMED': {
+      const g0 = state.games[action.gameId];
+      if (!g0 || g0.defConfirmed === action.key) return state;
+      const g = { ...g0, defConfirmed: action.key, updatedAt: Date.now() };
+      return { ...state, games: { ...state.games, [g.id]: g } };
+    }
     // 観戦の応援(スタンプ・応援コイン)の結果を試合に残す。クラウドの応援の表から作った要約。
     // 試合結果タブで見られ、試合と一緒に同期される。取り消しの対象にはしない(記録ではないため)
     case 'SET_GAME_CHEERS': {

@@ -6680,3 +6680,20 @@ test('応援コインはプレーから数え直す: 統合の前に贈られた
   // 無料のスタンプ(👏)はコインに入らない
   assert.equal(s.players.find((x) => x.id === 'keep').n, 1);
 });
+
+test('相手投手: 交代や代打が多い試合でも、10番手まで(それ以上も)交代できる', async () => {
+  const { nextOppPitcherLetter, oppPitcherLabel } = await import('../src/lib/oppBox.js');
+  const { OPP_LETTERS } = await import('../src/lib/model.js');
+  assert.equal(OPP_LETTERS.length, 26);
+  // 打順9人+相手の代打・代走8人を使った試合
+  const g = { oppPitcherLetter: 'A', oppUsedLetters: OPP_LETTERS.slice(0, 17), oppNames: {}, playLogs: [] };
+  for (let i = 2; i <= 12; i++) {
+    const next = nextOppPitcherLetter(g);
+    assert.ok(next, `${i}番手`);
+    assert.equal(oppPitcherLabel(g, next), `${i}番手`);
+    g.playLogs.push({ kind: 'opppitcher', payload: { in: next, out: g.oppPitcherLetter } });
+    g.oppPitcherLetter = next;
+    g.oppUsedLetters.push(next);
+  }
+  assert.equal(oppPitcherLabel(g, 'A'), '先発');
+});

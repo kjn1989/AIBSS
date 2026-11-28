@@ -1,7 +1,7 @@
 // ============================================================
 // 相手チームの出場選手ツリー + その試合の打撃成績
 //
-// 草野球では対戦相手が毎回変わるため、相手選手は記号(A〜T)で記録している。
+// 草野球では対戦相手が毎回変わるため、相手選手は記号(A〜Z)で記録している。
 // ただし自軍の投手成績をつけている時点で、相手の打席結果は 'defense' ログとして
 // すべて残っている。ここではそれを打順ツリー(自軍と同じ形)へ組み直す。
 //
@@ -91,7 +91,7 @@ export function oppPitcherLetters(game) {
 }
 
 // 相手投手の呼び名。名前を入れてあれば名前、無ければ登板の順に「先発」「2番手」「3番手」…
-// 記号(A〜T)は相手の打順の記号と同じ文字なので、投手の呼び名としては使わない
+// 記号(A〜Z)は相手の打順の記号と同じ文字なので、投手の呼び名としては使わない
 // (「どの文字を選べば投手交代になるのか」が分からなかった)
 export function oppPitcherLabel(game, letter, lang = 'ja') {
   if (!letter) return '';
@@ -109,7 +109,10 @@ export function oppPitcherOrdinal(i, lang = 'ja') {
 // 次に登板する相手投手に割り当てる記号(まだ試合に出ていない記号)
 export function nextOppPitcherLetter(game) {
   const used = new Set([...(game?.oppUsedLetters || []), ...oppPitcherLetters(game)]);
-  return OPP_LETTERS.find((l) => !used.has(l)) || null;
+  const free = OPP_LETTERS.find((l) => !used.has(l));
+  if (free) return free;
+  // A〜Zを使い切っても投手交代は止めない(交代と継投が非常に多い試合)。投手だけの記号を足す
+  for (let n = 1; ; n++) if (!used.has(`P${n}`)) return `P${n}`;
 }
 
 // 記号ごとの、その試合の打撃成績。相手の打席は 'defense' ログに入っている。

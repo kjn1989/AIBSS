@@ -4,7 +4,7 @@ import { POSITIONS, positionLabel, OPP_LETTERS } from '../lib/model.js';
 import { oppNameOf, oppPositionOf, oppHasName } from '../lib/oppBox.js';
 import Sheet from './Sheet.jsx';
 
-// 相手チームのオーダー(記号A〜Tで管理)。名前と守備位置は任意で入れられる。
+// 相手チームのオーダー(記号A〜Zで管理)。名前と守備位置は任意で入れられる。
 // 自軍のオーダーと同じ並び(打順・名前・守備位置・交代)にして、迷わず使えるようにする。
 const FIELD_POSITIONS = POSITIONS.filter((p) => p !== '打' && p !== '控');
 
@@ -149,7 +149,7 @@ export function OppNameSheet({ game, letter, onClose }) {
   );
 }
 
-// ---- 相手選手交代シート(代打・代走・守備交代。実名の代わりにA〜Tの記号を使う) ----
+// ---- 相手選手交代シート(代打・代走・守備交代。実名の代わりにA〜Zの記号を使う) ----
 export function OppSubstituteSheet({ game, slot, onClose, initialKind = 'ph' }) {
   const { dispatch } = useStore();
   const t = useT();

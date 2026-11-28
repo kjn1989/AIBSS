@@ -48,7 +48,7 @@ const FIELD_DOC = {
     'payload.runs': 'そのプレイで入った得点',
     'payload.outsOnPlay': 'そのプレイで増えたアウト数',
     'payload.pitchCount': 'その打席の投球数',
-    'payload.letter': '相手選手の記号(A〜T)。試合ごとの識別子で、試合をまたぐ意味はない',
+    'payload.letter': '相手選手の記号(A〜Z)。試合ごとの識別子で、試合をまたぐ意味はない',
     'payload.pitcherId': '投げていた自チーム投手のID',
   },
   player: {
@@ -126,7 +126,7 @@ export function buildYearArchive(state, year) {
     readme: [
       'このファイルは AI-BASE DIAMOND が書き出した1年度分の記録です。',
       'games[].playLogs が1プレイ1件の生の記録で、他はそこから作れます。',
-      '相手選手は記号(A〜T)で記録されており、記号は試合ごとの識別子です。',
+      '相手選手は記号(A〜Z)で記録されており、記号は試合ごとの識別子です。',
     '打球の位置は hitAngle(角度)と hitDepth(深さ)の極座標です。図の大きさに依存しません。',
       'games[].oppNames に名前が入っている場合、その試合での対応が分かります。',
       '項目の意味は fields を参照してください。',
