@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useStore, useT, usePlayerName, playerAliasMap } from '../state/store.jsx';
 import { teamLiveStats, CHEER_STAMPS, CHEER_EMOJI } from '../lib/officialCloud.js';
-import { cheerSummary, CheerTop } from './Cheer.jsx';
+import { cheerSummary, CheerTop, playersFromLogs } from './Cheer.jsx';
 
 // ============================================================
 // 観戦の応援(スタンプ・応援コイン)を試合結果に残す
@@ -12,8 +12,8 @@ import { cheerSummary, CheerTop } from './Cheer.jsx';
 // ============================================================
 
 // 試合の応援の要約。保存する形(players は統合済みの選手IDにそろえる)
-const snapshotOf = (r, aliases) => {
-  const s = cheerSummary(r, aliases);
+const snapshotOf = (r, aliases, game) => {
+  const s = cheerSummary(r, aliases, game);
   return { total: s.total, byStamp: s.byStamp, byLog: s.byLog, top: s.top, players: s.players.filter((x) => x.coins > 0 || x.n > 0) };
 };
 
@@ -37,7 +37,7 @@ export function useCheerBackfill() {
           const r = await teamLiveStats(teamId, g.id, 0);
           if (!alive) return;
           // 応援が1つも無い試合にも「無かった」を残す(毎回取りに行かないため)
-          if (r && !r.error) dispatch({ type: 'SET_GAME_CHEERS', gameId: g.id, cheers: snapshotOf(r, aliases) });
+          if (r && !r.error) dispatch({ type: 'SET_GAME_CHEERS', gameId: g.id, cheers: snapshotOf(r, aliases, g) });
         } catch { /* 取れなければ次に開いたとき */ }
       }
     })();
@@ -61,7 +61,7 @@ export default function CheerResult({ game }) {
     let alive = true;
     teamLiveStats(teamId, game.id, 0).then((r) => {
       if (!alive || !r || r.error) return;
-      const snap = snapshotOf(r, playerAliasMap(state.players));
+      const snap = snapshotOf(r, playerAliasMap(state.players), game);
       setLive(snap);
       if (game.status === 'finished') dispatch({ type: 'SET_GAME_CHEERS', gameId: game.id, cheers: snap });
     }).catch(() => {});
@@ -71,7 +71,8 @@ export default function CheerResult({ game }) {
 
   const c = live || game?.cheers;
   if (!c || !c.total) return null;
-  const players = (c.players || []).filter((x) => x.coins > 0).slice(0, 5);
+  // 前に残した要約の選手IDが古くても、プレーから数え直す
+  const players = (playersFromLogs(game, c.byLog) || c.players || []).filter((x) => x.coins > 0).slice(0, 5);
   return (
     <div className="card cheer-result">
       <h2>{t('cheerres.title')}</h2>

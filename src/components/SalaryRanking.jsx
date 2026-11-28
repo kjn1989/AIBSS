@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { teamCheerTotals } from '../lib/officialCloud.js';
+import { playersFromLogs } from '../lib/cheerSummary.js';
 import { useStore, useT, playerAliasMap } from '../state/store.jsx';
 import { aggregateBatting, aggregatePitching } from '../lib/stats.js';
 import { isArchived } from '../lib/year.js';
@@ -14,11 +15,18 @@ export function useTeamSalaries() {
   const fan = useFanCoins(state);
   const extra = useMemo(() => {
     const x = participation(games);
-    // 統合で消えた選手に贈られたコインは、残した選手に足す
-    const alias = playerAliasMap(state.players);
-    for (const [id0, coins] of Object.entries(fan || {})) {
-      const e = (x[alias.get(id0) || id0] ||= { innings: 0, chances: 0, fine: 0 });
+    // 応援コイン。試合結果に残した応援があれば、そのプレーから数え直す(統合した選手も正しく足される)。
+    // まだ1試合も残していないチームだけ、クラウドの通算(贈った時点の選手ID)を使う
+    const add = (id, coins) => {
+      const e = (x[id] ||= { innings: 0, chances: 0, fine: 0 });
       e.fan = (e.fan || 0) + (Number(coins) || 0);
+    };
+    const saved = games.filter((g) => g.cheers?.byLog);
+    if (saved.length) {
+      for (const g of saved) for (const p of playersFromLogs(g, g.cheers.byLog) || []) add(p.id, p.coins);
+    } else {
+      const alias = playerAliasMap(state.players);
+      for (const [id0, coins] of Object.entries(fan || {})) add(alias.get(id0) || id0, coins);
     }
     return x;
   }, [games, fan, state.players]);
