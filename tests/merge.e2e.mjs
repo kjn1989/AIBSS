@@ -36,7 +36,8 @@ try {
     const t = [...document.querySelectorAll('table.rank-table')].find((x) => x.innerText.includes('打席'));
     if (!t) return null;
     const rows = [...t.querySelectorAll('tbody tr')].filter((r) => r.children[0].innerText.trim().startsWith(nm));
-    return rows.map((r) => Number(r.children[1].innerText));
+    const i = [...t.querySelectorAll('thead th')].findIndex((th) => th.textContent.trim() === '打席');
+    return rows.map((r) => Number(r.children[i].innerText));
   }, name);
   await p.goto(URL_, { waitUntil: 'load' }); await W(900);
 

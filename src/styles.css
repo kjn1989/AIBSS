@@ -2872,3 +2872,16 @@ html[data-outdoor] .app-header .outdoor-toggle.on { background: #1f6feb; border-
 .lc-summary { margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: rgba(47, 129, 247, 0.08); }
 .dup-pick { display: flex; gap: 6px; width: 100%; margin-top: 8px; }
 .dup-pick button { margin: 0; flex: 1; white-space: nowrap; }
+
+/* 打撃成績一覧(全項目)。名前の列は横スクロールしても残す */
+.bat-full-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.bat-full { width: auto; min-width: 100%; }
+.bat-full th, .bat-full td { white-space: nowrap; padding: 8px 9px; }
+.bat-full th { cursor: pointer; text-align: right; }
+.bat-full th:first-child { text-align: left; }
+.bat-full th.on { color: var(--accent); }
+.bat-full td.on { color: var(--accent); }
+.bat-full th:first-child, .bat-full td.bat-name {
+  position: sticky; left: 0; z-index: 1; background: var(--bg-2);
+  color: var(--accent); font-weight: 700; box-shadow: 1px 0 0 var(--border);
+}
