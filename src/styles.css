@@ -2834,3 +2834,10 @@ html[data-outdoor] .app-header .outdoor-toggle.on { background: #1f6feb; border-
 /* DH制(大谷ルール)のカード */
 .dh-opts { display: flex; flex-direction: column; gap: 6px; }
 .dh-opts button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; margin: 0; padding: 10px 12px; }
+.dh-out-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.dh-out-grid button { margin: 0; text-align: left; padding: 8px 10px; }
+.dh-pos-list { display: flex; flex-direction: column; gap: 4px; }
+.dh-pos-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 8px; border-radius: 8px; }
+.dh-pos-row.moved { background: rgba(255, 196, 0, 0.12); }
+.dh-pos-row select { width: 84px; margin: 0; }
+.warn-text { color: #f0a020; }
