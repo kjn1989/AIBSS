@@ -4,7 +4,7 @@ import { fetchLive } from '../lib/officialCloud.js';
 import Scoreboard from './Scoreboard.jsx';
 import Diamond from './Diamond.jsx';
 import CurrentBatter from './CurrentBatter.jsx';
-import { useViewerCheer, CheerBar, CheerOverlay, CheerCounts, CheerTop, CheerPlayers, ViewerCount } from './Cheer.jsx';
+import { useViewerCheer, CheerBar, CheerOverlay, CheerCounts, CheerTop, CheerPlayers, ViewerCount, playersFromLogs } from './Cheer.jsx';
 import ScoreSheetView from './ScoreSheetView.jsx';
 import { renderPlayLog } from '../lib/playLogText.js';
 
@@ -122,7 +122,13 @@ export default function LiveWatch({ token }) {
       )}
 
       {/* 終わった試合は、記録係の端末が残した要約(統合した選手の名前にそろえてある)を優先する */}
-      {game && <CheerPlayers players={(game.status === 'finished' && game.cheers?.players) || cheer.feed?.players} />}
+      {/* 選手ごとのコインは、スタンプが付いたプレーから数え直す(統合した選手も、いまの名前で出る)。
+          終わった試合は、記録係の端末が残した要約を使う */}
+      {game && <CheerPlayers players={
+        playersFromLogs(game, cheer.feed?.byLog)
+        || (game.status === 'finished' && game.cheers && playersFromLogs(game, game.cheers.byLog))
+        || cheer.feed?.players
+      } />}
       {game && <CheerTop game={game} top={(game.status === 'finished' && game.cheers?.top) || cheer.feed?.top} />}
       {game && cheer.feed && ongoing && (
         <CheerBar token={token} game={game} wallet={cheer.feed.wallet} onSent={(s, cost) => { cheer.pushFloats([s]); if (cost) cheer.spend(cost); }} />

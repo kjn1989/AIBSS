@@ -2,9 +2,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useStore, useT, usePlayerName } from '../state/store.jsx';
 import { livePresence, liveCheer, teamLiveStats, CHEER_STAMPS, CHEER_EMOJI, CHEER_COST, CHEER_WALLET } from '../lib/officialCloud.js';
 import { renderPlayLog } from '../lib/playLogText.js';
-import { cheerSummary } from '../lib/cheerSummary.js';
+import { cheerSummary, playersFromLogs, recipientOf } from '../lib/cheerSummary.js';
 
-export { cheerSummary };
+export { cheerSummary, playersFromLogs, recipientOf };
 
 // ============================================================
 // 観戦中の人数と応援スタンプ(supabase/live_cheer.sql)
@@ -42,16 +42,6 @@ const HYPE_MIN = 8; // 1回の取得(約4秒)でこれ以上の新しいスタ�
 // 打席の記録だけ(スタンプを付ける相手)
 const isPlay = (l) => l && (l.kind === 'atbat' || l.kind === 'defense');
 export const lastPlayOf = (game) => [...(game?.playLogs || [])].reverse().find(isPlay) || null;
-
-// そのプレーで応援を受け取る選手(自チームの選手だけ。相手の選手には贈らない)
-//   自チームの打席 → 打者 / 守りの打席 → ファインプレーの野手、なければ投手
-export function recipientOf(log) {
-  if (!log) return null;
-  const p = log.payload || {};
-  if (log.kind === 'atbat') return p.playerId || null;
-  if (log.kind === 'defense') return p.finePlay?.playerId || p.pitcherId || null;
-  return null;
-}
 
 // この端末の観戦者番号(使い捨て。名前などとは結び付かない)
 const VKEY = 'bbscorer.viewerId';
@@ -273,13 +263,15 @@ export function CheerStrip({ game }) {
   if (!on || !feed) return null;
   const last = lastPlayOf(game);
   const lastM = last ? feed.byLog[last.id] : null;
+  // 応援王はプレーから数え直す(統合した選手も、いまの名前で出る)
+  const king = (playersFromLogs(game, feed.byLog) || feed.players || [])[0];
   return (
     <>
       <div className="cheer-strip small">
         <span>{t('cheer.viewers', { n: feed.viewers })}</span>
         {feed.total > 0 && <span className="dim">{t('cheer.total', { n: feed.total })}</span>}
         {lastM && <span className="dim">{t('cheer.lastPlay')}<CheerCounts m={lastM} /></span>}
-        {feed.players?.[0]?.coins > 0 && <span className="dim">{t('cheer.king', { name: nameOf(feed.players[0].id), n: feed.players[0].coins })}</span>}
+        {king?.coins > 0 && <span className="dim">{t('cheer.king', { name: nameOf(king.id), n: king.coins })}</span>}
       </div>
       {/* 届いたばかりの応援(新しい順)。記録しながらでも、横目で見られる1行だけ */}
       {ticker.length > 0 && (

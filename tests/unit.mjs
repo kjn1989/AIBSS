@@ -6658,3 +6658,25 @@ test('応援の要約: スタンプの合計・上位プレー・統合した選
   assert.deepEqual(s.top.map((x) => x.log), ['L1', 'L3', 'L2']);
   assert.deepEqual(s.players.map((x) => [x.id, x.coins]), [['fujita', 31], ['takashima', 14]]);
 });
+
+test('応援コインはプレーから数え直す: 統合の前に贈られたコイン(古い選手ID)も、いまの選手に付く', async () => {
+  const { cheerSummary, playersFromLogs } = await import('../src/lib/cheerSummary.js');
+  // 統合で「高島(old)」の打席は「髙島(keep)」に付け替わっている。クラウドのコインは old のまま
+  const game = { playLogs: [
+    { id: 'L1', kind: 'atbat', payload: { playerId: 'keep' } },
+    { id: 'L2', kind: 'defense', payload: { pitcherId: 'fujita' } },
+    { id: 'L3', kind: 'defense', payload: { pitcherId: 'fujita', finePlay: { pos: '遊', playerId: 'oyama' } } },
+  ] };
+  const r = {
+    total: 20,
+    cheers: [{ log: 'L1', stamp: 'mvp', n: 1 }, { log: 'L1', stamp: 'clap', n: 11 }, { log: 'L2', stamp: 'fire', n: 3 }, { log: 'L3', stamp: 'ball', n: 2 }, { log: 'GONE', stamp: 'mvp', n: 1 }],
+    players: [{ player: 'old', coins: 10, n: 1 }, { player: 'fujita', coins: 3, n: 3 }, { player: 'oyama', coins: 6, n: 2 }],
+  };
+  assert.deepEqual(playersFromLogs(game, cheerSummary(r).byLog).map((x) => [x.id, x.coins]), [['keep', 10], ['oyama', 6], ['fujita', 3]]);
+  // 試合を渡すと、要約の選手もプレーから(「old」=不明は出ない)
+  const s = cheerSummary(r, null, game);
+  assert.ok(!s.players.some((x) => x.id === 'old'));
+  assert.equal(s.players[0].id, 'keep');
+  // 無料のスタンプ(👏)はコインに入らない
+  assert.equal(s.players.find((x) => x.id === 'keep').n, 1);
+});

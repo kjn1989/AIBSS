@@ -466,10 +466,7 @@ const cheerMissing = (error) => /could not find the function|schema cache|live_p
 
 // 👏😱 は無料で何度でも。🔥⚾🏆 は応援コイン(1試合50枚)を使って、そのプレーの選手に贈る。
 // お金は動かない(アプリの中だけの点数)。supabase/live_cheer.sql の live_stamp_cost と同じ値
-export const CHEER_STAMPS = ['clap', 'wow', 'fire', 'ball', 'mvp'];
-export const CHEER_EMOJI = { clap: '👏', wow: '😱', fire: '🔥', ball: '⚾', mvp: '🏆', muscle: '💪' };
-export const CHEER_COST = { clap: 0, wow: 0, fire: 1, ball: 3, mvp: 10 };
-export const CHEER_WALLET = 50;
+export { CHEER_STAMPS, CHEER_EMOJI, CHEER_COST, CHEER_WALLET } from './cheerSummary.js';
 
 // 観戦ページが数秒おきに呼ぶ。「見ています」を知らせ、人数とスタンプを受け取る
 export async function livePresence(token, viewer, game, since = 0) {
