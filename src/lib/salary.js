@@ -25,7 +25,9 @@ export const clampTop = (v) => {
 };
 
 // 成績のポイント。
-//   打者: 塁打 + 四死球 + 盗塁 + 得点 + 打点
+//   打者: 塁打 + 四死球 + 失策・打撃妨害での出塁×0.5 + 盗塁 + 犠打 + 得点 + 打点
+//         出塁: 安打は塁打で、四死球は1つ1点。失策・打撃妨害で出たときは相手のミスも半分なので0.5
+//         犠打: 自分のアウトと引き換えに走者を進める。四球と同じ1点(犠飛は打点で入る)
 //   投手: 投球回×1.5 + 奪三振×0.5 − 自責点 − 与四死球×0.3 (0未満は0)
 //   出場: 出場イニング×0.3 / 守備: 守備機会×0.5 + ファインプレー×2
 //   ファン: 観戦ページで贈られた応援コイン×0.2(クラウドで観戦リンクを使っているチームだけ)
@@ -34,8 +36,13 @@ export const INNING_WEIGHT = 0.3; // 7回フル出場で約2点
 export const CHANCE_WEIGHT = 0.5;
 export const FINE_WEIGHT = 2;
 export const FAN_WEIGHT = 0.2; // 観戦者から贈られた応援コイン1枚あたり(1人が1試合で贈れるのは50枚 = 10点)
+export const REACH_WEIGHT = 0.5; // 失策・打撃妨害での出塁
+export const SAC_WEIGHT = 1; // 犠打(送りバント成功)
 export function salaryPoints(b, p, x = null) {
-  const bat = b ? (b.tb || 0) + (b.bb || 0) + (b.hbp || 0) + (b.sb || 0) + (b.runs || 0) + (b.rbi || 0) : 0;
+  const bat = b
+    ? (b.tb || 0) + (b.bb || 0) + (b.hbp || 0) + ((b.error || 0) + (b.interference || 0)) * REACH_WEIGHT
+      + (b.sb || 0) + (b.sacBunt || 0) * SAC_WEIGHT + (b.runs || 0) + (b.rbi || 0)
+    : 0;
   const pit = p
     ? Math.max(0, ((p.outsRecorded || 0) / 3) * 1.5 + (p.strikeouts || 0) * 0.5 - (p.earnedRuns || 0) - ((p.walks || 0) + (p.hitByPitch || 0)) * 0.3)
     : 0;
