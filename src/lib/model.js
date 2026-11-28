@@ -424,7 +424,7 @@ export const GAME_SCHEMA_VERSION = 1;
 // 分かったとき、その範囲の試合を見分けるため。テスト(node)では null
 const APP_BUILD = typeof __BUILD_INFO__ === 'undefined' ? null : (__BUILD_INFO__?.sha || null);
 
-export function newGame({ opponent = '', isHome = false, date = null, season = '', rules = null, allowReentry = false, attendees = null, scorerId = null, teamGap = 'even', gameType = null, edition = null, kind = null, origin = 'live', recordMode = 'detail' } = {}) {
+export function newGame({ opponent = '', isHome = false, homeUndecided = false, date = null, season = '', rules = null, allowReentry = false, attendees = null, scorerId = null, teamGap = 'even', gameType = null, edition = null, kind = null, origin = 'live', recordMode = 'detail' } = {}) {
   return {
     id: uid(),
     schemaVersion: GAME_SCHEMA_VERSION,
@@ -443,6 +443,9 @@ export function newGame({ opponent = '', isHome = false, date = null, season = '
     opponent,
     season, // シーズン/大会名(任意。集計フィルタに使用)
     isHome, // true=自チーム後攻
+    // 先攻・後攻がまだ決まっていない(試合直前のじゃんけん待ち)。オーダーは先に組める。
+    // 決まるまでは仮に先攻として扱い、最初のプレーの前なら SET_HOME_AWAY で切り替えられる
+    homeUndecided: !!homeUndecided,
     // 試合ルール(lib/rules.js)。試合作成時のルールをスナップショットとして保持する。
     // null = ルール管理なし(旧データ含む。終了提案・球数警告などの判定は無効)
     rules,
@@ -625,3 +628,15 @@ export const SIMPLE_DIR_ROWS = [['LF', 'CF', 'RF'], ['3B', 'SS', '2B', '1B'], ['
 export const OUTFIELD_DIRS = ['LF', 'CF', 'RF'];
 // かんたん記録のパッドに出す主な結果
 export const SIMPLE_RESULTS = ['single', 'double', 'triple', 'hr', 'out', 'so', 'bb', 'hbp', 'error', 'sacBunt', 'sacFly'];
+
+// まだ1球も記録していない試合か。先攻・後攻を入れ替えてよいのはこの間だけ
+// (打順・投手・守備位置・出欠の変更はプレーではないので数えない)
+const SETUP_LOG_KINDS = new Set(['pitcher', 'position', 'sub', 'lineup', 'attendees']);
+export function gameUntouched(g) {
+  if (!g || g.status !== 'ongoing') return false;
+  if (g.inning !== 1 || !g.isTop || g.outs || g.myScore || g.oppScore) return false;
+  if ([1, 2, 3].some((b) => g.runners?.[b])) return false;
+  if ((g.atBats || []).some((a) => a.result || (a.pitches || []).length)) return false;
+  if (Object.values(g.oppPitchers || {}).some((x) => x?.pitches)) return false;
+  return !(g.playLogs || []).some((l) => !SETUP_LOG_KINDS.has(l.kind));
+}

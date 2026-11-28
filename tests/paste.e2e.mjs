@@ -98,6 +98,7 @@ try {
   await q.click('nav button:has-text("スコア入力")'); await q.waitForTimeout(400);
   await q.click('.mode-opt:has-text("かんたん")');
   await q.fill('input[placeholder="対戦相手名"]', 'タイ代表');
+  await q.click('.toggle-row button:has-text("あとで")'); // 先攻・後攻は試合直前に決める
   await q.click('button:has-text("試合開始")'); await q.waitForTimeout(600);
   const at = q.locator('.sheet-actions button.primary'); if (await at.count()) { await at.click(); await q.waitForTimeout(600); }
   await q.click('button:has-text("名簿を貼り付けて打順を組む")'); await q.waitForTimeout(400);
@@ -114,6 +115,13 @@ try {
     JSON.stringify(rows3));
   const dhc = await q.locator('.dh-card').innerText().catch(() => '');
   ok('DH制のカードで先発が藤田になっている', dhc.includes('投手: 藤田'), dhc);
+  // 先攻・後攻はスコア画面で決める。決めるまでは目立つ札が出る
+  await q.click('nav button:has-text("スコア入力")'); await q.waitForTimeout(500);
+  ok('先攻・後攻が未定だと札が出る', await q.locator('.home-away.undecided').count() === 1);
+  ok('未定の間は先攻(表の攻撃)として表示', (await q.locator('.sit-main .nm').innerText().catch(() => '')) === '大槻');
+  await q.click('.home-away button:has-text("後攻")'); await q.waitForTimeout(500);
+  ok('後攻に決めると札が消える', await q.locator('.home-away').count() === 0);
+  ok('後攻なので1回表は守り(投手が藤田)', (await q.locator('select.pitcher-select').inputValue().then((v) => q.locator(`select.pitcher-select option[value="${v}"]`).innerText()).catch(() => '')) === '藤田');
   await ctx2.close();
 } catch (e) {
   console.log('ERROR:', e.message); fail++;

@@ -2841,3 +2841,7 @@ html[data-outdoor] .app-header .outdoor-toggle.on { background: #1f6feb; border-
 .dh-pos-row.moved { background: rgba(255, 196, 0, 0.12); }
 .dh-pos-row select { width: 84px; margin: 0; }
 .warn-text { color: #f0a020; }
+
+/* 先攻・後攻(試合直前に決める) */
+.home-away.undecided { border: 1px solid #f0a020; }
+.home-away .toggle-row { margin: 0; }
