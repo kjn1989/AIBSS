@@ -29,7 +29,7 @@ import { OppSubstituteSheet } from './OppOrderCard.jsx';
 import { oppNameOf, oppPositionOf, oppHasName } from '../lib/oppBox.js';
 import { renderPlayLog } from '../lib/playLogText.js';
 import GameProgressView from './GameProgressView.jsx';
-import { POSITIONS, OPP_LETTERS, resultCategory, multiOutLabel, positionLabel, attendeesOf, autoLineupFrom, isSimpleGame } from '../lib/model.js';
+import { POSITIONS, OPP_LETTERS, resultCategory, multiOutLabel, positionLabel, attendeesOf, autoLineupFrom, isSimpleGame, gameUntouched } from '../lib/model.js';
 import { playLabel } from '../lib/voiceParser.js';
 import { batterDrift } from '../lib/battersRebuild.js';
 import { convertMemoToPlay, guessPlayFromMemo, maskNames } from '../lib/gemini.js';
@@ -219,6 +219,7 @@ function GameSetup() {
   const t = useT();
   const [opponent, setOpponent] = useState('');
   const [isHome, setIsHome] = useState(false);
+  const [homeLater, setHomeLater] = useState(false); // 先攻・後攻は試合直前に決める
   const [season, setSeason] = useState('');
   const [gameType, setGameType] = useState(null); // 公式戦/練習試合。既定は未指定
   const edition = state.settings.edition || '草野球';
@@ -271,7 +272,7 @@ function GameSetup() {
       payload: {
         // 表記ゆれを入口で止める: 過去に対戦した相手なら、その書き方に揃える
         opponent: matched ? matched.name : opponent.trim(),
-        isHome, season: season.trim(), rules: { ...resolveRulesFrom(presetId, custom), ...live }, allowReentry,
+        isHome: homeLater ? false : isHome, homeUndecided: homeLater, season: season.trim(), rules: { ...resolveRulesFrom(presetId, custom), ...live }, allowReentry,
         attendees, gameType, recordMode,
         // かんたん記録では画面に出していない項目。前回の値が黙って入らないよう既定に戻す
         scorerId: simple ? null : scorerId, teamGap: simple ? 'even' : teamGap,
@@ -343,9 +344,11 @@ function GameSetup() {
         )}
         <GameTypeToggle value={gameType} onChange={setGameType} />
         <div className="toggle-row mt12">
-          <button className={!isHome ? 'active' : ''} onClick={() => setIsHome(false)}>{t('gamesetup.first')}</button>
-          <button className={isHome ? 'active' : ''} onClick={() => setIsHome(true)}>{t('gamesetup.second')}</button>
+          <button className={!homeLater && !isHome ? 'active' : ''} onClick={() => { setIsHome(false); setHomeLater(false); }}>{t('gamesetup.first')}</button>
+          <button className={!homeLater && isHome ? 'active' : ''} onClick={() => { setIsHome(true); setHomeLater(false); }}>{t('gamesetup.second')}</button>
+          <button className={homeLater ? 'active' : ''} onClick={() => setHomeLater(true)}>{t('gamesetup.homeLater')}</button>
         </div>
+        {homeLater && <p className="small dim" style={{ margin: '-6px 0 12px' }}>{t('gamesetup.homeLaterHint')}</p>}
 
         <RulePicker
           presetId={presetId} custom={custom} edition={edition}
@@ -674,10 +677,29 @@ function StrikeoutSheet({ game, batterName, initialSoType, onClose, onFurinige }
 // ---- Undo(履歴スタック方式: 直前のプレイ入力を1タップ取り消し) ----
 // 旧・左下フローティングバーは廃止し、「試合操作」カード内のボタンへ集約(投球カードの
 // 「1球取り消し」との二重表示・パッドとの重なりを解消)。ラベルは score.undo.<action> で翻訳。
+// 先攻・後攻がまだ決まっていなければ、目立たせて決めてもらう(試合直前のじゃんけん待ち)
+function HomeAwayPicker({ game }) {
+  const { dispatch } = useStore();
+  const t = useT();
+  // 決まったあとは出さない(スコア画面を縦に伸ばさない)。入れ間違いは「取り消し」で戻せる
+  if (!game.homeUndecided || !gameUntouched(game)) return null;
+  const set = (isHome) => dispatch({ type: 'SET_HOME_AWAY', gameId: game.id, isHome });
+  return (
+    <div className="card home-away undecided">
+      <b>{t('ha.undecided')}</b>
+      <p className="small dim" style={{ margin: '2px 0 8px' }}>{t('ha.undecidedHint')}</p>
+      <div className="toggle-row">
+        <button onClick={() => set(false)}>{t('gamesetup.first')}</button>
+        <button onClick={() => set(true)}>{t('gamesetup.second')}</button>
+      </div>
+    </div>
+  );
+}
+
 const UNDO_ACTIONS = new Set([
   'CONFIRM_PLAY', 'ADD_PITCH', 'RUNNER_EVENT', 'SUBSTITUTE', 'SET_PITCHER',
   'FORCE_CHANGE_HALF', 'SET_RUNNER', 'OPP_SUBSTITUTE', 'OPP_SET_PITCHER', 'FLOW_TAG',
-  'DISSOLVE_DH', 'SET_POSITION',
+  'DISSOLVE_DH', 'SET_POSITION', 'SET_HOME_AWAY',
 ]);
 
 // ---- ルールエンジンの提案バナー(試合終了条件・時間制限・球数警告) ----
@@ -893,6 +915,7 @@ export default function ScoreTab() {
   return (
     <div className="scoretab">
       <Scoreboard game={game} />
+      <HomeAwayPicker game={game} />
       <BatonConflict game={game} />
       <BatonMine game={game} />
       <ShareStatus game={game} />

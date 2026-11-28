@@ -8,7 +8,7 @@ import React, { createContext, useContext, useReducer, useEffect, useRef } from 
 import {
   newPlayer, newMember, newGame, newAtBat, newPitch, newPlayLog, newPitchingRecord, RESULTS, DIRECTIONS, OUT_TYPES,
   OPP_LETTERS, DEFAULT_EDITION, normalizeEdition, multiOutLabel, uid, attendeesOf, resultLabelOf, playErrorOf, finePlayOf,
-  FIELD_POSITIONS, nextProvisionalNames,
+  FIELD_POSITIONS, nextProvisionalNames, gameUntouched,
 } from '../lib/model.js';
 import { generateDemoData } from '../lib/demo.js';
 import { rebuildPitchingStats } from '../lib/pitchingRebuild.js';
@@ -972,6 +972,19 @@ function reduce(state, action) {
     }
 
     // ===== 試合 =====
+    // 先攻・後攻を決める/入れ替える。まだプレーを記録していない試合だけ
+    case 'SET_HOME_AWAY': {
+      const g0 = state.games[action.gameId];
+      if (!g0 || !gameUntouched(g0)) return state;
+      const g = deep(g0);
+      const wasUndecided = g.homeUndecided;
+      g.isHome = !!action.isHome;
+      g.homeUndecided = false;
+      // オーダーを前もって組んだ試合は、作った時刻ではなく決まった時刻を試合開始にする(時間制限の判定)
+      if (wasUndecided) g.startedAt = Date.now();
+      g.updatedAt = Date.now();
+      return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
+    }
     case 'CREATE_GAME': {
       const { oppRoster, ...rest } = action.payload || {};
       // 作った時点のエディションと区分を焼き込む(画面からは渡さない。設定が正)
