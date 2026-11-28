@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useStore, usePlayerName, useT } from '../state/store.jsx';
 import { RESULTS, formatIP } from '../lib/model.js';
 import { buildLineupRows, roleTag, posFull, assignAtBatsByPlayer } from '../lib/lineupBox.js';
-import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf, oppHasName } from '../lib/oppBox.js';
+import { buildOppLineupRows, oppBattingByLetter, oppPitcherLetters, oppPitchingStats, oppNameOf, oppHasName, oppPitcherLabel } from '../lib/oppBox.js';
 import { oppPlayerKey } from '../lib/matchup.js';
 import Sheet from './Sheet.jsx';
 
@@ -201,7 +201,7 @@ function OppPitching({ game, onEdit }) {
             {rows.map((r) => (
               <tr key={r.letter}>
                 <td className="sp-lbl">
-                  <button className="opp-name-btn" onClick={() => onEdit(r.letter)}>{oppNameOf(game, r.letter)} <span aria-hidden>✎</span></button>
+                  <button className="opp-name-btn" onClick={() => onEdit(r.letter)}>{oppPitcherLabel(game, r.letter)} <span aria-hidden>✎</span></button>
                 </td>
                 <td>{formatIP(r.outs)}</td>
                 <td>{r.runs}</td>

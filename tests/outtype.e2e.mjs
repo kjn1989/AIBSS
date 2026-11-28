@@ -41,6 +41,17 @@ const crashGuard = async (where) => {
   return false;
 };
 
+
+// 投手が未定で入力がロックされていたら、「投手を選ぶ」から最初の候補で決める
+async function pickPitcherIfLocked(page) {
+  if (!(await page.locator('.input-locked').count())) return;
+  await page.locator('.needs-pitcher button').click(); await page.waitForTimeout(400);
+  const chip = page.locator('.sheet .lc-chips button').first();
+  if (await chip.count()) { await chip.click(); await page.waitForTimeout(200); await page.locator('.sheet-actions button.primary').click(); }
+  else await page.locator('.sheet .big-btn').first().click();
+  await page.waitForTimeout(500);
+}
+
 const browser = await chromium.launch({ executablePath: resolveChromium() });
 
 try {
@@ -180,9 +191,7 @@ try {
   check('守備側(1回裏)に変わった', half.includes('1回裏') && half.includes('相手打者'), half.slice(0, 200));
 
   // 守備側は投手を決めるまで入力がロックされる(仕様)。まず投手を選ぶ
-  const psel = page.locator('select').filter({ has: page.locator('option') }).first();
-  const opts = await psel.locator('option').evaluateAll((os) => os.map((o) => o.value).filter(Boolean));
-  if (opts.length) { await psel.selectOption(opts[0]); await page.waitForTimeout(500); }
+  await pickPitcherIfLocked(page);
   check('投手を決めたら入力できる',
     (await page.locator('.input-locked').count()) === 0,
     String(await page.locator('.input-locked').count()));
@@ -228,10 +237,7 @@ try {
     for (let k = 0; k < 8; k++) {
       const locked = await page.locator('.input-locked').count();
       if (!locked) break;
-      const sel2 = page.locator('select').first();
-      const os2 = await sel2.locator('option').evaluateAll((os) => os.map((o) => o.value).filter(Boolean));
-      if (os2.length) await sel2.selectOption(os2[0]);
-      await page.waitForTimeout(400);
+      await pickPitcherIfLocked(page);
     }
     if ((await baseOn(1)) === 0) {
       await page.click('.result-pad button:has-text("ヒット")');

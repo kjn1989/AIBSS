@@ -55,6 +55,17 @@ const crashGuard = async (where) => {
   return false;
 };
 
+
+// 投手が未定で入力がロックされていたら、「投手を選ぶ」から最初の候補で決める
+async function pickPitcherIfLocked(page) {
+  if (!(await page.locator('.input-locked').count())) return;
+  await page.locator('.needs-pitcher button').click(); await page.waitForTimeout(400);
+  const chip = page.locator('.sheet .lc-chips button').first();
+  if (await chip.count()) { await chip.click(); await page.waitForTimeout(200); await page.locator('.sheet-actions button.primary').click(); }
+  else await page.locator('.sheet .big-btn').first().click();
+  await page.waitForTimeout(500);
+}
+
 const browser = await chromium.launch({ executablePath: resolveChromium() });
 try {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 }, locale: 'ja-JP' });
@@ -177,11 +188,7 @@ try {
   const oppPad = page.locator('.result-pad button:has-text("凡打")').first();
   check('相手の攻撃(自チームの守備)になった', await oppPad.count() > 0);
   // 守備側は投手を決めるまで入力がロックされる(仕様)。まず投手を選ぶ
-  const psel = page.locator('select').filter({ has: page.locator('option') }).first();
-  if (await psel.count()) {
-    const opts = await psel.locator('option').evaluateAll((os) => os.map((o) => o.value).filter(Boolean));
-    if (opts.length) { await psel.selectOption(opts[0]); await page.waitForTimeout(600); }
-  }
+  await pickPitcherIfLocked(page);
   check('投手を決めたら入力できる', !(await oppPad.isDisabled()),
     `locked=${await page.locator('.input-locked').count()}`);
   await oppPad.click();
