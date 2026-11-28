@@ -159,11 +159,11 @@ function BattingSummaryTable({ batting, nameOf, onOpenPlayer, tenureOf }) {
     <div className="card">
       <h2>{t('stats.battingTable')}</h2>
       <div style={{ overflowX: 'auto' }}>
-        <table className="rank-table" style={{ minWidth: 480 }}>
+        <table className="rank-table" style={{ minWidth: 520 }}>
           <thead>
             <tr>
               <th>{t('stats.player')}</th><th>{t('stats.col.pa')}</th><th>{t('stats.col.ab')}</th><th>{t('stats.col.h')}</th><th>{t('stats.col.avg')}</th>
-              <th>{t('stats.col.hr')}</th><th>{t('stats.col.rbi')}</th><th>{t('stats.col.bbhbp')}</th><th>{t('stats.col.so')}</th><th>{t('stats.col.sb')}</th>
+              <th>{t('stats.col.hr')}</th><th>{t('stats.col.rbi')}</th><th>{t('stats.col.bbhbp')}</th><th>{t('stats.col.so')}</th><th>{t('stats.col.sb')}</th><th>{t('stats.col.sac')}</th>
             </tr>
           </thead>
           <tbody>
@@ -186,6 +186,7 @@ function BattingSummaryTable({ batting, nameOf, onOpenPlayer, tenureOf }) {
                   <td className="num">{s.bb + s.hbp}</td>
                   <td className="num">{s.so}</td>
                   <td className="num">{s.sb}</td>
+                  <td className="num">{s.sacBunt || 0}</td>
                 </tr>
               );
             })}
