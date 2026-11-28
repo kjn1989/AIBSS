@@ -121,8 +121,9 @@ export default function LiveWatch({ token }) {
         </>
       )}
 
-      {game && <CheerPlayers players={cheer.feed?.players} />}
-      {game && <CheerTop game={game} top={cheer.feed?.top} />}
+      {/* 終わった試合は、記録係の端末が残した要約(統合した選手の名前にそろえてある)を優先する */}
+      {game && <CheerPlayers players={(game.status === 'finished' && game.cheers?.players) || cheer.feed?.players} />}
+      {game && <CheerTop game={game} top={(game.status === 'finished' && game.cheers?.top) || cheer.feed?.top} />}
       {game && cheer.feed && ongoing && (
         <CheerBar token={token} game={game} wallet={cheer.feed.wallet} onSent={(s, cost) => { cheer.pushFloats([s]); if (cost) cheer.spend(cost); }} />
       )}

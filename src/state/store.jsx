@@ -479,7 +479,7 @@ function ensureMinimumPitches(pitches, result) {
 // 記録のバトン(lib/baton.js): 進行中の試合は、バトンを持つ端末だけが変更できる。
 // 画面ごとに止めると漏れる(オーダー・試合結果・音声…どこからでも試合は変えられる)ので、
 // ここ1か所で止める。バトンの受け渡しと、クラウドからの反映だけは通す。
-const BATON_FREE = new Set(['TAKE_BATON', 'RESOLVE_BATON_CONFLICT', 'MERGE_REMOTE', 'SELECT_GAME']);
+const BATON_FREE = new Set(['TAKE_BATON', 'RESOLVE_BATON_CONFLICT', 'MERGE_REMOTE', 'SELECT_GAME', 'SET_GAME_CHEERS']);
 const GAME_BY_ID = new Set(['FINISH_GAME', 'UPDATE_GAME_META', 'DELETE_GAME']);
 function targetGameId(state, action) {
   if (action.gameId) return action.gameId;
@@ -889,6 +889,9 @@ function reduce(state, action) {
         games[gid] = g;
       }
       const filled = fillPlayerGaps(keep, dup);
+      // まとめた側のIDを覚えておく。クラウドの応援コインなど、試合の外にあって
+      // 付け替えられない記録を、残す側の選手として読むため
+      filled.mergedIds = [...new Set([...(keep.mergedIds || []), mergeId, ...(dup.mergedIds || [])])];
       return {
         ...state,
         games,
@@ -984,6 +987,15 @@ function reduce(state, action) {
       if (wasUndecided) g.startedAt = Date.now();
       g.updatedAt = Date.now();
       return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
+    }
+    // 観戦の応援(スタンプ・応援コイン)の結果を試合に残す。クラウドの応援の表から作った要約。
+    // 試合結果タブで見られ、試合と一緒に同期される。取り消しの対象にはしない(記録ではないため)
+    case 'SET_GAME_CHEERS': {
+      const g0 = state.games[action.gameId];
+      if (!g0 || !action.cheers) return state;
+      if (JSON.stringify(g0.cheers || null) === JSON.stringify(action.cheers)) return state;
+      const g = { ...g0, cheers: action.cheers, updatedAt: Date.now() };
+      return { ...state, games: { ...state.games, [g.id]: g } };
     }
     case 'CREATE_GAME': {
       const { oppRoster, ...rest } = action.payload || {};
@@ -2692,7 +2704,16 @@ export function useStore() {
 export function usePlayerName() {
   const { state } = useStore();
   const map = Object.fromEntries(state.players.map((p) => [p.id, p.name]));
+  // 統合で消えた選手のIDは、残した選手の名前で読む(応援コインなど、付け替えられない記録のため)
+  for (const p of state.players) for (const m of p.mergedIds || []) if (!map[m]) map[m] = p.name;
   return (id) => map[id] || '不明';
+}
+
+// 統合で消えた選手ID → 残した選手ID
+export function playerAliasMap(players = []) {
+  const m = new Map();
+  for (const p of players) for (const id of p.mergedIds || []) m.set(id, p.id);
+  return m;
 }
 
 // 表示言語の翻訳フック。t('tab.home') のように使う(辞書は lib/i18n.js)。

@@ -14,6 +14,7 @@ import FlowView from './FlowView.jsx';
 import NewspaperView from './NewspaperView.jsx';
 import ImportCsvView from './ImportCsvView.jsx';
 import TournamentSummary from './TournamentSummary.jsx';
+import CheerResult, { useCheerBackfill } from './CheerResult.jsx';
 import { tournamentOf } from '../lib/tournament.js';
 
 // 過去試合のCSV取り込み(ホームから移設): 紙のスコアブック等を成績に取り込む入口
@@ -131,6 +132,8 @@ export default function ResultTab() {
   const [gameId, setGameId] = useState(state.currentGameId || games[0]?.id || '');
   const game = state.games[gameId] || games[0];
   const knownSeasons = [...new Set(games.map((g) => g.season).filter(Boolean))];
+  // 終わった試合の観戦の応援を、試合結果に残す(まだ残していない試合だけ)
+  useCheerBackfill();
 
   if (!game) {
     return (
@@ -240,6 +243,7 @@ export default function ResultTab() {
 
       <div className="section-title">{t('restab.report')}</div>
       <HighlightCard game={game} />
+      <CheerResult game={game} />
       <button className="mt12" style={{ width: '100%' }} onClick={() => setShowNewspaper(true)}>
         {t('restab.makeNewspaper')}
       </button>

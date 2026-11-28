@@ -6644,3 +6644,17 @@ test('チームに配る案内: 全員向けは観戦リンクだけ、記録係
   const en = buildTeamKit({ team: 'T', liveUrl: 'L', scorerUrl: 'C', email: 'e@x', password: 'p', lang: 'en' });
   assert.ok(en.all.includes('No login') && en.scorer.includes('Email: e@x'));
 });
+
+test('応援の要約: スタンプの合計・上位プレー・統合した選手のコインは残した選手に足す', async () => {
+  const { cheerSummary } = await import('../src/lib/cheerSummary.js');
+  const r = {
+    total: 50,
+    cheers: [{ log: 'L1', stamp: 'clap', n: 29 }, { log: 'L1', stamp: 'fire', n: 3 }, { log: 'L2', stamp: 'clap', n: 3 }, { log: 'L2', stamp: 'mvp', n: 1 }, { log: 'L3', stamp: 'clap', n: 11 }, { log: '', stamp: 'wow', n: 3 }],
+    players: [{ player: 'fujita', coins: 31, n: 20 }, { player: 'old-takashima', coins: 10, n: 1 }, { player: 'takashima', coins: 4, n: 2 }],
+  };
+  const s = cheerSummary(r, new Map([['old-takashima', 'takashima']]));
+  assert.equal(s.total, 50);
+  assert.deepEqual(s.byStamp, { clap: 43, fire: 3, mvp: 1, wow: 3 });
+  assert.deepEqual(s.top.map((x) => x.log), ['L1', 'L3', 'L2']);
+  assert.deepEqual(s.players.map((x) => [x.id, x.coins]), [['fujita', 31], ['takashima', 14]]);
+});
