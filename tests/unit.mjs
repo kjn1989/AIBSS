@@ -1296,6 +1296,29 @@ test('remapPlayerInGame: 全ての参照を付け替え、updatedAtを進める(
   assert.equal(game.playLogs[2].payload.pitcherId, 'keep');
 });
 
+test('remapPlayerInGame: 名指ししていない参照も付け替える(今日のメンバー・好守・失策・臨時代走・責任投手・自責点の帰属)', () => {
+  const D = 'mfx3k2dupab12';
+  const K = 'mfx3k2keepcd3';
+  const game = {
+    updatedAt: 1, attendees: [D, K, 'x'],
+    runners: { 1: { playerId: 'r', pitcherId: D, courtesyFor: D }, 2: null, 3: null },
+    playLogs: [
+      { kind: 'defense', payload: { finePlay: { pos: '遊', playerId: D }, playError: { pos: '二', playerId: D } } },
+      { kind: 'run', payload: { runs: [{ erChoice: D }] } },
+    ],
+    perPlayer: { [D]: 3 },
+  };
+  assert.equal(remapPlayerInGame(game, D, K, 9), true);
+  assert.deepEqual(game.attendees, [K, 'x']);
+  assert.equal(game.runners[1].pitcherId, K);
+  assert.equal(game.runners[1].courtesyFor, K);
+  assert.equal(game.playLogs[0].payload.finePlay.playerId, K);
+  assert.equal(game.playLogs[0].payload.playError.playerId, K);
+  assert.equal(game.playLogs[1].payload.runs[0].erChoice, K);
+  assert.deepEqual(game.perPlayer, { [K]: 3 });
+  assert.equal(JSON.stringify(game).includes(D), false);
+});
+
 test('remapPlayerInGame: 対象が居ない試合は updatedAt を変えない(無用な再送を防ぐ)', () => {
   const game = { updatedAt: 1000, lineup: [{ order: 1, playerId: 'x' }], playLogs: [] };
   assert.equal(remapPlayerInGame(game, 'dup', 'keep', 2000), false);

@@ -21,6 +21,8 @@ import { BatonPlanCard } from './BatonPanel.jsx';
 import Sheet from './Sheet.jsx';
 import RosterManageSheet from './RosterManageSheet.jsx';
 import RosterPasteSheet from './RosterPasteSheet.jsx';
+import MergePlayersSheet from './MergePlayersSheet.jsx';
+import { nameVariantKey } from '../lib/mergePlayers.js';
 
 // 同じ名前で二重登録された選手を検出して統合を促すカード。
 // 二重登録があると「同じ人」と判定できず、打順移動の表示や通算成績が分断される。
@@ -308,10 +310,11 @@ function DuplicatePlayersCard() {
   const { state, dispatch } = useStore();
   const t = useT();
 
-  // 名前ごとにまとめ、2件以上あるものを重複とみなす
+  // 名前ごとにまとめ、2件以上あるものを重複とみなす。
+  // 「髙島」と「高島」のような異体字・空白の違いも同じ名前として見る(lib/mergePlayers.js)
   const byName = new Map();
   for (const p of state.players) {
-    const key = (p.name || '').trim();
+    const key = nameVariantKey(p.name);
     if (!key) continue;
     if (!byName.has(key)) byName.set(key, []);
     byName.get(key).push(p);
@@ -338,12 +341,44 @@ function DuplicatePlayersCard() {
     <div className="card">
       <div className="section-title" style={{ marginTop: 0 }}>{t('set.dupTitle')}</div>
       <p className="small dim" style={{ marginTop: 0 }}>{t('set.dupDesc')}</p>
-      {dups.map(([name, list]) => {
+      {dups.map(([key, list]) => {
         // 出場記録が多い順、同数なら背番号がある方を優先して残す
         const ranked = [...list].sort((a, b) => (useCount(b.id) - useCount(a.id)) || ((b.number ? 1 : 0) - (a.number ? 1 : 0)));
+        const label = (p) => `${p.name}${p.number ? ` #${p.number}` : t('set.dupNoNumber')}（${t('set.dupUses', { n: useCount(p.id) })}）`;
+        const spellings = [...new Set(ranked.map((p) => p.name.trim()))];
+        // 字が違う(髙島/高島): どちらの字が正しいかはアプリには分からないので、残す字を選んでもらう
+        if (spellings.length > 1) {
+          return (
+            <div className="row" key={key} style={{ alignItems: 'flex-start', flexWrap: 'wrap' }}>
+              <div className="grow">
+                <b>{spellings.join(' / ')}</b>
+                <div className="small dim">{t('set.dupVariant')}</div>
+                {ranked.map((p) => <div className="small dim" key={p.id}>・{label(p)}</div>)}
+              </div>
+              <div className="dup-pick">
+                {spellings.map((nm) => {
+                  const keep = ranked.find((p) => p.name.trim() === nm);
+                  const others = ranked.filter((p) => p !== keep);
+                  return (
+                    <button
+                      key={nm}
+                      className="primary small"
+                      onClick={() => {
+                        if (!window.confirm(t('set.dupVariantConfirm', { keep: label(keep), others: others.map(label).join('、') }))) return;
+                        for (const o of others) dispatch({ type: 'MERGE_PLAYERS', keepId: keep.id, mergeId: o.id });
+                      }}
+                    >
+                      {t('set.dupVariantAction', { name: nm })}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        }
+        const name = spellings[0];
         const keep = ranked[0];
         const others = ranked.slice(1);
-        const label = (p) => `${p.name}${p.number ? ` #${p.number}` : t('set.dupNoNumber')}（${t('set.dupUses', { n: useCount(p.id) })}）`;
         return (
           <div className="row" key={name} style={{ alignItems: 'flex-start', flexWrap: 'wrap' }}>
             <div className="grow">
@@ -371,6 +406,7 @@ export default function SettingsTab() {
   const { state, dispatch } = useStore();
   const t = useT();
   const [pasteOpen, setPasteOpen] = useState(false); // 名簿の貼り付け
+  const [mergeOpen, setMergeOpen] = useState(false); // 書きまちがいで分かれた選手をまとめる
   const [newName, setNewName] = useState('');
   const [newNumber, setNewNumber] = useState('');
   const [newThrows, setNewThrows] = useState('');
@@ -502,6 +538,11 @@ export default function SettingsTab() {
           {t('manage.open')}
           <span className="dim">{t('manage.openSub')}</span>
         </button>
+        {/* 名前の書きまちがいで、同じ人が2人に分かれてしまったとき */}
+        <button className="small ghost mt8" style={{ width: '100%' }} onClick={() => setMergeOpen(true)}>
+          {t('merge.open')}
+        </button>
+        {mergeOpen && <MergePlayersSheet onClose={() => setMergeOpen(false)} />}
         {gradeOn && (
           <>
           <div className="lens-row mt8">
