@@ -8,7 +8,7 @@
 // 蓄積成績(通算)は持たない。あくまで「その試合の記録」だけを扱う。
 // 名前は game.oppNames[letter] に任意で入る(未入力なら記号のまま)。
 // ============================================================
-import { RESULTS } from './model.js';
+import { RESULTS, OPP_LETTERS } from './model.js';
 
 // 記号→表示名。未入力なら記号そのまま(A, B, …)。
 export function oppNameOf(game, letter) {
@@ -88,6 +88,28 @@ export function oppPitcherLetters(game) {
   else add(game?.oppPitcherLetter);
   for (const c of changes) add(c.payload?.in);
   return out.filter(Boolean);
+}
+
+// 相手投手の呼び名。名前を入れてあれば名前、無ければ登板の順に「先発」「2番手」「3番手」…
+// 記号(A〜T)は相手の打順の記号と同じ文字なので、投手の呼び名としては使わない
+// (「どの文字を選べば投手交代になるのか」が分からなかった)
+export function oppPitcherLabel(game, letter, lang = 'ja') {
+  if (!letter) return '';
+  if (oppHasName(game, letter)) return game.oppNames[letter];
+  const list = oppPitcherLetters(game);
+  let i = list.indexOf(letter);
+  if (i < 0) i = list.length; // これから登板する投手
+  return oppPitcherOrdinal(i, lang);
+}
+export function oppPitcherOrdinal(i, lang = 'ja') {
+  if (lang === 'en') return i === 0 ? 'Starter' : `Pitcher #${i + 1}`;
+  return i === 0 ? '先発' : `${i + 1}番手`;
+}
+
+// 次に登板する相手投手に割り当てる記号(まだ試合に出ていない記号)
+export function nextOppPitcherLetter(game) {
+  const used = new Set([...(game?.oppUsedLetters || []), ...oppPitcherLetters(game)]);
+  return OPP_LETTERS.find((l) => !used.has(l)) || null;
 }
 
 // 記号ごとの、その試合の打撃成績。相手の打席は 'defense' ログに入っている。

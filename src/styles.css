@@ -2920,3 +2920,16 @@ html[data-outdoor] .app-header .outdoor-toggle.on { background: #1f6feb; border-
 .new-team-help summary { cursor: pointer; font-weight: 700; color: var(--accent); }
 .cheer-res-total { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
 .cheer-res-top .card { border: none; padding: 0; margin: 8px 0 0; background: transparent; }
+
+/* 相手の投手交代 */
+.opp-pitch-btn { display: inline-flex; align-items: center; gap: 8px; margin: 0; padding: 4px 10px; min-height: 34px; }
+.opp-pitch-btn .small { opacity: 0.75; border: 1px solid currentColor; border-radius: 999px; padding: 0 7px; }
+.opp-next { display: flex; flex-direction: column; gap: 6px; }
+.opp-next input { margin: 0; }
+.big-btn { padding: 14px; font-size: 17px; font-weight: 700; }
+.opp-lineup-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 6px; }
+.opp-lineup-grid button { margin: 0; }
+.pc-options { display: flex; flex-direction: column; gap: 6px; }
+.pc-opt { margin: 0; text-align: left; padding: 10px 12px; display: flex; gap: 8px; align-items: flex-start; }
+.pc-opt.on { border-color: var(--accent); background: rgba(47, 129, 247, 0.12); }
+.pc-radio { color: var(--accent); flex: none; }

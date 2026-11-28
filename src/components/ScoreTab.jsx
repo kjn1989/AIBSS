@@ -25,8 +25,10 @@ import VoiceControl from './VoiceControl.jsx';
 import { SubstituteSheet } from './OrderTab.jsx';
 import HighlightSheet from './HighlightSheet.jsx';
 import DefenseCheckView from './DefenseCheckView.jsx';
+import OppPitcherSheet from './OppPitcherSheet.jsx';
+import PitchingChangeSheet from './PitchingChangeSheet.jsx';
 import { OppSubstituteSheet } from './OppOrderCard.jsx';
-import { oppNameOf, oppPositionOf, oppHasName } from '../lib/oppBox.js';
+import { oppNameOf, oppPositionOf, oppHasName, oppPitcherLabel } from '../lib/oppBox.js';
 import { renderPlayLog } from '../lib/playLogText.js';
 import GameProgressView from './GameProgressView.jsx';
 import { POSITIONS, OPP_LETTERS, resultCategory, multiOutLabel, positionLabel, attendeesOf, autoLineupFrom, isSimpleGame, gameUntouched } from '../lib/model.js';
@@ -972,20 +974,11 @@ export default function ScoreTab() {
             <AtBatHistory items={game.atBats.filter((ab) => ab.playerId === batter.playerId)} edition={state.settings.edition} lang={lang} />
             <div className="sit-pitcher">
               <span className="small dim">{t('score.oppPitcher')}</span>
-              <select
-                className="pitcher-select"
-                style={{ width: 88 }}
-                value={game.oppPitcherLetter || ''}
-                onChange={(e) => e.target.value && dispatch({
-                  type: 'OPP_SET_PITCHER', gameId: game.id, letter: e.target.value,
-                  label: `相手投手交代: ${e.target.value}`,
-                })}
-              >
-                <option value="">{t('score.selectPitcher')}</option>
-                {OPP_LETTERS.map((l) => (
-                  <option key={l} value={l}>{oppHasName(game, l) ? `${oppNameOf(game, l)} (${l})` : l}</option>
-                ))}
-              </select>
+              {/* 相手投手は「先発」「2番手」…で呼ぶ。交代はボタン1つ(記号のA〜Tは出さない) */}
+              <button className="opp-pitch-btn" onClick={() => setSheet({ kind: 'oppPitcher' })}>
+                <b>{game.oppPitcherLetter ? oppPitcherLabel(game, game.oppPitcherLetter, lang) : t('score.selectPitcher')}</b>
+                <span className="small">{t('opp.pitchChange')}</span>
+              </button>
               {game.oppPitcherLetter && <OppHandToggle game={game} which="pitcher" letter={game.oppPitcherLetter} />}
               <span className="sit-voice-slot" id="scoretab-voice-slot" />
             </div>
@@ -1020,24 +1013,27 @@ export default function ScoreTab() {
           )}
           <div className="sit-pitcher">
             <span className="small dim">{t('score.pitcher')}</span>
-            <select
-              className="pitcher-select"
-              style={{ fontSize: pitcherFont(game.currentPitcherId ? nameOf(game.currentPitcherId) : '') }}
-              value={game.currentPitcherId || ''}
-              onChange={(e) => e.target.value && dispatch({ type: 'SET_PITCHER', gameId: game.id, playerId: e.target.value })}
-            >
-              <option value="">{t('score.selectPitcher')}</option>
-              {state.players.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
+            {/* 投手交代はシートで。DHなしの試合では、新しい投手が打順のどこに入るかも一緒に決める */}
+            <button className="opp-pitch-btn my-pitch-btn" onClick={() => setSheet({ kind: 'myPitcher' })}>
+              <b style={{ fontSize: pitcherFont(game.currentPitcherId ? nameOf(game.currentPitcherId) : '') }}>
+                {game.currentPitcherId ? nameOf(game.currentPitcherId) : t('score.selectPitcher')}
+              </b>
+              <span className="small">{t('opp.pitchChange')}</span>
+            </button>
             <span className="sit-voice-slot" id="scoretab-voice-slot" />
           </div>
           <PitcherStats game={game} playerId={game.currentPitcherId} />
         </div>
       )}
 
-      {needsPitcher && <div className="warn-box needs-pitcher">{t(simple ? 'score.needPitcherSimple' : 'score.needPitcher')}</div>}
+      {needsPitcher && (
+        <div className="warn-box needs-pitcher">
+          {t(simple ? 'score.needPitcherSimple' : 'score.needPitcher')}
+          <button className="primary small" style={{ marginLeft: 8 }} onClick={() => setSheet({ kind: myBatting ? 'oppPitcher' : 'myPitcher' })}>
+            {t('score.pickPitcherBtn')}
+          </button>
+        </div>
+      )}
 
       <div className={needsPitcher ? 'input-locked' : ''} aria-disabled={needsPitcher}>
         {/* かんたん記録: 1球ごとのボタンは出さず、打席の結果だけを付ける */}
@@ -1286,6 +1282,8 @@ export default function ScoreTab() {
       {sheet?.kind === 'oppSub' && (
         <OppSubstituteSheet game={game} slot={sheet.slot} initialKind={sheet.subKind} onClose={() => setSheet(null)} />
       )}
+      {sheet?.kind === 'oppPitcher' && <OppPitcherSheet game={game} onClose={() => setSheet(null)} />}
+      {sheet?.kind === 'myPitcher' && <PitchingChangeSheet game={game} onClose={() => setSheet(null)} />}
       {sheet?.kind === 'highlight' && (
         <HighlightSheet game={game} onClose={() => setSheet(null)} />
       )}

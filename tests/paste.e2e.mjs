@@ -88,7 +88,7 @@ try {
   await p.click('nav button:has-text("スコア入力")'); await W(400);
   for (let i = 0; i < 3; i++) { await p.click('.result-pad button:has-text("三振")'); await W(300); const o = p.locator('.sheet-actions button:has-text("確定")'); if (await o.count()) { await o.click(); await W(400); } }
   await W(400);
-  ok('守りに入ると投手が藤田になっている', (await p.locator('select.pitcher-select').inputValue().then((v) => p.locator(`select.pitcher-select option[value="${v}"]`).innerText())) === '藤田');
+  ok('守りに入ると投手が藤田になっている', (await p.locator('.my-pitch-btn b').innerText()) === '藤田');
   ok('横あふれなし', !(await p.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1)));
   // ---- 守備番号つき・DH・打順の外の投手(「1番 6大槻 … 投手 藤田」) ----
   const ctx2 = await b.newContext({ viewport: { width: 390, height: 844 }, locale: 'ja-JP' });
@@ -121,7 +121,7 @@ try {
   ok('未定の間は先攻(表の攻撃)として表示', (await q.locator('.sit-main .nm').innerText().catch(() => '')) === '大槻');
   await q.click('.home-away button:has-text("後攻")'); await q.waitForTimeout(500);
   ok('後攻に決めると札が消える', await q.locator('.home-away').count() === 0);
-  ok('後攻なので1回表は守り(投手が藤田)', (await q.locator('select.pitcher-select').inputValue().then((v) => q.locator(`select.pitcher-select option[value="${v}"]`).innerText()).catch(() => '')) === '藤田');
+  ok('後攻なので1回表は守り(投手が藤田)', (await q.locator('.my-pitch-btn b').innerText().catch(() => '')) === '藤田');
   await ctx2.close();
 } catch (e) {
   console.log('ERROR:', e.message); fail++;

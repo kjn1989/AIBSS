@@ -3,7 +3,7 @@ import { useStore, useT, usePlayerName, isMyTeamBatting } from '../state/store.j
 import { computeBoxScore, halfPlayed, hitsByInning } from '../lib/boxscore.js';
 import { resultCategory, isSimpleGame } from '../lib/model.js';
 import { shortLabel } from '../lib/notation.js';
-import { oppNameOf } from '../lib/oppBox.js';
+import { oppNameOf, oppPitcherLabel } from '../lib/oppBox.js';
 
 // チーム名の頭文字(先頭グラフェム)。空なら控えの記号を返す。
 function initialOf(name, fallback) {
@@ -27,7 +27,7 @@ function PitchLines({ game }) {
     : null;
   const oppRec = game.oppPitcherLetter ? game.oppPitchers?.[game.oppPitcherLetter] : null;
   const mine = { ini: myInitial, who: game.currentPitcherId ? nameOf(game.currentPitcherId) : '', pitches: myPr?.pitches || 0, set: !!game.currentPitcherId };
-  const opp = { ini: oppInitial, who: game.oppPitcherLetter || '', pitches: oppRec?.pitches || 0, set: !!game.oppPitcherLetter };
+  const opp = { ini: oppInitial, who: game.oppPitcherLetter ? oppPitcherLabel(game, game.oppPitcherLetter, state?.settings?.lang || 'ja') : '', pitches: oppRec?.pitches || 0, set: !!game.oppPitcherLetter };
 
   // 今投げているのは守備側(自軍打撃なら相手、守備なら自軍)
   const oppActive = isMyTeamBatting(game);
