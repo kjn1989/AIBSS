@@ -90,6 +90,31 @@ try {
   await W(400);
   ok('守りに入ると投手が藤田になっている', (await p.locator('select.pitcher-select').inputValue().then((v) => p.locator(`select.pitcher-select option[value="${v}"]`).innerText())) === '藤田');
   ok('横あふれなし', !(await p.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1)));
+  // ---- 守備番号つき・DH・打順の外の投手(「1番 6大槻 … 投手 藤田」) ----
+  const ctx2 = await b.newContext({ viewport: { width: 390, height: 844 }, locale: 'ja-JP' });
+  const q = await ctx2.newPage();
+  q.on('pageerror', (e) => { console.log('EXC:', e.message); fail++; });
+  await q.goto(URL_, { waitUntil: 'load' }); await q.waitForTimeout(900);
+  await q.click('nav button:has-text("スコア入力")'); await q.waitForTimeout(400);
+  await q.click('.mode-opt:has-text("かんたん")');
+  await q.fill('input[placeholder="対戦相手名"]', 'タイ代表');
+  await q.click('button:has-text("試合開始")'); await q.waitForTimeout(600);
+  const at = q.locator('.sheet-actions button.primary'); if (await at.count()) { await at.click(); await q.waitForTimeout(600); }
+  await q.click('button:has-text("名簿を貼り付けて打順を組む")'); await q.waitForTimeout(400);
+  await q.fill('.paste-area', '1番 6大槻\n2番 5髙島\n3番 4伊山\n4番 8大道\n5番 3千葉\n6番 DH岩崎\n7番 9清水\n8番 7中島\n9番 2黒瀬\n\n投手 藤田');
+  await q.waitForTimeout(300);
+  const sh = await q.locator('.sheet').innerText();
+  ok('藤田が打順の外の先発投手として出る', sh.includes('先発投手(打順の外・DH制)') && sh.includes('新しく 10 人を登録'), sh.slice(-400));
+  await q.click('.sheet-actions button.primary'); await q.waitForTimeout(700);
+  await q.click('nav button:has-text("オーダー")'); await q.waitForTimeout(600);
+  const rows3 = await q.evaluate(() => [...document.querySelectorAll('.main .row')]
+    .map((r) => [r.querySelector('b')?.textContent, r.querySelector('select')?.value]).filter((x) => x[0] && x[1]));
+  ok('数字のポジションとDHで打順が組まれる',
+    JSON.stringify(rows3) === JSON.stringify([['大槻', '遊'], ['髙島', '三'], ['伊山', '二'], ['大道', '中'], ['千葉', '一'], ['岩崎', 'DH'], ['清水', '右'], ['中島', '左'], ['黒瀬', '捕']]),
+    JSON.stringify(rows3));
+  const dhc = await q.locator('.dh-card').innerText().catch(() => '');
+  ok('DH制のカードで先発が藤田になっている', dhc.includes('投手: 藤田'), dhc);
+  await ctx2.close();
 } catch (e) {
   console.log('ERROR:', e.message); fail++;
 } finally {
