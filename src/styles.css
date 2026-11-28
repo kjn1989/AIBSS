@@ -2941,3 +2941,13 @@ html[data-outdoor] .app-header .outdoor-toggle.on { background: #1f6feb; border-
 .dc-order-name { text-align: left; background: transparent; border: none; margin: 0; padding: 4px 0; }
 .dc-order .pos-chip.on { color: #f0a020; border-color: #f0a020; }
 .def-change-btn { margin: 0 0 0 6px; white-space: nowrap; }
+
+/* 守備につくときの確認(読み取り専用の小さな図) */
+.dq-field { max-width: 360px; margin: 0 auto; }
+.dq-spot { position: absolute; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 1px; pointer-events: none; }
+.dq-pos { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 800; background: rgba(255, 255, 255, 0.9); color: #14301f; }
+.dq-name { font-size: 11.5px; font-weight: 700; background: rgba(0, 0, 0, 0.62); color: #fff; padding: 1px 6px; border-radius: 6px; white-space: nowrap; max-width: 80px; overflow: hidden; text-overflow: ellipsis; }
+.dq-spot.empty .dq-pos { background: rgba(255, 255, 255, 0.5); border: 1px dashed #fff; }
+.dq-spot.empty .dq-name { color: #ffcf6b; }
+.dq-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.dq-actions button { margin: 0; }

@@ -117,6 +117,25 @@ try {
   await p.click('nav button:has-text("スコア入力")'); await W(500);
   ok('投手欄も江口', (await p.locator('.my-pitch-btn b').innerText()) === '江口');
   ok('横あふれなし', !(await p.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1)));
+
+  // ---- 守備につくたびに「いまの守備位置」(代打・代走が無い回) ----
+  await so(3); await W(500); // 相手の攻撃を3アウト → 自分の攻撃
+  await so(3); await W(800); // 自分の攻撃を3アウト → 守備につく
+  const dq = p.locator('.sheet').filter({ has: p.locator('.dq-field') });
+  ok('守備につくと、いまの守備位置の図が出る', await dq.count() === 1);
+  const dqt = await dq.innerText().catch(() => '');
+  ok('図に守っている選手の名前が出て、「この守備でOK」と「守備位置の交代」がある', dqt.includes('江口') && dqt.includes('守備職人') && dqt.includes('この守備でOK') && dqt.includes('守備位置の交代'), dqt);
+  if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT.replace('.png', 'q.png') });
+  await dq.locator('button:has-text("守備位置の交代")').click(); await W(400);
+  ok('「守備位置の交代」で組み替えの図が開く', await p.locator('.dc-field').count() === 1);
+  await p.locator('.fullscreen-header button:has-text("あとで")').click(); await W(300);
+  // 毎回は出さない、にすると次からは出ない
+  await so(3); await W(500); await so(3); await W(800);
+  const dq2 = p.locator('.sheet').filter({ has: p.locator('.dq-field') });
+  ok('次の守備でもまた出る', await dq2.count() === 1);
+  await dq2.locator('button:has-text("毎回は出さない")').click(); await W(300);
+  await so(3); await W(500); await so(3); await W(800);
+  ok('「毎回は出さない」にすると出ない', await p.locator('.dq-field').count() === 0);
   if (process.env.SHOT) { await p.screenshot({ path: process.env.SHOT }); await p.locator('.def-change-btn').click(); await W(400); await p.screenshot({ path: process.env.SHOT.replace('.png', 'b.png'), fullPage: true }); }
 } catch (e) {
   console.log('ERROR:', e.message); fail++;

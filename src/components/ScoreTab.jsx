@@ -25,6 +25,7 @@ import VoiceControl from './VoiceControl.jsx';
 import { SubstituteSheet } from './OrderTab.jsx';
 import HighlightSheet from './HighlightSheet.jsx';
 import DefenseCheckView from './DefenseCheckView.jsx';
+import DefenseConfirmSheet from './DefenseConfirmSheet.jsx';
 import OppPitcherSheet from './OppPitcherSheet.jsx';
 import PitchingChangeSheet from './PitchingChangeSheet.jsx';
 import { OppSubstituteSheet } from './OppOrderCard.jsx';
@@ -778,6 +779,7 @@ export default function ScoreTab() {
   // 代打・代走を出した攻撃が終わったら、守備につく前に守備位置を確認する(パワプロと同じ流れ)。
   // 代打がそのまま元の位置に入るとは限らず、他の選手も含めて組み替えることが多いため。
   const [defenseCheck, setDefenseCheck] = useState(null); // { playerIds: [id] }
+  const [defConfirm, setDefConfirm] = useState(false); // 守備につくときの「いまの守備位置」
   const halfKey = game ? `${game.inning}|${game.isTop ? 'T' : 'B'}` : '';
   const prevHalfRef = useRef(halfKey);
   // 押した手応えは少ししたら消す。フックは早期returnより前に置く必要がある
@@ -802,6 +804,8 @@ export default function ScoreTab() {
       .map((l) => l.payload.in)
       .filter(Boolean);
     if (entered.length) setDefenseCheck({ playerIds: [...new Set(entered)] });
+    // 交代が無くても、守備につくたびに「いまの守備位置」を見せて確かめてもらう(設定で止められる)
+    else if (state.settings.defenseConfirm !== false) setDefConfirm(true);
   }, [halfKey]);
   const logInning = (l) => t('score.logInning', { inning: l.inning, half: t(l.isTop ? 'half.top' : 'half.bottom') });
 
@@ -1225,6 +1229,14 @@ export default function ScoreTab() {
         />
       )}
       {editLog && <EditPlaySheet game={game} log={editLog} onClose={() => setEditLog(null)} />}
+      {defConfirm && !defenseCheck && (
+        <DefenseConfirmSheet
+          game={game}
+          onOk={() => setDefConfirm(false)}
+          onChange={() => { setDefConfirm(false); setDefenseCheck({ playerIds: [] }); }}
+          onNever={() => { setDefConfirm(false); dispatch({ type: 'UPDATE_SETTINGS', patch: { defenseConfirm: false } }); }}
+        />
+      )}
       {defenseCheck && (
         <DefenseCheckView game={game} newPlayerIds={defenseCheck.playerIds} onClose={() => setDefenseCheck(null)} />
       )}

@@ -766,6 +766,16 @@ export default function SettingsTab() {
 
       <PadHintCard />
 
+      {/* 守備につくたびの「いまの守備位置」の確認(スコア入力画面) */}
+      <div className="card">
+        <h2>{t('dq.setTitle')}</h2>
+        <p className="small dim" style={{ marginTop: 0 }}>{t('dq.setDesc')}</p>
+        <div className="toggle-row" style={{ marginBottom: 0 }}>
+          <button className={state.settings.defenseConfirm !== false ? 'active' : ''} onClick={() => dispatch({ type: 'UPDATE_SETTINGS', patch: { defenseConfirm: true } })}>{t('dq.on')}</button>
+          <button className={state.settings.defenseConfirm === false ? 'active' : ''} onClick={() => dispatch({ type: 'UPDATE_SETTINGS', patch: { defenseConfirm: false } })}>{t('dq.off')}</button>
+        </div>
+      </div>
+
       {/* ふだんは触らない設定は畳む。選手登録を一番上に置いたので、最初に見えるのは使うものだけ */}
       <div className="card">
         <h2>{t('set.demoTitle')}</h2>
