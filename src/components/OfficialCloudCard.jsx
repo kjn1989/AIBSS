@@ -9,6 +9,7 @@ import {
 import { getActiveProfileId, findProfileByOfficialTeamId, addProfile, switchActiveProfile } from '../lib/profiles.js';
 import QRCode from './QRCode.jsx';
 import LiveLinkPanel from './LiveLinkPanel.jsx';
+import TeamSetupChecklist from './TeamSetupChecklist.jsx';
 import { recorderName, saveRecorderName } from '../lib/baton.js';
 
 const ROLE_KEYS = ['owner', 'scorer', 'viewer'];
@@ -179,6 +180,16 @@ export default function OfficialCloudCard() {
           <p className="small dim" style={{ marginBottom: 10 }}>
             {t('occ.loginDesc')}
           </p>
+          {/* 新しいチームの代表の人向け。ここから何を順にやればいいかを先に見せる */}
+          <details className="new-team-help" style={{ marginBottom: 10 }}>
+            <summary>{t('setup.newTeamSummary')}</summary>
+            <ol className="small" style={{ margin: '6px 0 0', paddingLeft: 20 }}>
+              <li>{t('setup.newTeam1')}</li>
+              <li>{t('setup.newTeam2')}</li>
+              <li>{t('setup.newTeam3')}</li>
+            </ol>
+            <p className="small dim" style={{ margin: '6px 0 0' }}>{t('setup.newTeamMember')}</p>
+          </details>
           {signup && <p className="small" style={{ marginBottom: 6 }}><b>{t('auth.signupTitle')}</b></p>}
           <input type="email" autoComplete="username" name="email" placeholder={t('occ.email')} value={email} onChange={(e) => setEmail(e.target.value)} />
           <input
@@ -294,6 +305,9 @@ export default function OfficialCloudCard() {
               <p className="small dim">{t('occ.myNameHint')}</p>
             </div>
           )}
+
+          {/* 新しいチームの立ち上げ: 次にやることの一覧と、チームに配る案内づくり */}
+          {myRole === 'owner' && <TeamSetupChecklist teamId={teamId} members={members} />}
 
           {(myRole === 'owner') && (
             <>

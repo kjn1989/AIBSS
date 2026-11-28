@@ -407,6 +407,7 @@ export default function SettingsTab() {
   const t = useT();
   const [pasteOpen, setPasteOpen] = useState(false); // 名簿の貼り付け
   const [mergeOpen, setMergeOpen] = useState(false); // 書きまちがいで分かれた選手をまとめる
+  const [advOpen, setAdvOpen] = useState(false); // 詳細設定(チームで共有の入口から開く)
   const [newName, setNewName] = useState('');
   const [newNumber, setNewNumber] = useState('');
   const [newThrows, setNewThrows] = useState('');
@@ -778,7 +779,25 @@ export default function SettingsTab() {
         )}
       </div>
 
-      <details className="adv-settings">
+      {/* チームで共有(記録係・ライブ観戦)の入口。本体は下の「詳細設定」の中にあるが、
+          新しいチームの代表がそこまで辿り着けないので、畳まずに入口だけ出しておく */}
+      <div className="card share-entry">
+        <h2>{t('set.shareEntryTitle')}</h2>
+        <p className="small dim" style={{ marginTop: 0 }}>
+          {state.settings.officialTeamId ? t('set.shareEntryOn') : t('set.shareEntryOff')}
+        </p>
+        <button
+          className="primary" style={{ width: '100%' }}
+          onClick={() => {
+            setAdvOpen(true);
+            setTimeout(() => document.getElementById('official-cloud')?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 50);
+          }}
+        >
+          {t('set.shareEntryBtn')}
+        </button>
+      </div>
+
+      <details className="adv-settings" open={advOpen} onToggle={(e) => setAdvOpen(e.currentTarget.open)}>
         <summary>{t('set.advanced')}</summary>
 
       <div className="card">
@@ -823,7 +842,7 @@ export default function SettingsTab() {
       </div>
       {showGeminiHelp && <GeminiKeyHelpSheet onClose={() => setShowGeminiHelp(false)} />}
 
-      <OfficialCloudCard />
+      <div id="official-cloud"><OfficialCloudCard /></div>
       <CloudCard />
       <ExportCard />
       <BackupCard />
