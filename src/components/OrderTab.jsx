@@ -126,6 +126,7 @@ function DhCard({ game }) {
   const t = useT();
   const nameOf = usePlayerName();
   const [open, setOpen] = useState(false);
+  const [bench, setBench] = useState(false);
   const dh = game.lineup.find((l) => l.position === 'DH');
   if (!dh) {
     if (!game.dhDissolved) return null;
@@ -152,6 +153,13 @@ function DhCard({ game }) {
       {open && (
         <Sheet title={t('dh.dissolveTitle')} onClose={() => setOpen(false)}>
           <p className="small dim" style={{ marginTop: 0 }}>{t('dh.dissolveDesc')}</p>
+          <div className="section-title">{t('dh.byBench')}</div>
+          <div className="dh-opts">
+            <button className="primary" onClick={() => { setOpen(false); setBench(true); }}>
+              <b>{t('dh.benchBtn')}</b>
+              <span className="small">{t('dh.benchBtnSub', { dh: nameOf(dh.playerId) })}</span>
+            </button>
+          </div>
           <div className="section-title">{t('dh.byDh')}</div>
           <div className="dh-opts">
             <button onClick={() => fire({ mode: 'dh' })}>
@@ -171,7 +179,92 @@ function DhCard({ game }) {
           <div className="sheet-actions"><button onClick={() => setOpen(false)}>{t('action.cancel')}</button></div>
         </Sheet>
       )}
+      {bench && <BenchDissolveSheet game={game} dh={dh} onClose={() => setBench(false)} />}
     </div>
+  );
+}
+
+// 控えの投手が登板して、DHを解除する(先発はDHを兼ねない、いちばんよくある形)
+//   1. 登板する投手  2. その投手が入る打順(退く選手)  3. 残りの守備位置
+//   守備位置は、選ぶと元の持ち主と入れ替わる。DHの選手は最初、退く選手の守備位置に入れておく
+const FIELD9 = ['投', '捕', '一', '二', '三', '遊', '左', '中', '右'];
+function BenchDissolveSheet({ game, dh, onClose }) {
+  const { state, dispatch } = useStore();
+  const t = useT();
+  const nameOf = usePlayerName();
+  const [pid, setPid] = useState('');
+  const [outOrder, setOutOrder] = useState(null);
+  const [pos, setPos] = useState({});
+  const inLineup = new Set(game.lineup.map((l) => l.playerId));
+  const candidates = state.players.filter((p) => !p.archived && !inLineup.has(p.id) && p.id !== game.currentPitcherId
+    && (game.allowReentry || !game.retiredPlayerIds.includes(p.id)));
+  const chooseOut = (order) => {
+    setOutOrder(order);
+    const out = game.lineup.find((l) => l.order === order);
+    const m = {};
+    for (const l of game.lineup) if (l.order !== order) m[l.order] = l.position;
+    // DHの選手は、ひとまず退く選手の守備位置へ(DHの選手自身が退くなら何も動かない)
+    if (out !== dh) m[dh.order] = FIELD9.includes(out.position) && out.position !== '投' ? out.position : '';
+    setPos(m);
+  };
+  const setOne = (order, to) => setPos((prev) => {
+    const m = { ...prev };
+    const from = m[order];
+    const other = Object.keys(m).find((o) => Number(o) !== order && m[o] === to);
+    if (other && FIELD9.includes(to)) m[other] = from;
+    m[order] = to;
+    return m;
+  });
+  const rest = game.lineup.filter((l) => l.order !== outOrder);
+  const field = rest.map((l) => pos[l.order]).filter((x) => !['打', '控'].includes(x));
+  const missing = FIELD9.filter((x) => x !== '投' && !field.includes(x));
+  const dup = field.filter((x, i) => field.indexOf(x) !== i);
+  const ok = pid && outOrder != null && !missing.length && !dup.length && !field.includes('DH') && !field.includes('');
+  const go = () => {
+    dispatch({ type: 'DISSOLVE_DH', gameId: game.id, mode: 'bench', pitcherId: pid, outOrder, positions: pos,
+      label: t('dh.benchLog', { name: nameOf(pid), out: nameOf(game.lineup.find((l) => l.order === outOrder).playerId) }) });
+    onClose();
+  };
+  return (
+    <Sheet title={t('dh.benchTitle')} onClose={onClose}>
+      <div className="section-title">{t('dh.benchStep1')}</div>
+      <select value={pid} onChange={(e) => setPid(e.target.value)}>
+        <option value="">{t('score.selectPitcher')}</option>
+        {candidates.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+      </select>
+      <div className="section-title">{t('dh.benchStep2', { name: pid ? nameOf(pid) : t('dh.newPitcher') })}</div>
+      <div className="dh-out-grid">
+        {game.lineup.map((l) => (
+          <button key={l.order} className={outOrder === l.order ? 'primary' : ''} onClick={() => chooseOut(l.order)}>
+            {l.order} {nameOf(l.playerId)} <span className="small dim">{l.position === 'DH' ? 'DH' : l.position}</span>
+          </button>
+        ))}
+      </div>
+      {outOrder != null && (
+        <>
+          <div className="section-title">{t('dh.benchStep3')}</div>
+          <div className="dh-pos-list">
+            <div className="dh-pos-row">
+              <span>{outOrder} {pid ? nameOf(pid) : t('dh.newPitcher')}</span><b>{t('posFull.投')}</b>
+            </div>
+            {rest.map((l) => (
+              <div key={l.order} className={`dh-pos-row${pos[l.order] !== l.position ? ' moved' : ''}`}>
+                <span>{l.order} {nameOf(l.playerId)}{l.position !== pos[l.order] && <span className="small dim"> ({l.position}→)</span>}</span>
+                <select value={pos[l.order] || ''} onChange={(e) => setOne(l.order, e.target.value)}>
+                  {!pos[l.order] && <option value="">—</option>}
+                  {['捕', '一', '二', '三', '遊', '左', '中', '右', '打'].map((x) => <option key={x} value={x}>{x}</option>)}
+                </select>
+              </div>
+            ))}
+          </div>
+          {!ok && pid && <p className="small warn-text">{t('dh.benchInvalid', { list: [...missing, ...new Set(dup)].join('・') || '—' })}</p>}
+        </>
+      )}
+      <div className="sheet-actions">
+        <button onClick={onClose}>{t('action.cancel')}</button>
+        <button className="primary" disabled={!ok} onClick={go}>{t('dh.benchGo')}</button>
+      </div>
+    </Sheet>
   );
 }
 

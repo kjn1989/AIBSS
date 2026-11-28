@@ -1136,7 +1136,33 @@ function reduce(state, action) {
         gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'position',
         text: '', payload: { order: s.order, playerId: s.playerId, position: s.position, from },
       }));
-      if (action.mode === 'fielder') {
+      if (action.mode === 'bench') {
+        // 控えの投手が登板し、抜ける選手(outOrder)の打順に入る。残りの守備は positions で丸ごと指定
+        //   例: 藤田(先発・打順外)→深町。DHの岩崎が一塁、一塁の千葉が右翼、右翼の清水が退き深町が7番に
+        const pid = action.pitcherId;
+        const slot = g.lineup.find((l) => l.order === action.outOrder);
+        if (!pid || !slot || g.lineup.some((l) => l.playerId === pid)) return state;
+        const next = g.lineup.map((l) => ({ ...l, position: l === slot ? '投' : (action.positions?.[l.order] ?? l.position) }));
+        const field = next.filter((l) => !['打', '控'].includes(l.position)).map((l) => l.position);
+        const need = ['投', '捕', '一', '二', '三', '遊', '左', '中', '右'];
+        if (field.includes('DH') || field.length !== need.length || !need.every((x) => field.includes(x))) return state;
+        const outgoing = slot.playerId;
+        const outPos = slot.position;
+        slot.playerId = pid;
+        slot.position = '投';
+        if (outgoing && !g.retiredPlayerIds.includes(outgoing)) g.retiredPlayerIds.push(outgoing);
+        if (!g.usedPlayerIds.includes(pid)) g.usedPlayerIds.push(pid);
+        g.playLogs.push(newPlayLog({
+          gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'sub', text: action.label || '選手交代',
+          payload: { order: slot.order, in: pid, out: outgoing, kind: 'def', position: '投', from: outPos },
+        }));
+        for (const l of g.lineup) {
+          if (l === slot) continue;
+          const to = next.find((x) => x.order === l.order).position;
+          if (to !== l.position) { const from = l.position; l.position = to; log(l, from); }
+        }
+        takeMoundFromLineup(g, pid, 'DH解除・投手交代');
+      } else if (action.mode === 'fielder') {
         const f = g.lineup.find((l) => l.order === action.fielderOrder);
         if (!f || f === dh || ['DH', '打', '控'].includes(f.position)) return state;
         const fieldPos = f.position;

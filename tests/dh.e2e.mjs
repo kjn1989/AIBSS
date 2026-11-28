@@ -148,7 +148,7 @@ try {
   check('カードに投手の名前が出る', dhTxt.includes(`投手: ${pickName}`), dhTxt);
   await dhCard.locator('button:has-text("DHを解除する")').click();
   await page.waitForTimeout(400);
-  const opt = page.locator('.sheet .dh-opts').nth(1).locator('button').first();
+  const opt = page.locator('.sheet .dh-opts').nth(2).locator('button').first();
   const optTxt = (await opt.innerText()).replace(/\n+/g, ' ');
   const newP = optTxt.split(' が投手に')[0].trim();
   check('解除シートに「◯◯が投手に」が出る', !!newP && optTxt.includes('へ'), optTxt);
@@ -204,6 +204,66 @@ try {
     check('DH兼投手だとカードに「兼ねています」と出る', c2.includes(`${dhName} が投手とDHを兼ねています`), `${dhName} / ${c2}`);
   }
   await ctx2.close();
+
+  // ---- 控えの投手が登板してDH解除(先発はDHを兼ねない・いちばんよくある形) ----
+  //   打順: 1捕青木 2一井上 … 8右工藤 9DH小林 / 先発 佐藤(打順外) / 控え 鈴木
+  //   鈴木が登板して工藤(右・8番)の打順に入る。DHの小林が一塁、一塁の井上が右翼へ
+  const ctx3 = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'ja-JP' });
+  const p3 = await ctx3.newPage();
+  p3.on('pageerror', (err) => { console.log('PAGE EXCEPTION:', err.message); failures++; });
+  p3.on('dialog', (d) => d.accept());
+  await p3.goto(URL_, { waitUntil: 'load' }); await p3.waitForTimeout(800);
+  await p3.click('button[aria-label="設定"]'); await p3.waitForTimeout(400);
+  const names3 = [...names, '鈴木'];
+  for (let i = 0; i < names3.length; i++) {
+    await p3.fill('.add-form input[placeholder="選手名"]', names3[i]);
+    await p3.fill('.add-form input[placeholder="背番号"]', String(i + 1));
+    await p3.click('.add-form button.primary'); await p3.waitForTimeout(120);
+  }
+  await p3.click('nav button:has-text("スコア入力")'); await p3.waitForTimeout(400);
+  await p3.click('button:has-text("くわしく")').catch(() => {});
+  await p3.fill('input[placeholder="対戦相手名"]', 'タイ代表');
+  await p3.click('button:has-text("試合開始")'); await p3.waitForTimeout(700);
+  const att3 = p3.locator('.sheet').filter({ hasText: '今日のメンバー' });
+  if (await att3.count()) { await p3.click('.sheet-actions button.primary'); await p3.waitForTimeout(700); }
+  await p3.click('nav button:has-text("オーダー")'); await p3.waitForTimeout(500);
+  await p3.click('.dh-toggle button:has-text("あり")'); await p3.waitForTimeout(300);
+  for (const n of names.slice(0, 9)) { await p3.locator('.select-row').filter({ hasText: n }).first().click(); await p3.waitForTimeout(100); }
+  await p3.click('button:has-text("次へ")'); await p3.waitForTimeout(400);
+  await p3.click('button:has-text("次へ")').catch(() => {}); await p3.waitForTimeout(400);
+  await p3.locator('.pos-field .pos-spot').filter({ hasText: /^投$/ }).first().click(); await p3.waitForTimeout(400);
+  await p3.locator('.sheet .picker-row').filter({ hasText: '佐藤' }).first().click(); await p3.waitForTimeout(400);
+  await p3.click('button:has-text("このオーダーで確定")'); await p3.waitForTimeout(800);
+
+  await p3.locator('.dh-card button:has-text("DHを解除する")').click(); await p3.waitForTimeout(400);
+  await p3.locator('.sheet button:has-text("控えの投手を登板させてDHを解除")').click(); await p3.waitForTimeout(400);
+  const bs = p3.locator('.sheet').last();
+  await bs.locator('select').first().selectOption({ label: '鈴木' });
+  await bs.locator('.dh-out-grid button').filter({ hasText: '工藤' }).click(); await p3.waitForTimeout(300);
+  const koba = bs.locator('.dh-pos-row').filter({ hasText: '小林' }).locator('select');
+  check('DHの小林は、まず退く工藤の守備位置(右)に入っている', (await koba.inputValue()) === '右', await koba.inputValue());
+  await koba.selectOption('一'); await p3.waitForTimeout(200);
+  const inoue = bs.locator('.dh-pos-row').filter({ hasText: '井上' }).locator('select');
+  check('小林を一塁にすると、一塁の井上が右翼に入れ替わる', (await inoue.inputValue()) === '右', await inoue.inputValue());
+  await bs.locator('button:has-text("この形でDH解除")').click(); await p3.waitForTimeout(700);
+  const lineupNow = await p3.evaluate(() => {
+    const rows = [...document.querySelectorAll('.card .row')].filter((r) => r.querySelector('select'));
+    const lineup = rows.map((r) => r.innerText.split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 2).join('') + r.querySelector('select').value).join(' ');
+    const main = document.querySelector('.main').innerText;
+    return { lineup, main };
+  });
+  lineupNow.retired = lineupNow.main.slice(lineupNow.main.indexOf('DHを解除しました'));
+  check('解除後の打順: 井上右・鈴木投(8番)・小林一、DHなし',
+    !!lineupNow && lineupNow.lineup.includes('2井上右') && lineupNow.lineup.includes('8鈴木投') && lineupNow.lineup.includes('9小林一') && !lineupNow.lineup.includes('DH'),
+    JSON.stringify(lineupNow));
+  check('佐藤と工藤は退いた選手に入る', lineupNow.retired.includes('佐藤') && lineupNow.retired.includes('工藤'), lineupNow.retired);
+  await p3.click('nav button:has-text("スコア入力")'); await p3.waitForTimeout(600);
+  const undoBtn = p3.locator('button.undo-op').first();
+  check('取り消しボタンが「DH解除」と読める', (await undoBtn.innerText()).includes('DH解除'), await undoBtn.innerText());
+  await undoBtn.click(); await p3.waitForTimeout(500);
+  await p3.click('nav button:has-text("オーダー")'); await p3.waitForTimeout(500);
+  check('取り消すとDH制に戻る', await p3.locator('.dh-card').count() === 1);
+  await ctx3.close();
 
 } catch (e) {
   // 要素が見つからない失敗は、たいてい画面が落ちている。
