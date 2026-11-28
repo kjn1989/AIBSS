@@ -95,6 +95,9 @@ export default function PlayerView({ playerId, games, onClose }) {
               <div><div className="dim small">{t('pv.bbhbp')}</div><b>{batting.bb + batting.hbp}</b></div>
               <div><div className="dim small">{t('pv.so')}</div><b>{batting.so}</b></div>
               <div><div className="dim small">{t('pv.risp')}</div><b>{fmtAvg(m.risp)}</b></div>
+              <div><div className="dim small">{t('pv.sac')}</div><b>{batting.sacBunt || 0}</b></div>
+              <div><div className="dim small">{t('pv.sacFly')}</div><b>{batting.sacFly || 0}</b></div>
+              <div><div className="dim small">{t('pv.slg')}</div><b>{fmtAvg(m.slg)}</b></div>
             </div>
           </div>
         ) : (

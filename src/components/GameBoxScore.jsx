@@ -9,7 +9,7 @@ import Sheet from './Sheet.jsx';
 // 1登場ぶんの打席群(+盗塁数)から表示用の打撃ラインを作る。
 // aggregateBatting と同じ判定基準(打数・安打・本塁打)を打席サブセットに適用する。
 function lineFromBucket(atBats, sb) {
-  let pa = 0; let ab = 0; let h = 0; let rbi = 0; let hr = 0;
+  let pa = 0; let ab = 0; let h = 0; let rbi = 0; let hr = 0; let sacBunt = 0;
   for (const a of atBats) {
     const def = RESULTS[a.result];
     if (!def) continue;
@@ -17,9 +17,10 @@ function lineFromBucket(atBats, sb) {
     if (def.ab) ab += 1;
     if (def.hit) h += 1;
     if (a.result === 'hr') hr += 1;
+    if (a.result === 'sacBunt') sacBunt += 1;
     rbi += a.rbi || 0;
   }
-  return { pa, ab, h, rbi, hr, sb };
+  return { pa, ab, h, rbi, hr, sb, sacBunt };
 }
 
 // 出場選手のボックススコア(打順ツリー方式)。
@@ -253,5 +254,6 @@ function statLine(s, t) {
   if (s.rbi) parts.push(t('box.rbiN', { n: s.rbi }));
   if (s.hr) parts.push(t('box.hrN', { n: s.hr }));
   if (s.sb) parts.push(t('box.sbN', { n: s.sb }));
+  if (s.sacBunt) parts.push(t('box.sacN', { n: s.sacBunt }));
   return parts.join(' ');
 }

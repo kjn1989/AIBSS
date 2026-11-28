@@ -216,15 +216,16 @@ try {
   const statsText = await page.locator('body').innerText();
   check('成績: 対象試合が表示されている', statsText.includes('ゴールデンパス'));
 
-  // 打撃成績一覧テーブルから 盗塁列(最終列)を合計: 単独1 + 重盗2 = 3
+  // 打撃成績一覧テーブルから 盗塁列(見出し「盗」)を合計: 単独1 + 重盗2 = 3
   const sbValues = await page.$$eval('table', (tables) => {
     const t = tables.find((x) => x.innerText.includes('盗') && x.innerText.includes('打席'));
     if (!t) return null;
-    return [...t.querySelectorAll('tbody tr')].map((tr) => {
-      const cells = [...tr.querySelectorAll('td')];
-      return Number(cells[cells.length - 1]?.textContent || 0);
-    });
+    const i = [...t.querySelectorAll('thead th')].findIndex((th) => th.textContent.trim() === '盗');
+    return [...t.querySelectorAll('tbody tr')].map((tr) => Number(tr.querySelectorAll('td')[i]?.textContent || 0));
   });
+  const hasSac = await page.$$eval('table', (tables) => tables.some((x) => x.innerText.includes('打席')
+    && [...x.querySelectorAll('thead th')].some((th) => th.textContent.trim() === '犠打')));
+  check('成績: 打撃成績一覧に犠打の列がある', hasSac);
   const sbTotal = (sbValues || []).reduce((a, b) => a + b, 0);
   const sbPlayers = (sbValues || []).filter((v) => v > 0).length;
   check('成績: 盗塁合計=3(重盗で2人に付与)', sbTotal === 3, `actual=${sbTotal}`);
