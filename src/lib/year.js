@@ -12,6 +12,7 @@
 //   年度 = 人の世代(誰が在籍しているか)
 //   大会 = その年度の中の区分(春季大会・秋季リーグ など)
 // ============================================================
+import { tournamentOf } from './tournament.js';
 
 export const DEFAULT_YEAR_START_MONTH = 4; // 日本の年度。設定で 1(暦年) や 9 にもできる
 
@@ -180,6 +181,10 @@ export function scopedGames(state, value) {
   if (value.scope === 'game') {
     const g = value.gameId ? state.games[value.gameId] : null;
     return g ? [g] : [];
+  }
+  // 大会: 「AABC2026 初戦」「AABC2026 第2戦」…を「AABC2026」としてまとめる(lib/tournament.js)
+  if (value.scope === 'tournament') {
+    return value.tournament ? all.filter((g) => tournamentOf(g.season) === value.tournament) : [];
   }
   if (value.scope === 'year') {
     const y = resolveYear(all, value, startMonth);
