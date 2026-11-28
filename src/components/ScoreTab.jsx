@@ -466,7 +466,7 @@ function BatterSheet({ game, onClose, onPinchHitter }) {
   );
 }
 
-// ---- 相手打者変更シート(記号A〜Tで管理) ----
+// ---- 相手打者変更シート(記号A〜Zで管理) ----
 function OppBatterSheet({ game, onClose, onPinchHitter }) {
   const { dispatch } = useStore();
   const t = useT();
@@ -974,7 +974,7 @@ export default function ScoreTab() {
             <AtBatHistory items={game.atBats.filter((ab) => ab.playerId === batter.playerId)} edition={state.settings.edition} lang={lang} />
             <div className="sit-pitcher">
               <span className="small dim">{t('score.oppPitcher')}</span>
-              {/* 相手投手は「先発」「2番手」…で呼ぶ。交代はボタン1つ(記号のA〜Tは出さない) */}
+              {/* 相手投手は「先発」「2番手」…で呼ぶ。交代はボタン1つ(記号のA〜Zは出さない) */}
               <button className="opp-pitch-btn" onClick={() => setSheet({ kind: 'oppPitcher' })}>
                 <b>{game.oppPitcherLetter ? oppPitcherLabel(game, game.oppPitcherLetter, lang) : t('score.selectPitcher')}</b>
                 <span className="small">{t('opp.pitchChange')}</span>

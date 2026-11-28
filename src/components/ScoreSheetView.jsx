@@ -143,7 +143,7 @@ export default function ScoreSheetView({ game, onClose, readOnly = false }) {
 
   const records = [...game.pitchingRecords].sort((a, b) => a.appearanceOrder - b.appearanceOrder);
 
-  // ---- 相手チーム: 記号(A〜T)で記録された打席を、同じ打順マトリクスに組む ----
+  // ---- 相手チーム: 記号(A〜Z)で記録された打席を、同じ打順マトリクスに組む ----
   // 相手の打席は 'defense' ログに全部残っているので、自軍と同じ形で並べられる。
   const oppPitchers = oppPitcherLetters(game);
   const oppCells = new Map(); // letter -> { [inning]: [cell] }
