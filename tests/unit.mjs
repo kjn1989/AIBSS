@@ -6561,3 +6561,30 @@ test('ボックススコア: 盗塁・牽制の悪送球(打席の外の失策)�
   assert.equal(box.opp.e, 1);
   assert.equal(box.my.e, 1);
 });
+
+test('名簿貼り付け: 「1番 6大槻」の守備番号・DH・打順の外の投手', () => {
+  const r = parseRosterText(`1番 6大槻
+2番 5髙島
+3番 4伊山
+4番 8大道
+5番 3千葉
+6番 DH岩崎
+7番 9清水
+8番 7中島
+9番 2黒瀬
+
+投手 藤田`);
+  assert.equal(r.numbersAre, 'order');
+  assert.deepEqual(r.rows.map((x) => [x.name, x.position]), [
+    ['大槻', '遊'], ['髙島', '三'], ['伊山', '二'], ['大道', '中'], ['千葉', '一'],
+    ['岩崎', 'DH'], ['清水', '右'], ['中島', '左'], ['黒瀬', '捕']]);
+  assert.deepEqual(r.pitcher, { name: '藤田', number: '' });
+  assert.ok(r.rows.every((x) => !x.number), '打順の数字は背番号にしない');
+  // LINEの書き方(「1番、6大槻さん」「先発：藤田さん！」)
+  const l = parseRosterText('1番、6大槻さん\n2番、5髙島さん\n6番、DH岩崎さん\n\n先発：藤田さん！');
+  assert.equal(l.numbersAre, 'order');
+  assert.deepEqual(l.rows.map((x) => [x.name, x.position]), [['大槻', '遊'], ['髙島', '三'], ['岩崎', 'DH']]);
+  assert.equal(l.pitcher.name, '藤田');
+  // 番号の無い名簿では、投手の行も打順の1人のまま
+  assert.equal(parseRosterText('藤田 投\n黒瀬 捕').pitcher, null);
+});

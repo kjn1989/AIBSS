@@ -11,7 +11,7 @@ import { FIELD_POSITIONS } from './model.js';
 
 // 守備位置の書き方 → アプリの位置(投捕一二三遊左中右 / DH)
 const POS_WORDS = [
-  ['投', ['投手', '投', 'ピッチャー', 'ピッチャ', 'P']],
+  ['投', ['先発投手', '先発', '投手', '投', 'ピッチャー', 'ピッチャ', 'P']],
   ['捕', ['捕手', '捕', 'キャッチャー', 'キャッチャ', 'C']],
   ['一', ['一塁手', '一塁', '一', 'ファースト', '1B']],
   ['二', ['二塁手', '二塁', '二', 'セカンド', '2B']],
@@ -50,14 +50,24 @@ export function parseRosterLine(raw) {
   s = s.replace(/^[・\-*•>\s]+/, '');
 
   let lead = null;
-  const m = s.match(/^(\d{1,3})\s*(?:番|[.)）:：、,．])?\s*/);
+  const m = s.match(/^(\d{1,3})\s*(?:番\s*[、,.:：．]?|[.)）:：、,．])?\s*/);
   // 数字だけの行(名前が無い)は名簿の行ではない
-  if (m && s.length > m[0].length) { lead = Number(m[1]); s = s.slice(m[0].length); }
+  let ban = false; // 「1番」と書いてあれば、先頭の数字は打順で確定
+  if (m && s.length > m[0].length) { lead = Number(m[1]); ban = m[0].includes('番'); s = s.slice(m[0].length); }
+
+  // 「1番 6大槻」「1番 DH岩崎」: 打順のあとに守備番号(1〜9)やDHが名前にくっついている
+  let gluedPos = null;
+  if (lead != null) {
+    const g = s.match(/^([1-9])(?=[^\d\s.)）:：、,．#])/);
+    if (g) { gluedPos = posByNumber(Number(g[1])); s = s.slice(1); }
+  }
+  const dhGlued = s.match(/^(DH|ＤＨ)(?=[^A-Za-z\s])/i);
+  if (!gluedPos && dhGlued) { gluedPos = 'DH'; s = s.slice(dhGlued[0].length); }
 
   let number = null;
   s = s.replace(/(?:#|＃|No\.?|背番号|背番)\s*(\d{1,3})/i, (_, d) => { number = d; return ' '; });
 
-  let position = null;
+  let position = gluedPos;
   // かっこの中。守備位置として読めたら位置、読めなければ(「主将」など)捨てる
   s = s.replace(/[（(［\[【〈<]\s*([^）)］\]】〉>]*)\s*[）)］\]】〉>]/g, (_, inner) => {
     const p = asPosition(inner);
@@ -75,7 +85,9 @@ export function parseRosterLine(raw) {
     if (last) { position = last; parts.pop(); } else if (first) { position = first; parts.shift(); }
   }
   // 名前にくっついた片仮名の位置(「ショート入交」「入交ショート」)
-  let name = parts.join(' ').trim();
+  // 敬称と行末の記号(「大槻さん！」)
+  if (parts.length) parts[parts.length - 1] = parts[parts.length - 1].replace(/[!！。.、,]+$/, '').replace(/(さん|くん|君|選手|ちゃん)$/, '');
+  let name = parts.filter(Boolean).join(' ').trim();
   if (!position && name) {
     for (const k of POS_KEYS) {
       if (k.length < 3) continue; // 1〜2文字は名前の一部と区別できない(「中島」「右田」)
@@ -85,11 +97,12 @@ export function parseRosterLine(raw) {
     }
   }
   if (!name || /^\d+$/.test(name)) return null; // 数字だけの行は名簿の行ではない
-  return { lead, name, position, number };
+  return { lead, ban, name, position, number };
 }
 
 // 貼り付けた全文を読む。
 //   rows: [{ name, position, number, order }]
+//   pitcher: 打順の外の先発投手 { name, number } | null
 //   numbersAre: 'order'(先頭の数字は打順) | 'uniform'(背番号) | 'none'
 export function parseRosterText(text) {
   const seen = new Set();
@@ -102,15 +115,25 @@ export function parseRosterText(text) {
     seen.add(key);
     rows.push(r);
   }
+  // 打順の行(先頭に数字)のあとの「投手 藤田」「先発：藤田」は、打順の外の先発投手(DH制)
+  let pitcher = null;
+  if (rows.some((r) => r.lead != null)) {
+    const i = rows.findIndex((r) => r.lead == null && r.position === '投');
+    if (i >= 0) { pitcher = { name: rows[i].name, number: rows[i].number || '' }; rows.splice(i, 1); }
+  }
   const leads = rows.map((r) => r.lead).filter((n) => n != null);
   let numbersAre = 'none';
   if (leads.length) {
     // 1 から順に並んでいれば打順。飛んでいたり大きい数字があれば背番号
     const sequential = leads.length === rows.length && leads.every((n, i) => n === i + 1);
-    numbersAre = sequential ? 'order' : 'uniform';
+    const banAll = rows.every((r) => r.ban);
+    numbersAre = sequential || banAll ? 'order' : 'uniform';
+    // 「◯番」の並びが前後していても、打順の数字どおりに並べる
+    if (banAll) rows.sort((a, b) => a.lead - b.lead);
   }
   return {
     numbersAre,
+    pitcher,
     rows: rows.map((r, i) => ({
       name: r.name,
       position: r.position,

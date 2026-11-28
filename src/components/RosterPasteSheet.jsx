@@ -25,10 +25,12 @@ export default function RosterPasteSheet({ game = null, onClose }) {
     number: numbersAre === 'uniform' ? r.number : (parsed.numbersAre === 'uniform' ? '' : r.number),
   }));
   const pos = lineupPositions(rows);
-  const newCount = rows.filter((r) => !known.has(normalizeName(r.name))).length;
+  // 打順の外の先発投手(「投手 藤田」)。打順に「投」が居なければ先発として登録する
+  const pitcher = parsed.pitcher && !pos.includes('投') ? parsed.pitcher : null;
+  const newCount = [...rows, ...(pitcher ? [pitcher] : [])].filter((r) => !known.has(normalizeName(r.name))).length;
 
   const save = (withLineup) => {
-    dispatch({ type: 'IMPORT_ROSTER', rows, gameId: withLineup ? game.id : null });
+    dispatch({ type: 'IMPORT_ROSTER', rows, pitcher, gameId: withLineup ? game.id : null });
     onClose();
   };
 
@@ -68,6 +70,16 @@ export default function RosterPasteSheet({ game = null, onClose }) {
                 </span>
               </div>
             ))}
+            {pitcher && (
+              <div className="row">
+                <span className="rank-badge">{t('paste.pitcherBadge')}</span>
+                <div className="grow"><b>{pitcher.name}</b><span className="small dim" style={{ marginLeft: 6 }}>{t('paste.pitcherOut')}</span></div>
+                <span className="small">{positionLabel('投', lang)}</span>
+                <span className={`pill ${known.has(normalizeName(pitcher.name)) ? '' : 'blue'}`} style={{ marginLeft: 8 }}>
+                  {t(known.has(normalizeName(pitcher.name)) ? 'paste.known' : 'paste.new')}
+                </span>
+              </div>
+            )}
           </div>
           <p className="small dim mt8">{t(asLineup ? 'paste.lineupNote' : 'paste.registerNote', { n: newCount })}</p>
           {asLineup && game.lineup.length > 0 && <div className="warn-box mt8">{t('paste.replaceNote')}</div>}

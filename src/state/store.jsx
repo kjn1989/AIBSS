@@ -779,6 +779,8 @@ function reduce(state, action) {
     case 'IMPORT_ROSTER': {
       const rows = (action.rows || []).filter((r) => r && String(r.name || '').trim());
       if (!rows.length) return state;
+      // 打順の外の先発投手(DH制の「投手 藤田」)。選手の登録はほかの行と同じ
+      const outP = action.pitcher && String(action.pitcher.name || '').trim() ? { ...action.pitcher, position: '投' } : null;
       const byName = new Map(state.players.filter((p) => !p.archivedAt).map((p) => [normalizeName(p.name), p]));
       const players = [...state.players];
       const ids = rows.map((r) => {
@@ -789,6 +791,13 @@ function reduce(state, action) {
         byName.set(normalizeName(p.name), p);
         return p.id;
       });
+      let outPid = null;
+      if (outP) {
+        const hit = byName.get(normalizeName(outP.name));
+        if (hit) outPid = hit.id;
+        else { const p = newPlayer(String(outP.name).trim(), outP.number || '', { position: '投' }); players.push(p); outPid = p.id; }
+        if (ids.includes(outPid)) outPid = null; // 打順にも居る人なら打順の外ではない
+      }
       let next = { ...state, players };
       const g0 = action.gameId ? state.games[action.gameId] : null;
       if (!g0 || (g0.atBats?.length || 0) > 0) return next;
@@ -796,12 +805,12 @@ function reduce(state, action) {
       const lineup = ids.map((playerId, i) => ({ order: i + 1, playerId, position: pos[i] }));
       if (Array.isArray(g0.attendees)) {
         const g = deep(g0);
-        g.attendees = [...new Set([...g.attendees, ...ids])];
+        g.attendees = [...new Set([...g.attendees, ...ids, ...(outPid ? [outPid] : [])])];
         next = { ...next, games: { ...next.games, [g.id]: g } };
       }
       next = reduce(next, { type: 'SET_LINEUP', gameId: action.gameId, lineup });
-      const pitcher = lineup.find((l) => l.position === '投');
-      return pitcher ? reduce(next, { type: 'SET_PITCHER', gameId: action.gameId, playerId: pitcher.playerId, label: action.pitcherLabel }) : next;
+      const pitcherId = lineup.find((l) => l.position === '投')?.playerId || outPid;
+      return pitcherId ? reduce(next, { type: 'SET_PITCHER', gameId: action.gameId, playerId: pitcherId, label: action.pitcherLabel }) : next;
     }
     // 選手登録なしで試合を始める。仮の選手を9人作り、打順と守備位置を既定で埋める。
     // 名前はあとから入れられる(記録は選手IDに付いているので、入れた時点で全部その名前になる)
