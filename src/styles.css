@@ -2830,3 +2830,7 @@ html[data-outdoor] .app-header .outdoor-toggle.on { background: #1f6feb; border-
 .cr-who { display: flex; flex-direction: column; min-width: 64px; }
 .cr-opts { display: flex; flex-wrap: wrap; gap: 5px; flex: 1; }
 .cr-opts button { margin: 0; min-width: 52px; }
+
+/* DH制(大谷ルール)のカード */
+.dh-opts { display: flex; flex-direction: column; gap: 6px; }
+.dh-opts button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; margin: 0; padding: 10px 12px; }

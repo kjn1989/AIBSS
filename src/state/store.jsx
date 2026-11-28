@@ -1122,6 +1122,35 @@ function reduce(state, action) {
       g.updatedAt = Date.now();
       return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
     }
+    // DH解除(大谷ルール)を1回で。
+    //   mode 'fielder': 打順の野手(fielderOrder)が投手になり、DHの選手がその野手の守備位置へ
+    //                   (例: ライトのイチローが投手、DHの大谷がライトへ)
+    //   mode 'dh'     : DHの選手がそのまま投手になる(前の投手は退く)
+    // どちらも、以後は投手が打順で打つ(DH消滅・9人野球)
+    case 'DISSOLVE_DH': {
+      const g = deep(state.games[action.gameId]);
+      if (!g) return state;
+      const dh = g.lineup.find((l) => l.position === 'DH');
+      if (!dh) return state;
+      const log = (s, from) => g.playLogs.push(newPlayLog({
+        gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'position',
+        text: '', payload: { order: s.order, playerId: s.playerId, position: s.position, from },
+      }));
+      if (action.mode === 'fielder') {
+        const f = g.lineup.find((l) => l.order === action.fielderOrder);
+        if (!f || f === dh || ['DH', '打', '控'].includes(f.position)) return state;
+        const fieldPos = f.position;
+        f.position = '投'; log(f, fieldPos);
+        dh.position = fieldPos; log(dh, 'DH');
+        takeMoundFromLineup(g, f.playerId, 'DH解除・投手交代');
+      } else {
+        dh.position = '投'; log(dh, 'DH');
+        takeMoundFromLineup(g, dh.playerId, 'DH解除・投手交代');
+      }
+      g.dhDissolved = { inning: g.inning, isTop: g.isTop };
+      g.updatedAt = Date.now();
+      return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
+    }
     case 'SET_POSITION': {
       // 守備位置のみ変更(交代を伴わない)
       const g = deep(state.games[action.gameId]);
@@ -1147,8 +1176,15 @@ function reduce(state, action) {
             logMove(other, from);
           }
         }
+        const hadDH = hasDH(g);
         slot.position = action.position;
         logMove(slot, prev);
+        // DH制の試合で、DHが無くなり、打順の中の誰かが「投」に就いた → DH解除。
+        // その選手が新しい投手になり、以後は投手も打順で打つ(9人野球)
+        if (hadDH && !hasDH(g)) {
+          const p = g.lineup.find((l) => l.position === '投');
+          if (p) { takeMoundFromLineup(g, p.playerId, 'DH解除・投手交代'); g.dhDissolved = { inning: g.inning, isTop: g.isTop }; }
+        }
       }
       g.updatedAt = Date.now();
       return { ...state, games: { ...state.games, [g.id]: g } };
@@ -1246,6 +1282,11 @@ function reduce(state, action) {
       }
       g.currentPitcherId = action.playerId;
       ensurePitchingRecord(g, action.playerId);
+      // 打順の外にいた投手(DH制の投手)は、降板したら試合から退く。
+      // 打順に残っている投手(大谷ルールで DH を兼ねていた投手など)は、降板しても打者として残る
+      if (prev && prev !== action.playerId && !g.lineup.some((l) => l.playerId === prev) && !g.retiredPlayerIds.includes(prev)) {
+        g.retiredPlayerIds.push(prev);
+      }
       // 継投時: 塁上走者の責任投手は前任のまま残す(自責点帰属ダイアログで使用)
       g.playLogs.push(newPlayLog({
         gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'pitcher',
@@ -2318,6 +2359,21 @@ function reduce(state, action) {
 }
 
 // 直前状態を履歴に積む(呼び出しはreducer内の変異アクションから)
+// DHが消えて、打順の中の選手が投手になったとき(大谷ルールの「DH解除」)。
+// 新しい投手に交代し、打順の外にいた前の投手は試合から退く(再出場できない)
+function takeMoundFromLineup(g, playerId, label) {
+  const prev = g.currentPitcherId;
+  if (!playerId || prev === playerId) return;
+  g.currentPitcherId = playerId;
+  ensurePitchingRecord(g, playerId);
+  g.playLogs.push(newPlayLog({
+    gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'pitcher',
+    text: label || '投手交代', payload: { in: playerId, out: prev },
+  }));
+  if (prev && !g.lineup.some((l) => l.playerId === prev) && !g.retiredPlayerIds.includes(prev)) g.retiredPlayerIds.push(prev);
+}
+const hasDH = (g) => (g.lineup || []).some((l) => l.position === 'DH');
+
 function pushHistory(state, action) {
   const gameId = action.gameId;
   const game = state.games[gameId];

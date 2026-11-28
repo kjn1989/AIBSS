@@ -139,6 +139,72 @@ try {
   // 打順の中には投手が居ないので、ここに名前が出るのは先発として記録できた証拠
   check('打順外の投手が先発として記録される', body.includes(pickName), `${pickName} / ${body.slice(0, 500)}`);
 
+  // ---- DHカード: いまの状態が出て、DHを解除できる ----
+  await page.click('nav button:has-text("オーダー")');
+  await page.waitForTimeout(600);
+  const dhCard = page.locator('.dh-card');
+  check('オーダーにDH制のカードが出る', await dhCard.count() === 1);
+  const dhTxt = await dhCard.innerText().catch(() => '');
+  check('カードに投手の名前が出る', dhTxt.includes(`投手: ${pickName}`), dhTxt);
+  await dhCard.locator('button:has-text("DHを解除する")').click();
+  await page.waitForTimeout(400);
+  const opt = page.locator('.sheet .dh-opts').nth(1).locator('button').first();
+  const optTxt = (await opt.innerText()).replace(/\n+/g, ' ');
+  const newP = optTxt.split(' が投手に')[0].trim();
+  check('解除シートに「◯◯が投手に」が出る', !!newP && optTxt.includes('へ'), optTxt);
+  await opt.click();
+  await page.waitForTimeout(700);
+  const after = await page.locator('.main').innerText();
+  check('解除後はDHが打順から消え、解除済みと出る', after.includes('DHを解除しました') && !(await page.locator('.dh-card').count()), after.slice(0, 400));
+  check('前の投手は退いた選手に入る', after.includes(pickName), after.slice(0, 600));
+  await page.click('nav button:has-text("スコア入力")');
+  await page.waitForTimeout(700);
+  const body2 = await page.locator('.scoretab').innerText().catch(() => '');
+  check('打順の野手が新しい投手になる', body2.includes(newP), `${newP} / ${body2.slice(0, 400)}`);
+
+  // ---- 大谷ルール: DHの選手を先発投手にもできる(まっさらな端末で) ----
+  const ctx2 = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'ja-JP' });
+  const pg = await ctx2.newPage();
+  pg.on('pageerror', (err) => { console.log('PAGE EXCEPTION:', err.message); failures++; });
+  pg.on('dialog', (d) => d.accept());
+  await pg.goto(URL_, { waitUntil: 'load' }); await pg.waitForTimeout(800);
+  await pg.click('button[aria-label="設定"]'); await pg.waitForTimeout(400);
+  for (let i = 0; i < names.length; i++) {
+    await pg.fill('.add-form input[placeholder="選手名"]', names[i]);
+    await pg.fill('.add-form input[placeholder="背番号"]', String(i + 1));
+    await pg.click('.add-form button.primary'); await pg.waitForTimeout(120);
+  }
+  await pg.click('nav button:has-text("スコア入力")'); await pg.waitForTimeout(400);
+  await pg.click('button:has-text("くわしく")').catch(() => {});
+  await pg.fill('input[placeholder="対戦相手名"]', '大谷確認');
+  await pg.click('button:has-text("試合開始")'); await pg.waitForTimeout(700);
+  const att2 = pg.locator('.sheet').filter({ hasText: '今日のメンバー' });
+  if (await att2.count()) { await pg.click('.sheet-actions button.primary'); await pg.waitForTimeout(700); }
+  await pg.click('nav button:has-text("オーダー")'); await pg.waitForTimeout(500);
+  await pg.click('.dh-toggle button:has-text("あり")'); await pg.waitForTimeout(300);
+  const r2 = pg.locator('.select-row');
+  for (let i = 0; i < 9; i++) { await r2.nth(i).click(); await pg.waitForTimeout(100); }
+  await pg.click('button:has-text("次へ")'); await pg.waitForTimeout(400);
+  await pg.click('button:has-text("次へ")').catch(() => {}); await pg.waitForTimeout(400);
+  // まず「指」(DH)に1人を置く
+  await pg.locator('.pos-field .pos-spot').filter({ hasText: /^指$/ }).first().click();
+  await pg.waitForTimeout(400);
+  const dhName = (await pg.locator('.sheet .picker-row').first().innerText()).replace(/^\d+\s*/, '').split(/\s|\n/)[0];
+  await pg.locator('.sheet .picker-row').first().click();
+  await pg.waitForTimeout(400);
+  await pg.locator('.pos-field .pos-spot').filter({ hasText: /^投$/ }).first().click();
+  await pg.waitForTimeout(400);
+  const two = pg.locator('.sheet .picker-row').filter({ hasText: '大谷ルール' });
+  check('投手の候補にDHの選手(大谷ルール)が出る', await two.count() === 1, await pg.locator('.sheet').last().innerText());
+  if (await two.count()) {
+    await two.click(); await pg.waitForTimeout(400);
+    await pg.click('button:has-text("このオーダーで確定")'); await pg.waitForTimeout(800);
+
+    const c2 = await pg.locator('.dh-card').innerText().catch(() => '');
+    check('DH兼投手だとカードに「兼ねています」と出る', c2.includes(`${dhName} が投手とDHを兼ねています`), `${dhName} / ${c2}`);
+  }
+  await ctx2.close();
+
 } catch (e) {
   // 要素が見つからない失敗は、たいてい画面が落ちている。
   // エラー境界が例外を握るので pageerror では拾えず、原因が読めなくなる

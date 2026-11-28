@@ -92,10 +92,13 @@ export default function LineupWizard({ game }) {
     const DEF_NO_DH = ['投', '捕', '一', '二', '三', '遊', '左', '中', '右'];
     const DEF_DH = ['捕', '一', '二', '三', '遊', '左', '中', '右', 'DH'];
     const defaults = useDH ? DEF_DH : DEF_NO_DH;
+    // 手で決めた守備位置は既定値から外す(「指」を手で置いたのに、空きの選手にも「指」が入って2人になるのを防ぐ)
+    const used = new Set(selected.map((s) => s.position).filter(Boolean));
+    const free = defaults.filter((d) => !used.has(d));
     const lineup = selected.map((s, i) => ({
       order: i + 1,
       playerId: s.playerId,
-      position: s.position || (i < 9 ? defaults[i] : '打'),
+      position: s.position || (i < 9 && free.length ? free.shift() : '打'),
     }));
     dispatch({ type: 'SET_LINEUP', gameId: game.id, lineup });
     // 先発投手を確定: DH制なら打順外の投手、DHなしなら打順内で「投」を守る選手
@@ -346,6 +349,8 @@ function PositionStep({ selected, nameOf, numberOf, onAssignPlayer, onClearPosit
   const spots = FIELD_SPOTS.filter((s) => useDH || s.value !== 'DH');
   // DH制の「投」は打順外から選ぶ。打順の中には投手が居ないので、打者一覧を出しても選べない
   const pitcherPick = useDH && pickerPos === '投';
+  // DHを守る(打つ)選手。大谷ルールではこの選手が投手を兼ねられる
+  const dhHolder = useDH ? selected.find((s) => s.position === 'DH') : null;
   // 選手の現在守備位置の表示(チップ)
   const posLabel = (v) => (!v ? t('lw.posNone') : v === 'DH' ? t('lw.posDh') : (lang === 'ja' ? v : positionLabel(v, 'en')));
   // フィールド上/ピッカー見出しの位置表記
@@ -408,14 +413,31 @@ function PositionStep({ selected, nameOf, numberOf, onAssignPlayer, onClearPosit
         })}
       </div>
       {useDH && (
-        <p className="small dim mt8">{pitcherId ? t('lw.dhStarter', { name: nameOf(pitcherId) }) : t('lw.dhStarterLater')}</p>
+        <p className="small dim mt8">
+          {pitcherId
+            ? (dhHolder?.playerId === pitcherId ? t('lw.twoWayStarter', { name: nameOf(pitcherId) }) : t('lw.dhStarter', { name: nameOf(pitcherId) }))
+            : t('lw.dhStarterLater')}
+        </p>
       )}
 
       {/* ポジションタップ時のメンバー選択ポップアップ */}
       {pickerPos && (
         <Sheet title={t('lw.pickerTitle', { pos: spotDisplay(pickerPos) })} onClose={() => setPickerPos(null)}>
           <div className="picker-list">
-            {pitcherPick && benchPlayers.length === 0 && (
+            {/* 大谷ルール: DHの選手が投手も兼ねる。降板してもDHとして打ち続けられる */}
+            {pitcherPick && dhHolder && (
+              <button
+                className={`picker-row${dhHolder.playerId === pitcherId ? ' current' : ''}`}
+                onClick={() => { onPitcher(dhHolder.playerId); setPickerPos(null); }}
+              >
+                <span className="grow" style={{ textAlign: 'left' }}>
+                  {nameOf(dhHolder.playerId)}
+                  <span className="dim small"> {t('lw.twoWayHint')}</span>
+                </span>
+                <span className={`pos-chip${dhHolder.playerId === pitcherId ? ' on' : ''}`}>{t('lw.twoWay')}</span>
+              </button>
+            )}
+            {pitcherPick && benchPlayers.length === 0 && !dhHolder && (
               <p className="small dim">{t('lw.noBench')}</p>
             )}
             {pitcherPick && benchPlayers.map((p) => {
