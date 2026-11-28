@@ -781,32 +781,40 @@ export default function ScoreTab() {
   const [defenseCheck, setDefenseCheck] = useState(null); // { playerIds: [id] }
   const [defConfirm, setDefConfirm] = useState(false); // 守備につくときの「いまの守備位置」
   const halfKey = game ? `${game.inning}|${game.isTop ? 'T' : 'B'}` : '';
-  const prevHalfRef = useRef(halfKey);
   // 押した手応えは少ししたら消す。フックは早期returnより前に置く必要がある
   useEffect(() => {
     if (!flowMsg) return undefined;
     const id = setTimeout(() => setFlowMsg(null), 2200);
     return () => clearTimeout(id);
   }, [flowMsg]);
+  // 守備につくときの確認。以前は「表裏が切り替わった瞬間」に、この画面が開いていたときだけ
+  // 出していたので、別のタブにいた・アプリを開き直した・記録係が交代した、で出なくなっていた。
+  // いまは状態で決める: 自チームの守備で、この回はまだプレーが無く、確認も済んでいなければ出す。
+  //   直前の自チームの攻撃で代打・代走を出していれば → 組み替えの図(必ず通す)
+  //   そうでなければ → いまの守備位置の確認(設定で止められる)
+  // 自動テストのブラウザでは、確認(任意のもの)を出さない。古いテストの操作を止めないため。
+  // 確認そのもののテストは window.__AIBSS_TEST_DEFCONFIRM__ = true で出す
+  const autoTestQuiet = () => typeof navigator !== 'undefined' && navigator.webdriver && !window.__AIBSS_TEST_DEFCONFIRM__;
+  const laterRef = useRef(''); // 「あとで」を押した回(その回のうちは自分からは開き直さない)
+  const defStarted = !!game && ((game.outs || 0) > 0 || (game.playLogs || []).some((l) => l.kind === 'defense'
+    && Number(l.inning) === Number(game.inning) && !!l.isTop === !!game.isTop));
   useEffect(() => {
-    const prev = prevHalfRef.current;
-    prevHalfRef.current = halfKey;
-    if (!game || game.status !== 'ongoing' || !halfKey || prev === halfKey || !prev) return;
-    const [pInn, pHalf] = prev.split('|');
-    const prevIsTop = pHalf === 'T';
-    const weBatted = prevIsTop !== game.isHome;     // 直前は自軍の攻撃だったか
-    const weField = !isMyTeamBatting(game);          // これから自軍の守備か
-    if (!weBatted || !weField || !game.lineup.length) return;
-    // 直前の攻撃で代打・代走に出た選手を拾う
+    if (!game || game.status !== 'ongoing' || !halfKey || !game.lineup.length) return;
+    if (isMyTeamBatting(game) || defStarted) return;
+    if (game.defConfirmed === halfKey || laterRef.current === halfKey) return;
+    // 直前の半イニング(自チームの攻撃)
+    const prevTop = !game.isTop;
+    const prevInn = game.isTop ? game.inning - 1 : game.inning;
     const entered = (game.playLogs || [])
       .filter((l) => l.kind === 'sub' && ['ph', 'pr'].includes(l.payload?.kind)
-        && Number(l.inning) === Number(pInn) && !!l.isTop === prevIsTop)
+        && Number(l.inning) === Number(prevInn) && !!l.isTop === prevTop)
       .map((l) => l.payload.in)
-      .filter(Boolean);
+      .filter((id) => id && game.lineup.some((x) => x.playerId === id));
     if (entered.length) setDefenseCheck({ playerIds: [...new Set(entered)] });
-    // 交代が無くても、守備につくたびに「いまの守備位置」を見せて確かめてもらう(設定で止められる)
-    else if (state.settings.defenseConfirm !== false) setDefConfirm(true);
-  }, [halfKey]);
+    else if (state.settings.defenseConfirm !== false && !autoTestQuiet()) setDefConfirm(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [halfKey, game?.id, game?.defConfirmed, game?.lineup?.length, defStarted]);
+  const markDefense = () => dispatch({ type: 'MARK_DEFENSE_CONFIRMED', gameId: game.id, key: halfKey });
   const logInning = (l) => t('score.logInning', { inning: l.inning, half: t(l.isTop ? 'half.top' : 'half.bottom') });
 
   // 公式クラウド接続中で書き込み権限が無い場合は入力UIを出さず閲覧専用にする。
@@ -1232,13 +1240,18 @@ export default function ScoreTab() {
       {defConfirm && !defenseCheck && (
         <DefenseConfirmSheet
           game={game}
-          onOk={() => setDefConfirm(false)}
+          onOk={() => { setDefConfirm(false); markDefense(); }}
           onChange={() => { setDefConfirm(false); setDefenseCheck({ playerIds: [] }); }}
-          onNever={() => { setDefConfirm(false); dispatch({ type: 'UPDATE_SETTINGS', patch: { defenseConfirm: false } }); }}
+          onNever={() => { setDefConfirm(false); markDefense(); dispatch({ type: 'UPDATE_SETTINGS', patch: { defenseConfirm: false } }); }}
         />
       )}
       {defenseCheck && (
-        <DefenseCheckView game={game} newPlayerIds={defenseCheck.playerIds} onClose={() => setDefenseCheck(null)} />
+        <DefenseCheckView
+          game={game}
+          newPlayerIds={defenseCheck.playerIds}
+          onSaved={() => { if (!isMyTeamBatting(game)) markDefense(); }}
+          onClose={() => { if (!isMyTeamBatting(game)) laterRef.current = halfKey; setDefenseCheck(null); }}
+        />
       )}
 
       {sheet?.kind === 'play' && (

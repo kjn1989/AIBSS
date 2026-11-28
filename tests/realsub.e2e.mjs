@@ -33,6 +33,7 @@ try {
   const p = await b.newPage({ viewport: { width: 390, height: 844 }, locale: 'ja-JP' });
   p.on('pageerror', (e) => { console.log('EXC:', e.message); fail++; });
   p.on('dialog', (d) => d.accept());
+  await p.addInitScript(() => { window.__AIBSS_TEST_DEFCONFIRM__ = true; });
   const W = (ms) => p.waitForTimeout(ms);
   const rowsNow = () => p.evaluate(() => [...document.querySelectorAll('.main .row')]
     .map((r) => [r.querySelector('b')?.textContent, r.querySelector('select')?.value]).filter((x) => x[0] && x[1]));
@@ -68,9 +69,13 @@ try {
   await p.locator('.sheet select').first().selectOption({ label: '代打男' }); await W(200);
   await p.locator('.sheet-actions button.primary').click(); await W(500);
   await so(2); await W(600);
+  // 以前は「表裏が変わった瞬間」に画面が開いていないと出なかった。開き直しても必ず出ること
+  ok('代打のあと、守備の図が開く(その場)', await p.locator('.dc-field').count() === 1);
+  await p.reload({ waitUntil: 'load' }); await W(1200);
+  await p.click('nav button:has-text("スコア入力")').catch(() => {}); await W(800);
 
   // ---- 守備の図が自動で開く。代打男(二)→ 守備職人、上田(一)と江口(三)を入れ替え ----
-  ok('代打のあと、守備の図が開く', await p.locator('.dc-field').count() === 1);
+  ok('アプリを開き直しても、代打のあとの守備の図が出る(確認が済むまで)', await p.locator('.dc-field').count() === 1);
   await p.locator('.dc-spot').filter({ hasText: '代打男' }).click(); await W(300);
   ok('守備位置を押すと控えの選手が出る', (await p.locator('.sheet').last().innerText()).includes('控えの選手と交代'));
   await p.locator('.sheet .lc-chips button:has-text("守備職人")').click(); await W(300);

@@ -23,7 +23,7 @@ import Sheet from './Sheet.jsx';
 // ============================================================
 const UNIQUE = new Set(['投', '捕', '一', '二', '三', '遊', '左', '中', '右', 'DH']);
 
-export default function DefenseCheckView({ game, newPlayerIds = [], onClose }) {
+export default function DefenseCheckView({ game, newPlayerIds = [], onClose, onSaved }) {
   const { state, dispatch } = useStore();
   const t = useT();
   const lang = state.settings.lang || 'ja';
@@ -91,6 +91,7 @@ export default function DefenseCheckView({ game, newPlayerIds = [], onClose }) {
   const blocked = dup.length > 0 || dhAndP;
 
   const save = () => {
+    onSaved?.(); // 守備の確認が済んだ(変更が無くても)
     if (!nChanges) { onClose(); return; }
     // 新しい投手(DHなしは「投」に入った選手、DH制は打順外の投手)
     const mound = slotAt('投');
