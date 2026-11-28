@@ -118,6 +118,63 @@ export function SubstituteSheet({ game, slot, onClose, initialKind = 'ph' }) {
 }
 
 // ---- メイン ----
+// DH制(大谷ルール)の状態と、DH解除。DH制の試合でだけ出す
+//   ・投手がDHを兼ねている(大谷ルール)ことを見せる
+//   ・DH解除: 打順の野手が投手になり DHの選手がその守備位置へ / DHの選手がそのまま投手に
+function DhCard({ game }) {
+  const { dispatch } = useStore();
+  const t = useT();
+  const nameOf = usePlayerName();
+  const [open, setOpen] = useState(false);
+  const dh = game.lineup.find((l) => l.position === 'DH');
+  if (!dh) {
+    if (!game.dhDissolved) return null;
+    return (
+      <div className="card">
+        <h2>{t('dh.title')}</h2>
+        <p className="small dim" style={{ margin: 0 }}>{t('dh.dissolved', { inning: game.dhDissolved.inning, half: t(game.dhDissolved.isTop ? 'half.top' : 'half.bottom') })}</p>
+      </div>
+    );
+  }
+  const twoWay = game.currentPitcherId && game.currentPitcherId === dh.playerId;
+  const fielders = game.lineup.filter((l) => l !== dh && !['DH', '打', '控', '投'].includes(l.position));
+  const fire = (a) => { dispatch({ type: 'DISSOLVE_DH', gameId: game.id, ...a }); setOpen(false); };
+  return (
+    <div className="card dh-card">
+      <h2>{t('dh.title')}</h2>
+      <p className="small" style={{ marginTop: 0 }}>
+        {twoWay
+          ? t('dh.twoWayNow', { name: nameOf(dh.playerId) })
+          : t('dh.normalNow', { dh: nameOf(dh.playerId), p: game.currentPitcherId ? nameOf(game.currentPitcherId) : '—' })}
+      </p>
+      <p className="small dim">{t('dh.rule')}</p>
+      <button style={{ width: '100%' }} onClick={() => setOpen(true)}>{t('dh.dissolveBtn')}</button>
+      {open && (
+        <Sheet title={t('dh.dissolveTitle')} onClose={() => setOpen(false)}>
+          <p className="small dim" style={{ marginTop: 0 }}>{t('dh.dissolveDesc')}</p>
+          <div className="section-title">{t('dh.byDh')}</div>
+          <div className="dh-opts">
+            <button onClick={() => fire({ mode: 'dh' })}>
+              <b>{t('dh.dhPitches', { dh: nameOf(dh.playerId) })}</b>
+              <span className="small dim">{t('dh.dhPitchesSub')}</span>
+            </button>
+          </div>
+          <div className="section-title">{t('dh.byFielder', { dh: nameOf(dh.playerId) })}</div>
+          <div className="dh-opts">
+            {fielders.map((f) => (
+              <button key={f.order} onClick={() => fire({ mode: 'fielder', fielderOrder: f.order })}>
+                <b>{t('dh.fielderPitches', { name: nameOf(f.playerId) })}</b>
+                <span className="small dim">{t('dh.dhMoves', { dh: nameOf(dh.playerId), pos: t(`posFull.${f.position}`) })}</span>
+              </button>
+            ))}
+          </div>
+          <div className="sheet-actions"><button onClick={() => setOpen(false)}>{t('action.cancel')}</button></div>
+        </Sheet>
+      )}
+    </div>
+  );
+}
+
 export default function OrderTab() {
   const { state, dispatch } = useStore();
   const t = useT();
@@ -296,6 +353,8 @@ export default function OrderTab() {
           </div>
         )}
       </div>
+
+      <DhCard game={game} />
 
       {game.retiredPlayerIds.length > 0 && (
         <div className="card">
