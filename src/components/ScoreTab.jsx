@@ -699,7 +699,7 @@ function HomeAwayPicker({ game }) {
 const UNDO_ACTIONS = new Set([
   'CONFIRM_PLAY', 'ADD_PITCH', 'RUNNER_EVENT', 'SUBSTITUTE', 'SET_PITCHER',
   'FORCE_CHANGE_HALF', 'SET_RUNNER', 'OPP_SUBSTITUTE', 'OPP_SET_PITCHER', 'FLOW_TAG',
-  'DISSOLVE_DH', 'SET_POSITION', 'SET_HOME_AWAY',
+  'DISSOLVE_DH', 'SET_POSITION', 'SET_HOME_AWAY', 'LINEUP_CHANGES',
 ]);
 
 // ---- ルールエンジンの提案バナー(試合終了条件・時間制限・球数警告) ----

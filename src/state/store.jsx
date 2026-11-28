@@ -1136,6 +1136,87 @@ function reduce(state, action) {
       g.updatedAt = Date.now();
       return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
     }
+    // 選手交代をまとめて(オーダーの「選手交代」)。何人でも1回で確定し、1回の取り消しで戻る。
+    //   subs:      [{ order, playerId, kind: 'ph'|'pr'|'def', label }]  その打順に入る選手
+    //   positions: { [order]: 守備位置 }  確定後の守備位置(書いていない打順は今のまま)
+    //   pitcherId: DH制で打順の外の投手を代えるとき。DHなしなら「投」の選手が投手になる
+    // 途中の形(重なった守備位置など)を作らないよう、最終形を確かめてから一度に当てる
+    case 'LINEUP_CHANGES': {
+      const g0 = state.games[action.gameId];
+      if (!g0) return state;
+      const subs = (action.subs || []).filter((x) => x && x.playerId && g0.lineup.some((l) => l.order === x.order));
+      const positions = action.positions || {};
+      const final = g0.lineup.map((l) => {
+        const x = subs.find((y) => y.order === l.order);
+        return { order: l.order, playerId: x ? x.playerId : l.playerId, position: positions[l.order] ?? l.position };
+      });
+      const ids = final.map((l) => l.playerId).filter(Boolean);
+      if (new Set(ids).size !== ids.length) return state;
+      for (const p of UNIQUE_POSITIONS) if (final.filter((l) => l.position === p).length > 1) return state;
+      const finalDH = final.find((l) => l.position === 'DH');
+      const moundSlot = final.find((l) => l.position === '投');
+      if (finalDH && moundSlot) return state; // DHがいるのに投手も打順の中、は無い
+      let pitcherId = g0.currentPitcherId;
+      if (finalDH) {
+        if (action.pitcherId) pitcherId = action.pitcherId;
+        // 打順の外の投手は、打順の中の選手と重ならない(DHと兼ねる大谷ルールだけは別)
+        if (pitcherId && final.some((l) => l.playerId === pitcherId && l !== finalDH)) return state;
+      } else if (moundSlot) {
+        pitcherId = moundSlot.playerId;
+      }
+      const g = deep(g0);
+      const hadDH = hasDH(g);
+      const started = !!(g.atBats?.length);
+      for (const x of subs) {
+        const slot = g.lineup.find((l) => l.order === x.order);
+        const outgoing = slot.playerId;
+        if (outgoing === x.playerId) continue;
+        const to = final.find((l) => l.order === x.order).position;
+        slot.playerId = x.playerId;
+        slot.position = to;
+        if (outgoing && !g.retiredPlayerIds.includes(outgoing)) g.retiredPlayerIds.push(outgoing);
+        if (!g.usedPlayerIds.includes(x.playerId)) g.usedPlayerIds.push(x.playerId);
+        if (x.kind === 'pr') {
+          for (const b of [1, 2, 3]) {
+            if (g.runners[b]?.playerId === outgoing) g.runners[b] = { ...g.runners[b], playerId: x.playerId };
+          }
+        }
+        g.playLogs.push(newPlayLog({
+          gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'sub', text: x.label || '選手交代',
+          payload: { order: x.order, in: x.playerId, out: outgoing, kind: x.kind || 'def', position: to },
+        }));
+      }
+      for (const l of g.lineup) {
+        const to = final.find((f) => f.order === l.order).position;
+        if (to === l.position) continue;
+        const from = l.position;
+        l.position = to;
+        if (started && l.playerId) {
+          g.playLogs.push(newPlayLog({
+            gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'position',
+            text: '', payload: { order: l.order, playerId: l.playerId, position: to, from },
+          }));
+        }
+      }
+      if (pitcherId && pitcherId !== g.currentPitcherId) {
+        const prev = g.currentPitcherId;
+        g.currentPitcherId = pitcherId;
+        ensurePitchingRecord(g, pitcherId);
+        if (prev && !g.lineup.some((l) => l.playerId === prev) && !g.retiredPlayerIds.includes(prev)) g.retiredPlayerIds.push(prev);
+        if (!g.usedPlayerIds.includes(pitcherId)) g.usedPlayerIds.push(pitcherId);
+        g.playLogs.push(newPlayLog({
+          gameId: g.id, inning: g.inning, isTop: g.isTop, kind: 'pitcher',
+          text: action.pitcherLabel || '投手交代', payload: { in: pitcherId, out: prev },
+        }));
+      }
+      if (hadDH && !hasDH(g)) g.dhDissolved = { inning: g.inning, isTop: g.isTop };
+      // 試合に入った人は、今日のメンバーにも入れる(遅れて来た人・名簿にない人)
+      if (Array.isArray(g.attendees)) {
+        g.attendees = [...new Set([...g.attendees, ...subs.map((x) => x.playerId), ...(pitcherId ? [pitcherId] : [])])];
+      }
+      g.updatedAt = Date.now();
+      return { ...state, games: { ...state.games, [g.id]: g }, history: pushHistory(state, action) };
+    }
     // 今日のメンバー。遅刻・早退があるので、試合が始まってからも直せる
     case 'SET_ATTENDEES': {
       const g = deep(state.games[action.gameId]);

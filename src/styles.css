@@ -2845,3 +2845,28 @@ html[data-outdoor] .app-header .outdoor-toggle.on { background: #1f6feb; border-
 /* 先攻・後攻(試合直前に決める) */
 .home-away.undecided { border: 1px solid #f0a020; }
 .home-away .toggle-row { margin: 0; }
+
+/* 選手交代(まとめて) */
+.lc-open { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 2px; margin-bottom: 8px; padding: 10px 12px; }
+.lc-open .small { font-weight: 400; opacity: 0.9; }
+.lc-list { display: flex; flex-direction: column; gap: 4px; }
+.lc-row { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 10px; border: 1px solid transparent; }
+.lc-row.changed { background: rgba(47, 129, 247, 0.14); border-color: rgba(47, 129, 247, 0.5); }
+.lc-row.moved { background: rgba(255, 196, 0, 0.12); }
+.lc-row.open { border-color: var(--accent-2, #2f81f7); }
+.lc-name { flex: 1; min-width: 0; margin: 0; text-align: left; padding: 8px 10px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; background: transparent; border: 1px dashed rgba(255, 255, 255, 0.18); }
+.lc-tap { margin-left: auto; font-size: 12px; opacity: 0.7; border: 1px solid currentColor; border-radius: 999px; padding: 0 8px; }
+.lc-row select { width: 76px; margin: 0; }
+.lc-row select.bad { border-color: #f0a020; color: #f0a020; }
+.lc-kinds { display: flex; gap: 4px; padding: 0 6px 4px 36px; }
+.lc-kinds button { flex: 1; margin: 0; padding: 4px 6px; font-size: 12.5px; min-height: 30px; }
+.lc-kinds button.on { background: var(--accent-2, #2f81f7); color: #fff; border-color: transparent; }
+.lc-bench { margin: 2px 0 6px 30px; padding: 8px; border-radius: 10px; background: var(--bg-3, rgba(255, 255, 255, 0.05)); display: flex; flex-direction: column; gap: 6px; }
+.lc-chips { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.lc-chips button { margin: 0; padding: 8px 4px; min-height: 40px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.lc-chips.dimmer button { opacity: 0.75; font-weight: 400; }
+.lc-sub { margin-top: 2px; }
+.lc-new { display: flex; gap: 6px; }
+.lc-new input { flex: 1; min-width: 0; margin: 0; }
+.lc-new button { margin: 0; white-space: nowrap; }
+.lc-summary { margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: rgba(47, 129, 247, 0.08); }
