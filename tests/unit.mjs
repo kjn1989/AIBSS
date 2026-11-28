@@ -6520,6 +6520,10 @@ test('推定年俸: 1位が最高額、順位ごとに0.8倍、記録なしは�
   assert.equal(clampTop(0), 5);
   // 投手の点はマイナスにならない
   assert.equal(salaryPoints(null, { outsRecorded: 0, earnedRuns: 10 }), 0);
+  // 出塁・盗塁・犠打: 単打1 + 四球1 + 死球1 + 失策で出塁0.5 + 打撃妨害0.5 + 盗塁2 + 犠打2 = 8
+  assert.equal(salaryPoints({ tb: 1, bb: 1, hbp: 1, error: 1, interference: 1, sb: 2, sacBunt: 2 }, null), 8);
+  // 犠打は四球と同じ重み
+  assert.equal(salaryPoints({ sacBunt: 1 }, null), salaryPoints({ bb: 1 }, null));
 });
 
 test('推定年俸: 出場イニング・守備機会(打球が飛んだ位置を守っていた人)・ファインプレーも数える', async () => {
