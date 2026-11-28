@@ -1,41 +1,62 @@
 import React, { useState } from 'react';
 import { useStore, usePlayerName, useT } from '../state/store.jsx';
-import { positionLabel } from '../lib/model.js';
-import { findPositionIssues } from '../lib/lineupBox.js';
+import { positionLabel, attendeesOf } from '../lib/model.js';
+import { isArchived } from '../lib/year.js';
 import { FIELD_SPOTS } from '../lib/fieldSpots.js';
 import FullscreenView from './FullscreenView.jsx';
 import Sheet from './Sheet.jsx';
 
-// 代打・代走で入った選手の守備位置を、その攻撃が終わった時点で確認する全画面ビュー。
-// 代打がそのまま元の選手の位置に入ることもあれば、他の選手も含めて守備を組み替える
-// こともあるため、フィールド図でひと目で見えて、タップで入れ替えられるようにする。
+// ============================================================
+// 守備交代(フィールドの図で組む)
+//
+// 守備に就くときの交代は、たいてい何人かが一度に動く(代打を下げて守備固め、
+// それに合わせて2人の位置が入れ替わる、投手も代わる…)。以前のこの画面は
+// 打順にいる選手の位置を動かすことしかできず、控えを入れるにはオーダー画面と行き来が要った。
+//
+//   ・守備位置を押す → 「打順の選手」と「控えの選手」の両方から選べる
+//       打順の選手を選ぶ … その位置にいた選手と持ち場を入れ替える
+//       控えの選手を選ぶ … その位置にいた選手と交代(その選手の打順に入る)
+//   ・マウンドも同じ。DH制なら投手だけが代わる
+//   ・図の下に打順を並べ、変わった打順・位置に色を付ける(打順の整合性をその場で確かめる)
+//   ・確定は1回(LINEUP_CHANGES)、取り消しも1回
+// 代打・代走を出した攻撃のあとには自動で開き、守備中はスコア画面の「🔁 守備交代」から開く
+// ============================================================
+const UNIQUE = new Set(['投', '捕', '一', '二', '三', '遊', '左', '中', '右', 'DH']);
+
 export default function DefenseCheckView({ game, newPlayerIds = [], onClose }) {
   const { state, dispatch } = useStore();
   const t = useT();
   const lang = state.settings.lang || 'ja';
   const nameOf = usePlayerName();
   const numberOf = (id) => state.players.find((p) => p.id === id)?.number || '';
-  // 編集中の割り当て(打順→守備位置)。確定するまで試合データは変えない。
-  const [draft, setDraft] = useState(() =>
-    Object.fromEntries((game.lineup || []).map((l) => [l.order, l.position || ''])));
-  const [pickerPos, setPickerPos] = useState(null); // 割り当て中のポジション値
-
   const slots = [...(game.lineup || [])].sort((a, b) => a.order - b.order);
-  const isNew = (pid) => newPlayerIds.includes(pid);
+  // 編集中の形。確定するまで試合データは変えない
+  const [draft, setDraft] = useState(() => Object.fromEntries(slots.map((l) => [l.order, l.position || ''])));
+  const [subs, setSubs] = useState({}); // { 打順: 入る選手ID }
+  const [pitcher, setPitcher] = useState(game.currentPitcherId || ''); // DH制の打順外の投手
+  const [pickerPos, setPickerPos] = useState(null);
+
+  const playerAt = (l) => subs[l.order] || l.playerId;
   const slotAt = (position) => slots.find((l) => draft[l.order] === position) || null;
-
-  // DH制(打順の誰かが「指」)なら投手は打順外。フィールドには読み取り専用で出す。
+  const isNew = (pid) => newPlayerIds.includes(pid) || Object.values(subs).includes(pid);
   const dhMode = slots.some((l) => draft[l.order] === 'DH');
-  const offPitcherId = dhMode && !slotAt('投')
-    && game.currentPitcherId && !slots.some((l) => l.playerId === game.currentPitcherId)
-    ? game.currentPitcherId : '';
-  // 「打」(全員打ち)はフィールド上の守備位置ではないので図には出さない
-  const spots = FIELD_SPOTS.filter((s) => s.value !== '打' && (dhMode || s.value !== 'DH'));
+  const offPitcher = dhMode && !slotAt('投') ? pitcher : '';
 
-  // 入力中の内容で重複・不在をその場で判定する(確定後に気づくのを避ける)
-  const preview = { lineup: slots.map((l) => ({ ...l, position: draft[l.order] || '' })) };
-  const issues = findPositionIssues({ ...preview, startingLineup: [], playLogs: [] });
-  const dupPositions = new Set(issues.duplicates.map((d) => d.position));
+  // 控え: 確定後の打順と投手に居ない人。退いた選手はリエントリーありの試合だけ
+  const players = state.players.filter((p) => !isArchived(p));
+  const here = new Set(attendeesOf(game, players).map((p) => p.id));
+  const taken = new Set([...slots.map(playerAt), ...(offPitcher ? [offPitcher] : [])]);
+  const leaving = new Set(slots.filter((l) => subs[l.order]).map((l) => l.playerId));
+  const bench = players
+    .filter((p) => !taken.has(p.id) && !leaving.has(p.id) && (game.allowReentry || !game.retiredPlayerIds.includes(p.id)))
+    .sort((a, b) => (here.has(b.id) ? 1 : 0) - (here.has(a.id) ? 1 : 0));
+
+  // 重なり・空き(確定前にその場で分かるように)
+  const field = slots.map((l) => draft[l.order]).filter((p) => UNIQUE.has(p));
+  const dup = [...new Set(field.filter((p, i) => field.indexOf(p) !== i))];
+  const need = ['捕', '一', '二', '三', '遊', '左', '中', '右', ...(dhMode ? [] : ['投'])];
+  const missing = slots.length >= 9 ? need.filter((p) => !field.includes(p)) : [];
+  const dhAndP = dhMode && !!slotAt('投');
 
   const spotDisplay = (v) => {
     if (v === 'DH') return lang === 'ja' ? '指' : 'DH';
@@ -43,58 +64,76 @@ export default function DefenseCheckView({ game, newPlayerIds = [], onClose }) {
     return positionLabel(v, 'en');
   };
   const posLabel = (v) => (!v ? '—' : spotDisplay(v));
-  // 捕手は名前を丸の下に出す分だけフィールド下端に近づくので、少し上に置く
   const topOf = (spot) => (spot.value === '捕' ? '86%' : spot.top);
+  const spots = FIELD_SPOTS.filter((s) => s.value !== '打' && (dhMode || s.value !== 'DH'));
 
-  // ある打順の選手をその守備位置へ。既にそこに居る選手とは持ち場を入れ替える。
-  const assign = (position, order) => {
-    setDraft((prev) => {
-      const next = { ...prev };
-      const from = prev[order] || '';
-      if (position !== '控') {
-        for (const [o, p] of Object.entries(prev)) {
-          if (p === position && Number(o) !== order) next[o] = from;
-        }
-      }
-      next[order] = position;
-      return next;
-    });
+  // 打順の選手をその位置へ(そこにいた選手とは持ち場を入れ替える)
+  const assign = (position, order) => setDraft((prev) => {
+    const next = { ...prev };
+    const from = prev[order] || '';
+    if (UNIQUE.has(position)) for (const [o, p] of Object.entries(prev)) if (p === position && Number(o) !== order) next[o] = from;
+    next[order] = position;
+    return next;
+  });
+  // 控えの選手を、その位置にいた選手と交代させる(打順はそのまま引き継ぐ)
+  const bringIn = (position, playerId) => {
+    if (position === '投' && dhMode && !slotAt('投')) { setPitcher(playerId); return; }
+    const holder = slotAt(position);
+    if (!holder) return;
+    setSubs((prev) => ({ ...prev, [holder.order]: playerId }));
   };
-  const clearPos = (position) => {
-    setDraft((prev) => Object.fromEntries(
-      Object.entries(prev).map(([o, p]) => [o, p === position ? '' : p])));
-  };
+  const revert = (order) => setSubs((prev) => { const m = { ...prev }; delete m[order]; return m; });
+
+  const changedPos = slots.filter((l) => (draft[l.order] || '') !== (l.position || ''));
+  const nSubs = Object.keys(subs).length;
+  const pitcherChanged = dhMode && pitcher && pitcher !== game.currentPitcherId;
+  const nChanges = nSubs + changedPos.length + (pitcherChanged ? 1 : 0);
+  const blocked = dup.length > 0 || dhAndP;
 
   const save = () => {
-    for (const l of slots) {
-      const pos = draft[l.order] || '';
-      // 9人ぶんの配置をここで作り切っているので、reducer側の自動入れ替えは使わない
-      if (pos && pos !== l.position) dispatch({ type: 'SET_POSITION', gameId: game.id, order: l.order, position: pos, swap: false });
-    }
+    if (!nChanges) { onClose(); return; }
+    // 新しい投手(DHなしは「投」に入った選手、DH制は打順外の投手)
+    const mound = slotAt('投');
+    const nextPitcher = mound ? playerAt(mound) : pitcher;
+    dispatch({
+      type: 'LINEUP_CHANGES',
+      gameId: game.id,
+      subs: slots.filter((l) => subs[l.order]).map((l) => ({
+        order: l.order, playerId: subs[l.order], kind: 'def',
+        label: t('order.sub.log', { kind: t('order.sub.def'), inName: nameOf(subs[l.order]), order: l.order, outName: nameOf(l.playerId) }),
+      })),
+      positions: Object.fromEntries(changedPos.map((l) => [l.order, draft[l.order] || '控'])),
+      pitcherId: dhMode ? pitcher || undefined : undefined,
+      pitcherLabel: game.currentPitcherId
+        ? t('pt.relievedLog', { name: nameOf(nextPitcher), prev: nameOf(game.currentPitcherId) })
+        : t('pt.starterLog', { name: nameOf(nextPitcher) }),
+    });
     onClose();
   };
 
-  // 守備位置が未定の選手(組み替えの取りこぼしに気づけるように図の下へ出す)
-  const unassigned = slots.filter((l) => !draft[l.order] || draft[l.order] === '控');
+  const pickHolder = pickerPos ? slotAt(pickerPos) : null;
 
   return (
     <FullscreenView>
       <header className="fullscreen-header">
         <button className="ghost small" onClick={onClose}>{t('dc.later')}</button>
-        <h2>{t('dc.title')}</h2>
-        <button className="primary small" onClick={save}>{t('dc.confirm')}</button>
+        <h2>{newPlayerIds.length ? t('dc.title') : t('dc.titleManual')}</h2>
+        <button className="primary small" disabled={blocked} onClick={save}>{t('dc.confirm')}</button>
       </header>
       <div className="fullscreen-body">
-        <p className="small dim" style={{ marginTop: 0 }}>{t('dc.desc', { inning: game.inning })}</p>
+        <p className="small dim" style={{ marginTop: 0 }}>
+          {newPlayerIds.length ? t('dc.desc', { inning: game.inning }) : t('dc.descManual')}
+        </p>
 
-        {(issues.duplicates.length > 0 || issues.missing.length > 0) && (
+        {(dup.length > 0 || missing.length > 0 || dhAndP) && (
           <div className="warn-box">
             ⚠️ {[
-              ...issues.duplicates.map((d) => t('dc.dup', {
-                pos: positionLabel(d.position, lang),
-                names: d.playerIds.map((id) => nameOf(id)).join('・'),
+              ...dup.map((p) => t('dc.dup', {
+                pos: positionLabel(p, lang),
+                names: slots.filter((l) => draft[l.order] === p).map((l) => nameOf(playerAt(l))).join('・'),
               })),
-              ...issues.missing.map((m) => t('dc.missing', { pos: positionLabel(m.position, lang) })),
+              ...missing.map((p) => t('dc.missing', { pos: positionLabel(p, lang) })),
+              ...(dhAndP ? [t('lc.dhAndP')] : []),
             ].join(' ')}
           </div>
         )}
@@ -106,20 +145,16 @@ export default function DefenseCheckView({ game, newPlayerIds = [], onClose }) {
           <div className="bf-line right" />
           <div className="bf-basepath" />
           {spots.map((spot) => {
-            if (spot.value === '投' && offPitcherId) {
-              return (
-                <div className="dc-spot fixed" key={spot.value} style={{ left: spot.left, top: topOf(spot) }}>
-                  <span className="dc-pos">{spotDisplay(spot.value)}</span>
-                  <span className="dc-name">{nameOf(offPitcherId)}</span>
-                </div>
-              );
-            }
             const slot = slotAt(spot.value);
+            const offMound = spot.value === '投' && offPitcher;
+            const who = offMound ? offPitcher : slot ? playerAt(slot) : '';
+            const changed = offMound ? pitcherChanged : slot && (subs[slot.order] || (draft[slot.order] || '') !== (slot.position || ''));
             const cls = [
               'dc-spot',
-              slot ? 'taken' : 'empty',
-              dupPositions.has(spot.value) ? 'dup' : '',
-              slot && isNew(slot.playerId) ? 'fresh' : '',
+              who ? 'taken' : 'empty',
+              dup.includes(spot.value) ? 'dup' : '',
+              who && isNew(who) ? 'fresh' : '',
+              changed ? 'changed' : '',
             ].filter(Boolean).join(' ');
             return (
               <button
@@ -127,66 +162,102 @@ export default function DefenseCheckView({ game, newPlayerIds = [], onClose }) {
                 className={cls}
                 style={{ left: spot.left, top: topOf(spot) }}
                 onClick={() => setPickerPos(spot.value)}
-                aria-label={t('dc.spotAria', { pos: spotDisplay(spot.value), name: slot ? nameOf(slot.playerId) : t('dc.empty') })}
+                aria-label={t('dc.spotAria', { pos: spotDisplay(spot.value), name: who ? nameOf(who) : t('dc.empty') })}
               >
                 <span className="dc-pos">{spotDisplay(spot.value)}</span>
-                <span className="dc-name">{slot ? nameOf(slot.playerId) : t('dc.empty')}</span>
+                <span className="dc-name">{who ? nameOf(who) : t('dc.empty')}</span>
               </button>
             );
           })}
         </div>
-        <p className="small dim dc-hint">{t('dc.tapHint')}</p>
+        <p className="small dim dc-hint">{t('dc.tapHint2')}</p>
 
-        {unassigned.length > 0 && (
-          <div className="card dc-bench">
-            <div className="small dim" style={{ marginBottom: 6 }}>{t('dc.bench')}</div>
-            {unassigned.map((l) => (
-              <div className="row" key={l.order}>
+        {/* 打順。変わった打順(交代)と位置を色で見せる */}
+        <div className="card dc-order">
+          <div className="small dim" style={{ marginBottom: 6 }}>{t('dc.orderTitle')}</div>
+          {slots.map((l) => {
+            const inId = subs[l.order];
+            const moved = (draft[l.order] || '') !== (l.position || '');
+            return (
+              <div className={`row dc-order-row${inId ? ' sub' : moved ? ' moved' : ''}`} key={l.order}>
                 <span className="rank-badge">{l.order}</span>
-                <span className="grow">
-                  {nameOf(l.playerId)}
-                  {numberOf(l.playerId) ? <span className="dim small"> #{numberOf(l.playerId)}</span> : ''}
-                  {isNew(l.playerId) && <span className="pill amber" style={{ marginLeft: 6 }}>{t('dc.newEntry')}</span>}
+                <button className="grow dc-order-name" onClick={() => draft[l.order] && setPickerPos(draft[l.order])}>
+                  {inId ? (<><s className="dim">{nameOf(l.playerId)}</s> → <b>{nameOf(inId)}</b></>) : <b>{nameOf(l.playerId)}</b>}
+                  {numberOf(playerAt(l)) && <span className="dim small"> #{numberOf(playerAt(l))}</span>}
+                </button>
+                <span className={`pos-chip${moved ? ' on' : ''}`}>
+                  {moved && l.position ? `${posLabel(l.position)}→` : ''}{posLabel(draft[l.order])}
                 </span>
-                <span className="pos-chip">{posLabel(draft[l.order])}</span>
+                {inId && <button className="small ghost" onClick={() => revert(l.order)} aria-label={t('lc.revert')}>↩</button>}
               </div>
-            ))}
-          </div>
-        )}
+            );
+          })}
+          {dhMode && offPitcher && (
+            <div className={`row dc-order-row${pitcherChanged ? ' sub' : ''}`}>
+              <span className="rank-badge">{t('paste.pitcherBadge')}</span>
+              <span className="grow">
+                {pitcherChanged ? (<><s className="dim">{nameOf(game.currentPitcherId)}</s> → <b>{nameOf(pitcher)}</b></>) : <b>{nameOf(pitcher)}</b>}
+                <span className="dim small"> {t('lc.pitcherRow')}</span>
+              </span>
+            </div>
+          )}
+        </div>
 
-        <button className="primary" style={{ width: '100%' }} onClick={save}>{t('dc.confirm')}</button>
+        <button className="primary" style={{ width: '100%' }} disabled={blocked} onClick={save}>
+          {nChanges ? t('dc.confirmN', { n: nChanges }) : t('dc.noChange')}
+        </button>
         <button className="ghost mt8" style={{ width: '100%' }} onClick={onClose}>{t('dc.later')}</button>
 
-        {/* ポジションタップ時のメンバー選択ポップアップ */}
         {pickerPos && (
           <Sheet title={t('dc.pickTitle', { pos: spotDisplay(pickerPos) })} onClose={() => setPickerPos(null)}>
-            <div className="picker-list">
-              {slots.map((l) => {
-                const here = draft[l.order] === pickerPos;
-                return (
-                  <button
-                    key={l.order}
-                    className={`picker-row${here ? ' current' : ''}`}
-                    onClick={() => { assign(pickerPos, l.order); setPickerPos(null); }}
-                  >
-                    <span className="rank-badge">{l.order}</span>
-                    <span className="grow" style={{ textAlign: 'left' }}>
-                      {nameOf(l.playerId)}
-                      {numberOf(l.playerId) && <span className="dim small"> #{numberOf(l.playerId)}</span>}
-                      {isNew(l.playerId) && <span className="pill amber" style={{ marginLeft: 6 }}>{t('dc.newEntry')}</span>}
-                    </span>
-                    <span className={`pos-chip${here ? ' on' : ''}`}>{posLabel(draft[l.order])}</span>
-                  </button>
-                );
-              })}
-            </div>
-            {slotAt(pickerPos) && (
-              <button
-                className="ghost danger mt8"
-                style={{ width: '100%' }}
-                onClick={() => { clearPos(pickerPos); setPickerPos(null); }}
-              >
-                {t('dc.clearPosition', { name: nameOf(slotAt(pickerPos).playerId) })}
+            {(pickHolder || (pickerPos === '投' && offPitcher)) && (
+              <p className="small dim" style={{ marginTop: 0 }}>
+                {t('dc.nowHere', { name: nameOf(pickHolder ? playerAt(pickHolder) : offPitcher) })}
+              </p>
+            )}
+            {(pickHolder || (pickerPos === '投' && dhMode)) && (
+              <>
+                <div className="section-title" style={{ marginTop: 0 }}>{t('dc.fromBench')}</div>
+                {bench.length === 0 && <p className="small dim">{t('pc.noBench')}</p>}
+                <div className="lc-chips">
+                  {bench.map((p) => (
+                    <button key={p.id} onClick={() => { bringIn(pickerPos, p.id); setPickerPos(null); }}>
+                      {p.name}{game.retiredPlayerIds.includes(p.id) && <span className="small dim"> {t('lc.reentry')}</span>}
+                    </button>
+                  ))}
+                </div>
+                <p className="small dim" style={{ margin: '4px 0 0' }}>
+                  {pickHolder ? t('dc.benchNote', { name: nameOf(playerAt(pickHolder)), order: pickHolder.order }) : t('dc.benchNoteDh')}
+                </p>
+              </>
+            )}
+            {!(pickerPos === '投' && dhMode && !pickHolder) && (
+              <>
+                <div className="section-title">{t('dc.fromLineup')}</div>
+                <div className="picker-list">
+                  {slots.map((l) => {
+                    const on = draft[l.order] === pickerPos;
+                    return (
+                      <button
+                        key={l.order}
+                        className={`picker-row${on ? ' current' : ''}`}
+                        onClick={() => { assign(pickerPos, l.order); setPickerPos(null); }}
+                      >
+                        <span className="rank-badge">{l.order}</span>
+                        <span className="grow" style={{ textAlign: 'left' }}>
+                          {nameOf(playerAt(l))}
+                          {isNew(playerAt(l)) && <span className="pill amber" style={{ marginLeft: 6 }}>{t('dc.newEntry')}</span>}
+                        </span>
+                        <span className={`pos-chip${on ? ' on' : ''}`}>{posLabel(draft[l.order])}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+            {pickHolder && subs[pickHolder.order] && (
+              <button className="ghost mt8" style={{ width: '100%' }} onClick={() => { revert(pickHolder.order); setPickerPos(null); }}>
+                {t('dc.revertSub', { name: nameOf(pickHolder.playerId) })}
               </button>
             )}
           </Sheet>

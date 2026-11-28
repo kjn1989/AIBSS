@@ -2933,3 +2933,11 @@ html[data-outdoor] .app-header .outdoor-toggle.on { background: #1f6feb; border-
 .pc-opt { margin: 0; text-align: left; padding: 10px 12px; display: flex; gap: 8px; align-items: flex-start; }
 .pc-opt.on { border-color: var(--accent); background: rgba(47, 129, 247, 0.12); }
 .pc-radio { color: var(--accent); flex: none; }
+.dc-spot.changed .dc-pos { box-shadow: 0 0 0 3px rgba(255, 196, 0, 0.75), 0 3px 10px rgba(0, 0, 0, 0.45); }
+.dc-order { margin: 4px 0 12px; }
+.dc-order-row { gap: 8px; }
+.dc-order-row.sub { background: rgba(47, 129, 247, 0.14); border-radius: 8px; }
+.dc-order-row.moved { background: rgba(255, 196, 0, 0.12); border-radius: 8px; }
+.dc-order-name { text-align: left; background: transparent; border: none; margin: 0; padding: 4px 0; }
+.dc-order .pos-chip.on { color: #f0a020; border-color: #f0a020; }
+.def-change-btn { margin: 0 0 0 6px; white-space: nowrap; }

@@ -1020,6 +1020,8 @@ export default function ScoreTab() {
               </b>
               <span className="small">{t('opp.pitchChange')}</span>
             </button>
+            {/* 守備の交代はここから(図で組む)。スコア画面の縦は増やさない */}
+            <button className="pill blue def-change-btn" onClick={() => setDefenseCheck({ playerIds: [] })}>{t('score.defChange')}</button>
             <span className="sit-voice-slot" id="scoretab-voice-slot" />
           </div>
           <PitcherStats game={game} playerId={game.currentPitcherId} />
