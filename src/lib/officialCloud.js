@@ -89,8 +89,14 @@ export async function keepAlivePing() {
   }
 }
 
+// テスト用の差し込み口(認証とチームのメンバー): window.__AIBSS_TEST_AUTH__ があれば、本物の代わりにそれを使う。
+// 管理者の画面(チームの立ち上げ・案内づくり)を、本物のクラウド無しで確かめるため
+const testAuth = () => (typeof window !== 'undefined' ? window.__AIBSS_TEST_AUTH__ : null);
+
 // ---------------- 認証 ----------------
 export function watchAuth(cb) {
+  const ta = testAuth();
+  if (ta) { setTimeout(() => cb(ta.user), 0); return () => {}; }
   const sb = ensureClient();
   if (!sb) return () => {};
   const { data: { subscription } } = sb.auth.onAuthStateChange((_event, session) => {
@@ -100,6 +106,7 @@ export function watchAuth(cb) {
 }
 
 export function currentUserAsync() {
+  if (testAuth()) return Promise.resolve(testAuth().user);
   const sb = ensureClient();
   if (!sb) return Promise.resolve(null);
   return sb.auth.getSession().then(({ data }) => toUser(data?.session?.user || null));
@@ -200,6 +207,7 @@ export async function createCloudTeam({ name, edition }) {
 
 // 招待トークンを発行(URLに埋め込む。トークンを知っていること自体が参加権)
 export async function createInvite(teamId, role = 'scorer') {
+  if (testAuth()) return testAuth().invite(teamId, role);
   const sb = ensureClient();
   if (!sb) throw new Error(tc('cloud.notConfigured'));
   const u = await requireUser();
@@ -241,6 +249,7 @@ export async function joinByInvite(token) {
 }
 
 export async function listMyTeams() {
+  if (testAuth()) return testAuth().teams;
   const sb = ensureClient();
   if (!sb) return [];
   const u = await currentUserAsync();
@@ -254,6 +263,7 @@ export async function listMyTeams() {
 }
 
 export async function listMembers(teamId) {
+  if (testAuth()) return testAuth().members;
   const sb = ensureClient();
   if (!sb) return [];
   const { data, error } = await sb.from('team_members').select('*').eq('team_id', teamId).order('joined_at');
@@ -284,6 +294,7 @@ export async function transferOwnership(teamId, uid) {
 // いま teams.owner_uid が誰か。「退会するとチームが消えるアカウント」はこれ1つだけで、
 // メンバー一覧の owner ロールとは別物。画面で区別できるように読めるようにする
 export async function teamOwnerUid(teamId) {
+  if (testAuth()) return testAuth().user?.uid || null;
   const sb = ensureClient();
   if (!sb) return null;
   const { data, error } = await sb.from('teams').select('owner_uid').eq('id', teamId).maybeSingle();

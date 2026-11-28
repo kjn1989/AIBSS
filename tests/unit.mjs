@@ -6615,3 +6615,32 @@ test('名簿貼り付け: 「1番 6大槻」の守備番号・DH・打順の外�
   // 番号の無い名簿では、投手の行も打順の1人のまま
   assert.equal(parseRosterText('藤田 投\n黒瀬 捕').pitcher, null);
 });
+
+test('チームに配る案内: 全員向けは観戦リンクだけ、記録係向けはログイン情報の真下に記録員リンク', async () => {
+  const { buildTeamKit, GUIDE_URL } = await import('../src/lib/teamKit.js');
+  const k = buildTeamKit({
+    team: 'バンコク・タイガース', liveUrl: 'https://x/?live=L', scorerUrl: 'https://x/?ct=C',
+    email: 'team@example.com', password: 'pass123', expiresAt: new Date(2026, 11, 12).getTime(), lang: 'ja',
+  });
+  // 全員向けにログイン情報や記録員リンクは入らない
+  assert.ok(k.all.includes('https://x/?live=L') && k.all.includes('バンコク・タイガース'));
+  assert.ok(!k.all.includes('pass123') && !k.all.includes('?ct=') && !k.all.includes('team@example.com'));
+  assert.ok(k.all.includes(GUIDE_URL));
+  // 記録係向け: ログイン情報 → 真下にリンク、期限、パスワードを変えない注意
+  const lines = k.scorer.split('\n');
+  const iPw = lines.findIndex((l) => l.includes('pass123'));
+  const iLink = lines.indexOf('https://x/?ct=C');
+  assert.ok(iPw > 0 && iLink > iPw && iLink - iPw <= 3, k.scorer);
+  assert.ok(k.scorer.includes('12月12日') && k.scorer.includes('パスワードは変えないでください'));
+  assert.ok(!k.scorer.includes('?live='));
+  // ログイン情報なし(記録係が自分のアカウントで入る)なら、その行もパスワードの注意も無い
+  const k2 = buildTeamKit({ team: 'T', scorerUrl: 'https://x/?ct=C', lang: 'ja' });
+  assert.ok(!k2.scorer.includes('ログイン情報') && !k2.scorer.includes('パスワード'));
+  assert.ok(k2.scorer.includes('https://x/?ct=C'));
+  // リンクが無ければ空
+  assert.equal(buildTeamKit({}).all, '');
+  assert.equal(buildTeamKit({}).scorer, '');
+  // 英語
+  const en = buildTeamKit({ team: 'T', liveUrl: 'L', scorerUrl: 'C', email: 'e@x', password: 'p', lang: 'en' });
+  assert.ok(en.all.includes('No login') && en.scorer.includes('Email: e@x'));
+});
