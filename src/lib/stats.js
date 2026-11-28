@@ -20,6 +20,8 @@ export function aggregateBatting(games) {
         pa: 0, ab: 0, h: 0, single: 0, double: 0, triple: 0, hr: 0,
         rbi: 0, runs: 0, sb: 0, bb: 0, ibb: 0, hbp: 0, so: 0,
         sacBunt: 0, sacFly: 0, interference: 0, error: 0, tb: 0,
+        // 出場試合・盗塁死・併殺打(打撃成績一覧に出す)
+        g: 0, cs: 0, gidp: 0,
         // 詳細メトリクス用
         rispAB: 0, rispH: 0,
         advChance: 0, advSuccess: 0,
@@ -36,6 +38,7 @@ export function aggregateBatting(games) {
     return map[pid];
   };
 
+  const gamesOf = new Map(); // 出場試合数(打撃の行がある選手にだけ、最後に付ける)
   for (const g of games) {
     for (const ab of g.atBats || []) {
       if (!ab.result) continue; // 未確定打席は除外
@@ -69,6 +72,8 @@ export function aggregateBatting(games) {
         }
       }
       if (ab.result === 'sacBunt') s.sacBunt += 1;
+      // 併殺打: 打った打球で2つ以上アウトになった凡打
+      if (ab.result === 'out' && (ab.outType === 'dp' || (ab.outsOnPlay || 0) >= 2)) s.gidp += 1;
       if (ab.result === 'sacFly') s.sacFly += 1;
       if (ab.result === 'interference') s.interference += 1;
       if (ab.result === 'error') s.error += 1;
@@ -104,11 +109,20 @@ export function aggregateBatting(games) {
         if (ab.firstPitchHit) s.firstPitchHits += 1;
       }
     }
-    // 得点・盗塁は PlayLog から拾う(打席レコード外の事象のため)
+    // 得点・盗塁・盗塁死は PlayLog から拾う(打席レコード外の事象のため)
     for (const log of g.playLogs || []) {
       if (log.kind === 'run' && log.payload?.playerId) get(log.payload.playerId).runs += 1;
       if (log.kind === 'sb' && log.payload?.playerId) get(log.payload.playerId).sb += 1;
+      // 「盗塁死」の行だけ(「盗塁死の間に生還」は刺された走者ではなく生還した走者の行)
+      if (log.kind === 'runner' && log.payload?.playerId && /^盗塁死(?!の間)/.test(log.text || '')) get(log.payload.playerId).cs += 1;
     }
+    // 出場試合: 打席・打順・途中出場・得点/盗塁のどれかに名前がある試合
+    const appeared = new Set();
+    for (const ab of g.atBats || []) if (ab.playerId) appeared.add(ab.playerId);
+    for (const l of [...(g.startingLineup || []), ...(g.lineup || [])]) if (l.playerId) appeared.add(l.playerId);
+    for (const id of g.usedPlayerIds || []) appeared.add(id);
+    for (const b of g.importedBatting || []) if (b.playerId) appeared.add(b.playerId);
+    for (const id of appeared) gamesOf.set(id, (gamesOf.get(id) || 0) + 1);
     // CSV取り込みのボックススコアを加算(空欄は0扱い)
     for (const b of g.importedBatting || []) {
       const s = get(b.playerId);
@@ -119,8 +133,10 @@ export function aggregateBatting(games) {
       s.rbi += b.rbi || 0; s.runs += b.runs || 0; s.sb += b.sb || 0;
       s.bb += b.bb || 0; s.hbp += b.hbp || 0; s.so += b.so || 0;
       s.sacBunt += b.sacBunt || 0; s.sacFly += b.sacFly || 0; s.tb += tb;
+      s.cs += b.cs || 0; s.gidp += b.gidp || 0;
     }
   }
+  for (const s of Object.values(map)) s.g = gamesOf.get(s.playerId) || 0;
   return map;
 }
 
@@ -177,6 +193,8 @@ export function aggregatePitching(games) {
         outsRecorded: 0, runs: 0, earnedRuns: 0, hitsAllowed: 0,
         walks: 0, intentionalWalks: 0, hitByPitch: 0, strikeouts: 0, pitches: 0, abFaced: 0,
         wins: 0, saves: 0, holds: 0, games: 0,
+        // 対戦打者数・被本塁打(相手の打席の記録から数える)
+        bf: 0, hrAllowed: 0,
         // 対左右打者(相手打者の左右を入力してある打席だけが対象)
         vsL: { ab: 0, h: 0 }, vsR: { ab: 0, h: 0 },
         // 被打球の質。打たれていても全部ボテボテなら投球内容は良い、が見えるようにする
@@ -192,6 +210,8 @@ export function aggregatePitching(games) {
       const p = log.payload || {};
       if (!p.pitcherId) continue;
       const s = get(p.pitcherId);
+      if (RESULTS[p.result]) s.bf += 1;
+      if (p.result === 'hr') s.hrAllowed += 1;
       // 被打球の質(左右の入力が無くても数えられるので、対左右とは別に集計する)
       if (isBattedBall(p.result)) {
         s.battedBalls += 1;

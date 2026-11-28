@@ -148,48 +148,70 @@ export default function StatsTab() {
   );
 }
 
-// 全員の打撃基本成績一覧(参考テーブル)
+// 全員の打撃成績一覧。プロ野球の個人打撃成績と同じ並びの項目を全部出す。
+// 横に長いので名前の列は固定し、見出しを押すとその項目で並べ替える
+const BAT_COLS = [
+  { k: 'avg', v: (s, m) => m.ba, f: fmtAvg },
+  { k: 'g', v: (s) => s.g },
+  { k: 'pa', v: (s) => s.pa },
+  { k: 'ab', v: (s) => s.ab },
+  { k: 'runs', v: (s) => s.runs },
+  { k: 'h', v: (s) => s.h },
+  { k: 'double', v: (s) => s.double },
+  { k: 'triple', v: (s) => s.triple },
+  { k: 'hr', v: (s) => s.hr },
+  { k: 'tb', v: (s) => s.tb },
+  { k: 'rbi', v: (s) => s.rbi },
+  { k: 'sb', v: (s) => s.sb },
+  { k: 'cs', v: (s) => s.cs },
+  { k: 'sac', v: (s) => s.sacBunt || 0 },
+  { k: 'sf', v: (s) => s.sacFly || 0 },
+  { k: 'bb', v: (s) => s.bb },
+  { k: 'hbp', v: (s) => s.hbp },
+  { k: 'so', v: (s) => s.so },
+  { k: 'gidp', v: (s) => s.gidp || 0 },
+  { k: 'obp', v: (s, m) => m.obp, f: fmtAvg },
+  { k: 'slg', v: (s, m) => m.slg, f: fmtAvg },
+  { k: 'ops', v: (s, m) => m.ops, f: (x) => (x === null ? '-' : x.toFixed(3)) },
+];
 function BattingSummaryTable({ batting, nameOf, onOpenPlayer, tenureOf }) {
   const t = useT();
+  const [sortKey, setSortKey] = useState('h');
+  const col = BAT_COLS.find((c) => c.k === sortKey) || BAT_COLS[5];
   const rows = Object.values(batting)
     .filter((s) => s.pa > 0)
-    .sort((a, b) => b.h - a.h);
+    .map((s) => ({ s, m: battingMetrics(s) }))
+    .sort((a, b) => ((col.v(b.s, b.m) ?? -1) - (col.v(a.s, a.m) ?? -1)) || (b.s.pa - a.s.pa));
   if (rows.length === 0) return null;
   return (
     <div className="card">
       <h2>{t('stats.battingTable')}</h2>
-      <div style={{ overflowX: 'auto' }}>
-        <table className="rank-table" style={{ minWidth: 520 }}>
+      <p className="small dim" style={{ marginTop: 0 }}>{t('stats.batTableHint')}</p>
+      <div className="bat-full-wrap">
+        <table className="rank-table bat-full">
           <thead>
             <tr>
-              <th>{t('stats.player')}</th><th>{t('stats.col.pa')}</th><th>{t('stats.col.ab')}</th><th>{t('stats.col.h')}</th><th>{t('stats.col.avg')}</th>
-              <th>{t('stats.col.hr')}</th><th>{t('stats.col.rbi')}</th><th>{t('stats.col.bbhbp')}</th><th>{t('stats.col.so')}</th><th>{t('stats.col.sb')}</th><th>{t('stats.col.sac')}</th>
+              <th>{t('stats.player')}</th>
+              {BAT_COLS.map((c) => (
+                <th key={c.k} className={c.k === sortKey ? 'on' : ''} onClick={() => setSortKey(c.k)} role="button">
+                  {t(`stats.bcol.${c.k}`)}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {rows.map((s) => {
-              const m = battingMetrics(s);
-              return (
-                <tr key={s.playerId} onClick={() => onOpenPlayer?.(s.playerId)} role="button">
-                  <td style={{ color: 'var(--accent)', fontWeight: 700 }}>
-                    {nameOf(s.playerId)}
-                    {tenureOf?.(s.playerId) && (
-                      <span className="tenure">{tenureOf(s.playerId)}</span>
-                    )}
-                  </td>
-                  <td className="num">{s.pa}</td>
-                  <td className="num">{s.ab}</td>
-                  <td className="num">{s.h}</td>
-                  <td className="num">{fmtAvg(m.ba)}</td>
-                  <td className="num">{s.hr}</td>
-                  <td className="num">{s.rbi}</td>
-                  <td className="num">{s.bb + s.hbp}</td>
-                  <td className="num">{s.so}</td>
-                  <td className="num">{s.sb}</td>
-                  <td className="num">{s.sacBunt || 0}</td>
-                </tr>
-              );
-            })}
+            {rows.map(({ s, m }) => (
+              <tr key={s.playerId} onClick={() => onOpenPlayer?.(s.playerId)} role="button">
+                <td className="bat-name">
+                  {nameOf(s.playerId)}
+                  {tenureOf?.(s.playerId) && <span className="tenure">{tenureOf(s.playerId)}</span>}
+                </td>
+                {BAT_COLS.map((c) => {
+                  const x = c.v(s, m);
+                  return <td key={c.k} className={`num${c.k === sortKey ? ' on' : ''}`}>{c.f ? c.f(x ?? null) : (x ?? 0)}</td>;
+                })}
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
@@ -235,50 +257,79 @@ function FieldingSummaryTable({ rows, nameOf, onOpenPlayer, tenureOf }) {
   );
 }
 
-// 全員の投手基本成績一覧(参考テーブル。旧「投手」タブのサマリーを移設)
+// 全員の投手成績一覧。打撃成績一覧と同じく全項目を出し、名前の列を固定・見出しで並べ替え
+const f2 = (x) => (x === null || x === undefined ? '-' : x.toFixed(2));
+const PIT_COLS = [
+  { k: 'era', v: (s, m) => m.era, f: f2, asc: true },
+  { k: 'g', v: (s) => s.games },
+  { k: 'w', v: (s) => s.wins },
+  { k: 'sv', v: (s) => s.saves },
+  { k: 'hld', v: (s) => s.holds },
+  { k: 'ip', v: (s) => s.outsRecorded, f: (x) => formatIP(x || 0) },
+  // 相手の打席を記録していない試合しかない投手は、0ではなく「-」(数えていないだけ)
+  { k: 'bf', v: (s) => (s.bf ? s.bf : null), f: (x) => (x === null ? '-' : x) },
+  { k: 'np', v: (s) => s.pitches },
+  { k: 'ha', v: (s) => s.hitsAllowed },
+  { k: 'hra', v: (s) => (s.bf ? (s.hrAllowed || 0) : null), f: (x) => (x === null ? '-' : x) },
+  { k: 'k', v: (s) => s.strikeouts },
+  { k: 'bb', v: (s) => s.walks },
+  { k: 'hbp', v: (s) => s.hitByPitch },
+  { k: 'r', v: (s) => s.runs },
+  { k: 'er', v: (s) => s.earnedRuns },
+  { k: 'whip', v: (s, m) => m.whip, f: f2, asc: true },
+  { k: 'oba', v: (s, m) => m.oba, f: fmtAvg, asc: true },
+  { k: 'k7', v: (s, m) => m.k7, f: f2 },
+  { k: 'kbb', v: (s, m) => m.kbb, f: f2 },
+];
 function PitchingSummaryTable({ pitching, nameOf, onOpenPlayer, tenureOf, basis, lang }) {
   const t = useT();
-  const rows = Object.values(pitching).filter((s) => s.outsRecorded > 0 || s.games > 0);
+  const [sortKey, setSortKey] = useState('ip');
+  const col = PIT_COLS.find((c) => c.k === sortKey) || PIT_COLS[5];
+  const val = (r) => col.v(r.s, r.m);
+  const rows = Object.values(pitching)
+    .filter((s) => s.outsRecorded > 0 || s.games > 0)
+    .map((s) => ({ s, m: pitchingMetrics(s, basis, lang) }))
+    .sort((a, b) => {
+      const x = val(a); const y = val(b);
+      // 率が出ない(投球回0)人は、並べ方にかかわらず下へ
+      if (x === null || x === undefined) return 1;
+      if (y === null || y === undefined) return -1;
+      return (col.asc ? x - y : y - x) || (b.s.outsRecorded - a.s.outsRecorded);
+    });
   if (rows.length === 0) return null;
   return (
     <div className="card">
       <h2>{t('stats.pitchingTable')}</h2>
-      <div style={{ overflowX: 'auto' }}>
-        <table className="rank-table" style={{ minWidth: 520 }}>
+      <p className="small dim" style={{ marginTop: 0 }}>{t('stats.batTableHint')}</p>
+      <div className="bat-full-wrap">
+        <table className="rank-table bat-full">
           <thead>
             <tr>
-              <th>{t('stats.col.pitcher')}</th><th>{t('stats.col.ip')}</th><th>{t('stats.col.era')}</th><th>{t('stats.col.oba')}</th><th>{t('stats.col.whip')}</th><th>{t('stats.col.k')}</th>
-              <th>{t('stats.col.bbhbpP')}</th><th>{t('stats.col.ha')}</th><th>{t('stats.col.er')}</th><th>{t('stats.col.w')}</th><th>{t('stats.col.s')}</th><th>{t('stats.col.hld')}</th>
+              <th>{t('stats.col.pitcher')}</th>
+              {PIT_COLS.map((c) => (
+                <th key={c.k} className={c.k === sortKey ? 'on' : ''} onClick={() => setSortKey(c.k)} role="button">
+                  {t(`stats.pcol.${c.k}`, { basis })}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {rows.map((s) => {
-              const m = pitchingMetrics(s, basis, lang);
-              return (
-                <tr key={s.playerId} onClick={() => onOpenPlayer?.(s.playerId)} role="button">
-                  <td style={{ color: 'var(--accent)', fontWeight: 700 }}>
-                    {nameOf(s.playerId)}
-                    {tenureOf?.(s.playerId) && (
-                      <span className="tenure">{tenureOf(s.playerId)}</span>
-                    )}
-                  </td>
-                  <td className="num">{formatIP(s.outsRecorded)}</td>
-                  <td className="num">{m.era === null ? '-' : m.era.toFixed(2)}</td>
-                  <td className="num">{m.oba === null ? '-' : m.oba.toFixed(3).replace(/^0\./, '.')}</td>
-                  <td className="num">{m.whip === null ? '-' : m.whip.toFixed(2)}</td>
-                  <td className="num">{s.strikeouts}</td>
-                  <td className="num">{s.walks + s.hitByPitch}</td>
-                  <td className="num">{s.hitsAllowed}</td>
-                  <td className="num">{s.earnedRuns}</td>
-                  <td className="num">{s.wins}</td>
-                  <td className="num">{s.saves}</td>
-                  <td className="num">{s.holds}</td>
-                </tr>
-              );
-            })}
+            {rows.map(({ s, m }) => (
+              <tr key={s.playerId} onClick={() => onOpenPlayer?.(s.playerId)} role="button">
+                <td className="bat-name">
+                  {nameOf(s.playerId)}
+                  {tenureOf?.(s.playerId) && <span className="tenure">{tenureOf(s.playerId)}</span>}
+                </td>
+                {PIT_COLS.map((c) => {
+                  const x = c.v(s, m);
+                  return <td key={c.k} className={`num${c.k === sortKey ? ' on' : ''}`}>{c.f ? c.f(x ?? null) : (x ?? 0)}</td>;
+                })}
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
+      <p className="small dim mt8">{t('stats.pitTableNote', { basis })}</p>
     </div>
   );
 }

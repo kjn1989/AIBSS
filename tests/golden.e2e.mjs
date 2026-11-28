@@ -220,12 +220,17 @@ try {
   const sbValues = await page.$$eval('table', (tables) => {
     const t = tables.find((x) => x.innerText.includes('盗') && x.innerText.includes('打席'));
     if (!t) return null;
-    const i = [...t.querySelectorAll('thead th')].findIndex((th) => th.textContent.trim() === '盗');
+    const i = [...t.querySelectorAll('thead th')].findIndex((th) => th.textContent.trim() === '盗塁');
     return [...t.querySelectorAll('tbody tr')].map((tr) => Number(tr.querySelectorAll('td')[i]?.textContent || 0));
   });
   const hasSac = await page.$$eval('table', (tables) => tables.some((x) => x.innerText.includes('打席')
     && [...x.querySelectorAll('thead th')].some((th) => th.textContent.trim() === '犠打')));
   check('成績: 打撃成績一覧に犠打の列がある', hasSac);
+  const heads = await page.$$eval('table', (tables) => {
+    const t = tables.find((x) => x.classList.contains('bat-full'));
+    return t ? [...t.querySelectorAll('thead th')].map((th) => th.textContent.trim()) : [];
+  });
+  check('成績: 打撃成績一覧に出塁率・得点・長打率・OPSなど全項目', ['打率', '試合', '打席', '打数', '得点', '安打', '二塁打', '三塁打', '本塁打', '塁打', '打点', '盗塁', '盗塁死', '犠打', '犠飛', '四球', '死球', '三振', '併殺打', '出塁率', '長打率', 'OPS'].every((h) => heads.includes(h)), heads.join(','));
   const sbTotal = (sbValues || []).reduce((a, b) => a + b, 0);
   const sbPlayers = (sbValues || []).filter((v) => v > 0).length;
   check('成績: 盗塁合計=3(重盗で2人に付与)', sbTotal === 3, `actual=${sbTotal}`);
